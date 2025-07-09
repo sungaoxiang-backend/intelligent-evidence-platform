@@ -53,5 +53,19 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_EMAIL: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "admin123"
 
+    # ----------------------- Agentic ------------------------------------
+    
+    # Qwen llm
+    QWEN_API_KEY: str
+    QWEN_BASE_URL: str
+    QWEN_CHAT_MODEL: str
+    QWEN_MUTI_MODEL: str
+    QWEN_OPENAI_EMBEDDER_MODEL: str
+
+    # Openai llm
+    OPENAI_API_KEY: str
+    OPENAI_IMAGE_MODEL: str
+    OPENAI_BASE_URL: str
+
 
 settings = Settings()
