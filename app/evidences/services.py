@@ -2,7 +2,7 @@ import os
 from typing import BinaryIO, Dict, List, Optional, Union
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -152,6 +152,26 @@ async def get_multi(
     return result.scalars().all()
 
 
+async def get_multi_with_count(
+    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None
+) -> (list[Evidence], int):
+    """获取多个证据，并返回总数"""
+    query = select(Evidence)
+    if case_id is not None:
+        query = query.where(Evidence.case_id == case_id)
+
+    # 获取总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query)
+
+    # 获取数据
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
+    data = result.scalars().all()
+
+    return data, total
+
+
 async def get_multi_with_cases(
     db: AsyncSession, *, skip: int = 0, limit: int = 100
 ) -> list[Evidence]:
@@ -159,6 +179,24 @@ async def get_multi_with_cases(
     query = select(Evidence).options(joinedload(Evidence.case)).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def get_multi_with_cases_with_count(
+    db: AsyncSession, *, skip: int = 0, limit: int = 100
+) -> (list[Evidence], int):
+    """获取多个证据，包含案件信息，并返回总数"""
+    query = select(Evidence).options(joinedload(Evidence.case))
+
+    # 获取总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query)
+
+    # 获取数据
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
+    data = result.scalars().all()
+
+    return data, total
 
 
 async def batch_create(

@@ -6,10 +6,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.deps import DBSession, get_current_active_superuser, get_current_staff
 from app.staffs.models import Staff
-from app.staffs.schemas import StaffCreate, StaffUpdate, Staff as StaffSchema, Token
+from app.staffs.schemas import Staff as StaffSchema, StaffCreate, StaffUpdate, Token
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.staffs import services as staff_service
+from app.core.response import SingleResponse, ListResponse, Pagination
 
 router = APIRouter()
 login_router = APIRouter()
@@ -40,23 +41,24 @@ async def login_access_token(db: DBSession, form_data: OAuth2PasswordRequestForm
     }
 
 
-@router.get("/me", response_model=StaffSchema)
+@router.get("/me", response_model=SingleResponse[StaffSchema])
 async def read_staff_me(current_staff: Annotated[Staff, Depends(get_current_staff)]):
     """获取当前登录员工信息"""
-    return current_staff
+    return SingleResponse(data=current_staff)
 
 
-@router.put("/me", response_model=StaffSchema)
+@router.put("/me", response_model=SingleResponse[StaffSchema])
 async def update_staff_me(
     db: DBSession,
     staff_in: StaffUpdate,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
     """更新当前登录员工信息"""
-    return await staff_service.update(db, current_staff, staff_in)
+    updated_staff = await staff_service.update(db, current_staff, staff_in)
+    return SingleResponse(data=updated_staff)
 
 
-@router.get("/", response_model=List[StaffSchema])
+@router.get("/", response_model=ListResponse[StaffSchema])
 async def read_staff_list(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_active_superuser)],
@@ -64,11 +66,14 @@ async def read_staff_list(
     limit: int = 100,
 ):
     """获取员工列表（仅超级管理员）"""
-    staff_list = await staff_service.get_multi(db, skip=skip, limit=limit)
-    return staff_list
+    staff_list, total = await staff_service.get_multi_with_count(db, skip=skip, limit=limit)
+    return ListResponse(
+        data=staff_list,
+        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
+    )
 
 
-@router.post("/", response_model=StaffSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[StaffSchema])
 async def create_staff(
     db: DBSession,
     staff_in: StaffCreate,
@@ -91,10 +96,11 @@ async def create_staff(
             detail="邮箱已存在",
         )
     
-    return await staff_service.create(db, staff_in)
+    new_staff = await staff_service.create(db, staff_in)
+    return SingleResponse(data=new_staff)
 
 
-@router.get("/{staff_id}", response_model=StaffSchema)
+@router.get("/{staff_id}", response_model=SingleResponse[StaffSchema])
 async def read_staff(
     staff_id: int,
     db: DBSession,
@@ -114,10 +120,10 @@ async def read_staff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="员工不存在",
         )
-    return staff
+    return SingleResponse(data=staff)
 
 
-@router.put("/{staff_id}", response_model=StaffSchema)
+@router.put("/{staff_id}", response_model=SingleResponse[StaffSchema])
 async def update_staff(
     staff_id: int,
     staff_in: StaffUpdate,
@@ -131,10 +137,11 @@ async def update_staff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="员工不存在",
         )
-    return await staff_service.update(db, staff, staff_in)
+    updated_staff = await staff_service.update(db, staff, staff_in)
+    return SingleResponse(data=updated_staff)
 
 
-@router.delete("/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{staff_id}", response_model=SingleResponse)
 async def delete_staff(
     staff_id: int,
     db: DBSession,
@@ -148,9 +155,10 @@ async def delete_staff(
             detail="不能删除自己",
         )
     
-    success = await staff_service.delete(db, staff_id)
-    if not success:
+    success_deleted = await staff_service.delete(db, staff_id)
+    if not success_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="员工不存在",
         )
+    return SingleResponse(data=None)

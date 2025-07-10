@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -84,6 +84,27 @@ async def get_multi(
     return result.scalars().all()
 
 
+async def get_multi_with_count(
+    db: AsyncSession, *, skip: int = 0, limit: int = 100, user_id: Optional[int] = None
+) -> Tuple[list[Case], int]:
+    """获取多个案件和总数"""
+    query = select(Case)
+    if user_id is not None:
+        query = query.where(Case.user_id == user_id)
+
+    # 查询总数
+    total_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(total_query)
+    total = total_result.scalar_one()
+
+    # 查询数据
+    items_query = query.offset(skip).limit(limit)
+    items_result = await db.execute(items_query)
+    items = items_result.scalars().all()
+
+    return items, total
+
+
 async def get_multi_with_users(
     db: AsyncSession, *, skip: int = 0, limit: int = 100
 ) -> list[Case]:
@@ -91,3 +112,20 @@ async def get_multi_with_users(
     query = select(Case).options(joinedload(Case.user)).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def get_multi_with_users_with_count(
+    db: AsyncSession, *, skip: int = 0, limit: int = 100
+) -> Tuple[list[Case], int]:
+    """获取多个案件（包含用户信息）和总数"""
+    # 查询总数
+    total_query = select(func.count()).select_from(Case)
+    total_result = await db.execute(total_query)
+    total = total_result.scalar_one()
+
+    # 查询数据
+    items_query = select(Case).options(joinedload(Case.user)).offset(skip).limit(limit)
+    items_result = await db.execute(items_query)
+    items = items_result.scalars().all()
+
+    return items, total

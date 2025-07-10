@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.users.models import User
@@ -65,3 +65,16 @@ async def get_multi(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> lis
     """获取多个用户"""
     result = await db.execute(select(User).offset(skip).limit(limit))
     return result.scalars().all()
+
+
+async def get_multi_with_count(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> Tuple[list[User], int]:
+    """获取多个用户和总数"""
+    # 查询总数
+    total_result = await db.execute(select(func.count()).select_from(User))
+    total = total_result.scalar_one()
+
+    # 查询数据
+    items_result = await db.execute(select(User).offset(skip).limit(limit))
+    items = items_result.scalars().all()
+
+    return items, total

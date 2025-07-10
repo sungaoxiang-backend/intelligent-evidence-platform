@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_password_hash, verify_password
 from app.staffs.models import Staff
@@ -85,3 +85,16 @@ async def get_multi(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> lis
     """获取多个员工"""
     result = await db.execute(select(Staff).offset(skip).limit(limit))
     return result.scalars().all()
+
+
+async def get_multi_with_count(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> Tuple[list[Staff], int]:
+    """获取多个员工及总数"""
+    # 获取总数
+    count_result = await db.execute(select(func.count()).select_from(Staff))
+    total = count_result.scalar_one()
+
+    # 获取分页数据
+    result = await db.execute(select(Staff).offset(skip).limit(limit))
+    items = result.scalars().all()
+    
+    return items, total

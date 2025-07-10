@@ -8,20 +8,21 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.deps import DBSession, get_current_staff
+from app.core.response import SingleResponse, ListResponse, Pagination
 from app.staffs.models import Staff
 from app.evidences.schemas import (
-    BatchDeleteRequest,
     Evidence as EvidenceSchema,
-    EvidenceCreate,
-    EvidenceUpdate,
     EvidenceWithCase,
+    BatchDeleteRequest,
+    EvidenceUpdate
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
 
 router = APIRouter()
 
-@router.get("/", response_model=List[EvidenceSchema])
+
+@router.get("/", response_model=ListResponse[EvidenceSchema])
 async def read_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -30,13 +31,16 @@ async def read_evidences(
     case_id: Optional[int] = None,
 ):
     """获取证据列表"""
-    evidences = await evidence_service.get_multi(
+    evidences, total = await evidence_service.get_multi_with_count(
         db, skip=skip, limit=limit, case_id=case_id
     )
-    return evidences
+    return ListResponse(
+        data=evidences,
+        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
+    )
 
 
-@router.get("/with-cases", response_model=List[EvidenceWithCase])
+@router.get("/with-cases", response_model=ListResponse[EvidenceWithCase])
 async def read_evidences_with_cases(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -44,10 +48,16 @@ async def read_evidences_with_cases(
     limit: int = 100,
 ):
     """获取证据列表，包含案件信息"""
-    return await evidence_service.get_multi_with_cases(db, skip=skip, limit=limit)
+    evidences, total = await evidence_service.get_multi_with_cases_with_count(
+        db, skip=skip, limit=limit
+    )
+    return ListResponse(
+        data=evidences,
+        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
+    )
 
 
-@router.get("/{evidence_id}", response_model=EvidenceSchema)
+@router.get("/{evidence_id}", response_model=SingleResponse[EvidenceSchema])
 async def read_evidence(
     evidence_id: int,
     db: DBSession,
@@ -60,10 +70,10 @@ async def read_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="证据不存在",
         )
-    return evidence
+    return SingleResponse(data=evidence)
 
 
-@router.get("/{evidence_id}/with-case", response_model=EvidenceWithCase)
+@router.get("/{evidence_id}/with-case", response_model=SingleResponse[EvidenceWithCase])
 async def read_evidence_with_case(
     evidence_id: int,
     db: DBSession,
@@ -76,10 +86,10 @@ async def read_evidence_with_case(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="证据不存在",
         )
-    return evidence
+    return SingleResponse(data=evidence)
 
 
-@router.post("/batch", response_model=List[EvidenceSchema], status_code=status.HTTP_201_CREATED)
+@router.post("/batch", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceSchema])
 async def batch_create_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -88,37 +98,40 @@ async def batch_create_evidences(
     files: List[UploadFile] = File(...),
 ):
     """批量创建证据
-    
+
     允许一次上传多个文件并创建多个证据
     """
     from loguru import logger
-    
+
     logger.info(f"接收批量创建证据请求: 案件ID={case_id}, 文件数量={len(files) if files else 0}")
-    
+
     if not files:
         logger.warning("未提供文件")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="未提供文件",
         )
-    
+
     # 记录文件信息
     for i, file in enumerate(files):
-        logger.debug(f"文件{i+1}: 名称={file.filename}, 内容类型={file.content_type}, 大小={file.size if hasattr(file, 'size') else '未知'}")
-    
+        logger.debug(
+            f"文件{i+1}: 名称={file.filename}, 内容类型={file.content_type}, 大小={file.size if hasattr(file, 'size') else '未知'}"
+        )
+
     # 处理tags字符串，转换为列表
     tags_list = None
     if tags:
         try:
             # 尝试解析JSON格式的tags
             import json
+
             tags_list = json.loads(tags)
             logger.debug(f"解析JSON格式的tags: {tags_list}")
         except json.JSONDecodeError:
             # 如果不是JSON格式，按逗号分隔
             tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
             logger.debug(f"解析逗号分隔的tags: {tags_list}")
-    
+
     # 检查案件是否存在
     case = await case_service.get_by_id(db, case_id)
     if not case:
@@ -128,14 +141,14 @@ async def batch_create_evidences(
             detail="案件不存在",
         )
     logger.debug(f"案件存在: ID={case_id}, 名称={case.title}")
-    
+
     try:
         # 批量创建证据
         logger.info(f"开始批量创建证据: 案件ID={case_id}, 文件数量={len(files)}")
         evidences = await evidence_service.batch_create(
             db, case_id, tags_list, files, current_staff.id
         )
-        
+
         if not evidences:
             # 收集文件信息用于调试
             files_info = []
@@ -144,7 +157,7 @@ async def batch_create_evidences(
                     file_info = {
                         "filename": file.filename,
                         "content_type": file.content_type,
-                        "size": file.size if hasattr(file, 'size') else None
+                        "size": file.size if hasattr(file, "size") else None,
                     }
                     # 尝试读取文件的前10个字节来检查是否可读
                     file.file.seek(0)
@@ -156,25 +169,26 @@ async def batch_create_evidences(
                     file_info["readable"] = False
                     file_info["read_error"] = str(read_err)
                 files_info.append(file_info)
-            
+
             error_detail = {
                 "message": "所有文件上传失败",
                 "error_type": "upload_failed",
                 "files_count": len(files),
-                "files_info": files_info
+                "files_info": files_info,
             }
-            
+
             logger.error(f"所有文件上传失败: {error_detail}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_detail,
             )
-        
+
         logger.info(f"批量创建证据成功: 成功数量={len(evidences)}")
-        return evidences
+        return ListResponse(data=evidences)
     except Exception as e:
         logger.error(f"批量创建证据异常: {str(e)}")
         import traceback
+
         logger.error(f"错误详情: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -186,14 +200,15 @@ async def batch_create_evidences(
                     {
                         "filename": file.filename,
                         "content_type": file.content_type,
-                        "size": file.size if hasattr(file, 'size') else None
-                    } for file in files
-                ]
+                        "size": file.size if hasattr(file, "size") else None,
+                    }
+                    for file in files
+                ],
             },
         )
 
 
-@router.put("/{evidence_id}", response_model=EvidenceSchema)
+@router.put("/{evidence_id}", response_model=SingleResponse[EvidenceSchema])
 async def update_evidence(
     evidence_id: int,
     evidence_in: EvidenceUpdate,
@@ -207,7 +222,8 @@ async def update_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="证据不存在",
         )
-    return await evidence_service.update(db, evidence, evidence_in)
+    evidence = await evidence_service.update(db, evidence, evidence_in)
+    return SingleResponse(data=evidence)
 
 
 @router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -223,25 +239,15 @@ async def delete_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="证据不存在",
         )
+    return
 
 
-@router.delete("/batch")
+@router.post("/batch-delete", response_model=SingleResponse)
 async def batch_delete_evidences(
+    request: BatchDeleteRequest,
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
-    delete_request: BatchDeleteRequest,
 ):
-    """批量删除证据
-    
-    允许一次删除多个证据
-    """
-    if not delete_request.evidence_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="未提供证据ID列表",
-        )
-    
-    # 批量删除证据
-    result = await evidence_service.batch_delete(db, delete_request.evidence_ids)
-    
-    return result
+    """批量删除证据"""
+    data = await evidence_service.batch_delete(db, request.evidence_ids)
+    return SingleResponse(data=data)

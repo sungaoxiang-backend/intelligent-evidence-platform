@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 import time
 import os
-
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from app.core.middleware import http_exception_handler, validation_exception_handler, global_exception_handler
 from app.core.logging import logger
 
 app = FastAPI(
@@ -22,6 +24,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 中间件
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
 app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
