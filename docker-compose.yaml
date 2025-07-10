@@ -45,7 +45,8 @@ services:
       "-c", "effective_io_concurrency=200",
       "-c", "work_mem=16MB",
       "-c", "min_wal_size=1GB",
-      "-c", "max_wal_size=4GB"
+      "-c", "max_wal_size=4GB",
+      "-c", "timezone=Asia/Shanghai"
     ]
 
 volumes:

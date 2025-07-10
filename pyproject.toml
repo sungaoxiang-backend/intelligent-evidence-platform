@@ -28,6 +28,7 @@ dependencies = [
     "urllib3>=1.26.0,<2.0.0",
     "charset-normalizer>=2.0.12",
     "loguru>=0.7.3",
+    "pytz>=2025.2",
 ]
 
 [project.optional-dependencies]

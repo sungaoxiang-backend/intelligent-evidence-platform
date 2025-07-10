@@ -1,15 +1,16 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, Integer, func
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import DeclarativeBase
-
+import pytz
 
 class Base(DeclarativeBase):
     """SQLAlchemy 2.0 基础模型类"""
 
-    id: Any
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
     # 根据类名自动生成表名
     @declared_attr.directive
@@ -21,11 +22,6 @@ class Base(DeclarativeBase):
         name = cls.__name__.lower()
         return f"{name}s"
 
-    # 所有模型共有的列
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-    updated_at = Column(
-        DateTime,
-        default=datetime.now,
-        onupdate=datetime.now,
-        nullable=False,
-    )
+    # 使用中国时区的默认时间生成器
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
