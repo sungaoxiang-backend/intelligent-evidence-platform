@@ -3,14 +3,14 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.deps import DBSession, get_current_staff
-from app.models.staff import Staff
-from app.schemas.user import UserCreate, UserUpdate, User as UserSchema
-from app.services import user as user_service
+from app.staffs.models import Staff
+from app.users.schemas import UserCreate, UserUpdate, User as UserSchema
+from app.users import services as user_service
 
 router = APIRouter()
 
 
-@router.get("/users", response_model=List[UserSchema])
+@router.get("/", response_model=List[UserSchema])
 async def read_users(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -22,7 +22,7 @@ async def read_users(
     return users
 
 
-@router.post("/users", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
     db: DBSession,
     user_in: UserCreate,
@@ -47,19 +47,10 @@ async def create_user(
                 detail="手机号已存在",
             )
     
-    # 检查邮箱是否已存在
-    if user_in.email:
-        user = await user_service.get_by_email(db, email=user_in.email)
-        if user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="邮箱已存在",
-            )
-    
     return await user_service.create(db, user_in)
 
 
-@router.get("/users/{user_id}", response_model=UserSchema)
+@router.get("/{user_id}", response_model=UserSchema)
 async def read_user(
     user_id: int,
     db: DBSession,
@@ -75,7 +66,7 @@ async def read_user(
     return user
 
 
-@router.put("/users/{user_id}", response_model=UserSchema)
+@router.put("/{user_id}", response_model=UserSchema)
 async def update_user(
     user_id: int,
     user_in: UserUpdate,
@@ -108,19 +99,10 @@ async def update_user(
                 detail="手机号已存在",
             )
     
-    # 检查邮箱是否已存在
-    if user_in.email and user_in.email != user.email:
-        existing_user = await user_service.get_by_email(db, email=user_in.email)
-        if existing_user and existing_user.id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="邮箱已存在",
-            )
-    
     return await user_service.update(db, user, user_in)
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
     db: DBSession,

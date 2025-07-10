@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.db.session import engine, Base, SessionLocal
 from app.core.security import get_password_hash
-from app.models.staff import Staff
+from app.staffs.models import Staff
 from app.core.config import settings
 
 

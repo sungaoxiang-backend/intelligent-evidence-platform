@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     COS_SECRET_KEY: str
     COS_REGION: str
     COS_BUCKET: str
+    COS_BUCKET_SERVICE: str = None
+    
+    @field_validator("COS_BUCKET_SERVICE", mode="before")
+    def assemble_cos_bucket_service(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+        if isinstance(v, str):
+            return v
+        return f"https://{values.data.get('COS_BUCKET')}.cos.{values.data.get('COS_REGION')}.myqcloud.com"
 
     # 超级管理员初始配置
     FIRST_SUPERUSER_USERNAME: str = "admin"

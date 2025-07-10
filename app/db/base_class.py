@@ -22,10 +22,10 @@ class Base(DeclarativeBase):
         return f"{name}s"
 
     # 所有模型共有的列
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=func.now(),
+        default=datetime.now,
+        onupdate=datetime.now,
         nullable=False,
     )

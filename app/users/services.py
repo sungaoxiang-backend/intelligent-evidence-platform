@@ -3,8 +3,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
+from app.users.models import User
+from app.users.schemas import UserCreate, UserUpdate
 
 
 async def get_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
@@ -24,21 +24,12 @@ async def get_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
     return result.scalars().first()
 
 
-async def get_by_email(db: AsyncSession, email: str) -> Optional[User]:
-    """根据邮箱获取用户"""
-    result = await db.execute(select(User).where(User.email == email))
-    return result.scalars().first()
-
-
 async def create(db: AsyncSession, obj_in: UserCreate) -> User:
     """创建新用户"""
     db_obj = User(
         name=obj_in.name,
         id_card=obj_in.id_card,
-        phone=obj_in.phone,
-        email=obj_in.email,
-        address=obj_in.address,
-        is_active=obj_in.is_active,
+        phone=obj_in.phone
     )
     db.add(db_obj)
     await db.commit()

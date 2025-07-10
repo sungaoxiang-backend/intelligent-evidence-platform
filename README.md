@@ -20,14 +20,16 @@
 ```
 .
 ├── app/                    # 应用主目录
-│   ├── api/                # API路由
-│   │   └── v1/             # API版本1
+│   ├── api/                # API路由聚合
+│   │   └── v1.py           # v1版本API路由
+│   ├── cases/              # 案件领域模块
 │   ├── core/               # 核心配置
 │   ├── db/                 # 数据库相关
-│   ├── models/             # 数据库模型
-│   ├── schemas/            # Pydantic模型
-│   ├── services/           # 业务逻辑
-│   ├── utils/              # 工具函数
+│   ├── evidences/          # 证据领域模块
+│   ├── integrations/       # 第三方服务集成
+│   ├── staffs/             # 员工领域模块
+│   ├── users/              # 用户领域模块
+│   ├── main.py             # 应用入口
 │   └── tests/              # 测试
 ├── alembic/                # 数据库迁移
 ├── .gitignore              # Git忽略文件
@@ -232,8 +234,8 @@ Docker部署会自动：
 
 ## API路由
 
-- `/api/v1/login`: 登录接口
-- `/api/v1/staff`: 员工管理接口
+- `/api/v1/login/access-token`: 登录接口
+- `/api/v1/staffs`: 员工管理接口
 - `/api/v1/users`: 用户管理接口
 - `/api/v1/cases`: 案件管理接口
 - `/api/v1/evidences`: 证据管理接口

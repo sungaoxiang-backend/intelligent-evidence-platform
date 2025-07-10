@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import pwd_context
 from app.db.session import get_db
-from app.models.staff import Staff
-from app.schemas.token import TokenPayload
+from app.staffs.models import Staff
+from app.staffs.schemas import TokenPayload
 
 # OAuth2密码Bearer流程
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/access-token")

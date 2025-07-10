@@ -1,22 +1,52 @@
 from typing import Annotated, List
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.deps import DBSession, get_current_active_superuser, get_current_staff
-from app.models.staff import Staff
-from app.schemas.staff import StaffCreate, StaffUpdate, Staff as StaffSchema
-from app.services import staff as staff_service
+from app.staffs.models import Staff
+from app.staffs.schemas import StaffCreate, StaffUpdate, Staff as StaffSchema, Token
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.staffs import services as staff_service
 
 router = APIRouter()
+login_router = APIRouter()
 
 
-@router.get("/staff/me", response_model=StaffSchema)
+@login_router.post("/access-token", response_model=Token)
+async def login_access_token(db: DBSession, form_data: OAuth2PasswordRequestForm = Depends()):
+    """获取OAuth2兼容的令牌（员工登录）"""
+    staff = await staff_service.authenticate(db, form_data.username, form_data.password)
+    if not staff:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码不正确",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not staff.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="用户未激活"
+        )
+    
+    # 创建访问令牌
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return {
+        "access_token": create_access_token(
+            staff.id, expires_delta=access_token_expires
+        ),
+        "token_type": "bearer",
+    }
+
+
+@router.get("/me", response_model=StaffSchema)
 async def read_staff_me(current_staff: Annotated[Staff, Depends(get_current_staff)]):
     """获取当前登录员工信息"""
     return current_staff
 
 
-@router.put("/staff/me", response_model=StaffSchema)
+@router.put("/me", response_model=StaffSchema)
 async def update_staff_me(
     db: DBSession,
     staff_in: StaffUpdate,
@@ -26,7 +56,7 @@ async def update_staff_me(
     return await staff_service.update(db, current_staff, staff_in)
 
 
-@router.get("/staff", response_model=List[StaffSchema])
+@router.get("/", response_model=List[StaffSchema])
 async def read_staff_list(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_active_superuser)],
@@ -38,7 +68,7 @@ async def read_staff_list(
     return staff_list
 
 
-@router.post("/staff", response_model=StaffSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=StaffSchema, status_code=status.HTTP_201_CREATED)
 async def create_staff(
     db: DBSession,
     staff_in: StaffCreate,
@@ -64,7 +94,7 @@ async def create_staff(
     return await staff_service.create(db, staff_in)
 
 
-@router.get("/staff/{staff_id}", response_model=StaffSchema)
+@router.get("/{staff_id}", response_model=StaffSchema)
 async def read_staff(
     staff_id: int,
     db: DBSession,
@@ -87,7 +117,7 @@ async def read_staff(
     return staff
 
 
-@router.put("/staff/{staff_id}", response_model=StaffSchema)
+@router.put("/{staff_id}", response_model=StaffSchema)
 async def update_staff(
     staff_id: int,
     staff_in: StaffUpdate,
@@ -104,7 +134,7 @@ async def update_staff(
     return await staff_service.update(db, staff, staff_in)
 
 
-@router.delete("/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_staff(
     staff_id: int,
     db: DBSession,

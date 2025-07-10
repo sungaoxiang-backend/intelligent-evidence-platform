@@ -1,11 +1,18 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
+import time
+import os
+
+from app.core.logging import logger
 
 app = FastAPI(
     title="智能证据平台 API",
     description="法律债务纠纷领域的证据智能管理平台",
     version="0.1.0",
 )
+
+from app.core.middleware import LoggingMiddleware
 
 # 配置CORS
 app.add_middleware(
@@ -15,25 +22,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
 async def root():
     return {"message": "欢迎使用智能证据平台 API"}
 
 
-# 导入和包含路由器
-from app.api.v1 import login, staff, users, cases, evidences
+from app.api.v1 import api_router
 
-# 添加API路由
-app.include_router(login.router, prefix="/api/v1")
-app.include_router(staff.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(cases.router, prefix="/api/v1")
-app.include_router(evidences.router, prefix="/api/v1")
-
+app.include_router(api_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

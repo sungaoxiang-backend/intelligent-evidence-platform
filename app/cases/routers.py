@@ -3,15 +3,15 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.deps import DBSession, get_current_staff
-from app.models.staff import Staff
-from app.schemas.case import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser
-from app.services import case as case_service
-from app.services import user as user_service
+from app.staffs.models import Staff
+from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser
+from app.cases import services as case_service
+from app.users import services as user_service
 
 router = APIRouter()
 
 
-@router.get("/cases", response_model=List[CaseSchema])
+@router.get("/", response_model=List[CaseSchema])
 async def read_cases(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -36,7 +36,7 @@ async def read_cases(
     return cases
 
 
-@router.get("/cases/with-users", response_model=List[CaseWithUser])
+@router.get("/with-users", response_model=List[CaseWithUser])
 async def read_cases_with_users(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -47,7 +47,7 @@ async def read_cases_with_users(
     return await case_service.get_multi_with_users(db, skip=skip, limit=limit)
 
 
-@router.post("/cases", response_model=CaseSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=CaseSchema, status_code=status.HTTP_201_CREATED)
 async def create_case(
     db: DBSession,
     case_in: CaseCreate,
@@ -70,11 +70,18 @@ async def create_case(
             detail="案件编号已存在",
         )
     
+    # 验证债权人和债务人信息
+    if not case_in.creaditor_name or not case_in.debtor_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="债权人和债务人信息不能为空",
+        )
+    
     # 创建案件
     return await case_service.create(db, case_in)
 
 
-@router.get("/cases/{case_id}", response_model=CaseSchema)
+@router.get("/{case_id}", response_model=CaseSchema)
 async def read_case(
     case_id: int,
     db: DBSession,
@@ -90,7 +97,7 @@ async def read_case(
     return case
 
 
-@router.get("/cases/{case_id}/with-user", response_model=CaseWithUser)
+@router.get("/{case_id}/with-user", response_model=CaseWithUser)
 async def read_case_with_user(
     case_id: int,
     db: DBSession,
@@ -106,7 +113,7 @@ async def read_case_with_user(
     return case
 
 
-@router.put("/cases/{case_id}", response_model=CaseSchema)
+@router.put("/{case_id}", response_model=CaseSchema)
 async def update_case(
     case_id: int,
     case_in: CaseUpdate,
@@ -133,7 +140,7 @@ async def update_case(
     return await case_service.update(db, case, case_in)
 
 
-@router.delete("/cases/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_case(
     case_id: int,
     db: DBSession,
@@ -146,19 +153,3 @@ async def delete_case(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="案件不存在",
         )
-
-
-@router.post("/cases/{case_id}/close", response_model=CaseSchema)
-async def close_case(
-    case_id: int,
-    db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
-):
-    """关闭案件"""
-    case = await case_service.close_case(db, case_id)
-    if not case:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="案件不存在",
-        )
-    return case

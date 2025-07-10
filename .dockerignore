@@ -43,6 +43,7 @@ htmlcov/
 *.swo
 
 # 日志
+logs/
 *.log
 
 # 本地配置

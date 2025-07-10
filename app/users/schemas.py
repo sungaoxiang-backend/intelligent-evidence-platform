@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 # 共享属性
@@ -9,9 +9,6 @@ class UserBase(BaseModel):
     name: Optional[str] = None
     id_card: Optional[str] = None
     phone: Optional[str] = None
-    email: Optional[EmailStr] = None
-    address: Optional[str] = None
-    is_active: Optional[bool] = True
 
 
 # 创建时需要的属性

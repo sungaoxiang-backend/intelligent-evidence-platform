@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models.case import CaseStatus, CaseType
+from app.cases.models import CaseType, PartyType
 
 
 # 共享属性
@@ -12,10 +12,11 @@ class CaseBase(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     case_number: Optional[str] = None
-    status: Optional[CaseStatus] = None
     case_type: Optional[CaseType] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    creaditor_name: Optional[str] = None
+    creditor_type: Optional[PartyType] = None
+    debtor_name: Optional[str] = None
+    debtor_type: Optional[PartyType] = None
     assigned_staff_id: Optional[int] = None
 
 
@@ -24,6 +25,9 @@ class CaseCreate(CaseBase):
     """案件创建模型"""
     title: str
     case_number: str
+    creaditor_name: str
+    debtor_name: str
+    case_type: CaseType
     user_id: int
 
 
@@ -46,7 +50,7 @@ class Case(CaseBase):
 
 
 # 包含用户信息的案件模型
-from app.schemas.user import User
+from app.users.schemas import User
 
 class CaseWithUser(Case):
     """包含用户信息的案件响应模型"""

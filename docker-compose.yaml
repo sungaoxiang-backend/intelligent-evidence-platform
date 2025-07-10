@@ -16,6 +16,7 @@ services:
       - POSTGRES_SERVER=db  # 覆盖.env.docker中的配置，确保在容器环境中使用正确的数据库主机
     volumes:
       - ./app:/app/app
+      - ./logs:/app/logs
     restart: always
 
   db:

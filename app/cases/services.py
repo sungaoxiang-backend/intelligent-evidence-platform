@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.case import Case, CaseStatus
-from app.schemas.case import CaseCreate, CaseUpdate
+from app.cases.models import Case
+from app.cases.schemas import CaseCreate, CaseUpdate
 
 
 async def get_by_id(db: AsyncSession, case_id: int) -> Optional[Case]:
@@ -34,10 +34,11 @@ async def create(db: AsyncSession, obj_in: CaseCreate) -> Case:
         title=obj_in.title,
         description=obj_in.description,
         case_number=obj_in.case_number,
-        status=obj_in.status or CaseStatus.PENDING,
         case_type=obj_in.case_type,
-        start_date=obj_in.start_date or datetime.utcnow(),
-        end_date=obj_in.end_date,
+        creaditor_name=obj_in.creaditor_name,
+        creditor_type=obj_in.creditor_type,
+        debtor_name=obj_in.debtor_name,
+        debtor_type=obj_in.debtor_type,
         user_id=obj_in.user_id,
         assigned_staff_id=obj_in.assigned_staff_id,
     )
@@ -90,18 +91,3 @@ async def get_multi_with_users(
     query = select(Case).options(joinedload(Case.user)).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
-
-
-async def close_case(db: AsyncSession, case_id: int) -> Optional[Case]:
-    """关闭案件"""
-    case = await get_by_id(db, case_id)
-    if not case:
-        return None
-    
-    case.status = CaseStatus.CLOSED
-    case.end_date = datetime.utcnow()
-    
-    db.add(case)
-    await db.commit()
-    await db.refresh(case)
-    return case

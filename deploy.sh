@@ -79,9 +79,17 @@ case "$MODE" in
         docker-compose up -d
         ;;
     clean)
-        echo "清理所有数据并重新构建服务..."
-        docker-compose down -v
-        docker-compose build --no-cache
-        docker-compose up -d
+        echo "警告: 此操作将清理所有数据（包括数据库）并重新构建服务！"
+        echo "请输入 'YES' 确认继续操作，或任意其他键取消："
+        read -r confirmation
+        if [ "$confirmation" = "YES" ]; then
+            echo "确认清理所有数据并重新构建服务..."
+            docker-compose down -v
+            docker-compose build --no-cache
+            docker-compose up -d
+        else
+            echo "操作已取消"
+            exit 0
+        fi
         ;;
 esac

@@ -26,3 +26,9 @@ yarn-error.log*
 # env
 .env
 .env.docker
+# Log files
+*.log
+logs/
+# Database files
+*.db
+*.sqlite

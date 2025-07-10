@@ -1,0 +1,4 @@
+2025-07-09 14:04:33 | INFO | app.main:log_requests:49 - 开始请求: GET http://127.0.0.1:8000/docs
+2025-07-09 14:04:33 | INFO | app.main:log_requests:60 - 完成请求: GET http://127.0.0.1:8000/docs - 状态码: 200 - 耗时: 0.0167秒
+2025-07-09 14:04:34 | INFO | app.main:log_requests:49 - 开始请求: GET http://127.0.0.1:8000/openapi.json
+2025-07-09 14:04:34 | INFO | app.main:log_requests:60 - 完成请求: GET http://127.0.0.1:8000/openapi.json - 状态码: 200 - 耗时: 0.0317秒

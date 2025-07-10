@@ -42,3 +42,16 @@ class StaffLogin(BaseModel):
     """员工登录模型"""
     username: str
     password: str
+
+
+# Token模型
+class Token(BaseModel):
+    """JWT Token模型"""
+    access_token: str
+    token_type: str
+
+
+# Token中的数据模型
+class TokenPayload(BaseModel):
+    """JWT Token Payload模型"""
+    sub: Optional[int] = None

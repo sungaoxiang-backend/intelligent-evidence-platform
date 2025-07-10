@@ -23,6 +23,11 @@ dependencies = [
     "openai>=1.93.2",
     "unstructured>=0.18.3",
     "markdown>=3.8.2",
+    "alembic-postgresql-enum>=1.7.0",
+    "requests>=2.28.0",
+    "urllib3>=1.26.0,<2.0.0",
+    "charset-normalizer>=2.0.12",
+    "loguru>=0.7.3",
 ]
 
 [project.optional-dependencies]

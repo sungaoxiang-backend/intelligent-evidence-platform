@@ -2,10 +2,9 @@ from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import get_password_hash, verify_password
-from app.models.staff import Staff
-from app.schemas.staff import StaffCreate, StaffUpdate
+from app.staffs.models import Staff
+from app.staffs.schemas import StaffCreate, StaffUpdate
 
 
 async def get_by_id(db: AsyncSession, staff_id: int) -> Optional[Staff]:
