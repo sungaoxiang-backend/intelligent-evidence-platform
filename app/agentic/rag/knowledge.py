@@ -4,7 +4,7 @@ from agno.vectordb.pgvector import PgVector, SearchType
 from app.core.config import settings
 from app.agentic.rag.embedder import get_qwen_embedder
 
-knowledge_base_dir = Path(__file__).parent.resolve()
+knowledge_base_dir = Path(__file__).parent.resolve() / "docs"
 
 def create_knowledge_base():
     # 在函数内部获取embedder，避免循环导入

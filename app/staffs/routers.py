@@ -16,7 +16,7 @@ router = APIRouter()
 login_router = APIRouter()
 
 
-@login_router.post("/access-token", response_model=Token)
+@login_router.post("/access-token", response_model=SingleResponse[Token])
 async def login_access_token(db: DBSession, form_data: OAuth2PasswordRequestForm = Depends()):
     """获取OAuth2兼容的令牌（员工登录）"""
     staff = await staff_service.authenticate(db, form_data.username, form_data.password)
@@ -33,12 +33,12 @@ async def login_access_token(db: DBSession, form_data: OAuth2PasswordRequestForm
     
     # 创建访问令牌
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return {
+    return SingleResponse(data={
         "access_token": create_access_token(
             staff.id, expires_delta=access_token_expires
         ),
         "token_type": "bearer",
-    }
+    })
 
 
 @router.get("/me", response_model=SingleResponse[StaffSchema])
