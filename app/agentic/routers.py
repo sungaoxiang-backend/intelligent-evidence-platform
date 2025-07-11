@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from app.core.deps import DBSession, get_current_staff
 from app.staffs.models import Staff
 from app.agentic.services import classify_evidence
-from app.agentic.agents.evidence_classifier import Results
+from app.agentic.agents.evidence_classifier import EvidenceClassifiResults
 from app.core.response import SingleResponse
 
 router = APIRouter()
 
 
-@router.post("/classification", response_model=SingleResponse[Results])
+@router.post("/classification", response_model=SingleResponse[EvidenceClassifiResults])
 async def classify_evidence_endpoint(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],

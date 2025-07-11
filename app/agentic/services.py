@@ -2,10 +2,10 @@ from typing import List
 from fastapi import UploadFile
 from agno.media import Image
 
-from app.agentic.agents.evidence_classifier import EvidenceClassifier, Results
+from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
 from app.integrations.cos import COSService
 
-async def classify_evidence(files: List[UploadFile]) -> Results:
+async def classify_evidence(files: List[UploadFile]) -> EvidenceClassifiResults:
     """
     Uploads files to COS, then classifies them.
     """
@@ -30,7 +30,7 @@ async def classify_evidence(files: List[UploadFile]) -> Results:
         message_parts.append(f"{i+1}. file_url: {img.url}")
     messages = "\n".join(message_parts)
 
-    response = evidence_classifier.agent.run(
+    response = await evidence_classifier.agent.arun(
         messages,
         images=uploaded_images
     )

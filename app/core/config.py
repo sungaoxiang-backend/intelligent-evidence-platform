@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_EMAIL: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "admin123"
 
+    # 讯飞OCR配置
+    XUNFEI_OCR_API_KEY: str
+    XUNFEI_OCR_API_SECRET: str
+    XUNFEI_OCR_APP_ID: str
+    XUNFEI_OCR_INVOICE_API_URL: str # 用于通用票证识别
+    XUNFEI_OCR_GENERAL_API_URL: str # 用于通用OCR识别
+    XUNFEI_OCR_TIMEOUT: str
     # ----------------------- Agentic ------------------------------------
     
     # Qwen llm
