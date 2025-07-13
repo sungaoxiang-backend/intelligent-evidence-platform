@@ -1,10 +1,12 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # 共享属性
-class UserBase(BaseModel):
+from app.core.schemas import BaseSchema
+
+class UserBase(BaseSchema):
     """用户基础模型"""
     name: Optional[str] = None
     id_card: Optional[str] = None

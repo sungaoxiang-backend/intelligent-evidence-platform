@@ -46,6 +46,20 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // 401错误：token过期或无效
+        this.clearToken();
+        // 清除cookie
+        if (typeof window !== 'undefined') {
+          document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
+        }
+        // 重定向到登录页
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        throw new Error('认证已过期，请重新登录');
+      }
+      
       const error = await response.text();
       throw new Error(`API Error: ${response.status} - ${error}`);
     }

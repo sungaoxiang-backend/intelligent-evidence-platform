@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -14,7 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth";
-import { useRouter } from "next/navigation";
+// 删除这行重复的导入：import { useRouter } from "next/navigation";
 
 const navigation = [
   {
@@ -51,12 +53,38 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuthStore();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { logout } = useAuthStore();
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
+  // 预加载数据
+  const handleLinkHover = (href: string) => {
+    if (href === '/users') {
+      queryClient.prefetchQuery({
+        queryKey: ['users', 1, 10],
+        queryFn: () => apiClient.getUsers({ skip: 0, limit: 10 }),
+        staleTime: 30000,
+      });
+    } else if (href === '/staffs') {
+      queryClient.prefetchQuery({
+        queryKey: ['staffs', 1, 10],
+        queryFn: () => apiClient.getStaffs({ skip: 0, limit: 10 }),
+        staleTime: 30000,
+      });
+    }
+  };
+
+  // 添加这个函数
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // 清除所有查询缓存
+      queryClient.clear();
+      // 重定向到登录页
+      router.push('/login');
+    } catch (error) {
+      console.error('登出失败:', error);
+    }
   };
 
   return (
@@ -71,6 +99,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
+              onMouseEnter={() => handleLinkHover(item.href)}
               className={cn(
                 "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive

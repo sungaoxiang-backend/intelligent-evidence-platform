@@ -1,0 +1,137 @@
+"use client";
+
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { Loader2, X } from "lucide-react";
+import { apiClient } from "@/lib/api";
+import { User, UserCreate } from "@/types";
+
+interface UserFormProps {
+  user?: User | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export function UserForm({ user, onClose, onSuccess }: UserFormProps) {
+  const [formData, setFormData] = useState({
+    name: user?.name || "",
+    id_card: user?.id_card || "",
+    phone: user?.phone || "",
+  });
+
+  const isEditing = !!user;
+
+  // 创建用户
+  const createUserMutation = useMutation({
+    mutationFn: (data: UserCreate) => apiClient.createUser(data),
+    onSuccess: () => {
+      toast.success("用户创建成功");
+      onSuccess();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "创建用户失败");
+    },
+  });
+
+  // 更新用户
+  const updateUserMutation = useMutation({
+    mutationFn: (data: { id: number; userData: Partial<UserCreate> }) =>
+      apiClient.updateUser(data.id, data.userData),
+    onSuccess: () => {
+      toast.success("用户更新成功");
+      onSuccess();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "更新用户失败");
+    },
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      toast.error("请输入用户姓名");
+      return;
+    }
+
+    if (isEditing && user) {
+      updateUserMutation.mutate({
+        id: user.id,
+        userData: formData,
+      });
+    } else {
+      createUserMutation.mutate(formData);
+    }
+  };
+
+  const isLoading = createUserMutation.isPending || updateUserMutation.isPending;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <Card className="w-full max-w-md mx-4">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>{isEditing ? "编辑用户" : "新增用户"}</CardTitle>
+              <CardDescription>
+                {isEditing ? "修改用户信息" : "创建新的用户"}
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">姓名 *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="请输入用户姓名"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="id_card">身份证号</Label>
+              <Input
+                id="id_card"
+                value={formData.id_card}
+                onChange={(e) => setFormData({ ...formData, id_card: e.target.value })}
+                placeholder="请输入身份证号"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">手机号</Label>
+              <Input
+                id="phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="请输入手机号"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button type="button" variant="outline" onClick={onClose}>
+                取消
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isEditing ? "更新" : "创建"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

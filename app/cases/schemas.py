@@ -32,9 +32,18 @@ class CaseCreate(CaseBase):
 
 
 # 更新时可以修改的属性
-class CaseUpdate(CaseBase):
+class CaseUpdate(BaseModel):
     """案件更新模型"""
-    pass
+    title: Optional[str] = None
+    description: Optional[str] = None
+    case_number: Optional[str] = None  # 添加这一行
+    case_type: Optional[CaseType] = None
+    creaditor_name: Optional[str] = None
+    creditor_type: Optional[PartyType] = None
+    debtor_name: Optional[str] = None
+    debtor_type: Optional[PartyType] = None
+    assigned_staff_id: Optional[int] = None
+    # 注意：不包括 case_number 和 user_id，这些通常不应该在更新时修改
 
 
 # API响应中的案件模型

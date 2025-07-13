@@ -9,8 +9,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60 * 1000, // 1 minute
+            staleTime: 5 * 60 * 1000, // 5分钟
+            cacheTime: 10 * 60 * 1000, // 10分钟
             refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            retry: 1,
+            // 启用后台重新获取
+            refetchInterval: false,
           },
         },
       })

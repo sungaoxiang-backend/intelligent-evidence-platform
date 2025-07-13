@@ -16,19 +16,35 @@ import { Staff, StaffCreate, StaffUpdate } from "@/types";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+
 export default function StaffsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
   const queryClient = useQueryClient();
 
   // 获取员工列表
   const { data: staffsData, isLoading, error } = useQuery({
-    queryKey: ['staffs'],
-    queryFn: () => apiClient.getStaffs(),
+    queryKey: ['staffs', currentPage, pageSize],
+    queryFn: () => apiClient.getStaffs({ 
+      skip: (currentPage - 1) * pageSize, 
+      limit: pageSize 
+    }),
   });
 
+  // 确保变量定义顺序正确
   const staffs = staffsData?.data || [];
+  const pagination = staffsData?.pagination;
 
   // 创建员工
   const createMutation = useMutation({
@@ -98,18 +114,22 @@ export default function StaffsPage() {
     updateMutation.mutate({ id: staff.id, data: updateData });
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-12">
-          <p className="text-red-600">加载员工数据失败</p>
-          <Button 
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['staffs'] })}
-            className="mt-4"
-          >
-            重试
-          </Button>
-        </div>
+      <div className="text-center text-red-500 p-8">
+        加载员工列表失败，请重试
       </div>
     );
   }
@@ -143,33 +163,34 @@ export default function StaffsPage() {
         </Dialog>
       </div>
 
+      {/* 搜索和员工列表 */}
       <Card>
         <CardHeader>
           <CardTitle>员工列表</CardTitle>
           <CardDescription>
-            {isLoading ? "加载中..." : `共 ${staffs.length} 名员工`}
+            共 {pagination?.total || 0} 名员工
           </CardDescription>
-          <div className="flex items-center space-x-2">
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2 mb-4">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜索员工..."
+              placeholder="搜索员工姓名、用户名或邮箱..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
             />
           </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+
+          {filteredStaffs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchTerm ? "没有找到匹配的员工" : "暂无员工数据"}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>员工</TableHead>
-                  <TableHead>联系方式</TableHead>
+                  <TableHead>员工信息</TableHead>
                   <TableHead>角色</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -182,21 +203,17 @@ export default function StaffsPage() {
                       <div className="flex items-center space-x-3">
                         <Avatar>
                           <AvatarFallback>
-                            {staff.full_name ? staff.full_name.charAt(0) : staff.username.charAt(0).toUpperCase()}
+                            {staff.full_name ? staff.full_name.charAt(0) : staff.username.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{staff.full_name || staff.username}</div>
-                          <div className="text-sm text-muted-foreground">@{staff.username}</div>
+                          <div className="font-medium">
+                            {staff.full_name || staff.username}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {staff.email}
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="text-sm">{staff.email}</div>
-                        {staff.phone && (
-                          <div className="text-sm text-muted-foreground">{staff.phone}</div>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -246,6 +263,45 @@ export default function StaffsPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          
+          {/* 分页组件 */}
+          {pagination && pagination.pages > 1 && (
+            <div className="mt-4">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  
+                  {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page)}
+                        isActive={currentPage === page}
+                        className="cursor-pointer"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  
+                  <PaginationItem>
+                    <PaginationNext 
+                      onClick={() => setCurrentPage(Math.min(pagination.pages, currentPage + 1))}
+                      className={currentPage >= pagination.pages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-sm text-muted-foreground mt-2 text-center">
+                显示 {(currentPage - 1) * pageSize + 1} 到 {Math.min(currentPage * pageSize, pagination.total)} 条，共 {pagination.total} 条
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
