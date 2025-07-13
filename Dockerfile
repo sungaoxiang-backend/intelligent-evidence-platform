@@ -1,4 +1,24 @@
-FROM python:3.12-slim
+# 构建阶段
+FROM python:3.12 AS builder
+
+WORKDIR /app
+
+# 设置环境变量
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 复制依赖文件
+COPY pyproject.toml uv.lock* ./
+
+# 安装uv并创建虚拟环境
+RUN pip install uv && \
+    uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    UV_HTTP_TIMEOUT=120 UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
+
+# 最终阶段 - 使用完整版Python镜像
+FROM python:3.12
 
 WORKDIR /app
 
@@ -6,40 +26,24 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    PATH=/root/.local/bin:$PATH
+    PATH=/app/.venv/bin:$PATH
 
-# 安装系统依赖
+# 安装PostgreSQL客户端
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
+    postgresql-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# 从构建阶段复制虚拟环境
+COPY --from=builder /app/.venv /app/.venv
+
 # 复制项目文件
-COPY pyproject.toml uv.lock* ./
 COPY app/ ./app/
 COPY .env.docker ./.env
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 COPY templates/ ./templates/
 COPY static/ ./static/
-
-# 安装uv，创建虚拟环境并安装依赖
-RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple uv \
-    && uv --version \
-    && uv venv /app/.venv \
-    && . /app/.venv/bin/activate \
-    && UV_HTTP_TIMEOUT=120 UV_SYSTEM_PYTHON=1 uv pip install -i https://pypi.tuna.tsinghua.edu.cn/simple numpy==2.0.0 \
-    && UV_HTTP_TIMEOUT=120 uv sync
-
-# 设置PATH以使用虚拟环境
-ENV PATH="/app/.venv/bin:$PATH"
-
-# 安装PostgreSQL客户端工具
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    postgresql-client \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
 
 # 复制入口点脚本
 COPY docker-entrypoint.sh /docker-entrypoint.sh
