@@ -5,6 +5,9 @@ import time
 import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 from app.core.middleware import http_exception_handler, validation_exception_handler, global_exception_handler
 from app.core.logging import logger
 
@@ -13,6 +16,9 @@ app = FastAPI(
     description="法律债务纠纷领域的证据智能管理平台",
     version="0.1.0",
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 from app.core.middleware import LoggingMiddleware
 
@@ -32,8 +38,8 @@ app.add_exception_handler(Exception, global_exception_handler)
 app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
-async def root():
-    return {"message": "欢迎使用智能证据平台 API"}
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 from app.api.v1 import api_router

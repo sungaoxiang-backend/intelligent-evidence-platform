@@ -21,6 +21,8 @@ COPY app/ ./app/
 COPY .env.docker ./.env
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
+COPY templates/ ./templates/
+COPY static/ ./static/
 
 # 安装uv，创建虚拟环境并安装依赖
 RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple uv \
