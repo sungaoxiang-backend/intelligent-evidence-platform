@@ -251,3 +251,69 @@ async def batch_delete_evidences(
     """批量删除证据"""
     data = await evidence_service.batch_delete(db, request.evidence_ids)
     return SingleResponse(data=data)
+
+
+@router.post("/batch-with-classification", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceSchema])
+async def batch_create_evidences_with_classification(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    case_id: int = Form(...),
+    tags: Optional[str] = Form(None),
+    files: List[UploadFile] = File(...),
+):
+    """批量创建证据并进行AI分类
+
+    允许一次上传多个文件、创建多个证据并自动进行AI分类
+    """
+    from loguru import logger
+
+    logger.info(f"接收批量创建证据+分类请求: 案件ID={case_id}, 文件数量={len(files) if files else 0}")
+
+    if not files:
+        logger.warning("未提供文件")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未提供文件",
+        )
+
+    # 处理tags字符串，转换为列表
+    tags_list = None
+    if tags:
+        try:
+            import json
+            tags_list = json.loads(tags)
+            logger.debug(f"解析JSON格式的tags: {tags_list}")
+        except json.JSONDecodeError:
+            tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+            logger.debug(f"解析逗号分隔的tags: {tags_list}")
+
+    # 检查案件是否存在
+    case = await case_service.get_by_id(db, case_id)
+    if not case:
+        logger.warning(f"案件不存在: ID={case_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="案件不存在",
+        )
+
+    try:
+        # 批量创建证据并分类
+        logger.info(f"开始批量创建证据+分类: 案件ID={case_id}, 文件数量={len(files)}")
+        evidences = await evidence_service.batch_create_with_classification(
+            db, case_id, tags_list, files, current_staff.id
+        )
+
+        if not evidences:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="所有文件上传失败",
+            )
+
+        logger.info(f"批量创建证据+分类成功: 成功数量={len(evidences)}")
+        return ListResponse(data=evidences)
+    except Exception as e:
+        logger.error(f"批量创建证据+分类异常: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量创建证据+分类失败: {str(e)}",
+        )

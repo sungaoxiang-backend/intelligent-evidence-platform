@@ -1,33 +1,8 @@
+from typing import Optional, List
 from datetime import datetime
-from typing import List, Optional
-
 from pydantic import BaseModel
+from app.cases.schemas import Case
 
-
-# 共享属性
-class EvidenceBase(BaseModel):
-    """证据基础模型"""
-    file_url: Optional[str] = None
-    file_name: Optional[str] = None
-    file_size: Optional[int] = None
-    file_extension: Optional[str] = None
-    tags: Optional[List[str]] = None
-
-
-# 创建时需要的属性
-class EvidenceCreate(EvidenceBase):
-    """证据创建模型"""
-    case_id: int
-    # 文件相关信息由API处理
-
-
-# 更新时可以修改的属性
-class EvidenceUpdate(EvidenceBase):
-    """证据更新模型"""
-    pass
-
-
-# 文件上传响应
 class FileUploadResponse(BaseModel):
     """文件上传响应模型"""
     file_url: str
@@ -35,22 +10,30 @@ class FileUploadResponse(BaseModel):
     file_size: int
     file_extension: str
 
-
-# 文件上传结果
-class FileUploadResult(BaseModel):
-    """文件上传结果模型"""
-    filename: str
-    url: str
-    success: bool
-    error: Optional[str] = None
-
-# 批量删除请求
 class BatchDeleteRequest(BaseModel):
     """批量删除请求模型"""
     evidence_ids: List[int]
 
+class EvidenceBase(BaseModel):
+    """证据基础模型"""
+    file_name: str
+    file_size: int
+    file_extension: str
+    tags: Optional[List[str]] = None
+    
+class EvidenceCreate(EvidenceBase):
+    """证据创建模型"""
+    case_id: int
+    # 文件相关信息由API处理
 
-# API响应中的证据模型
+class EvidenceUpdate(BaseModel):
+    """证据更新模型"""
+    tags: Optional[List[str]] = None
+    evidence_type: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    classification_reasoning: Optional[str] = None
+    is_classified: Optional[bool] = None
+
 class Evidence(EvidenceBase):
     """证据响应模型"""
     id: int
@@ -60,16 +43,19 @@ class Evidence(EvidenceBase):
     file_name: str
     file_size: int
     file_extension: str
+    
+    # AI分类结果
+    evidence_type: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    classification_reasoning: Optional[str] = None
+    is_classified: bool = False
+    
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
 
-
-# 包含案件信息的证据模型
-from app.cases.schemas import Case
-
 class EvidenceWithCase(Evidence):
-    """包含案件信息的证据响应模型"""
-    case: Case
+    """包含案件信息的证据模型"""
+    case: Optional[Case] = None  # 使用Case schema而不是dict

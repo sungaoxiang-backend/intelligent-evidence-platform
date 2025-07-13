@@ -104,6 +104,21 @@ export interface CaseCreate {
   assigned_staff_id?: number;
 }
 
+// 证据类型枚举
+export enum EvidenceType {
+  WECHAT_CHAT = "wechat_chat",
+  ALIPAY_TRANSFER = "alipay_transfer",
+  IOU = "iou",
+  CONTRACT = "contract",
+  BANK_STATEMENT = "bank_statement",
+  INVOICE = "invoice",
+  RECEIPT = "receipt",
+  ID_CARD = "id_card",
+  BUSINESS_LICENSE = "business_license",
+  COURT_DOCUMENT = "court_document",
+  OTHER = "other"
+}
+
 // 证据相关类型
 export interface Evidence {
   id: number;
@@ -114,6 +129,11 @@ export interface Evidence {
   file_size: number;
   file_extension: string;
   tags?: string[];
+  // 修改分类相关字段
+  evidence_type?: string;  // 直接使用字符串类型，匹配后端返回的中文值
+  classification_confidence?: number;
+  classification_reasoning?: string;
+  is_classified: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -125,4 +145,21 @@ export interface EvidenceWithCase extends Evidence {
 export interface EvidenceCreate {
   case_id: number;
   tags?: string[];
+}
+
+// 批量删除请求类型
+export interface BatchDeleteRequest {
+  evidence_ids: number[];
+}
+
+// 分类结果类型
+export interface ClassificationResult {
+  image_url: string;
+  evidence_type: EvidenceType;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface ClassificationResults {
+  results?: ClassificationResult[];
 }

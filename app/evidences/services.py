@@ -1,5 +1,5 @@
 import os
-from typing import BinaryIO, Dict, List, Optional, Union
+from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable
 
 from fastapi import UploadFile
 from sqlalchemy import select, func
@@ -312,3 +312,48 @@ async def batch_delete(
     await db.commit()
     
     return {"successful": successful, "failed": failed}
+
+
+async def batch_create_with_classification(
+    db: AsyncSession,
+    case_id: int,
+    tags: Optional[List[str]],
+    files: List[UploadFile],
+    staff_id: int,
+    send_progress: Callable[[dict], Awaitable[None]] = None
+) -> List[Evidence]:
+    """批量创建证据并进行AI分类"""
+    from loguru import logger
+    from app.agentic.services import classify_evidence
+    
+    # 1. 使用现有的 batch_create 创建证据记录
+    evidences = await batch_create(db, case_id, tags, files, staff_id)
+    
+    if not evidences:
+        return evidences
+    
+    # 2. 调用现有的分类服务
+    try:
+        classification_result = await classify_evidence(files, send_progress)
+        
+        # 3. 更新证据的分类信息
+        for i, evidence in enumerate(evidences):
+            if i < len(classification_result.results):  # 修改：evidences -> results
+                result = classification_result.results[i]  # 修改：evidences -> results
+                evidence.evidence_type = result.evidence_type.value
+                evidence.classification_confidence = result.confidence
+                evidence.classification_reasoning = result.reasoning
+                evidence.is_classified = True
+                
+        # 4. 批量更新数据库
+        await db.commit()
+        for evidence in evidences:
+            await db.refresh(evidence)
+            
+        logger.info(f"成功完成{len(evidences)}个证据的上传和分类")
+        
+    except Exception as e:
+        logger.error(f"分类失败，但证据已上传: {str(e)}")
+        # 分类失败不影响证据上传，只是 is_classified 保持 False
+    
+    return evidences

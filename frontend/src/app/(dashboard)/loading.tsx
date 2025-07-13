@@ -1,15 +1,18 @@
-import { Loader2 } from "lucide-react";
-import { Sidebar } from "@/components/layout/sidebar";
+import Sidebar from "@/components/layout/sidebar";
 
-export default function DashboardLoading() {
+export default function Loading() {
   return (
     <div className="flex h-screen bg-gray-100">
       <Sidebar />
       <main className="flex-1 overflow-auto">
-        <div className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">加载页面中...</p>
+        <div className="p-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-300 rounded mb-4"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-300 rounded"></div>
+              <div className="h-4 bg-gray-300 rounded"></div>
+              <div className="h-4 bg-gray-300 rounded"></div>
+            </div>
           </div>
         </div>
       </main>

@@ -32,7 +32,8 @@ class ApiClient {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      // 只有当body不是FormData时才设置Content-Type
+      ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
       ...options.headers,
     };
 
@@ -209,6 +210,10 @@ class ApiClient {
     return this.request<any>(`/evidences/${id}`);
   }
 
+  async getEvidenceWithCase(id: number) {
+    return this.request<any>(`/evidences/${id}/with-case`);
+  }
+
   async createEvidence(data: any) {
     return this.request<any>('/evidences', {
       method: 'POST',
@@ -226,6 +231,47 @@ class ApiClient {
   async deleteEvidence(id: number) {
     return this.request<any>(`/evidences/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async batchDeleteEvidences(evidenceIds: number[]) {
+    return this.request<any>('/evidences/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ evidence_ids: evidenceIds }),
+    });
+  }
+
+  // 批量上传证据（普通上传）
+  async batchCreateEvidences(files: File[], caseId: number, tags?: string[]) {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+    formData.append("case_id", caseId.toString());
+    if (tags && tags.length > 0) {
+      formData.append("tags", JSON.stringify(tags));
+    }
+
+    return this.request<any>('/evidences/batch', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // 批量上传证据并分类
+  async batchCreateEvidencesWithClassification(files: File[], caseId: number, tags?: string[]) {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+    formData.append("case_id", caseId.toString());
+    if (tags && tags.length > 0) {
+      formData.append("tags", JSON.stringify(tags));
+    }
+
+    return this.request<any>('/evidences/batch-with-classification', {
+      method: 'POST',
+      body: formData,
     });
   }
 }
