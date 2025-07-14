@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { User } from "@/types";
 import { UserForm } from "@/components/users/user-form";
@@ -22,9 +23,9 @@ import {
 import { Suspense } from "react";
 
 function UsersContent() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
   const queryClient = useQueryClient();
@@ -38,21 +39,9 @@ function UsersContent() {
     }),
   });
 
-  // 变量定义（只保留一次）
+  // 变量定义
   const users = usersData?.data || [];
   const pagination = usersData?.pagination;
-
-  // 删除用户
-  const deleteUserMutation = useMutation({
-    mutationFn: (userId: number) => apiClient.deleteUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success("用户删除成功");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "删除用户失败");
-    },
-  });
 
   // 过滤用户
   const filteredUsers = users.filter((user: User) =>
@@ -61,20 +50,8 @@ function UsersContent() {
     (user.id_card && user.id_card.includes(searchTerm))
   );
 
-  const handleEdit = (user: User) => {
-    setEditingUser(user);
-    setIsFormOpen(true);
-  };
-
-  const handleDelete = async (userId: number) => {
-    if (window.confirm("确定要删除这个用户吗？")) {
-      deleteUserMutation.mutate(userId);
-    }
-  };
-
   const handleFormClose = () => {
     setIsFormOpen(false);
-    setEditingUser(null);
   };
 
   if (isLoading) {
@@ -96,7 +73,6 @@ function UsersContent() {
     );
   }
 
-  // 在JSX的底部使用标准分页组件
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center">
@@ -137,19 +113,22 @@ function UsersContent() {
                   <th className="h-12 px-4 text-left align-middle font-medium">姓名</th>
                   <th className="h-12 px-4 text-left align-middle font-medium">身份证号</th>
                   <th className="h-12 px-4 text-left align-middle font-medium">手机号</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="h-24 text-center text-muted-foreground">
+                    <td colSpan={3} className="h-24 text-center text-muted-foreground">
                       {searchTerm ? "未找到匹配的用户" : "暂无用户数据"}
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((user: User) => (
-                    <tr key={user.id} className="border-b">
+                    <tr 
+                      key={user.id} 
+                      className="border-b cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/users/${user.id}`)}
+                    >
                       <td className="p-4 align-middle">
                         <div className="font-medium">{user.name}</div>
                       </td>
@@ -163,25 +142,6 @@ function UsersContent() {
                           {user.phone || "-"}
                         </span>
                       </td>
-                      <td className="p-4 align-middle">
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(user)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(user.id)}
-                            disabled={deleteUserMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -194,7 +154,6 @@ function UsersContent() {
       {/* 用户表单对话框 */}
       {isFormOpen && (
         <UserForm
-          user={editingUser}
           onClose={handleFormClose}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -203,7 +162,7 @@ function UsersContent() {
         />
       )}
       
-      {/* 使用标准的shadcn/ui分页组件 */}
+      {/* 分页组件 */}
       {pagination && pagination.pages > 1 && (
         <div className="mt-4">
           <Pagination>

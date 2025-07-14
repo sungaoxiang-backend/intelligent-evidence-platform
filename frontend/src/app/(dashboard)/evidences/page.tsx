@@ -2,18 +2,16 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Eye, Upload, FileText, Download, Brain } from "lucide-react";
+import { Plus, Search, Upload, FileText, Download, Paperclip, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Evidence, EvidenceType } from "@/types";
+import { Evidence, EvidenceWithCase } from "@/types";
 
 import {
   Pagination,
@@ -32,18 +30,19 @@ export default function EvidencesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCaseId, setSelectedCaseId] = useState<number | undefined>();
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceWithCase | null>(null);
 
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   // 获取证据列表
   const { data: evidencesData, isLoading } = useQuery({
-    queryKey: ["evidences", currentPage, pageSize, selectedCaseId],
+    queryKey: ["evidences", currentPage, pageSize, selectedCaseId, searchTerm],
     queryFn: () =>
       apiClient.getEvidences({
         skip: (currentPage - 1) * pageSize,
         limit: pageSize,
         case_id: selectedCaseId,
+        search: searchTerm,
       }),
   });
 
@@ -53,24 +52,9 @@ export default function EvidencesPage() {
     queryFn: () => apiClient.getCases({ skip: 0, limit: 1000 }),
   });
 
-  // 删除证据
-  const deleteEvidenceMutation = useMutation({
-    mutationFn: (id: number) => apiClient.deleteEvidence(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["evidences"] });
-      toast.success("证据删除成功");
-    },
-    onError: () => {
-      toast.error("删除失败，请重试");
-    },
-  });
-
   const evidences = evidencesData?.data || [];
-
-  // 过滤证据
-  const filteredEvidences = evidences.filter((evidence: Evidence) =>
-    evidence.file_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const totalEvidences = evidencesData?.total || 0;
+  const totalPages = Math.ceil(totalEvidences / pageSize);
 
   // 格式化文件大小
   const formatFileSize = (bytes: number) => {
@@ -83,7 +67,7 @@ export default function EvidencesPage() {
 
   // 获取文件类型图标
   const getFileIcon = (extension: string) => {
-    const ext = extension.toLowerCase();
+    const ext = extension?.toLowerCase();
     if (["jpg", "jpeg", "png", "gif", "bmp"].includes(ext)) {
       return "🖼️";
     } else if (["pdf"].includes(ext)) {
@@ -100,27 +84,12 @@ export default function EvidencesPage() {
     return "📎";
   };
 
-  // 获取证据类型标签
-  // 修改 getEvidenceTypeLabel 函数，直接处理字符串类型
-  const getEvidenceTypeLabel = (type?: string) => {
-  // 后端直接返回中文字符串，无需转换
-  return type || "未分类";
-  };
-
-  // 获取置信度颜色
-  const getConfidenceColor = (confidence?: number) => {
-    if (!confidence) return "secondary";
-    if (confidence >= 0.8) return "default";
-    if (confidence >= 0.6) return "secondary";
-    return "destructive";
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col h-full space-y-4">
+      <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">证据管理</h1>
-          <p className="text-muted-foreground">管理和查看所有证据文件</p>
+          <h1 className="text-2xl font-bold tracking-tight">证据管理</h1>
+          <p className="text-muted-foreground">浏览、预览和标注您的证据文件</p>
         </div>
         <Button onClick={() => setIsUploadDialogOpen(true)}>
           <Upload className="mr-2 h-4 w-4" />
@@ -128,8 +97,6 @@ export default function EvidencesPage() {
         </Button>
       </div>
 
-      {/* 删除第137-148行的意外注释和代码 */}
-      
       <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -145,192 +112,171 @@ export default function EvidencesPage() {
         </DialogContent>
       </Dialog>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>证据列表</CardTitle>
-          <CardDescription>查看和管理所有证据文件</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-4 mb-6">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索证据文件名..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            <select
-              className="px-3 py-2 border border-input bg-background rounded-md"
-              value={selectedCaseId || ""}
-              onChange={(e) => setSelectedCaseId(e.target.value ? Number(e.target.value) : undefined)}
-            >
-              <option value="">所有案件</option>
-              {casesData?.data?.map((case_: any) => (
-                <option key={case_.id} value={case_.id}>
-                  {case_.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="text-muted-foreground">加载中...</div>
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>文件</TableHead>
-                    <TableHead>案件</TableHead>
-                    <TableHead>分类</TableHead>
-                    <TableHead>大小</TableHead>
-                    <TableHead>标签</TableHead>
-                    <TableHead>上传时间</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEvidences.map((evidence: Evidence) => (
-                    <TableRow key={evidence.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{getFileIcon(evidence.file_extension)}</span>
-                          <div>
-                            <div className="font-medium">{evidence.file_name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              .{evidence.file_extension}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">案件 #{evidence.case_id}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {evidence.is_classified && evidence.evidence_type ? (
-                            <>
-                              <Badge variant={getConfidenceColor(evidence.classification_confidence)}>
-                                {getEvidenceTypeLabel(evidence.evidence_type)}
-                              </Badge>
-                              {evidence.classification_confidence && (
-                                <div className="text-xs text-muted-foreground">
-                                  置信度: {(evidence.classification_confidence * 100).toFixed(1)}%
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <Badge variant="secondary">未分类</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatFileSize(evidence.file_size)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {evidence.tags?.map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(evidence.created_at).toLocaleDateString("zh-CN")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => router.push(`/evidences/${evidence.id}`)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(evidence.file_url, "_blank")}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  确定要删除证据文件 "{evidence.file_name}" 吗？此操作无法撤销。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>取消</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteEvidenceMutation.mutate(evidence.id)}
-                                >
-                                  删除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 h-0">
+        {/* Left Panel: Thumbnail List */}
+        <div className="lg:col-span-3 flex flex-col h-full">
+          <Card className="flex-1 flex flex-col">
+            <CardHeader>
+              <CardTitle>文件列表</CardTitle>
+              <div className="flex items-center space-x-2 pt-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="搜索文件名..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <select
+                  className="px-3 py-2 border border-input bg-background rounded-md text-sm"
+                  value={selectedCaseId || ""}
+                  onChange={(e) => setSelectedCaseId(e.target.value ? Number(e.target.value) : undefined)}
+                >
+                  <option value="">所有案件</option>
+                  {casesData?.data?.map((case_: any) => (
+                    <option key={case_.id} value={case_.id}>
+                      {case_.title}
+                    </option>
                   ))}
-                </TableBody>
-              </Table>
-
-              {/* 删除第306行的注释 */}
-              {evidencesData?.pagination && evidencesData.pagination.pages > 1 && (
-                <div className="mt-6">
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                          className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                      
-                      {Array.from({ length: evidencesData.pagination.pages }, (_, i) => i + 1).map((page) => (
-                        <PaginationItem key={page}>
-                          <PaginationLink
-                            onClick={() => setCurrentPage(page)}
-                            isActive={currentPage === page}
-                            className="cursor-pointer"
-                          >
-                            {page}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => setCurrentPage(Math.min(evidencesData.pagination.pages, currentPage + 1))}
-                          className={currentPage >= evidencesData.pagination.pages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                  
-                  <div className="text-sm text-muted-foreground mt-2 text-center">
-                    显示 {(currentPage - 1) * pageSize + 1} 到 {Math.min(currentPage * pageSize, evidencesData.pagination.total)} 条，共 {evidencesData.pagination.total} 条
+                </select>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-2 space-y-2">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">加载中...</p>
+                </div>
+              ) : evidences.length > 0 ? (
+                evidences.map((evidence) => (
+                  <div
+                    key={evidence.id}
+                    className={`flex items-center space-x-3 p-2 rounded-md cursor-pointer border ${selectedEvidence?.id === evidence.id ? 'bg-muted border-primary' : 'hover:bg-muted/50'}`}
+                    onClick={() => setSelectedEvidence(evidence)}
+                  >
+                    <div className="text-2xl">
+                      {['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(evidence.file_extension?.toLowerCase()) ? (
+                        <img src={evidence.file_url} alt={evidence.file_name} className="w-10 h-10 object-cover rounded-md bg-slate-200" />
+                      ) : (
+                        <div className="w-10 h-10 flex items-center justify-center bg-slate-200 rounded-md">
+                          {getFileIcon(evidence.file_extension)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-sm font-medium text-gray-900 truncate">{evidence.file_name}</p>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">未找到证据</p>
                 </div>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+            {totalPages > 1 && (
+              <div className="p-4 border-t">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(p => Math.max(1, p - 1)); }} disabled={currentPage === 1} />
+                    </PaginationItem>
+                    <PaginationItem>
+                      <span className="px-4 py-2 text-sm">{currentPage} / {totalPages}</span>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(p => Math.min(totalPages, p + 1)); }} disabled={currentPage === totalPages} />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Middle Panel: Preview */}
+        <div className="lg:col-span-6 flex flex-col h-full">
+          <Card className="flex-1 flex flex-col">
+            <CardHeader>
+              <CardTitle>文件预览</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex items-center justify-center">
+              {selectedEvidence ? (
+                (['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(selectedEvidence.file_extension?.toLowerCase())) ? (
+                  <img src={selectedEvidence.file_url} alt={selectedEvidence.file_name} className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12" />
+                    <p className="mt-2">此文件类型不支持预览。</p>
+                  </div>
+                )
+              ) : (
+                <div className="text-center text-muted-foreground">
+                  <p>请从左侧选择一个文件进行预览</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Panel: Details */}
+        <div className="lg:col-span-3 flex flex-col h-full">
+          <Card className="flex-1 flex flex-col">
+            <CardHeader>
+              <CardTitle>数据标注</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto space-y-4">
+              {selectedEvidence ? (
+                <div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-semibold">文件名:</span>
+                      <span className="text-right truncate">{selectedEvidence.file_name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">所属案件:</span>
+                      <span className="text-right truncate">{selectedEvidence.case?.title || '未关联'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">文件大小:</span>
+                      <span>{formatFileSize(selectedEvidence.file_size)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">上传时间:</span>
+                      <span>{new Date(selectedEvidence.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t">
+                    <h3 className="font-semibold mb-2">智能识别结果</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="font-semibold">证据分类:</span>
+                        <Badge variant={selectedEvidence.evidence_type ? 'default' : 'secondary'}>
+                          {selectedEvidence.evidence_type || '未分类'}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">识别标签:</span>
+                        <span className="text-right">无</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t">
+                    <h3 className="font-semibold mb-2">分析摘要</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedEvidence.classification_reasoning || '暂无分析摘要。'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground pt-10">
+                  <p>请选择一个文件查看详情</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

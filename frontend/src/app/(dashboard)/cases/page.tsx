@@ -74,10 +74,6 @@ export default function CasesPage() {
     }
   };
 
-  const handleEdit = (id: number) => {
-    router.push(`/cases/${id}`);
-  };
-
   const handleView = (id: number) => {
     router.push(`/cases/${id}`);
   };
@@ -135,25 +131,24 @@ export default function CasesPage() {
               <TableHead>债权人</TableHead>
               <TableHead>债务人</TableHead>
               <TableHead>创建时间</TableHead>
-              <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   加载中...
                 </TableCell>
               </TableRow>
             ) : filteredCases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   暂无案件数据
                 </TableCell>
               </TableRow>
             ) : (
               filteredCases.map((case_) => (
-                <TableRow key={case_.id}>
+                <TableRow key={case_.id} onClick={() => handleView(case_.id)} className="cursor-pointer">
                   <TableCell className="font-medium">
                     {case_.case_number}
                   </TableCell>
@@ -185,25 +180,6 @@ export default function CasesPage() {
                   </TableCell>
                   <TableCell>
                     {new Date(case_.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleView(case_.id)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(case_.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
               ))

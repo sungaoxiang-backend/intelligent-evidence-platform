@@ -29,10 +29,11 @@ async def read_evidences(
     skip: int = 0,
     limit: int = 100,
     case_id: Optional[int] = None,
+    search: Optional[str] = None,
 ):
     """获取证据列表"""
     evidences, total = await evidence_service.get_multi_with_count(
-        db, skip=skip, limit=limit, case_id=case_id
+        db, skip=skip, limit=limit, case_id=case_id, search=search
     )
     return ListResponse(
         data=evidences,

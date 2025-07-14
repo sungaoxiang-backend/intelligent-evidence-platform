@@ -25,7 +25,10 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
+import { useRouter } from "next/navigation";
+
 export default function StaffsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
@@ -193,12 +196,15 @@ export default function StaffsPage() {
                   <TableHead>员工信息</TableHead>
                   <TableHead>角色</TableHead>
                   <TableHead>状态</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredStaffs.map((staff: Staff) => (
-                  <TableRow key={staff.id}>
+                  <TableRow 
+                    key={staff.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/staffs/${staff.id}`)}
+                  >
                     <TableCell>
                       <div className="flex items-center space-x-3">
                         <Avatar>
@@ -225,39 +231,6 @@ export default function StaffsPage() {
                       <Badge variant={staff.is_active ? "default" : "secondary"}>
                         {staff.is_active ? "活跃" : "禁用"}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditingStaff(staff)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            编辑
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleToggleStatus(staff)}
-                            disabled={updateMutation.isPending}
-                          >
-                            {staff.is_active ? (
-                              <><UserX className="mr-2 h-4 w-4" />禁用</>
-                            ) : (
-                              <><UserCheck className="mr-2 h-4 w-4" />启用</>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteStaff(staff.id)}
-                            className="text-red-600"
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}

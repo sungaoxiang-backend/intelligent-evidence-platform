@@ -51,14 +51,54 @@ export function UserForm({ user, onClose, onSuccess }: UserFormProps) {
     },
   });
 
+  // 添加输入验证函数
+  const validateIdCard = (value: string): string | null => {
+    if (!value.trim()) return null;
+    const cleaned = value.trim();
+    if (![15, 18].includes(cleaned.length)) {
+      return "身份证号码必须是15位或18位";
+    }
+    if (cleaned.length === 18 && !/^\d{17}[\dXx]$/.test(cleaned)) {
+      return "18位身份证号码格式不正确";
+    }
+    if (cleaned.length === 15 && !/^\d{15}$/.test(cleaned)) {
+      return "15位身份证号码格式不正确";
+    }
+    return null;
+  };
+  
+  const validatePhone = (value: string): string | null => {
+    if (!value.trim()) return null;
+    const cleaned = value.replace(/[\s\-\(\)]/g, '');
+    if (!/^1[3-9]\d{9}$/.test(cleaned)) {
+      return "手机号码格式不正确";
+    }
+    return null;
+  };
+  
+  // 在handleSubmit中添加验证
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+  
     if (!formData.name.trim()) {
       toast.error("请输入用户姓名");
       return;
     }
-
+  
+    // 验证身份证
+    const idCardError = validateIdCard(formData.id_card);
+    if (idCardError) {
+      toast.error(idCardError);
+      return;
+    }
+  
+    // 验证手机号
+    const phoneError = validatePhone(formData.phone);
+    if (phoneError) {
+      toast.error(phoneError);
+      return;
+    }
+  
     if (isEditing && user) {
       updateUserMutation.mutate({
         id: user.id,
@@ -102,21 +142,27 @@ export function UserForm({ user, onClose, onSuccess }: UserFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="id_card">身份证号</Label>
+              // 更新输入框
               <Input
                 id="id_card"
                 value={formData.id_card}
-                onChange={(e) => setFormData({ ...formData, id_card: e.target.value })}
-                placeholder="请输入身份证号"
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^\dXx]/g, '').toUpperCase();
+                  setFormData({ ...formData, id_card: value });
+                }}
+                maxLength={18}
+                placeholder="请输入15位或18位身份证号码"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">手机号</Label>
+              
               <Input
                 id="phone"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="请输入手机号"
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^\d]/g, '');
+                  setFormData({ ...formData, phone: value });
+                }}
+                maxLength={11}
+                placeholder="请输入11位手机号码"
               />
             </div>
 

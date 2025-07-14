@@ -153,12 +153,14 @@ async def get_multi(
 
 
 async def get_multi_with_count(
-    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None
+    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None, search: Optional[str] = None
 ) -> (list[Evidence], int):
     """获取多个证据，并返回总数"""
-    query = select(Evidence)
+    query = select(Evidence).options(joinedload(Evidence.case))
     if case_id is not None:
         query = query.where(Evidence.case_id == case_id)
+    if search:
+        query = query.where(Evidence.file_name.ilike(f"%{search}%"))
 
     # 获取总数
     count_query = select(func.count()).select_from(query.subquery())

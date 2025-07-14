@@ -25,9 +25,18 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { ArrowLeft, Edit, Save, X } from "lucide-react";
-import { CaseType, PartyType } from "@/types";
+import { ArrowLeft, Edit, Save, X, Upload, FileText, Trash2 } from "lucide-react";
+import { CaseType, PartyType, Evidence } from "@/types";
 import { toast } from "sonner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 const CASE_TYPE_LABELS = {
   [CaseType.DEBT]: "借款纠纷",
@@ -59,11 +68,17 @@ export default function CaseDetailPage() {
   const params = useParams();
   const caseId = parseInt(params.id as string);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const queryClient = useQueryClient();
 
   const { data: caseData, isLoading } = useQuery({
     queryKey: ["case", caseId],
     queryFn: () => apiClient.getCase(caseId),
+  });
+
+  const { data: evidencesData, isLoading: isLoadingEvidences } = useQuery({
+    queryKey: ["evidences", caseId],
+    queryFn: () => apiClient.getEvidences({ case_id: caseId }),
   });
 
   const { data: usersData } = useQuery({
@@ -75,6 +90,47 @@ export default function CaseDetailPage() {
     queryKey: ["staffs"],
     queryFn: () => apiClient.getStaffs(),
   });
+
+  const uploadEvidenceMutation = useMutation({
+    mutationFn: (file: File) => apiClient.uploadEvidence(caseId, file),
+    onSuccess: () => {
+      toast.success("证据上传成功");
+      setSelectedFile(null);
+      queryClient.invalidateQueries({ queryKey: ["evidences", caseId] });
+    },
+    onError: () => {
+      toast.error("证据上传失败");
+    },
+  });
+
+  const deleteEvidenceMutation = useMutation({
+    mutationFn: (evidenceId: number) => apiClient.deleteEvidence(evidenceId),
+    onSuccess: () => {
+      toast.success("证据删除成功");
+      queryClient.invalidateQueries({ queryKey: ["evidences", caseId] });
+    },
+    onError: () => {
+      toast.error("证据删除失败");
+    },
+  });
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      setSelectedFile(event.target.files[0]);
+    }
+  };
+
+  const handleUpload = () => {
+    if (selectedFile) {
+      uploadEvidenceMutation.mutate(selectedFile);
+    }
+  };
+
+  const handleDeleteEvidence = (evidenceId: number) => {
+    if (confirm("确定要删除这个证据吗？")) {
+      deleteEvidenceMutation.mutate(evidenceId);
+    }
+  };
 
   const form = useForm<z.infer<typeof caseFormSchema>>({
     resolver: zodResolver(caseFormSchema),
@@ -480,6 +536,68 @@ export default function CaseDetailPage() {
           )}
         </form>
       </Form>
+
+      {/* 证据管理 */}
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">证据管理</h2>
+          <p className="text-muted-foreground mt-2">管理与此案件相关的证据文件</p>
+        </div>
+
+        {/* 上传证据 */}
+        <div className="flex items-center space-x-2">
+          <Input type="file" onChange={handleFileChange} className="max-w-xs" />
+          <Button onClick={handleUpload} disabled={!selectedFile || uploadEvidenceMutation.isPending}>
+            <Upload className="mr-2 h-4 w-4" />
+            {uploadEvidenceMutation.isPending ? "上传中..." : "上传证据"}
+          </Button>
+        </div>
+
+        {/* 证据列表 */}
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>文件名</TableHead>
+                <TableHead>文件类型</TableHead>
+                <TableHead>上传时间</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingEvidences ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8">加载中...</TableCell>
+                </TableRow>
+              ) : evidencesData?.data && evidencesData.data.length > 0 ? (
+                evidencesData.data.map((evidence: Evidence) => (
+                  <TableRow key={evidence.id}>
+                    <TableCell className="font-medium flex items-center">
+                      <FileText className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <a href={evidence.file_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        {evidence.file_name}
+                      </a>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{evidence.file_type}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(evidence.created_at).toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteEvidence(evidence.id)} className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8">暂无证据</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </div>
   );
 }

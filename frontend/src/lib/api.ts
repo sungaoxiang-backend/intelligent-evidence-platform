@@ -89,8 +89,16 @@ class ApiClient {
     return result.data;
   }
 
+  // 在getCurrentUser方法后添加
   async getCurrentUser() {
     return this.request<any>('/staffs/me');
+  }
+  
+  async updateCurrentUser(data: any) {
+    return this.request<any>('/staffs/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   // 员工相关
@@ -196,11 +204,12 @@ class ApiClient {
   }
 
   // 证据相关
-  async getEvidences(params?: { skip?: number; limit?: number; case_id?: number }) {
+  async getEvidences(params?: { skip?: number; limit?: number; case_id?: number; search?: string }) {
     const searchParams = new URLSearchParams();
     if (params?.skip) searchParams.append('skip', params.skip.toString());
     if (params?.limit) searchParams.append('limit', params.limit.toString());
     if (params?.case_id) searchParams.append('case_id', params.case_id.toString());
+    if (params?.search) searchParams.append('search', params.search);
     
     const query = searchParams.toString();
     return this.request<any>(`/evidences${query ? `?${query}` : ''}`);
