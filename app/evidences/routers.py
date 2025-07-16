@@ -95,7 +95,6 @@ async def batch_create_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
     case_id: int = Form(...),
-    tags: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
 ):
     """批量创建证据
@@ -119,20 +118,6 @@ async def batch_create_evidences(
             f"文件{i+1}: 名称={file.filename}, 内容类型={file.content_type}, 大小={file.size if hasattr(file, 'size') else '未知'}"
         )
 
-    # 处理tags字符串，转换为列表
-    tags_list = None
-    if tags:
-        try:
-            # 尝试解析JSON格式的tags
-            import json
-
-            tags_list = json.loads(tags)
-            logger.debug(f"解析JSON格式的tags: {tags_list}")
-        except json.JSONDecodeError:
-            # 如果不是JSON格式，按逗号分隔
-            tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
-            logger.debug(f"解析逗号分隔的tags: {tags_list}")
-
     # 检查案件是否存在
     case = await case_service.get_by_id(db, case_id)
     if not case:
@@ -147,7 +132,7 @@ async def batch_create_evidences(
         # 批量创建证据
         logger.info(f"开始批量创建证据: 案件ID={case_id}, 文件数量={len(files)}")
         evidences = await evidence_service.batch_create(
-            db, case_id, tags_list, files, current_staff.id
+            db, case_id, files
         )
 
         if not evidences:
@@ -259,7 +244,6 @@ async def batch_create_evidences_with_classification(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
     case_id: int = Form(...),
-    tags: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
 ):
     """批量创建证据并进行AI分类
@@ -277,17 +261,6 @@ async def batch_create_evidences_with_classification(
             detail="未提供文件",
         )
 
-    # 处理tags字符串，转换为列表
-    tags_list = None
-    if tags:
-        try:
-            import json
-            tags_list = json.loads(tags)
-            logger.debug(f"解析JSON格式的tags: {tags_list}")
-        except json.JSONDecodeError:
-            tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
-            logger.debug(f"解析逗号分隔的tags: {tags_list}")
-
     # 检查案件是否存在
     case = await case_service.get_by_id(db, case_id)
     if not case:
@@ -301,7 +274,7 @@ async def batch_create_evidences_with_classification(
         # 批量创建证据并分类
         logger.info(f"开始批量创建证据+分类: 案件ID={case_id}, 文件数量={len(files)}")
         evidences = await evidence_service.batch_create_with_classification(
-            db, case_id, tags_list, files, current_staff.id
+            db, case_id, files
         )
 
         if not evidences:
@@ -314,6 +287,8 @@ async def batch_create_evidences_with_classification(
         return ListResponse(data=evidences)
     except Exception as e:
         logger.error(f"批量创建证据+分类异常: {str(e)}")
+        import traceback
+        logger.error(f"错误详情: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量创建证据+分类失败: {str(e)}",

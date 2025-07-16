@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Any, Optional, List
 from datetime import datetime
 from pydantic import BaseModel
 from app.cases.schemas import Case
@@ -19,7 +19,6 @@ class EvidenceBase(BaseModel):
     file_name: str
     file_size: int
     file_extension: str
-    tags: Optional[List[str]] = None
     
 class EvidenceCreate(EvidenceBase):
     """证据创建模型"""
@@ -28,7 +27,6 @@ class EvidenceCreate(EvidenceBase):
 
 class EvidenceUpdate(BaseModel):
     """证据更新模型"""
-    tags: Optional[List[str]] = None
     evidence_type: Optional[str] = None
     classification_confidence: Optional[float] = None
     classification_reasoning: Optional[str] = None
@@ -38,7 +36,6 @@ class Evidence(EvidenceBase):
     """证据响应模型"""
     id: int
     case_id: int
-    uploaded_by_id: int
     file_url: str
     file_name: str
     file_size: int
@@ -58,4 +55,4 @@ class Evidence(EvidenceBase):
 
 class EvidenceWithCase(Evidence):
     """包含案件信息的证据模型"""
-    case: Optional[Case] = None  # 使用Case schema而不是dict
+    case: Optional[Case] = None

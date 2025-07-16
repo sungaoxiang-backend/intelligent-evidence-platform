@@ -1,3 +1,4 @@
+from locale import strcoll
 from typing import Any, Dict, List, Optional
 
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator
@@ -56,9 +57,8 @@ class Settings(BaseSettings):
         return f"https://{values.data.get('COS_BUCKET')}.cos.{values.data.get('COS_REGION')}.myqcloud.com"
 
     # 超级管理员初始配置
-    FIRST_SUPERUSER_USERNAME: str = "admin"
-    FIRST_SUPERUSER_EMAIL: str = "admin@example.com"
-    FIRST_SUPERUSER_PASSWORD: str = "admin123"
+    FIRST_SUPERUSER_USERNAME: str
+    FIRST_SUPERUSER_PASSWORD: str
 
     # 讯飞OCR配置
     XUNFEI_OCR_API_KEY: str

@@ -19,9 +19,7 @@ async def create_first_superuser():
             # 创建超级管理员
             superuser = Staff(
                 username=settings.FIRST_SUPERUSER_USERNAME,
-                email=settings.FIRST_SUPERUSER_EMAIL,
                 hashed_password=get_password_hash(settings.FIRST_SUPERUSER_PASSWORD),
-                full_name="超级管理员",
                 is_superuser=True,
                 is_active=True,
             )

@@ -7,9 +7,6 @@ from pydantic import BaseModel, EmailStr, Field
 class StaffBase(BaseModel):
     """员工基础模型"""
     username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
-    phone: Optional[str] = None
     is_active: Optional[bool] = True
     is_superuser: bool = False
 
@@ -18,7 +15,6 @@ class StaffBase(BaseModel):
 class StaffCreate(StaffBase):
     """员工创建模型"""
     username: str
-    email: EmailStr
     password: str = Field(..., min_length=8)
 
 

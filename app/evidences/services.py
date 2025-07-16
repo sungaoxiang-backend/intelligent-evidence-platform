@@ -29,7 +29,7 @@ async def get_by_id_with_case(db: AsyncSession, evidence_id: int) -> Optional[Ev
 
 
 async def upload_file(
-    file: BinaryIO, filename: str, staff_id: int, disposition: str = 'inline'
+    file: BinaryIO, filename: str, disposition: str = 'inline'
 ) -> FileUploadResponse:
     """上传文件到COS"""
     from loguru import logger
@@ -86,28 +86,6 @@ async def upload_file(
         raise
 
 
-async def create(
-    db: AsyncSession,
-    obj_in: EvidenceCreate,
-    file_data: FileUploadResponse,
-    staff_id: int,
-) -> Evidence:
-    """创建新证据"""
-    db_obj = Evidence(
-        file_url=file_data.file_url,
-        file_name=file_data.file_name,
-        file_size=file_data.file_size,
-        file_extension=file_data.file_extension,
-        tags=obj_in.tags,
-        case_id=obj_in.case_id,
-        uploaded_by_id=staff_id,
-    )
-    db.add(db_obj)
-    await db.commit()
-    await db.refresh(db_obj)
-    return db_obj
-
-
 async def update(db: AsyncSession, db_obj: Evidence, obj_in: EvidenceUpdate) -> Evidence:
     """更新证据信息"""
     update_data = obj_in.model_dump(exclude_unset=True)
@@ -140,21 +118,9 @@ async def delete(db: AsyncSession, evidence_id: int) -> bool:
     return True
 
 
-async def get_multi(
-    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None
-) -> list[Evidence]:
-    """获取多个证据"""
-    query = select(Evidence)
-    if case_id is not None:
-        query = query.where(Evidence.case_id == case_id)
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    return result.scalars().all()
-
-
 async def get_multi_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None, search: Optional[str] = None
-) -> (list[Evidence], int):
+) -> (List[Evidence], int):
     """获取多个证据，并返回总数"""
     query = select(Evidence).options(joinedload(Evidence.case))
     if case_id is not None:
@@ -204,9 +170,7 @@ async def get_multi_with_cases_with_count(
 async def batch_create(
     db: AsyncSession,
     case_id: int,
-    tags: Optional[List[str]],
     files: List[UploadFile],
-    staff_id: int,
 ) -> List[Evidence]:
     """批量创建证据
     
@@ -230,7 +194,7 @@ async def batch_create(
             logger.debug(f"处理第{index+1}个文件: {file.filename}, 大小: {file.size if hasattr(file, 'size') else '未知'}")
             
             # 上传单个文件
-            file_data = await upload_file(file.file, file.filename, staff_id)
+            file_data = await upload_file(file.file, file.filename)
             logger.debug(f"文件上传成功: {file.filename}, URL: {file_data.file_url}")
             
             # 创建单个证据
@@ -239,9 +203,7 @@ async def batch_create(
                 file_name=file_data.file_name,
                 file_size=file_data.file_size,
                 file_extension=file_data.file_extension,
-                tags=tags,
                 case_id=case_id,
-                uploaded_by_id=staff_id,
             )
             db.add(db_obj)
             evidences.append(db_obj)
@@ -319,9 +281,7 @@ async def batch_delete(
 async def batch_create_with_classification(
     db: AsyncSession,
     case_id: int,
-    tags: Optional[List[str]],
     files: List[UploadFile],
-    staff_id: int,
     send_progress: Callable[[dict], Awaitable[None]] = None
 ) -> List[Evidence]:
     """批量创建证据并进行AI分类"""
@@ -329,7 +289,7 @@ async def batch_create_with_classification(
     from app.agentic.services import classify_evidence
     
     # 1. 使用现有的 batch_create 创建证据记录
-    evidences = await batch_create(db, case_id, tags, files, staff_id)
+    evidences = await batch_create(db, case_id, files)
     
     if not evidences:
         return evidences

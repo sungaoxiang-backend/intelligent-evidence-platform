@@ -1,11 +1,13 @@
 from datetime import datetime
 from typing import Any
+import re
 
 from sqlalchemy import Column, DateTime, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import DeclarativeBase
 import pytz
+
 
 class Base(DeclarativeBase):
     """SQLAlchemy 2.0 基础模型类"""
@@ -18,8 +20,9 @@ class Base(DeclarativeBase):
         # 如果已经定义了表名，则使用已定义的表名
         if hasattr(cls, "_tablename"):
             return cls._tablename
-        # 否则根据类名生成复数形式的表名
-        name = cls.__name__.lower()
+        # 否则根据类名生成下划线分隔的复数形式表名
+        # 将驼峰命名转换为下划线分隔
+        name = re.sub(r'(?<!^)(?=[A-Z])', '_', cls.__name__).lower()
         return f"{name}s"
 
     # 使用中国时区的默认时间生成器

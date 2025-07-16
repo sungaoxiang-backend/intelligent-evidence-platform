@@ -18,12 +18,33 @@ class CaseType(str, Enum):
     DEBT = "debt"  # 借款纠纷
     CONTRACT = "contract"  # 合同纠纷
 
+class CaseStatus(str, Enum):
+    """案件状态枚举"""
+    DRAFT = "draft"  # 草稿，初始创建
+    INFO_ENTERED = "info_entered"  # 基础信息录入完成
+    EVIDENCE_ANNOTATED = "evidence_annotated"  # 证据材料AI智能标注完成
+    DOCUMENTS_GENERATED = "documents_generated"  # 文书生成完成
+    # SUBMITTED = "submitted"  # 案件已提交
+    # FILED = "filed"  # 案件已立案
+    # IN_PROGRESS = "in_progress"  # 进行中（诉中通用）
+    # CLOSED = "closed"  # 案件已结案
+    # ARCHIVED = "archived"  # 已归档
 
 class Case(Base):
     """案件模型"""
 
+    # 基础信息
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    creaditor_name: Mapped[str] = mapped_column(String(50),  index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
+    case_type: Mapped[CaseType] = mapped_column(
+            SQLAlchemyEnum(CaseType), nullable=False
+        )
+    case_status: Mapped[CaseStatus] = mapped_column(
+            SQLAlchemyEnum(CaseStatus), nullable=False, default=CaseStatus.DRAFT
+        )
+
+    # 当事人信息
+    creditor_name: Mapped[str] = mapped_column(String(50),  index=True, nullable=False)
     creditor_type: Mapped[PartyType] = mapped_column(
         SQLAlchemyEnum(PartyType), nullable=True, default=None
     )
@@ -31,17 +52,11 @@ class Case(Base):
     debtor_type: Mapped[PartyType] = mapped_column(
         SQLAlchemyEnum(PartyType), nullable=True, default=None
     )
-    title: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    case_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    case_type: Mapped[CaseType] = mapped_column(
-        SQLAlchemyEnum(CaseType), nullable=False
-    )
+    
     # 外键
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    assigned_staff_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("staffs.id"), nullable=True)
     
     # 关系
     user = relationship("User", back_populates="cases")
-    assigned_staff = relationship("Staff")
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")

@@ -18,12 +18,6 @@ async def get_by_username(db: AsyncSession, username: str) -> Optional[Staff]:
     return result.scalars().first()
 
 
-async def get_by_email(db: AsyncSession, email: str) -> Optional[Staff]:
-    """根据邮箱获取员工"""
-    result = await db.execute(select(Staff).where(Staff.email == email))
-    return result.scalars().first()
-
-
 async def authenticate(db: AsyncSession, username: str, password: str) -> Optional[Staff]:
     """验证员工凭据"""
     staff = await get_by_username(db, username)
@@ -38,10 +32,7 @@ async def create(db: AsyncSession, obj_in: StaffCreate) -> Staff:
     """创建新员工"""
     db_obj = Staff(
         username=obj_in.username,
-        email=obj_in.email,
         hashed_password=get_password_hash(obj_in.password),
-        full_name=obj_in.full_name,
-        phone=obj_in.phone,
         is_active=obj_in.is_active,
         is_superuser=obj_in.is_superuser,
     )
@@ -79,12 +70,6 @@ async def delete(db: AsyncSession, staff_id: int) -> bool:
     await db.delete(staff)
     await db.commit()
     return True
-
-
-async def get_multi(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> list[Staff]:
-    """获取多个员工"""
-    result = await db.execute(select(Staff).offset(skip).limit(limit))
-    return result.scalars().all()
 
 
 async def get_multi_with_count(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> Tuple[list[Staff], int]:

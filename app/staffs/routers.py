@@ -51,11 +51,11 @@ async def read_staff_me(current_staff: Annotated[Staff, Depends(get_current_staf
 async def update_staff_me(
     db: DBSession,
     staff_in: StaffUpdate,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
 ):
     """更新当前登录员工信息"""
-    updated_staff = await staff_service.update(db, current_staff, staff_in)
-    return SingleResponse(data=updated_staff)
+    current_staff = await staff_service.update(db, current_staff, staff_in)
+    return SingleResponse(data=current_staff)
 
 
 @router.get("/", response_model=ListResponse[StaffSchema])
@@ -86,14 +86,6 @@ async def create_staff(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名已存在",
-        )
-    
-    # 检查邮箱是否已存在
-    staff = await staff_service.get_by_email(db, email=staff_in.email)
-    if staff:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="邮箱已存在",
         )
     
     new_staff = await staff_service.create(db, staff_in)
