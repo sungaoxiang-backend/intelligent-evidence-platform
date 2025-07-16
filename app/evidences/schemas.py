@@ -14,6 +14,8 @@ class BatchDeleteRequest(BaseModel):
     """批量删除请求模型"""
     evidence_ids: List[int]
 
+from app.core.schemas import BaseSchema
+
 class EvidenceBase(BaseModel):
     """证据基础模型"""
     file_name: str
@@ -32,14 +34,11 @@ class EvidenceUpdate(BaseModel):
     classification_reasoning: Optional[str] = None
     is_classified: Optional[bool] = None
 
-class Evidence(EvidenceBase):
+class Evidence(BaseSchema, EvidenceBase):
     """证据响应模型"""
     id: int
     case_id: int
     file_url: str
-    file_name: str
-    file_size: int
-    file_extension: str
     
     # AI分类结果
     evidence_type: Optional[str] = None

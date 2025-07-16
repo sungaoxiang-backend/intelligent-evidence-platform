@@ -1,18 +1,24 @@
-from typing import Optional, Union
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+import pytz
+
+def convert_datetime_to_shanghai(dt: datetime) -> str:
+    """将datetime对象（无论是否带时区）转换为上海时区的ISO格式字符串"""
+    if dt.tzinfo is None:
+        # 如果是天真(naive)的datetime，根据我们的AwareDateTime设置，它实际上是UTC
+        dt = pytz.utc.localize(dt)
+    # 将时间转换为上海时区
+    return dt.astimezone(pytz.timezone('Asia/Shanghai')).isoformat()
 
 class BaseSchema(BaseModel):
-    """基础 Schema，处理通用的数据转换"""
-    
-    @field_validator('*', mode='before')
-    @classmethod
-    def empty_str_to_none(cls, v, info):
-        """将空字符串转换为None（仅对Optional字段）"""
-        # 检查字段是否为Optional类型
-        field_info = cls.model_fields.get(info.field_name)
-        if field_info and hasattr(field_info.annotation, '__origin__'):
-            if field_info.annotation.__origin__ is Union:
-                # 如果是Optional字段且值为空字符串，转换为None
-                if isinstance(v, str) and v.strip() == '':
-                    return None
-        return v
+    """
+    基础 Schema.
+    所有其他数据传输对象 (DTOs/Schemas) 应继承自此类.
+    """
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: convert_datetime_to_shanghai
+        }
+    )
+

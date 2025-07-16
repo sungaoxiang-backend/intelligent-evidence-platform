@@ -4,7 +4,7 @@ from tokenize import OP
 from typing import Optional
 
 from pydantic import BaseModel
-
+from app.core.schemas import BaseSchema
 from app.cases.models import CaseType, PartyType, CaseStatus
 from app.users.schemas import UserCreate, User
 
@@ -37,7 +37,7 @@ class CaseUpdate(BaseModel):
 
 
 # API响应中的案件模型
-class Case(BaseModel):
+class Case(BaseSchema):
     """案件响应模型"""
     id: int
     user_id: int

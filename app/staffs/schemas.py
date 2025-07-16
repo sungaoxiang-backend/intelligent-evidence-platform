@@ -1,7 +1,8 @@
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
-
+from app.core.schemas import BaseSchema
+from datetime import datetime
 
 # 共享属性
 class StaffBase(BaseModel):
@@ -25,9 +26,11 @@ class StaffUpdate(StaffBase):
 
 
 # API响应中的员工模型
-class Staff(StaffBase):
+class Staff(BaseSchema, StaffBase):
     """员工响应模型"""
     id: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

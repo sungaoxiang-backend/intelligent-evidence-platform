@@ -2,10 +2,12 @@ from typing import Optional
 import re
 from pydantic import BaseModel, field_validator, ValidationError
 
-# 共享属性
+from pydantic import BaseModel, field_validator, ValidationError
 from app.core.schemas import BaseSchema
+from datetime import datetime
 
-class UserBase(BaseSchema):
+
+class UserBase(BaseModel):
     """用户基础模型"""
     name: Optional[str] = None
     id_card: Optional[str] = None
@@ -63,9 +65,11 @@ class UserUpdate(UserBase):
 
 
 # API响应中的用户模型
-class User(UserBase):
+class User(BaseSchema, UserBase):
     """用户响应模型"""
     id: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
