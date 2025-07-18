@@ -134,3 +134,17 @@ class FeatureGroupDetailResponse(BaseModel):
 class EvidenceClassificationByUrlsRequest(BaseModel):
     urls: List[str]
 
+
+class EvidenceFeatureExtractionRequest(BaseModel):
+    """证据特征提取请求"""
+    urls: List[str]
+    evidence_type: str
+    consider_correlations: bool = False
+
+
+class EvidenceFeatureExtractionByUrlsRequest(BaseModel):
+    """通过URL进行证据特征提取的请求"""
+    urls: List[str]
+    evidence_type: str
+    consider_correlations: bool = False
+

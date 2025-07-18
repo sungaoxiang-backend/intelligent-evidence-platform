@@ -1,7 +1,7 @@
 "use client"
 
 import { evidenceApi } from "@/lib/api"
-import { useEffect, useState } from "react"
+import { useState, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,76 +10,69 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Upload,
   Search,
-  Filter,
   Eye,
   Download,
   FileText,
   ImageIcon,
   Video,
   File,
-  CheckCircle,
-  AlertTriangle,
 } from "lucide-react"
 import { Pagination } from "@/components/pagination"
 import { useToast } from "@/components/ui/use-toast"
 import { caseApi } from "@/lib/api"
+import useSWR, { mutate } from "swr"
 
-export function EvidenceManagement() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
-  const [evidenceList, setEvidenceList] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
-  const [total, setTotal] = useState(0)
-  const { toast } = useToast()
-  const [previewEvidence, setPreviewEvidence] = useState<any | null>(null)
-  const [deleteEvidence, setDeleteEvidence] = useState<any | null>(null)
-  const [caseList, setCaseList] = useState<any[]>([])
-  const [uploadCaseId, setUploadCaseId] = useState("")
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [uploading, setUploading] = useState(false)
+// SWR数据获取函数
+const evidenceFetcher = async ([key, search, page, pageSize]: [string, string, number, number]) => {
+  const response = await evidenceApi.getEvidences({
+    page,
+    pageSize,
+    search,
+    withCase: true,
+  })
+  return response
+}
 
-  useEffect(() => {
-    loadEvidence()
-  }, [searchTerm, page, pageSize])
+const caseFetcher = async ([key]: [string]) => {
+  const res = await caseApi.getCases({ page: 1, pageSize: 100 })
+  return res.data || []
+}
 
-  useEffect(() => {
-    async function fetchCases() {
-      try {
-        const res = await caseApi.getCases({ page: 1, pageSize: 100 })
-        setCaseList(res.data || [])
-      } catch {
-        setCaseList([])
-      }
+// 使用Suspense的证据数据展示组件
+function EvidenceTableContent({ 
+  searchTerm, 
+  page, 
+  pageSize, 
+  onPreview, 
+  onDownload, 
+  onDelete 
+}: {
+  searchTerm: string
+  page: number
+  pageSize: number
+  onPreview: (evidence: any) => void
+  onDownload: (evidence: any) => void
+  onDelete: (evidence: any) => void
+}) {
+  const { data, error } = useSWR(
+    ['/api/evidences', searchTerm, page, pageSize],
+    evidenceFetcher,
+    {
+      suspense: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
     }
-    if (isUploadDialogOpen) fetchCases()
-  }, [isUploadDialogOpen])
+  )
 
-  const loadEvidence = async () => {
-    setLoading(true)
-    try {
-      const response = await evidenceApi.getEvidences({
-        page,
-        pageSize,
-        search: searchTerm,
-        withCase: true,
-      })
-      setEvidenceList(response.data)
-      setTotal(response.pagination?.total || 0)
-      // 打印后端返回的证据数据结构，便于排查字段
-      console.log("[evidenceList]", response.data)
-    } catch (error) {
-      setEvidenceList([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
+  if (error) {
+    throw error
   }
+
+  const evidenceList = data?.data || []
+  const total = data?.pagination?.total || 0
 
   const getFileIcon = (format: string | undefined) => {
     switch ((format?.toLowerCase() ?? "")) {
@@ -123,6 +116,7 @@ export function EvidenceManagement() {
       default: return ext.toUpperCase()
     }
   }
+
   function formatFileSize(size: number | undefined) {
     if (!size && size !== 0) return "-"
     if (size < 1024) return `${size} B`
@@ -130,10 +124,75 @@ export function EvidenceManagement() {
     return `${(size / 1024 / 1024).toFixed(2)} MB`
   }
 
-  // 按钮交互反馈
+  return (
+    <>
+      <div className="bg-white rounded-lg border overflow-x-auto">
+        <table className="min-w-full text-sm align-middle">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">证据名称</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件类型</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件大小</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">关联案件</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">上传时间</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {evidenceList.length === 0 ? (
+              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
+            ) : (
+              evidenceList.map((evidence) => (
+                <tr key={evidence.id} className="border-b hover:bg-gray-50 transition">
+                  <td className="px-4 py-3 whitespace-nowrap">{evidence.file_name || '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{getFileType(evidence.file_name)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatFileSize(evidence.file_size)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {"case" in evidence && evidence.case?.title ? evidence.case.title : "-"}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onPreview(evidence)}>预览</Button>
+                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onDownload(evidence)}>下载</Button>
+                    <Button variant="destructive" size="sm" onClick={() => onDelete(evidence)}>删除</Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-6">
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(total / pageSize) || 1}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={() => {}}
+          onPageSizeChange={() => {}}
+          loading={false}
+        />
+      </div>
+    </>
+  )
+}
+
+export function EvidenceManagement() {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const { toast } = useToast()
+  const [previewEvidence, setPreviewEvidence] = useState<any | null>(null)
+  const [deleteEvidence, setDeleteEvidence] = useState<any | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadCaseId, setUploadCaseId] = useState("")
+
   const handlePreview = (evidence: any) => {
     setPreviewEvidence(evidence)
   }
+
   const handleDownload = (evidence: any) => {
     if (evidence.file_url) {
       const link = document.createElement('a')
@@ -146,22 +205,23 @@ export function EvidenceManagement() {
       toast({ title: "无可用文件下载链接", variant: "destructive" })
     }
   }
+
   const handleDelete = (evidence: any) => {
     setDeleteEvidence(evidence)
   }
+
   const confirmDelete = async () => {
     if (!deleteEvidence) return
     try {
       await evidenceApi.deleteEvidence(deleteEvidence.id)
       toast({ title: "删除成功" })
       setDeleteEvidence(null)
-      loadEvidence()
+      mutate(['/api/evidences', searchTerm, page, pageSize])
     } catch {
       toast({ title: "删除失败", variant: "destructive" })
     }
   }
 
-  // 修改 handleFileChange：文件选择后如有案件，自动上传
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
       const files = Array.from(e.target.files)
@@ -172,7 +232,7 @@ export function EvidenceManagement() {
       }
     }
   }
-  // 案件选择后如有文件，也自动上传
+
   function handleCaseChange(val: string) {
     setUploadCaseId(val)
     if (selectedFiles.length > 0 && val) {
@@ -180,7 +240,7 @@ export function EvidenceManagement() {
       autoUpload(selectedFiles, val)
     }
   }
-  // 自动上传逻辑
+
   async function autoUpload(files: File[], caseId: string) {
     if (!caseId || files.length === 0) return
     setUploading(true)
@@ -189,7 +249,7 @@ export function EvidenceManagement() {
       toast({ title: "上传成功" })
       setUploadCaseId("")
       setSelectedFiles([])
-      loadEvidence()
+      mutate(['/api/evidences', searchTerm, page, pageSize])
     } catch (e) {
       toast({ title: "上传失败", variant: "destructive" })
     } finally {
@@ -209,6 +269,7 @@ export function EvidenceManagement() {
           上传证据
         </Button>
       </div>
+
       {/* 搜索栏 */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -220,56 +281,20 @@ export function EvidenceManagement() {
           />
         </div>
       </div>
-      {/* 证据表格 */}
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="min-w-full text-sm align-middle">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">证据名称</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件类型</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件大小</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">关联案件</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">上传时间</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">加载中...</td></tr>
-            ) : evidenceList.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
-            ) : (
-              evidenceList.map((evidence) => (
-                <tr key={evidence.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 whitespace-nowrap">{evidence.file_name || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{getFileType(evidence.file_name)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatFileSize(evidence.file_size)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{evidence.case?.title || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => handlePreview(evidence)}>预览</Button>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => handleDownload(evidence)}>下载</Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(evidence)}>删除</Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-      {/* 分页组件 */}
-      <div className="mt-6">
-        <Pagination
-          currentPage={page}
-          totalPages={Math.ceil(total / pageSize) || 1}
+
+      {/* 使用Suspense包装数据展示 */}
+      <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
+        <EvidenceTableContent 
+          searchTerm={searchTerm}
+          page={page}
           pageSize={pageSize}
-          total={total}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          loading={loading}
+          onPreview={handlePreview}
+          onDownload={handleDownload}
+          onDelete={handleDelete}
         />
-      </div>
-      {/* 上传证据弹窗（保留原有实现） */}
+      </Suspense>
+
+      {/* 上传证据弹窗 */}
       <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -278,16 +303,12 @@ export function EvidenceManagement() {
           <div className="space-y-6">
             <div>
               <Label htmlFor="caseSelect">关联案件 *</Label>
-              <Select value={uploadCaseId} onValueChange={handleCaseChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择关联案件" />
-                </SelectTrigger>
-                <SelectContent>
-                  {caseList.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Suspense fallback={<div className="text-sm text-gray-500">加载案件...</div>}>
+                <CaseSelect 
+                  value={uploadCaseId} 
+                  onChange={handleCaseChange} 
+                />
+              </Suspense>
             </div>
             <div>
               <Label htmlFor="fileUpload">上传文件 *</Label>
@@ -308,7 +329,6 @@ export function EvidenceManagement() {
                 )}
               </div>
             </div>
-            {/* 上传按钮和 loading 完全移除，仅保留取消按钮 */}
             <div className="flex justify-end space-x-3">
               <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
                 取消
@@ -317,6 +337,7 @@ export function EvidenceManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
       {/* 预览弹窗 */}
       <Dialog open={!!previewEvidence} onOpenChange={v => !v && setPreviewEvidence(null)}>
         <DialogContent className="max-w-2xl">
@@ -334,13 +355,14 @@ export function EvidenceManagement() {
           )}
         </DialogContent>
       </Dialog>
+
       {/* 删除确认弹窗 */}
       <Dialog open={!!deleteEvidence} onOpenChange={v => !v && setDeleteEvidence(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
           </DialogHeader>
-          <div className="py-4">确定要删除该证据“{deleteEvidence?.file_name}”吗？此操作不可恢复。</div>
+          <div className="py-4">确定要删除该证据"{deleteEvidence?.file_name}"吗？此操作不可恢复。</div>
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setDeleteEvidence(null)}>取消</Button>
             <Button variant="destructive" onClick={confirmDelete}>删除</Button>
@@ -348,5 +370,26 @@ export function EvidenceManagement() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// 案件选择组件
+function CaseSelect({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+  const { data: caseList } = useSWR(['/api/cases'], caseFetcher, {
+    suspense: true,
+    revalidateOnFocus: false,
+  })
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder="选择关联案件" />
+      </SelectTrigger>
+      <SelectContent>
+        {caseList?.map((c) => (
+          <SelectItem key={c.id} value={String(c.id)}>{c.title}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }

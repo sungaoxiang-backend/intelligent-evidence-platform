@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -9,21 +9,132 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Plus, Search, Filter } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 import { userApi } from "@/lib/user-api"
 import type { User } from "@/lib/types"
 import { useToast } from "@/components/ui/use-toast"
+import useSWR, { mutate } from "swr"
 
 // 添加表单初始值
 const initialForm: { name: string; id_card: string; phone: string } = { name: "", id_card: "", phone: "" }
+
+// SWR数据获取函数
+const fetcher = async ([key, search, activeTab, page, pageSize]: [string, string, string, number, number]) => {
+  const params: any = { page, pageSize, search }
+  if (activeTab === "individual") params.type = "个人"
+  if (activeTab === "corporate") params.type = "企业"
+  if (activeTab === "active") params.status = "活跃"
+  
+  const res = await userApi.getUsers(params)
+  return res
+}
+
+// 使用Suspense的数据展示组件
+function UserTableContent({ 
+  searchTerm, 
+  activeTab, 
+  page, 
+  pageSize, 
+  onSelectIds, 
+  onViewUser, 
+  onOpenEdit, 
+  onSetDeleteUserId,
+  selectedIds
+}: {
+  searchTerm: string
+  activeTab: string
+  page: number
+  pageSize: number
+  onSelectIds: (ids: string[]) => void
+  onViewUser: (user: User) => void
+  onOpenEdit: (user: User) => void
+  onSetDeleteUserId: (id: string) => void
+  selectedIds: string[]
+}) {
+  const { data, error } = useSWR(
+    ['/api/users', searchTerm, activeTab, page, pageSize],
+    fetcher,
+    {
+      suspense: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  const users = data?.data || []
+  const total = data?.pagination?.total || 0
+
+  const toggleSelect = (id: string) => {
+    onSelectIds(selectedIds.includes(id) 
+      ? selectedIds.filter(i => i !== id) 
+      : [...selectedIds, id])
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === users.length) {
+      onSelectIds([])
+    } else {
+      onSelectIds(users.map(u => u.id))
+    }
+  }
+
+  return (
+    <>
+      {selectedIds.length > 0 && (
+        <Button variant="destructive" size="sm" className="mb-2" onClick={() => {}} >
+          批量删除（{selectedIds.length}）
+        </Button>
+      )}
+      <div className="bg-white rounded-lg border overflow-x-auto">
+        <table className="min-w-full text-sm align-middle">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="px-4 py-3">
+                <Checkbox checked={selectedIds.length === users.length && users.length > 0} onCheckedChange={toggleSelectAll} />
+              </th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">姓名</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">身份证号</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">联系电话</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">创建时间</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 ? (
+              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
+            ) : (
+              users.map((user) => (
+                <tr key={user.id} className="border-b hover:bg-gray-50 transition">
+                  <td className="px-4 py-3 text-center">
+                    <Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{user.id_card || '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{user.phone || '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{user.created_at ? new Date(user.created_at).toLocaleString() : '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onViewUser(user)}>查看</Button>
+                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onOpenEdit(user)}>编辑</Button>
+                    <Button variant="destructive" size="sm" onClick={() => onSetDeleteUserId(user.id)}>删除</Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
 
 export function UserManagement() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("all")
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const pageSize = 20
   const { toast } = useToast()
@@ -41,31 +152,6 @@ export function UserManagement() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
-
-  useEffect(() => {
-    loadUsers()
-    // eslint-disable-next-line
-  }, [searchTerm, activeTab, page])
-
-  async function loadUsers() {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize, search: searchTerm }
-      // tab 分类过滤
-      if (activeTab === "individual") params.type = "个人"
-      if (activeTab === "corporate") params.type = "企业"
-      if (activeTab === "active") params.status = "活跃"
-      const res = await userApi.getUsers(params)
-      setUsers(res.data)
-      setTotal(res.pagination?.total || 0)
-    } catch (e) {
-      toast({ title: "获取用户列表失败", variant: "destructive" })
-      setUsers([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // 添加表单校验
   function validate(form: typeof initialForm) {
@@ -91,7 +177,9 @@ export function UserManagement() {
       toast({ title: "添加成功" })
       setIsAddDialogOpen(false)
       setAddForm(initialForm)
-      loadUsers()
+      
+      // 重新验证数据
+      mutate(['/api/users', searchTerm, activeTab, page, pageSize])
     } catch (e: any) {
       toast({ title: "添加失败", description: e?.message || "", variant: "destructive" })
     } finally {
@@ -133,7 +221,9 @@ export function UserManagement() {
       })
       toast({ title: "修改成功" })
       setEditUser(null)
-      loadUsers()
+      
+      // 重新验证数据
+      mutate(['/api/users', searchTerm, activeTab, page, pageSize])
     } catch (e: any) {
       toast({ title: "修改失败", description: e?.message || "", variant: "destructive" })
     } finally {
@@ -149,7 +239,10 @@ export function UserManagement() {
       await userApi.deleteUser(Number(deleteUserId))
       toast({ title: "删除成功" })
       setDeleteUserId(null)
-      loadUsers()
+      setSelectedIds(selectedIds.filter(id => id !== deleteUserId))
+      
+      // 重新验证数据
+      mutate(['/api/users', searchTerm, activeTab, page, pageSize])
     } catch (e: any) {
       toast({ title: "删除失败", description: e?.message || "", variant: "destructive" })
     } finally {
@@ -168,38 +261,15 @@ export function UserManagement() {
       toast({ title: "批量删除成功" })
       setSelectedIds([])
       setBatchDeleteOpen(false)
-      loadUsers()
+      
+      // 重新验证数据
+      mutate(['/api/users', searchTerm, activeTab, page, pageSize])
     } catch (e: any) {
       toast({ title: "批量删除失败", description: e?.message || "", variant: "destructive" })
     } finally {
       setDeleteLoading(false)
     }
   }
-
-  // 复选框操作
-  function toggleSelect(id: string) {
-    setSelectedIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])
-  }
-  function toggleSelectAll() {
-    if (selectedIds.length === users.length) setSelectedIds([])
-    else setSelectedIds(users.map(u => u.id))
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "活跃":
-        return "bg-green-100 text-green-800"
-      case "待联系":
-        return "bg-orange-100 text-orange-800"
-      case "已结案":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-blue-100 text-blue-800"
-    }
-  }
-
-  // 统计
-  const stats = { total }
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -254,58 +324,25 @@ export function UserManagement() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <Button variant="outline" onClick={loadUsers}>刷新</Button>
+        <Button variant="outline" onClick={() => mutate(['/api/users', searchTerm, activeTab, page, pageSize])}>刷新</Button>
       </div>
 
-      {/* 表格列表 */}
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="min-w-full text-sm align-middle">
-          {/* 表格表头： */}
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-4 py-3">
-                <Checkbox checked={selectedIds.length === users.length && users.length > 0} onCheckedChange={toggleSelectAll} />
-              </th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">姓名</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">身份证号</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">联系电话</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">创建时间</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
-            </tr>
-          </thead>
-          {/* 表格行： */}
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">加载中...</td></tr>
-            ) : users.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
-            ) : (
-              users.map((user) => (
-                <tr key={user.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 text-center">
-                    <Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} />
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.id_card || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.phone || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.created_at ? new Date(user.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => setViewUser(user)}>查看</Button>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => openEdit(user)}>编辑</Button>
-                    <Button variant="destructive" size="sm" onClick={() => setDeleteUserId(user.id)}>删除</Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-      {/* 表格上方批量删除按钮： */}
-      {selectedIds.length > 0 && (
-        <Button variant="destructive" size="sm" className="mb-2" onClick={() => setBatchDeleteOpen(true)}>
-          批量删除（{selectedIds.length}）
-        </Button>
-      )}
+      {/* 使用Suspense包装数据展示 */}
+      <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
+        <UserTableContent 
+          searchTerm={searchTerm}
+          activeTab={activeTab}
+          page={page}
+          pageSize={pageSize}
+          onSelectIds={setSelectedIds}
+          onViewUser={setViewUser}
+          onOpenEdit={openEdit}
+          onSetDeleteUserId={setDeleteUserId}
+          selectedIds={selectedIds}
+        />
+      </Suspense>
+
+      {/* 详情 Dialog */}
       <Dialog open={!!viewUser} onOpenChange={open => { if (!open) setViewUser(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -322,6 +359,8 @@ export function UserManagement() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 编辑 Dialog */}
       <Dialog open={!!editUser} onOpenChange={open => { if (!open) setEditUser(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -347,7 +386,8 @@ export function UserManagement() {
           </form>
         </DialogContent>
       </Dialog>
-      {/* 单条删除确认 Dialog： */}
+
+      {/* 删除确认 Dialog */}
       <Dialog open={!!deleteUserId} onOpenChange={open => { if (!open) setDeleteUserId(null) }}>
         <DialogContent className="max-w-xs">
           <DialogHeader>
@@ -360,7 +400,8 @@ export function UserManagement() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* 批量删除确认 Dialog： */}
+
+      {/* 批量删除 Dialog */}
       <Dialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
         <DialogContent className="max-w-xs">
           <DialogHeader>

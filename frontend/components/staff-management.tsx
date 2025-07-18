@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -27,21 +27,150 @@ import {
 import { staffApi } from "@/lib/staff-api"
 import { authService } from "@/lib/auth"
 import type { Staff, CreateStaffRequest } from "@/lib/config"
+import useSWR, { mutate } from "swr"
+
+// SWR数据获取函数
+const fetcher = async ([key]: [string]) => {
+  const result = await staffApi.getStaffs()
+  return result
+}
+
+// 使用Suspense的数据展示组件
+function StaffTableContent({ 
+  searchTerm, 
+  onDeleteStaff, 
+  currentUser, 
+  isSuperUser 
+}: {
+  searchTerm: string
+  onDeleteStaff: (staff: Staff) => void
+  currentUser: any
+  isSuperUser: boolean
+}) {
+  const { data, error } = useSWR(['/api/staffs'], fetcher, {
+    suspense: true,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  })
+
+  if (error) {
+    throw error
+  }
+
+  const staffs = data?.data || []
+  const filteredStaffs = staffs.filter((staff: Staff) => 
+    staff.username.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>员工ID</TableHead>
+          <TableHead>用户名</TableHead>
+          <TableHead>角色</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead>创建时间</TableHead>
+          <TableHead>更新时间</TableHead>
+          {isSuperUser && <TableHead>操作</TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredStaffs.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={isSuperUser ? 7 : 6} className="text-center py-8 text-muted-foreground">
+              {searchTerm ? "没有找到匹配的员工" : "暂无员工数据"}
+            </TableCell>
+          </TableRow>
+        ) : (
+          filteredStaffs.map((staff: Staff) => (
+            <TableRow key={staff.id}>
+              <TableCell className="font-medium">#{staff.id}</TableCell>
+              <TableCell>
+                <div className="flex items-center space-x-2">
+                  {staff.is_superuser ? (
+                    <Shield className="h-4 w-4 text-orange-600" />
+                  ) : (
+                    <User className="h-4 w-4 text-blue-600" />
+                  )}
+                  <span className="font-medium">{staff.username}</span>
+                  {staff.id === currentUser?.id && (
+                    <Badge variant="outline" className="text-xs">
+                      当前用户
+                    </Badge>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {staff.is_superuser ? (
+                  <Badge className="bg-orange-100 text-orange-800">超级管理员</Badge>
+                ) : (
+                  <Badge variant="outline">普通员工</Badge>
+                )}
+              </TableCell>
+              <TableCell>
+                {staff.is_active ? (
+                  <Badge className="bg-green-100 text-green-800">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    活跃
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    禁用
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">{formatDate(staff.created_at)}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{formatDate(staff.updated_at)}</TableCell>
+              {isSuperUser && (
+                <TableCell>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onDeleteStaff(staff)}
+                      disabled={staff.id === currentUser?.id}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              )}
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  )
+}
+
+// 员工计数组件
+function StaffCount() {
+  const { data } = useSWR(['/api/staffs'], fetcher, {
+    suspense: true,
+  })
+  const staffs = data?.data || []
+  return <span>{staffs.length}</span>
+}
 
 export function StaffManagement() {
-  const [staffs, setStaffs] = useState<Staff[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [pagination, setPagination] = useState({
-    total: 0,
-    page: 1,
-    size: 100,
-    pages: 1,
-  })
 
   // 创建员工表单
   const [createForm, setCreateForm] = useState<CreateStaffRequest>({
@@ -54,28 +183,6 @@ export function StaffManagement() {
   const currentUser = authService.getUser()
   const isSuperUser = authService.isSuperUser()
 
-  useEffect(() => {
-    loadStaffs()
-  }, [])
-
-  const loadStaffs = async () => {
-    setLoading(true)
-    setError("")
-
-    try {
-      const result = await staffApi.getStaffs()
-
-      setStaffs(result.data)
-      if (result.pagination) {
-        setPagination(result.pagination)
-      }
-    } catch (error) {
-      setError("加载员工列表失败")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreating(true)
@@ -84,13 +191,12 @@ export function StaffManagement() {
 
     try {
       const result = await staffApi.createStaff(createForm)
-
       setSuccess(`员工 "${result.data.username}" 创建成功`)
-      setStaffs((prev) => [...prev, result.data!])
       setCreateForm({ username: "", password: "" })
       setIsAddDialogOpen(false)
-      // 更新分页信息
-      setPagination((prev) => ({ ...prev, total: prev.total + 1 }))
+      
+      // 重新验证数据
+      mutate(['/api/staffs'])
     } catch (error) {
       setError("创建员工失败")
     } finally {
@@ -103,31 +209,15 @@ export function StaffManagement() {
       return
     }
 
-    setError("")
-    setSuccess("")
-
     try {
       await staffApi.deleteStaff(staff.id)
-
       setSuccess(`员工 "${staff.username}" 删除成功`)
-      setStaffs((prev) => prev.filter((s) => s.id !== staff.id))
-      // 更新分页信息
-      setPagination((prev) => ({ ...prev, total: prev.total - 1 }))
+      
+      // 重新验证数据
+      mutate(['/api/staffs'])
     } catch (error) {
       setError("删除员工失败")
     }
-  }
-
-  const filteredStaffs = staffs.filter((staff) => staff.username.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
   }
 
   const clearMessages = () => {
@@ -257,7 +347,11 @@ export function StaffManagement() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <span>员工列表</span>
-              <Badge variant="secondary">{pagination.total}</Badge>
+              <Badge variant="secondary">
+                <Suspense fallback={<Loader2 className="h-3 w-3 animate-spin" />}>
+                  <StaffCount />
+                </Suspense>
+              </Badge>
             </CardTitle>
             <div className="flex items-center space-x-2">
               <div className="relative">
@@ -274,100 +368,18 @@ export function StaffManagement() {
                   清除消息
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={loadStaffs} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "刷新"}
-              </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-muted-foreground">加载中...</span>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>员工ID</TableHead>
-                  <TableHead>用户名</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>创建时间</TableHead>
-                  <TableHead>更新时间</TableHead>
-                  {isSuperUser && <TableHead>操作</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStaffs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isSuperUser ? 7 : 6} className="text-center py-8 text-muted-foreground">
-                      {searchTerm ? "没有找到匹配的员工" : "暂无员工数据"}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredStaffs.map((staff) => (
-                    <TableRow key={staff.id}>
-                      <TableCell className="font-medium">#{staff.id}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {staff.is_superuser ? (
-                            <Shield className="h-4 w-4 text-orange-600" />
-                          ) : (
-                            <User className="h-4 w-4 text-blue-600" />
-                          )}
-                          <span className="font-medium">{staff.username}</span>
-                          {staff.id === currentUser?.id && (
-                            <Badge variant="outline" className="text-xs">
-                              当前用户
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {staff.is_superuser ? (
-                          <Badge className="bg-orange-100 text-orange-800">超级管理员</Badge>
-                        ) : (
-                          <Badge variant="outline">普通员工</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {staff.is_active ? (
-                          <Badge className="bg-green-100 text-green-800">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            活跃
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            禁用
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatDate(staff.created_at)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatDate(staff.updated_at)}</TableCell>
-                      {isSuperUser && (
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteStaff(staff)}
-                              disabled={staff.id === currentUser?.id}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
+          <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
+            <StaffTableContent 
+              searchTerm={searchTerm} 
+              onDeleteStaff={handleDeleteStaff} 
+              currentUser={currentUser} 
+              isSuperUser={isSuperUser} 
+            />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

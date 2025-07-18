@@ -1,4 +1,5 @@
 from typing import Annotated, Optional
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import Case
@@ -24,6 +25,7 @@ async def read_cases(
     user_id: Optional[int] = None
 ):
     """获取案件列表"""
+    time.sleep(2)
     # 构建查询条件
     filters = {}
     if user_id is not None:
