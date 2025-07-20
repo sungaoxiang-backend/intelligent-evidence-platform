@@ -1,7 +1,7 @@
 "use client"
 
 import { evidenceApi } from "@/lib/api"
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -31,7 +31,6 @@ const evidenceFetcher = async ([key, search, page, pageSize]: [string, string, n
     page,
     pageSize,
     search,
-    withCase: true,
   })
   return response
 }
@@ -142,7 +141,7 @@ function EvidenceTableContent({
             {evidenceList.length === 0 ? (
               <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
             ) : (
-              evidenceList.map((evidence) => (
+              evidenceList.map((evidence: any) => (
                 <tr key={evidence.id} className="border-b hover:bg-gray-50 transition">
                   <td className="px-4 py-3 whitespace-nowrap">{evidence.file_name || '-'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{getFileType(evidence.file_name)}</td>
@@ -188,6 +187,30 @@ export function EvidenceManagement() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadCaseId, setUploadCaseId] = useState("")
+  const [cases, setCases] = useState<any[]>([])
+  const [caseLoading, setCaseLoading] = useState(false)
+
+  // 获取案件列表
+  const fetchCases = async (search = "") => {
+    setCaseLoading(true)
+    try {
+      // 假设 evidenceApi.getCases 存在，否则用 caseApi.getCases
+      const response = await caseApi.getCases({ page: 1, pageSize: 100, search })
+      setCases(response.data)
+      return response.data
+    } catch (error) {
+      toast({ title: "获取案件失败", variant: "destructive" })
+      return []
+    } finally {
+      setCaseLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isUploadDialogOpen) {
+      fetchCases("") // 弹窗打开时自动加载全部案件
+    }
+  }, [isUploadDialogOpen])
 
   const handlePreview = (evidence: any) => {
     setPreviewEvidence(evidence)
@@ -245,7 +268,12 @@ export function EvidenceManagement() {
     if (!caseId || files.length === 0) return
     setUploading(true)
     try {
-      await evidenceApi.uploadEvidences({ case_id: Number(caseId), files })
+      const formData = new FormData()
+      formData.append("case_id", caseId)
+      files.forEach(file => formData.append("files", file))
+      // 可选: formData.append("auto_classification", "true")
+      // 可选: formData.append("auto_feature_extraction", "true")
+      await evidenceApi.autoProcess(formData)
       toast({ title: "上传成功" })
       setUploadCaseId("")
       setSelectedFiles([])
@@ -303,12 +331,28 @@ export function EvidenceManagement() {
           <div className="space-y-6">
             <div>
               <Label htmlFor="caseSelect">关联案件 *</Label>
-              <Suspense fallback={<div className="text-sm text-gray-500">加载案件...</div>}>
-                <CaseSelect 
-                  value={uploadCaseId} 
-                  onChange={handleCaseChange} 
-                />
-              </Suspense>
+              <Select
+                value={uploadCaseId}
+                onValueChange={setUploadCaseId}
+                disabled={caseLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={caseLoading ? "加载中..." : (cases.length === 0 ? "暂无案件，请先创建" : "选择案件")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {cases.length === 0 ? (
+                    <SelectItem value="__no_case__" disabled>
+                      暂无案件数据
+                    </SelectItem>
+                  ) : (
+                    cases.map((c: any) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.creditor_name} vs {c.debtor_name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="fileUpload">上传文件 *</Label>

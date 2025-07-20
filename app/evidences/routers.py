@@ -11,10 +11,9 @@ from app.core.deps import DBSession, get_current_staff
 from app.core.response import SingleResponse, ListResponse, Pagination
 from app.staffs.models import Staff
 from app.evidences.schemas import (
-    Evidence as EvidenceSchema,
-    EvidenceWithCase,
+    EvidenceResponse,
     BatchDeleteRequest,
-    EvidenceUpdate
+    EvidenceEditRequest
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -22,7 +21,7 @@ from app.evidences import services as evidence_service
 router = APIRouter()
 
 
-@router.get("/", response_model=ListResponse[EvidenceSchema])
+@router.get("/", response_model=ListResponse[EvidenceResponse])
 async def read_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -41,24 +40,7 @@ async def read_evidences(
     )
 
 
-@router.get("/with-cases", response_model=ListResponse[EvidenceWithCase])
-async def read_evidences_with_cases(
-    db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
-    skip: int = 0,
-    limit: int = 100,
-):
-    """获取证据列表，包含案件信息"""
-    evidences, total = await evidence_service.get_multi_with_cases_with_count(
-        db, skip=skip, limit=limit
-    )
-    return ListResponse(
-        data=evidences,
-        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
-    )
-
-
-@router.get("/{evidence_id}", response_model=SingleResponse[EvidenceSchema])
+@router.get("/{evidence_id}", response_model=SingleResponse[EvidenceResponse])
 async def read_evidence(
     evidence_id: int,
     db: DBSession,
@@ -74,23 +56,7 @@ async def read_evidence(
     return SingleResponse(data=evidence)
 
 
-@router.get("/{evidence_id}/with-case", response_model=SingleResponse[EvidenceWithCase])
-async def read_evidence_with_case(
-    evidence_id: int,
-    db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
-):
-    """获取证据信息，包含案件信息"""
-    evidence = await evidence_service.get_by_id_with_case(db, evidence_id)
-    if not evidence:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="证据不存在",
-        )
-    return SingleResponse(data=evidence)
-
-
-@router.post("/batch", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceSchema])
+@router.post("/batch", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceResponse])
 async def batch_create_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -194,10 +160,10 @@ async def batch_create_evidences(
         )
 
 
-@router.put("/{evidence_id}", response_model=SingleResponse[EvidenceSchema])
+@router.put("/{evidence_id}", response_model=SingleResponse[EvidenceResponse])
 async def update_evidence(
     evidence_id: int,
-    evidence_in: EvidenceUpdate,
+    evidence_in: EvidenceEditRequest,
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
@@ -239,7 +205,7 @@ async def batch_delete_evidences(
     return SingleResponse(data=data)
 
 
-@router.post("/batch-with-classification", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceSchema])
+@router.post("/batch-with-classification", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceResponse])
 async def batch_create_evidences_with_classification(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -293,3 +259,42 @@ async def batch_create_evidences_with_classification(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量创建证据+分类失败: {str(e)}",
         )
+        
+from app.evidences.schemas import AutoProcessRequest, EvidenceEditRequest, EvidenceResponse
+
+@router.post("/auto-process", response_model=ListResponse[EvidenceResponse])
+async def auto_process(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    case_id: int = Form(...),
+    files: List[UploadFile] = File(None),
+    evidence_ids: List[int] = Form(None),
+    auto_classification: bool = Form(False),
+    auto_feature_extraction: bool = Form(False),
+    ):
+    from app.evidences.services import auto_process
+    from loguru import logger
+    # evidence_ids 可能是字符串列表，需转为 int
+    if evidence_ids is not None:
+        evidence_ids = [int(eid) for eid in evidence_ids]
+    logger.info(f"收到 evidence_ids: {evidence_ids}")
+    # 简单验证：必须提供其一且不能同时提供
+    has_files = files is not None and len(files) > 0
+    has_evidence_ids = evidence_ids is not None and len(evidence_ids) > 0
+    if not has_files and not has_evidence_ids:
+        raise HTTPException(status_code=400, detail="必须提供 files 或 evidence_ids")
+    if has_files and has_evidence_ids:
+        raise HTTPException(status_code=400, detail="files 和 evidence_ids 不能同时提供")
+    # 检查案件是否存在
+    case = await case_service.get_by_id(db, case_id)
+    if not case:
+        logger.warning(f"案件不存在: ID={case_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="案件不存在",
+        )
+    # 校验：不能只做特征提取，必须先分类
+    if auto_feature_extraction and not auto_classification:
+        raise HTTPException(status_code=400, detail="不能只做特征提取，必须先分类")
+    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction)
+    return ListResponse(data=evidences)

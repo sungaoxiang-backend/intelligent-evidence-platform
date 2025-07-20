@@ -1,16 +1,16 @@
 import os
 from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable
-
+from datetime import datetime
 from fastapi import UploadFile
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-
+from agno.media import Image
+from agno.run.response import RunResponse
 from app.evidences.models import Evidence
 from app.evidences.schemas import (
-    EvidenceCreate, 
-    EvidenceUpdate, 
-    FileUploadResponse
+    EvidenceEditRequest, 
+    UploadFileResponse
 )
 from app.integrations.cos import cos_service
 
@@ -30,7 +30,7 @@ async def get_by_id_with_case(db: AsyncSession, evidence_id: int) -> Optional[Ev
 
 async def upload_file(
     file: BinaryIO, filename: str, disposition: str = 'inline'
-) -> FileUploadResponse:
+) -> UploadFileResponse:
     """上传文件到COS"""
     from loguru import logger
     
@@ -73,7 +73,7 @@ async def upload_file(
         file_url = cos_service.upload_file(file, filename, folder, disposition)
         logger.debug(f"文件上传成功: {filename}, URL: {file_url}")
         
-        return FileUploadResponse(
+        return UploadFileResponse(
             file_url=file_url,
             file_name=filename,
             file_size=file_size,
@@ -86,7 +86,7 @@ async def upload_file(
         raise
 
 
-async def update(db: AsyncSession, db_obj: Evidence, obj_in: EvidenceUpdate) -> Evidence:
+async def update(db: AsyncSession, db_obj: Evidence, obj_in: EvidenceEditRequest) -> Evidence:
     """更新证据信息"""
     update_data = obj_in.model_dump(exclude_unset=True)
     
@@ -319,3 +319,118 @@ async def batch_create_with_classification(
         # 分类失败不影响证据上传，只是 is_classified 保持 False
     
     return evidences
+
+
+async def auto_process(
+    db: AsyncSession,
+    case_id: int,
+    files: List[UploadFile] = None,
+    evidence_ids: List[int] = None,
+    auto_classification: bool = False,
+    auto_feature_extraction: bool = False,
+    send_progress: Callable[[dict], Awaitable[None]] = None
+)-> List[Evidence]:
+    from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
+    from app.agentic.agents.evidence_features_extractor import EvidenceFeaturesExtractor, EvidenceExtractionResults
+    from loguru import logger
+    
+    # 类型安全：确保 evidence_ids 为 int 列表
+    if evidence_ids is not None:
+        evidence_ids = [int(eid) for eid in evidence_ids]
+
+    has_files = files is not None and len(files) > 0
+    has_evidence_ids = evidence_ids is not None and len(evidence_ids) > 0
+    
+    if not has_files and not has_evidence_ids:
+        logger.error("auto_process: 必须提供 files 或 evidence_ids")
+        return []
+    
+    if has_files and has_evidence_ids:
+        logger.error("auto_process: files 和 evidence_ids 不能同时提供")
+        return []
+
+    # 1. 使用现有的 batch_create 创建证据记录或根据 evidence_ids 检索证据
+    if files:
+        evidences = await batch_create(db, case_id, files)
+        if send_progress:
+            await send_progress({"status": "uploaded", "message": "文件已成功上传"})
+    elif evidence_ids:
+        evidences = []
+        for evidence_id in evidence_ids:
+            q = await db.execute(select(Evidence).where(Evidence.id == evidence_id, Evidence.case_id == case_id))
+            if evidence := q.scalars().first():
+                evidences.append(evidence)
+        if send_progress:
+            await send_progress({"status": "loaded", "message": "证据已成功加载"})
+    else:
+        evidences = []
+
+
+    # 2. 证据分类（可选）
+    if auto_classification:
+        evidence_classifier = EvidenceClassifier()
+        message_parts = ["请对以下证据进行分类："]
+        for i, ev in enumerate(evidences):
+            message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+        messages = "\n".join(message_parts)
+        run_response: RunResponse = await evidence_classifier.agent.arun(
+            messages,
+            images=[Image(url=ev.file_url) for ev in evidences]
+        )
+        evidence_classifi_results: EvidenceClassifiResults = run_response.content
+        if results := evidence_classifi_results.results:
+            from urllib.parse import unquote
+            for res in results:
+                res_url = unquote(res.image_url)
+                for evidence in evidences:
+                    ev_url = unquote(evidence.file_url)
+                    if ev_url == res_url:
+                        evidence.classification_category = res.evidence_type
+                        evidence.classification_confidence = res.confidence
+                        evidence.classification_reasoning = res.reasoning
+                        from datetime import datetime
+                        evidence.classified_at = datetime.now()
+                        db.add(evidence)
+                        break
+            await db.commit()
+            for evidence in evidences:
+                await db.refresh(evidence)
+        if send_progress:
+            await send_progress({"status": "classified", "message": "文件已成功分类"})
+
+    # 3. 证据特征提取（可选，且只能在分类后）
+    if auto_feature_extraction:
+        extractor = EvidenceFeaturesExtractor()
+        message_parts = ["请从以下证据图片中提取关键信息:"]
+        for i, ev in enumerate(evidences):
+            message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+            message_parts.append(f"证据类型: {ev.classification_category}")
+        messages = "\n".join(message_parts)
+        run_response: RunResponse = await extractor.agent.arun(
+            messages,
+            images=[Image(url=ev.file_url) for ev in evidences]
+        )
+        evidence_extraction_results: EvidenceExtractionResults = run_response.content
+        if results := evidence_extraction_results.results:
+            from urllib.parse import unquote
+            for res in results:
+                res_url = unquote(res.image_url)
+                for evidence in evidences:
+                    ev_url = unquote(evidence.file_url)
+                    if ev_url == res_url:
+                        evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
+                        from datetime import datetime
+                        evidence.features_extracted_at = datetime.now()
+                        db.add(evidence)
+                        break
+            await db.commit()
+            for evidence in evidences:
+                await db.refresh(evidence)
+        if send_progress:
+            await send_progress({"status": "classified", "message": "文件已成功提取特征"})
+        
+        
+    # 4. 返回证据列表
+    return evidences
+
+        

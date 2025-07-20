@@ -14,12 +14,12 @@ from app.users.schemas import UserCreate, User
 class CaseCreate(BaseModel):
     """案件创建模型"""
     user_id: int
-    description: Optional[str] = None
-    case_type: CaseType
+    case_type: Optional[CaseType] = None
     creditor_name: str
     creditor_type: Optional[PartyType] = None
-    debtor_name: str
+    debtor_name: Optional[str] = None
     debtor_type: Optional[PartyType] = None
+    description: Optional[str] = None
 
 
 # 更新时可以修改的属性
@@ -39,12 +39,11 @@ class Case(BaseSchema):
     """案件响应模型"""
     id: int
     user_id: int
-    title: str
-    description: Optional[str] = None
-    case_type: CaseType
     creditor_name: str
+    description: Optional[str] = None
+    case_type: Optional[CaseType] = None
     creditor_type: Optional[PartyType] = None
-    debtor_name: str
+    debtor_name: Optional[str] = None
     debtor_type: Optional[PartyType] = None
     created_at: datetime
     updated_at: datetime

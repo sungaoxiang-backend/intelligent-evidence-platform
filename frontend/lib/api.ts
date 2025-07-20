@@ -153,6 +153,23 @@ export interface Evidence {
   classification_confidence?: number
   classification_reasoning?: string
   is_classified: boolean
+  individual_features?: {
+    evidence_type?: string
+    confidence?: number
+    reasoning?: string
+    feature_extraction?: {
+      evidence_type?: string
+      extracted_slots?: Array<{
+        slot_name: string
+        slot_value: string
+        confidence: number
+        reasoning: string
+        from_urls?: string[]
+      }>
+      consider_correlations?: boolean
+    }
+  }
+  feature_extraction?: any
   created_at: string
   updated_at: string
 }
@@ -175,18 +192,19 @@ export interface EvidenceUpdateParams {
 }
 
 export const evidenceApi = {
-  async getEvidences(params: { page?: number; pageSize?: number; search?: string; case_id?: number; withCase?: boolean }): Promise<{ data: Evidence[] | EvidenceWithCase[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "", case_id, withCase } = params
+  async getEvidences(params: { page?: number; pageSize?: number; search?: string; case_id?: number }) {
+    const { page = 1, pageSize = 20, search = "", case_id } = params
     const skip = (page - 1) * pageSize
-    let url = `${API_CONFIG.BASE_URL}/evidences${withCase ? '/with-cases' : ''}?skip=${skip}&limit=${pageSize}`
+    const limit = pageSize
+    let url = `${API_CONFIG.BASE_URL}/evidences?skip=${skip}&limit=${limit}`
     if (search) url += `&search=${encodeURIComponent(search)}`
-    if (case_id) url += `&case_id=${case_id}`
+    if (case_id !== undefined && case_id !== null) url += `&case_id=${case_id}`
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
     })
     const result = await resp.json()
     if (result.code === 200) {
-      return { data: result.data, pagination: result.pagination }
+      return result
     } else {
       throw new Error(result.message || "请求失败")
     }
@@ -288,6 +306,43 @@ export const evidenceApi = {
       return result.data;
     } else {
       throw new Error(result.message || '智能分类失败');
+    }
+  },
+
+  async extractFeaturesByUrls(urls: string[], evidence_type: string = "微信聊天记录", consider_correlations: boolean = false): Promise<any> {
+    const url = `${API_CONFIG.BASE_URL}/agentic/extract-features-by-urls`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`
+      },
+      body: JSON.stringify({ 
+        urls, 
+        evidence_type, 
+        consider_correlations 
+      }),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return result.data;
+    } else {
+      throw new Error(result.message || '特征提取失败');
+    }
+  },
+
+  async autoProcess(formData: FormData): Promise<{ data: Evidence[]; pagination?: any }> {
+    const url = `${API_CONFIG.BASE_URL}/evidences/auto-process`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      body: formData,
+    });
+    const result = await resp.json();
+    if (result.code === 200 || resp.status === 201) {
+      return { data: result.data, pagination: result.pagination };
+    } else {
+      throw new Error(result.message || "操作失败");
     }
   },
 }

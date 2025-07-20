@@ -16,6 +16,7 @@ import type { Case } from "@/lib/types"
 import { useToast } from "@/components/ui/use-toast"
 import useSWR, { mutate } from "swr"
 import { CaseTableSkeleton } from "./case-table-skeleton"
+import { User } from '@/lib/types'
 
 // SWR数据获取函数
 const fetcher = async ([key, search, page, pageSize]: [string, string, number, number]) => {
@@ -26,6 +27,11 @@ const fetcher = async ([key, search, page, pageSize]: [string, string, number, n
   })
   return response
 }
+// CASE_TYPES 定义提前到文件顶部且唯一
+const CASE_TYPES: Record<string, string> = {
+  debt: "借款纠纷",
+  contract: "合同纠纷"
+};
 
 // 使用Suspense的数据展示组件
 function CaseTableContent({ 
@@ -72,7 +78,7 @@ function CaseTableContent({
         <table className="min-w-full text-sm align-middle">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">案件标题</th>
+              <th className="px-4 py-3 font-medium text-gray-700 text-left">关联用户</th>
               <th className="px-4 py-3 font-medium text-gray-700 text-left">案件类型</th>
               <th className="px-4 py-3 font-medium text-gray-700 text-left">债权人</th>
               <th className="px-4 py-3 font-medium text-gray-700 text-left">债务人</th>
@@ -86,8 +92,8 @@ function CaseTableContent({
             ) : (
               cases.map((case_: Case) => (
                 <tr key={case_.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.title}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.case_type}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{case_.creditor_name}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{CASE_TYPES[case_.case_type as keyof typeof CASE_TYPES] || case_.case_type}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{case_.creditor_name}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{case_.debtor_name}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{case_.created_at ? new Date(case_.created_at).toLocaleString() : '-'}</td>
@@ -146,29 +152,31 @@ export function CaseManagement() {
   const [newUserForm, setNewUserForm] = useState({ name: "", id_card: "", phone: "" })
   const [userLoading, setUserLoading] = useState(false)
 
-  // 案件类型枚举 - 对齐后端
-const CASE_TYPES = {
-  "debt": "借款纠纷",
-  "contract": "合同纠纷"
-} as const
+  // 用户类型枚举 - 对齐后端
+  const PARTY_TYPES = {
+    person: "个人",
+    company: "公司", 
+    individual: "个体工商户"
+  } as const
 
-// 当事人类型枚举 - 对齐后端
-const PARTY_TYPES = {
-  "person": "个人",
-  "company": "公司", 
-  "individual": "个体工商户"
-} as const
-
-// 新增案件表单状态
-  const [addForm, setAddForm] = useState({
+  // addForm/Case/Partial<Case> 类型声明调整
+  const [addForm, setAddForm] = useState<{
+    user_id: number;
+    case_type: keyof typeof CASE_TYPES;
+    creditor_name: string;
+    creditor_type?: keyof typeof PARTY_TYPES;
+    debtor_name: string;
+    debtor_type?: keyof typeof PARTY_TYPES;
+    description: string;
+  }>({
     user_id: 0,
-    case_type: "debt" as keyof typeof CASE_TYPES,
+    case_type: "debt",
     creditor_name: "",
-    creditor_type: null as keyof typeof PARTY_TYPES | null,
+    creditor_type: undefined,
     debtor_name: "",
-    debtor_type: null as keyof typeof PARTY_TYPES | null,
+    debtor_type: undefined,
     description: ""
-  })
+  });
   const [addLoading, setAddLoading] = useState(false)
 
   const handlePageChange = (page: number) => {
@@ -249,8 +257,6 @@ const PARTY_TYPES = {
   // 新增表单校验
   function validateAdd(form: typeof addForm) {
     if (!form.user_id) return "请选择关联用户"
-    if (!form.case_type) return "案件类型为必填项"
-    if (!form.creditor_name.trim()) return "债权人为必填项"
     if (!form.debtor_name.trim()) return "债务人为必填项"
     return null
   }
@@ -328,9 +334,9 @@ const PARTY_TYPES = {
         user_id: 0,
         case_type: "debt",
         creditor_name: "",
-        creditor_type: null,
+        creditor_type: undefined,
         debtor_name: "",
-        debtor_type: null,
+        debtor_type: undefined,
         description: ""
       })
       refreshData()
@@ -340,6 +346,12 @@ const PARTY_TYPES = {
       setAddLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (isAddDialogOpen) {
+      fetchUsers(""); // 弹窗打开时自动加载全部用户
+    }
+  }, [isAddDialogOpen]);
 
   return (
     <div className="space-y-4">
@@ -362,62 +374,57 @@ const PARTY_TYPES = {
             </DialogHeader>
             <form className="space-y-6" onSubmit={e => { e.preventDefault(); handleAddCase() }}>
               <div className="grid grid-cols-2 gap-6">
-                <div className="col-span-2">
+                {/* 必填项一行展示 */}
+                <div className="col-span-1">
                   <Label htmlFor="userSelect">关联用户 *</Label>
-                  <div className="flex gap-2">
-                    <Select 
-                      value={addForm.user_id.toString()} 
-                      onValueChange={value => {
-                        const user = users.find(u => u.id === parseInt(value))
-                        if (user) {
-                          setAddForm(prev => ({ 
-                            ...prev, 
-                            user_id: user.id, 
-                            creditor_name: user.name 
-                          }))
-                        }
-                      }}
-                      disabled={userLoading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={userLoading ? "加载中..." : (users.length === 0 ? "暂无用户，请先创建" : "选择用户")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <div className="p-2">
-                          <Input
-                            placeholder="搜索用户姓名或电话..."
-                            value={userSearch}
-                            onChange={(e) => handleUserSearch(e.target.value)}
-                            className="h-8 text-sm mb-2"
-                          />
-                        </div>
-                        {users.length === 0 ? (
-                          <SelectItem value="0" disabled>
-                            {userSearch ? "未找到匹配用户" : "暂无用户数据"}
+                  <Select 
+                    value={addForm.user_id ? String(addForm.user_id) : ""} 
+                    onValueChange={value => {
+                      const user = users.find(u => String(u.id) === value)
+                      if (user) {
+                        setAddForm(prev => ({ ...prev, user_id: user.id, creditor_name: user.name }))
+                      }
+                    }}
+                    disabled={userLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={userLoading ? "加载中..." : (users.length === 0 ? "暂无用户，请先创建" : "选择用户")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="p-2">
+                        <Input
+                          placeholder="搜索用户姓名或电话..."
+                          value={userSearch}
+                          onChange={(e) => handleUserSearch(e.target.value)}
+                          className="h-8 text-sm mb-2"
+                        />
+                      </div>
+                      {users.length === 0 ? (
+                        <SelectItem value="0" disabled>
+                          {userSearch ? "未找到匹配用户" : "暂无用户数据"}
+                        </SelectItem>
+                      ) : (
+                        users.map(user => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name} {user.phone && `(${user.phone})`}
                           </SelectItem>
-                        ) : (
-                          users.map(user => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.name} {user.phone && `(${user.phone})`}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setIsCreatingUser(true)}
-                      className="shrink-0"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      创建用户
-                    </Button>
-                  </div>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
+                <div className="col-span-1">
+                  <Label htmlFor="debtorName">债务人姓名 *</Label>
+                  <Input 
+                    id="debtorName" 
+                    value={addForm.debtor_name} 
+                    onChange={e => setAddForm({...addForm, debtor_name: e.target.value})} 
+                    placeholder="请输入债务人姓名"
+                  />
+                </div>
+                {/* 非必填项 */}
                 <div>
-                  <Label htmlFor="caseType">案件类型 *</Label>
+                  <Label htmlFor="caseType">案件类型</Label>
                   <Select 
                     value={addForm.case_type} 
                     onValueChange={value => setAddForm({...addForm, case_type: value as keyof typeof CASE_TYPES})}
@@ -433,7 +440,7 @@ const PARTY_TYPES = {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="creditorName">债权人 *</Label>
+                  <Label htmlFor="creditorName">债权人</Label>
                   <Input 
                     id="creditorName" 
                     value={addForm.creditor_name} 
@@ -445,7 +452,7 @@ const PARTY_TYPES = {
                   <Label htmlFor="creditorType">债权人类型</Label>
                   <Select 
                     value={addForm.creditor_type || "none"} 
-                    onValueChange={value => setAddForm({...addForm, creditor_type: value === "none" ? null : value as keyof typeof PARTY_TYPES})}
+                    onValueChange={value => setAddForm({...addForm, creditor_type: value === "none" ? undefined : value as keyof typeof PARTY_TYPES})}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="请选择类型"/>
@@ -459,19 +466,10 @@ const PARTY_TYPES = {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="debtorName">债务人 *</Label>
-                  <Input 
-                    id="debtorName" 
-                    value={addForm.debtor_name} 
-                    onChange={e => setAddForm({...addForm, debtor_name: e.target.value})} 
-                    placeholder="请输入债务人姓名"
-                  />
-                </div>
-                <div>
                   <Label htmlFor="debtorType">债务人类型</Label>
                   <Select 
                     value={addForm.debtor_type || "none"} 
-                    onValueChange={value => setAddForm({...addForm, debtor_type: value === "none" ? null : value as keyof typeof PARTY_TYPES})}
+                    onValueChange={value => setAddForm({...addForm, debtor_type: value === "none" ? undefined : value as keyof typeof PARTY_TYPES})}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="请选择类型"/>
@@ -547,8 +545,20 @@ const PARTY_TYPES = {
             <div className="space-y-3 text-sm">
               <div><span className="font-medium">案件标题：</span>{viewCase.title}</div>
               <div><span className="font-medium">案件类型：</span>{CASE_TYPES[viewCase.case_type as keyof typeof CASE_TYPES] || viewCase.case_type}</div>
-              <div><span className="font-medium">债权人：</span>{viewCase.creditor_name} ({PARTY_TYPES[viewCase.creditor_type as keyof typeof PARTY_TYPES] || viewCase.creditor_type})</div>
-              <div><span className="font-medium">债务人：</span>{viewCase.debtor_name} ({PARTY_TYPES[viewCase.debtor_type as keyof typeof PARTY_TYPES] || viewCase.debtor_type})</div>
+              <div>
+                <span className="font-medium">债权人：</span>
+                {viewCase.creditor_name}
+                {viewCase.creditor_type && PARTY_TYPES[viewCase.creditor_type as keyof typeof PARTY_TYPES]
+                  ? `（${PARTY_TYPES[viewCase.creditor_type as keyof typeof PARTY_TYPES]}）`
+                  : ""}
+              </div>
+              <div>
+                <span className="font-medium">债务人：</span>
+                {viewCase.debtor_name}
+                {viewCase.debtor_type && PARTY_TYPES[viewCase.debtor_type as keyof typeof PARTY_TYPES]
+                  ? `（${PARTY_TYPES[viewCase.debtor_type as keyof typeof PARTY_TYPES]}）`
+                  : ""}
+              </div>
               <div><span className="font-medium">描述：</span>{viewCase.description || '-'}</div>
               <div><span className="font-medium">创建时间：</span>{viewCase.created_at ? new Date(viewCase.created_at).toLocaleString() : '-'}</div>
             </div>
@@ -587,7 +597,7 @@ const PARTY_TYPES = {
               <label className="block text-sm font-medium mb-1">债权人类型</label>
               <Select 
                 value={editForm.creditor_type || "none"} 
-                onValueChange={value => setEditForm(f => ({ ...f, creditor_type: value === "none" ? null : value as keyof typeof PARTY_TYPES }))}
+                onValueChange={value => setEditForm(f => ({ ...f, creditor_type: value === "none" ? undefined : value as keyof typeof PARTY_TYPES }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="请选择类型"/>
@@ -608,7 +618,7 @@ const PARTY_TYPES = {
               <label className="block text-sm font-medium mb-1">债务人类型</label>
               <Select 
                 value={editForm.debtor_type || "none"} 
-                onValueChange={value => setEditForm(f => ({ ...f, debtor_type: value === "none" ? null : value as keyof typeof PARTY_TYPES }))}
+                onValueChange={value => setEditForm(f => ({ ...f, debtor_type: value === "none" ? undefined : value as keyof typeof PARTY_TYPES }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="请选择类型"/>

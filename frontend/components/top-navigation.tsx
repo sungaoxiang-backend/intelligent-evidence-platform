@@ -39,9 +39,9 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
 
   const navigationItems = [
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
+    { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
     { id: "evidence", label: "证据管理", icon: Shield, href: "/evidence" },
-    { id: "users", label: "当事人", icon: Users, href: "/users" },
   ]
 
   if (userRole === "admin") {
@@ -92,7 +92,7 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
             <div className="hidden md:block relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground h-3 w-3" />
               <Input
-                placeholder="搜索案件、当事人..."
+                placeholder="搜索案件、用户..."
                 className="pl-7 w-48 h-7 bg-muted/50 border-0 focus:bg-background transition-colors text-xs"
               />
             </div>

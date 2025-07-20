@@ -249,7 +249,7 @@ export function WorkbenchDashboard() {
                         </Badge>
                       </div>
                       <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                        <span>当事人: {case_.client}</span>
+                        <span>用户: {case_.client}</span>
                         <span>金额: {case_.amount}</span>
                         <span>编号: {case_.id}</span>
                         <span>
@@ -306,7 +306,7 @@ export function WorkbenchDashboard() {
               onClick={() => router.push("/users")}
             >
               <Users className="h-5 w-5" />
-              <span className="text-sm">当事人管理</span>
+              <span className="text-sm">用户管理</span>
             </Button>
             <Button variant="outline" className="h-16 flex-col space-y-1.5 bg-transparent">
               <Brain className="h-5 w-5" />

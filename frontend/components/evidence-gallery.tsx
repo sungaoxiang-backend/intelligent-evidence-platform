@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import useSWR, { mutate } from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Search,
   Filter,
@@ -18,10 +19,12 @@ import {
   ZoomIn,
   Edit,
   Brain,
+  Upload,
 } from "lucide-react"
 import { evidenceApi } from "@/lib/api"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // SWR数据获取函数
 const evidenceFetcher = async ([key, caseId, search, page, pageSize]: [string, string, string, number, number]) => {
@@ -61,7 +64,10 @@ function EvidenceGalleryContent({
   selectedIds,
   setSelectedIds,
   handleBatchClassify,
-  classifying
+  classifying,
+  handleBatchFeatureExtraction,
+  extracting,
+  handleSave,
 }: {
   caseId: string | number
   searchTerm: string
@@ -73,6 +79,9 @@ function EvidenceGalleryContent({
   setSelectedIds: (ids: number[]) => void
   handleBatchClassify: () => void
   classifying: boolean
+  handleBatchFeatureExtraction: () => void
+  extracting: boolean
+  handleSave: (editForm: any, setEditing: (v: boolean) => void) => void
 }) {
   const { data: evidenceData } = useSWR(
     ['/api/evidences', String(caseId), searchTerm, page, pageSize],
@@ -108,8 +117,8 @@ function EvidenceGalleryContent({
     ? evidenceList
     : (groupMap[activeCategory] || []);
 
-  const allIds = groupedEvidence.map(e => e.id)
-  const isAllSelected = allIds.length > 0 && allIds.every(id => selectedIds.includes(id))
+  const allIds = groupedEvidence.map((e: any) => e.id)
+  const isAllSelected = allIds.length > 0 && allIds.every((id: number) => selectedIds.includes(id))
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -120,8 +129,42 @@ function EvidenceGalleryContent({
   }
 
   const handleSelectOne = (id: number, checked: boolean) => {
-    setSelectedIds(checked ? [...selectedIds, id] : selectedIds.filter(i => i !== id))
+    setSelectedIds(checked ? [...selectedIds, id] : selectedIds.filter((i) => i !== id))
   }
+
+  // 右侧数据标注区域
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<any>(selectedEvidence)
+
+  useEffect(() => {
+    setEditForm(selectedEvidence)
+  }, [selectedEvidence])
+
+  // // 编辑保存逻辑
+  // const handleSave = async () => {
+  //   try {
+  //     // 只提交 schema 允许的字段
+  //     const payload: any = {
+  //       classification_category: editForm.classification_category,
+  //       classification_confidence: editForm.classification_confidence,
+  //       classification_reasoning: editForm.classification_reasoning,
+  //     };
+  //     if (Array.isArray(editForm.evidence_features)) {
+  //       payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
+  //         slot_value: slot.slot_value
+  //       }))
+  //     }
+  //     await evidenceApi.updateEvidence(editForm.id, payload)
+  //     setEditing(false)
+  //     // 刷新数据
+  //     await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+  //     toast({ title: "保存成功" })
+  //   } catch (e: any) {
+  //     toast({ title: "保存失败", description: e?.message || '未知错误', variant: "destructive" })
+  //   }
+  // }
+
+  if (!editForm) return null;
 
   return (
     <div className="grid grid-cols-12 gap-4 h-[calc(100vh-220px)]">
@@ -177,7 +220,7 @@ function EvidenceGalleryContent({
                 />
                 <span className="ml-2 text-xs text-muted-foreground">全选</span>
               </div>
-              {groupedEvidence.map((evidence) => {
+              {groupedEvidence.map((evidence: any) => {
                 const checked = selectedIds.includes(evidence.id)
                 return (
                   <div
@@ -332,46 +375,128 @@ function EvidenceGalleryContent({
                     </div>
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">上传时间:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.created_at}>{selectedEvidence.created_at}</span>
+                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.created_at}>{selectedEvidence.created_at ? new Date(selectedEvidence.created_at).toLocaleString() : '-'}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-muted-foreground shrink-0">更新时间:</span>
+                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.updated_at}>{selectedEvidence.updated_at ? new Date(selectedEvidence.updated_at).toLocaleString() : '-'}</span>
                     </div>
                   </div>
                 </div>
 
                 <Separator />
 
-                {/* AI分类结果 */}
-                {selectedEvidence.is_classified && (
-                  <div>
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Brain className="h-3.5 w-3.5 text-blue-600" />
-                      <h4 className="font-medium text-foreground text-sm">AI分类结果</h4>
-                      <Badge variant="outline" className="text-xs">
-                        置信度: {((selectedEvidence.classification_confidence || 0) * 100).toFixed(0)}%
-                      </Badge>
+                {/* 分类结果 */}
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Brain className="h-3.5 w-3.5 text-blue-600" />
+                    <h4 className="font-medium text-foreground text-sm">AI分类结果</h4>
+                    <Badge variant="outline" className="text-xs">
+                      置信度: {((editForm.classification_confidence || 0) * 100).toFixed(0)}%
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">分类类别:</Label>
+                      {editing ? (
+                        <Input
+                          value={editForm.classification_category || ""}
+                          onChange={e => setEditForm((f: any) => ({ ...f, classification_category: e.target.value }))}
+                        />
+                      ) : (
+                        <div className="text-xs">{editForm.classification_category || "未分类"}</div>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">分类理由:</Label>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">置信度:</Label>
+                      {editing ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={editForm.classification_confidence ?? ""}
+                          onChange={e => setEditForm((f: any) => ({ ...f, classification_confidence: Number(e.target.value) }))}
+                        />
+                      ) : (
+                        <div className="text-xs">{((editForm.classification_confidence || 0) * 100).toFixed(2)}%</div>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">分类理由:</Label>
+                      {editing ? (
+                        <Textarea
+                          value={editForm.classification_reasoning || ""}
+                          onChange={e => setEditForm((f: any) => ({ ...f, classification_reasoning: e.target.value }))}
+                        />
+                      ) : (
                         <div className="text-xs bg-muted/50 p-2 rounded-md mt-1 border max-h-[100px] overflow-y-auto">
-                          {selectedEvidence.classification_reasoning || ''}
+                          {editForm.classification_reasoning || ''}
                         </div>
-                      </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">分类时间:</Label>
+                      <div className="text-xs">{editForm.classified_at ? new Date(editForm.classified_at).toLocaleString() : "-"}</div>
                     </div>
                   </div>
-                )}
+                </div>
 
-                <Separator />
+                {/* 特征提取结果 */}
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Brain className="h-3.5 w-3.5 text-purple-600" />
+                    <h4 className="font-medium text-foreground text-sm">特征提取结果</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {(editForm.evidence_features || []).map((slot: any, idx: number) => (
+                      <div key={idx} className="bg-purple-50 p-2 rounded-md border space-y-1">
+                        <div>
+                          <Label className="text-xs">词槽名:</Label>
+                          <span className="text-xs">{slot.slot_name}</span>
+                        </div>
+                        <div>
+                          <Label className="text-xs">词槽值:</Label>
+                          {editing ? (
+                            <Input
+                              value={slot.slot_value}
+                              onChange={e => {
+                                const newFeatures = [...editForm.evidence_features]
+                                newFeatures[idx].slot_value = e.target.value
+                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                              }}
+                            />
+                          ) : (
+                            <span className="text-xs">{slot.slot_value}</span>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-xs">置信度:</Label>
+                          <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                        </div>
+                        <div>
+                          <Label className="text-xs">理由:</Label>
+                          <span className="text-xs">{slot.reasoning}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div>
+                      <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
+                      <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
+                    </div>
+                  </div>
+                </div>
 
-                {/* 操作按钮 */}
-                <div className="space-y-2">
-                  <Button className="w-full h-8 text-sm">
-                    <Download className="h-3.5 w-3.5 mr-1.5" />
-                    下载原文件
-                  </Button>
-                  <Button variant="outline" className="w-full bg-transparent h-8 text-sm">
-                    <Edit className="h-3.5 w-3.5 mr-1.5" />
-                    编辑标注
-                  </Button>
+                {/* 编辑/保存按钮 */}
+                <div className="flex gap-2 mt-2">
+                  {editing ? (
+                    <>
+                      <Button onClick={() => handleSave(editForm, setEditing)}>保存</Button>
+                      <Button variant="outline" onClick={() => setEditing(false)}>取消</Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" onClick={() => setEditing(true)}>编辑标注</Button>
+                  )}
                 </div>
               </div>
             </ScrollArea>
@@ -394,9 +519,34 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [classifying, setClassifying] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const { toast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+
+  // 获取证据列表
+  const { data: evidenceData } = useSWR(
+    ['/api/evidences', String(caseId), searchTerm, page, pageSize],
+    evidenceFetcher,
+    {
+      suspense: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
+  )
+  const evidenceList = evidenceData?.data || []
+
+  // 自动选中第一个证据
+  useEffect(() => {
+    if (evidenceList.length > 0) {
+      setSelectedEvidence(evidenceList[0]);
+    } else {
+      setSelectedEvidence(null);
+    }
+  }, [evidenceList]);
 
   const handleBatchClassify = async () => {
     setClassifying(true)
@@ -405,45 +555,86 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         toast({ title: "提示", description: "请先选择证据", variant: "destructive" })
         return
       }
-      
-      const response = await evidenceApi.getEvidences({
-        page,
-        pageSize,
-        search: searchTerm,
-        case_id: Number(caseId),
-      })
-      
-      const evidenceList = response?.data || []
-      const selectedEvidence = evidenceList.filter((e: any) => selectedIds.includes(e.id))
-      
-      if (selectedEvidence.length === 0) {
-        toast({ title: "警告", description: "未找到选中的证据数据", variant: "destructive" })
-        return
-      }
-      
-      const urls = selectedEvidence
-        .map((e: any) => e.file_url)
-        .filter((url: string) => url)
-      
-      if (urls.length === 0) {
-        toast({ 
-          title: "警告", 
-          description: `选中的证据中没有有效的文件URL`, 
-          variant: "destructive" 
-        })
-        return
-      }
-      
-      await evidenceApi.classifyEvidencesByUrls(urls)
-      toast({ title: "智能分类完成", description: `成功分类 ${urls.length} 个证据` })
+      const formData = new FormData()
+      formData.append("case_id", String(caseId))
+      selectedIds.forEach(id => formData.append("evidence_ids", String(id)))
+      formData.append("auto_classification", "true")
+      formData.append("auto_feature_extraction", "false")
+      await evidenceApi.autoProcess(formData)
+      toast({ title: "智能分类完成", description: `成功分类 ${selectedIds.length} 个证据` })
       setSelectedIds([])
-      
-      // 强制刷新数据
       await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
     } catch (e: any) {
       toast({ title: "智能分类失败", description: e?.message || '未知错误', variant: "destructive" })
     } finally {
       setClassifying(false)
+    }
+  }
+
+  const handleBatchFeatureExtraction = async () => {
+    setExtracting(true)
+    try {
+      if (selectedIds.length === 0) {
+        toast({ title: "提示", description: "请先选择证据", variant: "destructive" })
+        return
+      }
+      // 适配后端逻辑：特征提取必须依赖分类
+      // 这里始终 auto_classification=true, auto_feature_extraction=true
+      const formData = new FormData()
+      formData.append("case_id", String(caseId))
+      selectedIds.forEach(id => formData.append("evidence_ids", String(id)))
+      formData.append("auto_classification", "true")
+      formData.append("auto_feature_extraction", "true")
+      await evidenceApi.autoProcess(formData)
+      toast({ title: "特征提取完成", description: `成功提取 ${selectedIds.length} 个证据的特征` })
+      setSelectedIds([])
+      await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+    } catch (e: any) {
+      toast({ title: "特征提取失败", description: e?.message || '未知错误', variant: "destructive" })
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  // 在 EvidenceGallery 组件作用域内定义 handleSave
+  const handleSave = async (editForm: any, setEditing: (v: boolean) => void) => {
+    try {
+      const payload: any = {
+        classification_category: editForm.classification_category,
+        classification_confidence: editForm.classification_confidence,
+        classification_reasoning: editForm.classification_reasoning,
+      };
+      if (Array.isArray(editForm.evidence_features)) {
+        payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
+          slot_value: slot.slot_value
+        }))
+      }
+      await evidenceApi.updateEvidence(editForm.id, payload)
+      setEditing(false)
+      await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      toast({ title: "保存成功" })
+    } catch (e: any) {
+      toast({ title: "保存失败", description: e?.message || '未知错误', variant: "destructive" })
+    }
+  }
+
+  // 上传逻辑
+  async function handleUpload() {
+    if (!caseId || selectedFiles.length === 0) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("case_id", String(caseId))
+      selectedFiles.forEach(file => formData.append("files", file))
+      await evidenceApi.autoProcess(formData)
+      toast({ title: "上传成功" })
+      setIsUploadDialogOpen(false)
+      setSelectedFiles([])
+      await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+    } catch (e) {
+      toast({ title: "上传失败", variant: "destructive" })
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -455,11 +646,54 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           <h1 className="text-3xl font-bold text-foreground">证据管理</h1>
           <p className="text-muted-foreground mt-2">智能证据处理</p>
         </div>
-        {onBack && (
-          <Button variant="outline" onClick={onBack}>返回案件</Button>
-        )}
+        <div className="flex gap-3 items-center ml-auto">
+          <Button size="lg" className="bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg" onClick={() => setIsUploadDialogOpen(true)}>
+            上传证据
+          </Button>
+          {onBack && (
+            <Button variant="outline" onClick={onBack}>返回案件</Button>
+          )}
+        </div>
       </div>
-
+      {/* 上传证据弹窗 */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>上传新证据</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div>
+              <Label htmlFor="fileUpload">上传文件 *</Label>
+              <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-2">点击上传或拖拽文件到此处</p>
+                <p className="text-sm text-gray-500">支持 PDF、JPG、PNG、MP3 等格式，最大 50MB</p>
+                <Input type="file" className="hidden" id="fileUpload" multiple onChange={e => {
+                  if (e.target.files) setSelectedFiles(Array.from(e.target.files))
+                }} />
+                <Button
+                  variant="outline"
+                  className="mt-4 bg-transparent"
+                  onClick={() => document.getElementById("fileUpload")?.click()}
+                >
+                  选择文件
+                </Button>
+                {selectedFiles.length > 0 && (
+                  <div className="mt-2 text-sm text-gray-700">已选择 {selectedFiles.length} 个文件</div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={handleUpload} disabled={uploading || selectedFiles.length === 0}>
+                {uploading ? "上传中..." : "上传证据"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* 搜索栏 */}
       <div className="flex gap-4">
         <div className="relative flex-1">
@@ -477,11 +711,14 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         </Button>
       </div>
 
-      {/* 多选智能分类按钮 */}
+      {/* 多选智能分类和特征提取按钮 */}
       {selectedIds.length > 0 && (
         <div className="mb-2 flex items-center gap-3">
           <Button onClick={handleBatchClassify} disabled={classifying} className="bg-gradient-to-r from-blue-500 to-green-500 text-white">
             {classifying ? "分类中..." : "智能分类"}
+          </Button>
+          <Button onClick={handleBatchFeatureExtraction} disabled={extracting} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+            {extracting ? "提取中..." : "特征提取"}
           </Button>
           <span className="text-sm text-muted-foreground">已选 {selectedIds.length} 项</span>
         </div>
@@ -499,6 +736,9 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           setSelectedIds={setSelectedIds}
           handleBatchClassify={handleBatchClassify}
           classifying={classifying}
+          handleBatchFeatureExtraction={handleBatchFeatureExtraction}
+          extracting={extracting}
+          handleSave={handleSave}
         />
       </Suspense>
     </div>

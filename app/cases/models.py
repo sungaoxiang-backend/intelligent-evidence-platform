@@ -35,22 +35,21 @@ class Case(Base):
 
     # 基础信息
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
-    case_type: Mapped[CaseType] = mapped_column(
-            SQLAlchemyEnum(CaseType), nullable=False
+    case_type: Mapped[Optional[CaseType]] = mapped_column(
+            SQLAlchemyEnum(CaseType), nullable=True
         )
     case_status: Mapped[CaseStatus] = mapped_column(
             SQLAlchemyEnum(CaseStatus), nullable=False, default=CaseStatus.DRAFT
         )
 
     # 当事人信息
-    creditor_name: Mapped[str] = mapped_column(String(50),  index=True, nullable=False)
-    creditor_type: Mapped[PartyType] = mapped_column(
-        SQLAlchemyEnum(PartyType), nullable=True, default=None
+    creditor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    debtor_name: Mapped[Optional[str]] = mapped_column(String(50), index=True, nullable=True)
+    creditor_type: Mapped[Optional[PartyType]] = mapped_column(
+        SQLAlchemyEnum(PartyType), nullable=True
     )
-    debtor_name: Mapped[str] = mapped_column(String(50),  index=True, nullable=False)
-    debtor_type: Mapped[PartyType] = mapped_column(
-        SQLAlchemyEnum(PartyType), nullable=True, default=None
+    debtor_type: Mapped[Optional[PartyType]] = mapped_column(
+        SQLAlchemyEnum(PartyType), nullable=True
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     

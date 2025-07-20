@@ -191,24 +191,24 @@ EVIDENCE_TYPE_FEATURES = {
     }
 }
 
-class ExtractedFeature(BaseModel):
-    """单个提取的特征信息"""
-    slot_name: str
-    value: str
-    confidence: float
-    position: Optional[str] = None  # 在图片中的位置描述
-
 class SlotExtraction(BaseModel):
     """单个词槽提取结果"""
-    from_urls: List[str]  # 来源图片URL，单个或联合
     slot_name: str  # 必须是target_slots_to_extract中的key
     slot_value: str
     confidence: float
     reasoning: str  # 提取理由，特别说明来自哪些图片
+    
+
+class ResultItem(BaseModel):
+    """单个词槽提取结果"""
+    image_url: str
+    classification_category: str
+    slot_extraction: List[SlotExtraction]
+   
 
 class EvidenceExtractionResults(BaseModel):
     """特征提取结果"""
-    results: List[SlotExtraction]  # 所有提取的词槽结果
+    results: List[ResultItem]  # 所有提取的词槽结果
 
 def get_extraction_guide(evidence_type: EvidenceType, consider_correlations: bool = False) -> str:
     """生成针对特定证据类型的特征提取指南"""
@@ -238,46 +238,19 @@ instructions="""你是一个专业的法律证据信息提取AI助手。你的�
 
 **核心任务**: 从提供的图片中提取target_slots_to_extract中指定的所有词槽，支持单个图片提取和多个图片联合提取。
 
-**数据结构要求**: 
-- 必须使用统一的SlotExtraction结构
-- 每个提取结果包含: from_urls(来源图片列表), slot_name(目标词槽名), slot_value(提取值), confidence(置信度), reasoning(提取理由)
-- 禁止使用任何其他字段名或结构
-
 **提取规则:**
 1. **严格词槽限制**: 只能提取target_slots_to_extract中明确列出的词槽，禁止创建新词槽名
 2. **统一格式**: 无论单个图片还是多个图片联合提取，都使用相同的SlotExtraction结构
-3. **值来源说明**: 在reasoning中明确说明信息来自哪些图片
-4. **联合提取**: 当consider_correlations=True时，某些词槽值需要综合分析多个图片得出
-5. **置信度**: 为每个提取的字段给出0-1之间的置信度
+3. **值来源说明**: 在reasoning中明确说明信息提取的原因
+4. **置信度**: 为每个提取的字段给出0-1之间的置信度
+5. **联合提取**: 当consider_correlations=True时，某些词槽值需要综合分析多个图片得出
+
 
 **输出格式要求**:
-返回EvidenceExtractionResults结构，其中results字段是SlotExtraction列表。
+1. 返回EvidenceExtractionResults结构，其中results字段是ResultItem的列表，ResultItem中每个image_url和evidence_type对应SlotExtraction列表。
 
-**联合提取示例**:
-当consider_correlations=True时，可以创建跨图片的提取结果：
-```json
-{
-  "results": [
-    {
-      "from_urls": ["image1", "image2"],
-      "slot_name": "欠款合意",
-      "slot_value": "是",
-      "confidence": 0.9,
-      "reasoning": "image1中债务人承认欠款，image2中债权人确认债务金额，综合判断存在欠款合意"
-    },
-    {
-      "from_urls": ["image3"],
-      "slot_name": "欠款金额",
-      "slot_value": "10000",
-      "confidence": 0.95,
-      "reasoning": "image3中明确显示欠款金额为10000元"
-    }
-  ]
-}
-```
-
-**重要**: 禁止输出任何不在target_slots_to_extract列表中的词槽名。
-现在开始提取指定证据图片中的关键信息。
+**重要**: 
+1. 禁止输出任何不在target_slots_to_extract列表中的词槽名。
 """,
             response_model=EvidenceExtractionResults,
             show_tool_calls=True,
@@ -361,34 +334,16 @@ if __name__ == '__main__':
     print("=== 测试独立特征提取 ===")
     extractor.extract_features(
         image_urls=test_images_need_consider_correlations[:2],
-        evidence_types=[EvidenceType.WECHAT_CHAT_RECORD],
+        evidence_types=test_evidence_types,
         consider_correlations=False
     )
     
-    # 测试2: 联合特征提取（关联分析）
-    print("\n=== 测试联合特征提取 ===")
-    extractor.extract_features(
-        image_urls=test_images_need_consider_correlations,
-        evidence_types=[EvidenceType.WECHAT_CHAT_RECORD],
-        consider_correlations=True
-    )
+    # # 测试2: 联合特征提取（关联分析）
+    # print("\n=== 测试联合特征提取 ===")
+    # extractor.extract_features(
+    #     image_urls=test_images_need_consider_correlations,
+    #     evidence_types=[EvidenceType.WECHAT_CHAT_RECORD],
+    #     consider_correlations=True
+    # )
     
     print("提取完成")
-
-# 预期输出格式示例
-expected_output_example = [
-    {
-        "from_urls": ["image1", "image2"],
-        "slot_name": "欠款合意",
-        "slot_value": True,
-        "confidence": 0.9,
-        "reasoning": "这两张图体现了a欠了b的钱，且a承认了欠钱"
-    },
-    {
-        "from_urls": ["image3", "image4"],
-        "slot_name": "欠款金额",
-        "slot_value": "10万",
-        "confidence": 0.9,
-        "reasoning": "image3体现了债务人说先想要还5万，image4提到剩下5万再延缓1个月，故总计欠款10万"
-    }
-]

@@ -1,7 +1,7 @@
 from typing import List, Callable, Awaitable
 from fastapi import UploadFile
 from agno.media import Image
-
+import json
 from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
 from app.agentic.agents.evidence_features_extractor import EvidenceFeaturesExtractor, EvidenceType, EvidenceExtractionResults
 from app.integrations.cos import COSService
@@ -89,11 +89,35 @@ async def classify_evidence_by_urls(
             q = await db.execute(select(Evidence).where(Evidence.file_url == r.image_url))
             evidence = q.scalars().first()
             if evidence:
-                evidence.individual_features = {
-                    "evidence_type": r.evidence_type,
-                    "confidence": r.confidence,
-                    "reasoning": r.reasoning
-                }
+                # 合并现有数据，而不是覆盖
+                if evidence.individual_features is None:
+                    evidence.individual_features = {}
+                
+                # 如果是字符串，先解析
+                if isinstance(evidence.individual_features, str):
+                    try:
+                        evidence.individual_features = json.loads(evidence.individual_features)
+                    except:
+                        evidence.individual_features = {}
+                
+                # 先解析现有的JSON字符串
+                current_features = {}
+                if evidence.individual_features:
+                    if isinstance(evidence.individual_features, str):
+                        try:
+                            current_features = json.loads(evidence.individual_features)
+                        except:
+                            current_features = {}
+                    elif isinstance(evidence.individual_features, dict):
+                        current_features = evidence.individual_features
+                
+                # 更新分类相关字段
+                current_features["evidence_type"] = r.evidence_type
+                current_features["confidence"] = r.confidence
+                current_features["reasoning"] = r.reasoning
+                
+                # 重新序列化为JSON字符串存储
+                evidence.individual_features = json.dumps(current_features, ensure_ascii=False)
                 db.add(evidence)
         await db.commit()
     return result
@@ -156,13 +180,38 @@ async def extract_evidence_features(
                             "from_urls": slot_result.from_urls
                         })
                 
-                if url_features:
-                    evidence.individual_features = {
-                        "evidence_type": evidence_type,
-                        "extracted_slots": url_features,
-                        "consider_correlations": consider_correlations
-                    }
-                    db.add(evidence)
+                # 合并现有数据，而不是覆盖
+                if evidence.individual_features is None:
+                    evidence.individual_features = {}
+                
+                # 如果是字符串，先解析
+                if isinstance(evidence.individual_features, str):
+                    try:
+                        evidence.individual_features = json.loads(evidence.individual_features)
+                    except:
+                        evidence.individual_features = {}
+                
+                # 先解析现有的JSON字符串
+                current_features = {}
+                if evidence.individual_features:
+                    if isinstance(evidence.individual_features, str):
+                        try:
+                            current_features = json.loads(evidence.individual_features)
+                        except:
+                            current_features = {}
+                    elif isinstance(evidence.individual_features, dict):
+                        current_features = evidence.individual_features
+                
+                # 添加特征提取数据
+                current_features["feature_extraction"] = {
+                    "evidence_type": evidence_type,
+                    "extracted_slots": url_features,
+                    "consider_correlations": consider_correlations
+                }
+                
+                # 重新序列化为JSON字符串存储
+                evidence.individual_features = json.dumps(current_features, ensure_ascii=False)
+                db.add(evidence)
         await db.commit()
     
     return result

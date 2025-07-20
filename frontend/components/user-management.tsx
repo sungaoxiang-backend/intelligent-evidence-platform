@@ -276,19 +276,19 @@ export function UserManagement() {
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">当事人管理</h1>
-          <p className="text-gray-600 mt-1">管理所有案件相关的当事人信息</p>
+          <h1 className="text-3xl font-bold text-gray-900">用户管理</h1>
+          <p className="text-gray-600 mt-1">管理所有案件相关的用户信息</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={(open) => { setIsAddDialogOpen(open); if (!open) setAddForm(initialForm) }}>
           <DialogTrigger asChild>
             <Button size="lg" className="bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg">
               <Plus className="h-5 w-5 mr-2" />
-              添加当事人
+              添加用户
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>添加新当事人</DialogTitle>
+              <DialogTitle>添加新用户</DialogTitle>
             </DialogHeader>
             <form className="space-y-6" onSubmit={e => { e.preventDefault(); handleAddUser() }}>
               <div className="grid grid-cols-2 gap-4">
@@ -309,7 +309,7 @@ export function UserManagement() {
                 <Button variant="outline" type="button" onClick={() => setIsAddDialogOpen(false)}>
                   取消
                 </Button>
-                <Button type="submit" disabled={addLoading}>{addLoading ? "添加中..." : "添加当事人"}</Button>
+                <Button type="submit" disabled={addLoading}>{addLoading ? "添加中..." : "添加用户"}</Button>
               </div>
             </form>
           </DialogContent>
@@ -346,7 +346,7 @@ export function UserManagement() {
       <Dialog open={!!viewUser} onOpenChange={open => { if (!open) setViewUser(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>当事人详情</DialogTitle>
+            <DialogTitle>用户详情</DialogTitle>
           </DialogHeader>
           {viewUser && (
             <div className="space-y-3 text-sm">
@@ -364,7 +364,7 @@ export function UserManagement() {
       <Dialog open={!!editUser} onOpenChange={open => { if (!open) setEditUser(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>编辑当事人</DialogTitle>
+            <DialogTitle>编辑用户</DialogTitle>
           </DialogHeader>
           <form className="space-y-5 mt-2" onSubmit={e => { e.preventDefault(); handleEditUser() }}>
             <div>
@@ -393,7 +393,7 @@ export function UserManagement() {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
           </DialogHeader>
-          <div className="py-4">确定要删除该当事人吗？此操作不可撤销。</div>
+          <div className="py-4">确定要删除该用户吗？此操作不可撤销。</div>
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setDeleteUserId(null)}>取消</Button>
             <Button variant="destructive" onClick={handleDeleteUser} disabled={deleteLoading}>删除</Button>
@@ -407,7 +407,7 @@ export function UserManagement() {
           <DialogHeader>
             <DialogTitle>批量删除</DialogTitle>
           </DialogHeader>
-          <div className="py-4">确定要删除选中的 {selectedIds.length} 个当事人吗？此操作不可撤销。</div>
+          <div className="py-4">确定要删除选中的 {selectedIds.length} 个用户吗？此操作不可撤销。</div>
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setBatchDeleteOpen(false)}>取消</Button>
             <Button variant="destructive" onClick={handleBatchDelete} disabled={deleteLoading}>删除</Button>
