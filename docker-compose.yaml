@@ -26,7 +26,7 @@ services:
     env_file:
       - .env.docker
     ports:
-      - "5432:5432"
+      - "15432:5432"
     restart: always
     networks:
       - app-network
