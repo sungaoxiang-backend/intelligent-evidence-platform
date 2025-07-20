@@ -1,6 +1,7 @@
+import json
 from typing import Any, Optional, List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from app.cases.schemas import Case
 
 class FileUploadResponse(BaseModel):
@@ -48,6 +49,25 @@ class Evidence(BaseSchema, EvidenceBase):
     
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="before")
+    def unpack_individual_features(cls, data: Any) -> Any:
+        if hasattr(data, "individual_features"):
+            features = data.individual_features
+            if features:
+                # Pydantic v2 from_attributes 模式下，如果 individual_features 是字符串，需要先解析
+                if isinstance(features, str):
+                    try:
+                        features = json.loads(features)
+                    except json.JSONDecodeError:
+                        features = {}
+                
+                if isinstance(features, dict):
+                    data.evidence_type = features.get("evidence_type")
+                    data.classification_confidence = features.get("confidence")
+                    data.classification_reasoning = features.get("reasoning")
+                    data.is_classified = True
+        return data
 
     class Config:
         from_attributes = True

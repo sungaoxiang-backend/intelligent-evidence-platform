@@ -1,11 +1,12 @@
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, UploadFile, WebSocket, WebSocketDisconnect, HTTPException
 from app.core.deps import DBSession, get_current_staff
 from app.staffs.models import Staff
-from app.agentic.services import classify_evidence
+from app.agentic.services import classify_evidence, classify_evidence_by_urls
 from app.agentic.agents.evidence_classifier import EvidenceClassifiResults
 from app.core.response import SingleResponse
 import json
+from app.agentic.schemas import EvidenceClassificationByUrlsRequest
 
 router = APIRouter()
 
@@ -54,4 +55,17 @@ async def classify_evidence_endpoint(
     async def dummy_callback(data):
         pass
     result = await classify_evidence(files, dummy_callback) # Dummy callback for HTTP
+    return SingleResponse(data=result)
+
+
+@router.post("/classification-by-urls", response_model=SingleResponse[EvidenceClassifiResults])
+async def classify_evidence_by_urls_endpoint(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    request: EvidenceClassificationByUrlsRequest,
+):
+    async def dummy_callback(data): pass
+    if not request.urls or not isinstance(request.urls, list) or len(request.urls) == 0:
+        raise HTTPException(status_code=400, detail="必须提供URL列表")
+    result = await classify_evidence_by_urls(request.urls, dummy_callback, db=db)
     return SingleResponse(data=result)

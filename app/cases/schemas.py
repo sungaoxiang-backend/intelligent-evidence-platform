@@ -14,7 +14,6 @@ from app.users.schemas import UserCreate, User
 class CaseCreate(BaseModel):
     """案件创建模型"""
     user_id: int
-    title: str
     description: Optional[str] = None
     case_type: CaseType
     creditor_name: str
@@ -26,7 +25,6 @@ class CaseCreate(BaseModel):
 # 更新时可以修改的属性
 class CaseUpdate(BaseModel):
     """案件更新模型"""
-    title: Optional[str] = None
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
     creditor_name: Optional[str] = None

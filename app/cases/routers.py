@@ -21,8 +21,7 @@ async def read_cases(
     current_staff: Annotated[Staff, Depends(get_current_staff)],
     skip: int = 0,
     limit: int = 10,
-    user_id: Optional[int] = None,
-    assigned_staff_id: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """获取案件列表"""
     # 构建查询条件
@@ -32,11 +31,6 @@ async def read_cases(
 
     # 获取案件列表
     cases, total = await case_service.get_multi_with_count(db, skip=skip, limit=limit, **filters)
-
-    # 过滤分配给特定员工的案件
-    if assigned_staff_id is not None:
-        cases = [case for case in cases if case.assigned_staff_id == assigned_staff_id]
-        total = len(cases) # Note: This might not be accurate if pagination is applied before filtering.
 
     return ListResponse(
         data=cases,
@@ -55,15 +49,6 @@ async def create_case(
     user = await user_service.get_by_id(db, case_in.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-
-    # 检查案件编号是否已存在
-    existing_case = await case_service.get_by_case_number(db, case_in.case_number)
-    if existing_case:
-        raise HTTPException(status_code=400, detail="案件编号已存在")
-
-    # 验证债权人和债务人信息
-    if not case_in.creaditor_name or not case_in.debtor_name:
-        raise HTTPException(status_code=400, detail="债权人和债务人信息不能为空")
 
     # 创建案件
     new_case = await case_service.create(db, case_in)
@@ -94,12 +79,6 @@ async def update_case(
     case = await case_service.get_by_id(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="案件不存在")
-
-    # 检查案件编号是否已存在
-    if case_in.case_number and case_in.case_number != case.case_number:
-        existing_case = await case_service.get_by_case_number(db, case_in.case_number)
-        if existing_case and existing_case.id != case_id:
-            raise HTTPException(status_code=400, detail="案件编号已存在")
 
     updated_case = await case_service.update(db, case, case_in)
     return SingleResponse(data=updated_case)

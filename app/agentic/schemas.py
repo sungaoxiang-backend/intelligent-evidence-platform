@@ -1,4 +1,4 @@
-from typing import Any, Optional, List, Dict, Union, Float
+from typing import Any, Optional, List, Dict, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -130,4 +130,7 @@ class FeatureGroupDetailResponse(BaseModel):
     associated_evidences: List[Dict[str, Any]] = []  # 简化的证据信息
     association_count: int = 0
 
+
+class EvidenceClassificationByUrlsRequest(BaseModel):
+    urls: List[str]
 

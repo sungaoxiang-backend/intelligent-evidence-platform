@@ -4,6 +4,10 @@ from agno.media import Image
 
 from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
 from app.integrations.cos import COSService
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.evidences.models import Evidence
+from app.db.session import SessionLocal
+from sqlalchemy import select
 
 async def classify_evidence(
     files: List[UploadFile], 
@@ -50,4 +54,43 @@ async def classify_evidence(
     result = response.content
     await send_progress({"status": "completed", "result": result.model_dump()})
 
+    return result
+
+async def classify_evidence_by_urls(
+    urls: List[str],
+    send_progress: Callable[[dict], Awaitable[None]] = None,
+    db: AsyncSession = None
+) -> EvidenceClassifiResults:
+    async def no_op(data): pass
+    if send_progress is None:
+        send_progress = no_op
+
+    images = [Image(url=url) for url in urls]
+    await send_progress({"status": "classifying", "message": "Starting evidence classification by urls..."})
+    evidence_classifier = EvidenceClassifier()
+    message_parts = ["请对以下证据进行分类："]
+    for i, img in enumerate(images):
+        message_parts.append(f"{i+1}. file_url: {img.url}")
+    messages = "\n".join(message_parts)
+    response = await evidence_classifier.agent.arun(
+        messages,
+        images=images
+    )
+    result = response.content
+    await send_progress({"status": "completed", "result": result.model_dump()})
+
+    # 更新数据库individual_features
+    if db is not None and result and result.results:
+        for r in result.results:
+            # 查找Evidence
+            q = await db.execute(select(Evidence).where(Evidence.file_url == r.image_url))
+            evidence = q.scalars().first()
+            if evidence:
+                evidence.individual_features = {
+                    "evidence_type": r.evidence_type,
+                    "confidence": r.confidence,
+                    "reasoning": r.reasoning
+                }
+                db.add(evidence)
+        await db.commit()
     return result

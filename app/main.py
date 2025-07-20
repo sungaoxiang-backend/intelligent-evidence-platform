@@ -17,8 +17,8 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
+# templates = Jinja2Templates(directory="templates")
 
 from app.core.middleware import LoggingMiddleware
 
@@ -37,10 +37,12 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_middleware(LoggingMiddleware)
 
+# @app.get("/")
+# async def root(request: Request):
+#     return templates.TemplateResponse("index.html", {"request": request})
 @app.get("/")
-async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
+async def index():
+    return {"server_status": "running"}
 
 from app.api.v1 import api_router
 

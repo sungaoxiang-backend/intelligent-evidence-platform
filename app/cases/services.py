@@ -21,8 +21,9 @@ async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
 
 async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:
     """创建新案件"""
+    title = f"{obj_in.creditor_name} vs {obj_in.debtor_name}"
     db_obj = CaseModel(
-        title=obj_in.title,
+        title=title,
         description=obj_in.description,
         case_type=obj_in.case_type,
         creditor_name=obj_in.creditor_name,
@@ -43,7 +44,7 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
     
     # 检查是否需要更新title
     should_update_title = False
-    if any(field in update_data for field in ['creditor_name', 'debtor_name', 'case_type']):
+    if any(field in update_data for field in ['creditor_name', 'debtor_name']):
         should_update_title = True
     
     # 更新属性
@@ -52,7 +53,7 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
     
     # 如果关键字段有更新，同步更新title
     if should_update_title:
-        db_obj.title = f"{db_obj.creditor_name} VS {db_obj.debtor_name} 的 {db_obj.case_type.value}"
+        db_obj.title = f"{db_obj.creditor_name} vs {db_obj.debtor_name}"
     
     db.add(db_obj)
     await db.commit()
