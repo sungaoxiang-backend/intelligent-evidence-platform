@@ -1,0 +1,73 @@
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:54 - 开始请求: GET http://localhost:8000/
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:62 - 完成请求: GET http://localhost:8000/ - 状态码: 200 - 耗时: 0.0128秒
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:54 - 开始请求: GET http://localhost:8000/static/style.css
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:54 - 开始请求: GET http://localhost:8000/static/script.js
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:62 - 完成请求: GET http://localhost:8000/static/script.js - 状态码: 304 - 耗时: 0.0085秒
+2025-07-12 00:57:04 | INFO | app.core.middleware:dispatch:62 - 完成请求: GET http://localhost:8000/static/style.css - 状态码: 304 - 耗时: 0.0140秒
+2025-07-12 00:57:11 | INFO | app.core.middleware:dispatch:54 - 开始请求: POST http://localhost:8000/api/v1/agentic/classification
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 发票.png, 文件夹: images
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 181542 字节
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005711_发票.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005711_发票.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005711_发票.png, disposition=inline
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005711_发票.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005711_发票.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 身份证正面.png, 文件夹: images
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 347913 字节
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005711_身份证正面.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005711_身份证正面.png
+2025-07-12 00:57:11 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005711_身份证正面.png, disposition=inline
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005711_身份证正面.png
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005711_身份证正面.png
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 银行卡.jpg, 文件夹: images
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 488408 字节
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005712_银行卡.jpg
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005712_银行卡.jpg
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005712_银行卡.jpg, disposition=inline
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005712_银行卡.jpg
+2025-07-12 00:57:12 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005712_银行卡.jpg
+2025-07-12 00:57:36 | INFO | app.core.middleware:dispatch:62 - 完成请求: POST http://localhost:8000/api/v1/agentic/classification - 状态码: 200 - 耗时: 25.6055秒
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: temp_file_187650790201584.jpg, 文件夹: images
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 814248 字节
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005805_temp_file_187650790201584.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005805_temp_file_187650790201584.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005805_temp_file_187650790201584.jpg, disposition=inline
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005805_temp_file_187650790201584.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005805_temp_file_187650790201584.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: temp_file_187650793583120.jpg, 文件夹: images
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 603343 字节
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005805_temp_file_187650793583120.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005805_temp_file_187650793583120.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005805_temp_file_187650793583120.jpg, disposition=inline
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005805_temp_file_187650793583120.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005805_temp_file_187650793583120.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: temp_file_281472286793744.jpg, 文件夹: images
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 5558278 字节
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005805_temp_file_281472286793744.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005805_temp_file_281472286793744.jpg
+2025-07-12 00:58:05 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005805_temp_file_281472286793744.jpg, disposition=inline
+2025-07-12 00:58:06 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005805_temp_file_281472286793744.jpg
+2025-07-12 00:58:06 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005805_temp_file_281472286793744.jpg
+2025-07-12 00:58:19 | INFO | app.core.middleware:dispatch:54 - 开始请求: POST http://localhost:8000/api/v1/agentic/classification
+2025-07-12 00:58:19 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 发票.png, 文件夹: images
+2025-07-12 00:58:19 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 181542 字节
+2025-07-12 00:58:19 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005819_发票.png
+2025-07-12 00:58:19 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005819_发票.png
+2025-07-12 00:58:19 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005819_发票.png, disposition=inline
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005819_发票.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005819_发票.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 身份证正面.png, 文件夹: images
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 347913 字节
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005820_身份证正面.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005820_身份证正面.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005820_身份证正面.png, disposition=inline
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005820_身份证正面.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005820_身份证正面.png
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:39 - COS服务开始上传文件: 银行卡.jpg, 文件夹: images
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:57 - 文件大小: 488408 字节
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:81 - 生成唯一文件名: 20250712005820_银行卡.jpg
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:88 - 对象键: images/20250712005820_银行卡.jpg
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:95 - 开始上传到COS: Bucket=hui-ai-lawyer-1309488351, Key=images/20250712005820_银行卡.jpg, disposition=inline
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:105 - COS上传成功: images/20250712005820_银行卡.jpg
+2025-07-12 00:58:20 | DEBUG | app.integrations.cos:upload_file:109 - 生成文件URL: https://hui-ai-lawyer-1309488351.cos.ap-guangzhou.myqcloud.com/images/20250712005820_银行卡.jpg
+2025-07-12 00:58:38 | INFO | app.core.middleware:dispatch:62 - 完成请求: POST http://localhost:8000/api/v1/agentic/classification - 状态码: 200 - 耗时: 18.2510秒
