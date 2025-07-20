@@ -49,6 +49,19 @@ services:
       "-c", "timezone=Asia/Shanghai"
     ]
 
+  frontend:
+      build:
+        context: ./frontend
+        dockerfile: Dockerfile
+      ports:
+        - "3000:3000"
+      networks:
+        - app-network
+      depends_on:
+        - app
+      environment:
+        - NODE_ENV=production
+        
 volumes:
   postgres_data:
 
