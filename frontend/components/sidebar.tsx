@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { LayoutDashboard, Users, UserCheck, FileText, Shield, LogOut, Scale } from "lucide-react"
+import Link from "next/link"
 
 interface SidebarProps {
   activeModule: string
@@ -11,11 +12,11 @@ interface SidebarProps {
 
 export function Sidebar({ activeModule, setActiveModule }: SidebarProps) {
   const menuItems = [
-    { id: "dashboard", label: "数据仪表盘", icon: LayoutDashboard },
-    { id: "staff", label: "员工管理", icon: UserCheck },
-    { id: "users", label: "用户管理", icon: Users },
-    { id: "cases", label: "案件管理", icon: Scale },
-    { id: "evidence", label: "证据管理", icon: Shield },
+    { id: "dashboard", label: "数据仪表盘", icon: LayoutDashboard, href: "/" },
+    { id: "staff", label: "员工管理", icon: UserCheck, href: "/staff" },
+    { id: "users", label: "用户管理", icon: Users, href: "/users" },
+    { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
+    { id: "evidence", label: "证据管理", icon: Shield, href: "/evidence" },
   ]
 
   return (
@@ -31,18 +32,19 @@ export function Sidebar({ activeModule, setActiveModule }: SidebarProps) {
         {menuItems.map((item) => {
           const Icon = item.icon
           return (
-            <Button
-              key={item.id}
-              variant="ghost"
-              className={cn(
-                "w-full justify-start px-6 py-3 text-left",
-                activeModule === item.id && "bg-blue-50 text-blue-600 border-r-2 border-blue-600",
-              )}
-              onClick={() => setActiveModule(item.id)}
-            >
-              <Icon className="mr-3 h-5 w-5" />
-              {item.label}
-            </Button>
+            <Link href={item.href} key={item.id} passHref legacyBehavior>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start px-6 py-3 text-left",
+                  activeModule === item.id && "bg-blue-50 text-blue-600 border-r-2 border-blue-600",
+                )}
+                as="a"
+              >
+                <Icon className="mr-3 h-5 w-5" />
+                {item.label}
+              </Button>
+            </Link>
           )
         })}
       </nav>

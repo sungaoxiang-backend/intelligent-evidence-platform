@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Inter } from "next/font/google"
 import "./globals.css"
@@ -86,6 +85,33 @@ function AppContent({ children }: { children: React.ReactNode }) {
   )
 }
 
+// 全局错误边界组件
+class GlobalErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    // 可在此处上报错误日志
+    // console.error('GlobalErrorBoundary:', error, errorInfo)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center">
+          <h1 className="text-2xl font-bold mb-4">页面发生错误</h1>
+          <p className="text-muted-foreground mb-2">{this.state.error?.message || '未知错误'}</p>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={() => window.location.reload()}>刷新页面</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -95,8 +121,10 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AppContent>{children}</AppContent>
-          <Toaster />
+          <GlobalErrorBoundary>
+            <AppContent>{children}</AppContent>
+            <Toaster />
+          </GlobalErrorBoundary>
         </ThemeProvider>
       </body>
     </html>
