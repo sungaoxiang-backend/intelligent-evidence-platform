@@ -24,6 +24,7 @@ import { Pagination } from "@/components/pagination"
 import { useToast } from "@/components/ui/use-toast"
 import { caseApi } from "@/lib/api"
 import useSWR, { mutate } from "swr"
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 
 // SWR数据获取函数
 const evidenceFetcher = async ([key, search, page, pageSize]: [string, string, number, number]) => {
@@ -125,42 +126,42 @@ function EvidenceTableContent({
 
   return (
     <>
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="min-w-full text-sm align-middle">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">证据名称</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件类型</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">文件大小</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">关联案件</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">上传时间</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evidenceList.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
-            ) : (
-              evidenceList.map((evidence: any) => (
-                <tr key={evidence.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 whitespace-nowrap">{evidence.file_name || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{getFileType(evidence.file_name)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatFileSize(evidence.file_size)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {"case" in evidence && evidence.case?.title ? evidence.case.title : "-"}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onPreview(evidence)}>预览</Button>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onDownload(evidence)}>下载</Button>
-                    <Button variant="destructive" size="sm" onClick={() => onDelete(evidence)}>删除</Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card className="overflow-x-auto">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>证据名称</TableHead>
+                <TableHead>文件类型</TableHead>
+                <TableHead>文件大小</TableHead>
+                <TableHead>关联案件</TableHead>
+                <TableHead>上传时间</TableHead>
+                <TableHead className="text-center">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {evidenceList.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+              ) : (
+                evidenceList.map((evidence: any) => (
+                  <TableRow key={evidence.id}>
+                    <TableCell className="whitespace-nowrap">{evidence.file_name || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{getFileType(evidence.file_name)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatFileSize(evidence.file_size)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{"case" in evidence && evidence.case?.title ? evidence.case.title : "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-center">
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onPreview(evidence)}>预览</Button>
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onDownload(evidence)}>下载</Button>
+                      <Button variant="destructive" size="sm" onClick={() => onDelete(evidence)}>删除</Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
       <div className="mt-6">
         <Pagination
           currentPage={page}

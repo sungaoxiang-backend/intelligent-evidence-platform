@@ -57,21 +57,20 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md p-6">
         {/* Logo和标题 */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-4 shadow-lg">
             <Scale className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">债务纠纷管理平台</h1>
-          <p className="text-gray-600">请登录您的账户</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">汇法律 智能证物平台</h1>
         </div>
         {/* 登录表单 */}
         <Card className="shadow-xl border-0">
-          <CardHeader className="space-y-1 pb-6">
+          {/* <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-xl text-center">员工登录</CardTitle>
-          </CardHeader>
+          </CardHeader> */}
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* 用户名输入 */}

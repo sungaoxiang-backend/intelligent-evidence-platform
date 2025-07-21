@@ -20,305 +20,207 @@ import {
   Scale,
   Brain,
   Upload,
+  BarChart2,
+  PieChart,
 } from "lucide-react"
+import useSWR from "swr"
+import { caseApi, evidenceApi, userApi } from "@/lib/api"
+import { useEffect, useState } from "react"
 
 export function WorkbenchDashboard() {
   const router = useRouter()
 
-  const todayTasks = [
-    {
-      id: 1,
-      type: "urgent",
-      title: "张三债务纠纷案 - AI标注完成，需审核",
-      caseId: "C2024001",
-      deadline: "今天 18:00",
-      priority: "高",
-      stage: "诉前",
-    },
-    {
-      id: 2,
-      type: "reminder",
-      title: "李四合同违约案 - 开庭提醒",
-      caseId: "C2024002",
-      deadline: "明天 09:30",
-      priority: "高",
-      stage: "诉中",
-    },
-    {
-      id: 3,
-      type: "ai",
-      title: "ABC公司案 - 证据材料AI分析中",
-      caseId: "C2024003",
-      deadline: "2小时后完成",
-      priority: "中",
-      stage: "诉前",
-    },
-  ]
+  // 统计数据
+  const { data: caseData } = useSWR(["dashboard-cases"], async () => {
+    const res = await caseApi.getCases({ page: 1, pageSize: 10 })
+    return res
+  })
+  const { data: evidenceData } = useSWR(["dashboard-evidences"], async () => {
+    const res = await evidenceApi.getEvidences({ page: 1, pageSize: 10 })
+    return res
+  })
+  const { data: userData } = useSWR(["dashboard-users"], async () => {
+    const res = await userApi.getUsers({ page: 1, pageSize: 10 })
+    return res
+  })
 
-  const quickStats = [
-    { label: "今日新增案件", value: "5", change: "+2", icon: Plus, color: "text-blue-600" },
-    { label: "AI处理中", value: "8", change: "+3", icon: Brain, color: "text-purple-600" },
-    { label: "本月结案", value: "28", change: "+15", icon: CheckCircle, color: "text-green-600" },
-    { label: "回款金额", value: "¥156万", change: "+23%", icon: DollarSign, color: "text-orange-600" },
-  ]
-
-  const recentCases = [
-    {
-      id: "C2024005",
-      title: "某公司债务追讨案",
-      client: "ABC贸易公司",
-      amount: "¥50万",
-      stage: "诉前",
-      status: "证据材料AI智能标注",
-      progress: 65,
-      nextAction: "审核AI标注结果",
-      aiProcessed: 8,
-      totalEvidence: 12,
-    },
-    {
-      id: "C2024004",
-      title: "个人借贷纠纷案",
-      client: "赵六",
-      amount: "¥12万",
-      stage: "诉前",
-      status: "文书生成",
-      progress: 85,
-      nextAction: "生成起诉状",
-      aiProcessed: 5,
-      totalEvidence: 5,
-    },
-    {
-      id: "C2024003",
-      title: "合同违约赔偿案",
-      client: "XYZ科技",
-      amount: "¥80万",
-      stage: "诉中",
-      status: "案件已立案",
-      progress: 70,
-      nextAction: "准备庭审材料",
-      aiProcessed: 15,
-      totalEvidence: 15,
-    },
-  ]
-
-  const getStageColor = (stage: string) => {
-    switch (stage) {
-      case "诉前":
-        return "bg-blue-100 text-blue-800"
-      case "诉中":
-        return "bg-orange-100 text-orange-800"
-      case "诉后":
-        return "bg-green-100 text-green-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
-
-  const getTaskIcon = (type: string) => {
-    switch (type) {
-      case "urgent":
-        return <AlertTriangle className="h-4 w-4 text-red-500" />
-      case "reminder":
-        return <Calendar className="h-4 w-4 text-blue-500" />
-      case "ai":
-        return <Brain className="h-4 w-4 text-purple-500" />
-      default:
-        return <FileText className="h-4 w-4 text-orange-500" />
-    }
-  }
+  // 最近数据
+  const recentCases = caseData?.data || []
+  const recentEvidences = evidenceData?.data || []
+  const recentUsers = userData?.data || []
 
   return (
-    <div className="space-y-5">
-      {/* 页面头部 */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-3 lg:space-y-0">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">工作台</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            今天是{" "}
-            {new Date().toLocaleDateString("zh-CN", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-              weekday: "long",
-            })}
-            ，您有 {todayTasks.length} 项待办事项
-          </p>
-        </div>
-
-        <div className="flex space-x-2">
-          <Button
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all h-9 px-4"
-            onClick={() => router.push("/cases")}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            录入新案件
-          </Button>
-          <Button variant="outline" className="bg-transparent h-9 px-4" onClick={() => router.push("/evidence")}>
-            <Upload className="h-4 w-4 mr-2" />
-            批量上传证据
-          </Button>
-          <Button variant="outline" className="bg-transparent h-9 px-4">
-            <Brain className="h-4 w-4 mr-2" />
-            AI智能分析
-          </Button>
-        </div>
-      </div>
-
-      {/* 今日统计 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {quickStats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <Card key={index} className="card-shadow hover:card-shadow-hover transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-                    <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                    <p className={`text-sm ${stat.change.startsWith("+") ? "text-green-600" : "text-red-600"}`}>
-                      {stat.change} 较昨日
-                    </p>
-                  </div>
-                  <div className={`p-2.5 rounded-full bg-muted/50 ${stat.color}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* 今日待办 */}
-        <Card className="lg:col-span-1 card-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-lg">今日待办</CardTitle>
-            <Badge variant="secondary">{todayTasks.length}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {todayTasks.map((task) => (
-              <div
-                key={task.id}
-                className="p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    {getTaskIcon(task.type)}
-                    <Badge variant={task.priority === "高" ? "destructive" : "secondary"} className="text-xs">
-                      {task.priority}
-                    </Badge>
-                    <Badge className={getStageColor(task.stage)} variant="outline">
-                      {task.stage}
-                    </Badge>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{task.deadline}</span>
-                </div>
-                <h4 className="font-medium text-sm mb-1">{task.title}</h4>
-                <p className="text-xs text-muted-foreground">案件编号: {task.caseId}</p>
+    <div className="space-y-8 pb-12">
+      {/* 平台使用说明 */}
+      <Card className="card-shadow">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold mb-2 flex items-center gap-2">
+            <Shield className="h-7 w-7 text-blue-600" /> 汇法律 智能证物平台
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="prose prose-blue max-w-none text-base">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 rounded px-4 py-2">
+              <Scale className="h-5 w-5 text-blue-500" />
+              <span className="font-semibold text-blue-700 dark:text-blue-300">智能证物管理 · AI辅助分析 · 一站式法律数据平台</span>
+            </div>
+            <p>
+              <b>汇法律 智能证物平台</b> 为法律服务、案件管理、证据管理等场景提供智能化、结构化的证物管理与AI辅助分析能力。
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="flex items-center gap-1 text-lg font-semibold mb-2"><FileText className="h-5 w-5 text-blue-500" /> 主要功能</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li><b>案件管理：</b> 创建、编辑、分配、进度跟踪</li>
+                  <li><b>证据管理：</b> 批量上传、AI分类、特征提取</li>
+                  <li><b>用户/员工管理：</b> 权限分级、信息维护</li>
+                  <li><b>AI智能分析：</b> 自动分类、关键信息抽取</li>
+                </ul>
               </div>
-            ))}
+              <div>
+                <h3 className="flex items-center gap-1 text-lg font-semibold mb-2"><Users className="h-5 w-5 text-green-500" /> 快速上手</h3>
+                <ul className="list-decimal pl-5 space-y-1">
+                  <li>左侧导航进入各业务模块</li>
+                  <li>案件管理中可新建案件</li>
+                  <li>证据管理中批量上传证据，体验AI自动分类</li>
+                  <li>点击统计卡片可跳转详情</li>
+                </ul>
+              </div>
+            </div>
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded px-4 py-2 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <span className="text-yellow-800 dark:text-yellow-200 text-sm">AI分析结果仅供参考，最终以人工审核为准。如遇系统异常请联系管理员。</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-            <Button variant="ghost" className="w-full justify-center" onClick={() => router.push("/cases")}>
-              查看全部待办
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+      {/* 统计卡片和最新数据列表可保留，放在说明下方 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/cases") }>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">案件总数</p>
+              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">{caseData?.pagination?.total ?? "-"}</p>
+            </div>
+            <div className="p-3 rounded-full bg-muted/50 text-blue-600 group-hover:bg-primary/20 transition-colors">
+              <Scale className="h-7 w-7" />
+            </div>
           </CardContent>
         </Card>
-
-        {/* 最近案件 */}
-        <Card className="lg:col-span-2 card-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-lg">最近案件进展</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/cases")}>
-              查看全部
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentCases.map((case_) => (
-                <div key={case_.id} className="p-4 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h4 className="font-medium text-sm">{case_.title}</h4>
-                        <Badge className={getStageColor(case_.stage)}>{case_.stage}</Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {case_.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                        <span>用户: {case_.client}</span>
-                        <span>金额: {case_.amount}</span>
-                        <span>编号: {case_.id}</span>
-                        <span>
-                          AI处理: {case_.aiProcessed}/{case_.totalEvidence}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">案件进度</span>
-                      <span className="font-medium">{case_.progress}%</span>
-                    </div>
-                    <Progress value={case_.progress} className="h-1.5" />
-                    <p className="text-sm text-blue-600 flex items-center space-x-1">
-                      <Clock className="h-3 w-3" />
-                      <span>下一步: {case_.nextAction}</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
+        <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/evidence") }>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">证据总数</p>
+              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">{evidenceData?.pagination?.total ?? "-"}</p>
+            </div>
+            <div className="p-3 rounded-full bg-muted/50 text-purple-600 group-hover:bg-primary/20 transition-colors">
+              <Shield className="h-7 w-7" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/users") }>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">用户总数</p>
+              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">{userData?.pagination?.total ?? "-"}</p>
+            </div>
+            <div className="p-3 rounded-full bg-muted/50 text-green-600 group-hover:bg-primary/20 transition-colors">
+              <Users className="h-7 w-7" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 快速入口 */}
-      <Card className="card-shadow">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">快速操作</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Button
-              variant="outline"
-              className="h-16 flex-col space-y-1.5 bg-transparent"
-              onClick={() => router.push("/cases")}
-            >
-              <Scale className="h-5 w-5" />
-              <span className="text-sm">案件管理</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-16 flex-col space-y-1.5 bg-transparent"
-              onClick={() => router.push("/evidence")}
-            >
-              <Shield className="h-5 w-5" />
-              <span className="text-sm">证据管理</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-16 flex-col space-y-1.5 bg-transparent"
-              onClick={() => router.push("/users")}
-            >
-              <Users className="h-5 w-5" />
-              <span className="text-sm">用户管理</span>
-            </Button>
-            <Button variant="outline" className="h-16 flex-col space-y-1.5 bg-transparent">
-              <Brain className="h-5 w-5" />
-              <span className="text-sm">AI智能分析</span>
-            </Button>
-            <Button variant="outline" className="h-16 flex-col space-y-1.5 bg-transparent">
-              <TrendingUp className="h-5 w-5" />
-              <span className="text-sm">数据报表</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* 最近案件 */}
+        <Card className="card-shadow h-full flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-lg">最新案件</CardTitle>
+            <button className="text-sm text-blue-600 hover:underline" onClick={() => router.push("/cases")}>全部</button>
+          </CardHeader>
+          <CardContent className="flex-1">
+            {recentCases.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">暂无案件数据</div>
+            ) : (
+              <div className="space-y-3">
+                {recentCases.map((case_) => (
+                  <div key={case_.id} className="p-3 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer" onClick={() => router.push(`/cases`)}>
+                    <div className="flex items-center space-x-3 mb-1">
+                      <span className="font-medium text-sm">{case_.title}</span>
+                      <span className="text-xs text-muted-foreground">#{case_.id}</span>
+                      <span className="text-xs text-muted-foreground">{case_.created_at ? new Date(case_.created_at).toLocaleString() : "-"}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                      <span>债权人: {case_.creditor_name}</span>
+                      <span>债务人: {case_.debtor_name}</span>
+                      <span>类型: {case_.case_type}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 最近证据 */}
+        <Card className="card-shadow h-full flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-lg">最新证据</CardTitle>
+            <button className="text-sm text-blue-600 hover:underline" onClick={() => router.push("/evidence")}>全部</button>
+          </CardHeader>
+          <CardContent className="flex-1">
+            {recentEvidences.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">暂无证据数据</div>
+            ) : (
+              <div className="space-y-3">
+                {recentEvidences.map((evidence) => (
+                  <div key={evidence.id} className="p-3 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer" onClick={() => router.push(`/evidence`)}>
+                    <div className="flex items-center space-x-3 mb-1">
+                      <span className="font-medium text-sm">{evidence.file_name || evidence.name || '-'}</span>
+                      <span className="text-xs text-muted-foreground">#{evidence.id}</span>
+                      <span className="text-xs text-muted-foreground">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : "-"}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                      <span>类型: {evidence.evidence_type || evidence.type || '-'}</span>
+                      <span>上传人: {evidence.uploader || '-'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 最近用户 */}
+        <Card className="card-shadow h-full flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-lg">最新用户</CardTitle>
+            <button className="text-sm text-blue-600 hover:underline" onClick={() => router.push("/users")}>全部</button>
+          </CardHeader>
+          <CardContent className="flex-1">
+            {recentUsers.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">暂无用户数据</div>
+            ) : (
+              <div className="space-y-3">
+                {recentUsers.map((user) => (
+                  <div key={user.id} className="p-3 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer" onClick={() => router.push(`/users`)}>
+                    <div className="flex items-center space-x-3 mb-1">
+                      <span className="font-medium text-sm">{user.name}</span>
+                      <span className="text-xs text-muted-foreground">#{user.id}</span>
+                      <span className="text-xs text-muted-foreground">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "-"}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                      <span>手机号: {user.phone || '-'}</span>
+                      <span>类型: {user.type || '-'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

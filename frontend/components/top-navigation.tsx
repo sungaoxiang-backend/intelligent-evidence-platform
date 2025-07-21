@@ -59,7 +59,7 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
                 <Scale className="h-3.5 w-3.5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-foreground leading-none">债务纠纷管理平台</h1>
+                <h1 className="text-base font-bold text-foreground leading-none">汇法律 智能证物平台</h1>
               </div>
             </Link>
 
@@ -106,16 +106,6 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
             >
               <Sun className="h-3.5 w-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-3.5 w-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            </Button>
-
-            {/* 通知 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="relative text-muted-foreground hover:text-foreground h-7 w-7 p-0"
-            >
-              <Bell className="h-3.5 w-3.5" />
-              <Badge className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 p-0 text-xs bg-red-500 text-white">3</Badge>
             </Button>
 
             {/* 快速录入 */}

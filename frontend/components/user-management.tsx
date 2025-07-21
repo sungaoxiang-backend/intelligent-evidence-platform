@@ -14,6 +14,8 @@ import { userApi } from "@/lib/user-api"
 import type { User } from "@/lib/types"
 import { useToast } from "@/components/ui/use-toast"
 import useSWR, { mutate } from "swr"
+import { Card, CardContent } from "@/components/ui/card"
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 
 // 添加表单初始值
 const initialForm: { name: string; id_card: string; phone: string } = { name: "", id_card: "", phone: "" }
@@ -89,44 +91,46 @@ function UserTableContent({
           批量删除（{selectedIds.length}）
         </Button>
       )}
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="min-w-full text-sm align-middle">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-4 py-3">
-                <Checkbox checked={selectedIds.length === users.length && users.length > 0} onCheckedChange={toggleSelectAll} />
-              </th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">姓名</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">身份证号</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">联系电话</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">创建时间</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
-            ) : (
-              users.map((user) => (
-                <tr key={user.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 text-center">
-                    <Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} />
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.id_card || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.phone || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{user.created_at ? new Date(user.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onViewUser(user)}>查看</Button>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onOpenEdit(user)}>编辑</Button>
-                    <Button variant="destructive" size="sm" onClick={() => onSetDeleteUserId(user.id)}>删除</Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card className="overflow-x-auto">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <Checkbox checked={selectedIds.length === users.length && users.length > 0} onCheckedChange={toggleSelectAll} />
+                </TableHead>
+                <TableHead>姓名</TableHead>
+                <TableHead>身份证号</TableHead>
+                <TableHead>联系电话</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead className="text-center">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="text-center">
+                      <Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{user.name}</TableCell>
+                    <TableCell className="whitespace-nowrap">{user.id_card || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{user.phone || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{user.created_at ? new Date(user.created_at).toLocaleString() : '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-center">
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onViewUser(user)}>查看</Button>
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onOpenEdit(user)}>编辑</Button>
+                      <Button variant="destructive" size="sm" onClick={() => onSetDeleteUserId(user.id)}>删除</Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </>
   )
 }

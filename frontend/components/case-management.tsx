@@ -17,6 +17,8 @@ import { useToast } from "@/components/ui/use-toast"
 import useSWR, { mutate } from "swr"
 import { CaseTableSkeleton } from "./case-table-skeleton"
 import { User } from '@/lib/types'
+import { Card, CardContent } from "@/components/ui/card"
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 
 // SWR数据获取函数
 const fetcher = async ([key, search, page, pageSize]: [string, string, number, number]) => {
@@ -74,44 +76,45 @@ function CaseTableContent({
   return (
     <>
       {/* 案件表格 */}
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="min-w-full text-sm align-middle">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">关联用户</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">案件类型</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">债权人</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">债务人</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-left">创建时间</th>
-              <th className="px-4 py-3 font-medium text-gray-700 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cases.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">暂无数据</td></tr>
-            ) : (
-              cases.map((case_: Case) => (
-                <tr key={case_.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.creditor_name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{CASE_TYPES[case_.case_type as keyof typeof CASE_TYPES] || case_.case_type}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.creditor_name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.debtor_name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{case_.created_at ? new Date(case_.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <Link href={`/cases/${case_.id}`} passHref>
-                      <Button variant="outline" size="sm" className="mr-2">查看证据</Button>
-                    </Link>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onViewCase(case_)}>查看详情</Button>
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => onEditCase(case_)}>编辑</Button>
-                    <Button variant="destructive" size="sm" onClick={() => onDeleteCase(case_)}>删除</Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
+      <Card className="overflow-x-auto">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>关联用户</TableHead>
+                <TableHead>案件类型</TableHead>
+                <TableHead>债权人</TableHead>
+                <TableHead>债务人</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead className="text-center">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cases.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+              ) : (
+                cases.map((case_: Case) => (
+                  <TableRow key={case_.id}>
+                    <TableCell className="whitespace-nowrap">{case_.creditor_name}</TableCell>
+                    <TableCell className="whitespace-nowrap">{CASE_TYPES[case_.case_type as keyof typeof CASE_TYPES] || case_.case_type}</TableCell>
+                    <TableCell className="whitespace-nowrap">{case_.creditor_name}</TableCell>
+                    <TableCell className="whitespace-nowrap">{case_.debtor_name}</TableCell>
+                    <TableCell className="whitespace-nowrap">{case_.created_at ? new Date(case_.created_at).toLocaleString() : '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-center">
+                      <Link href={`/cases/${case_.id}`} passHref>
+                        <Button variant="outline" size="sm" className="mr-2">查看证据</Button>
+                      </Link>
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onViewCase(case_)}>查看详情</Button>
+                      <Button variant="outline" size="sm" className="mr-2" onClick={() => onEditCase(case_)}>编辑</Button>
+                      <Button variant="destructive" size="sm" onClick={() => onDeleteCase(case_)}>删除</Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
       {/* 分页组件 */}
       {totalPages > 1 && (
         <div className="mt-6">
