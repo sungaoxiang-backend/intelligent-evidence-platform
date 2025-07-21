@@ -9,34 +9,46 @@ class AuthService {
 
   // 获取存储的token
   getToken(): string | null {
-    if (typeof window === "undefined") return null
-    return localStorage.getItem(this.tokenKey)
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(this.tokenKey)
+    }
+    return null
   }
 
   // 存储token
   setToken(token: string): void {
-    if (typeof window === "undefined") return
-    localStorage.setItem(this.tokenKey, token)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(this.tokenKey, token)
+    }
   }
 
   // 清除token
   removeToken(): void {
-    if (typeof window === "undefined") return
-    localStorage.removeItem(this.tokenKey)
-    localStorage.removeItem(this.userKey)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.tokenKey)
+    }
   }
 
   // 获取存储的用户信息
   getUser(): Staff | null {
-    if (typeof window === "undefined") return null
-    const userStr = localStorage.getItem(this.userKey)
-    return userStr ? JSON.parse(userStr) : null
+    if (typeof window !== 'undefined') {
+      const userStr = localStorage.getItem(this.userKey)
+      if (userStr) {
+        try {
+          return JSON.parse(userStr)
+        } catch {
+          return null
+        }
+      }
+    }
+    return null
   }
 
   // 存储用户信息
   setUser(user: Staff): void {
-    if (typeof window === "undefined") return
-    localStorage.setItem(this.userKey, JSON.stringify(user))
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(this.userKey, JSON.stringify(user))
+    }
   }
 
   // 检查是否已登录

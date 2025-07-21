@@ -1,13 +1,33 @@
 import type { Case, User, ApiResponse, PaginationParams } from "./types"
 import { API_CONFIG } from "./config"
 
+function getAuthHeader(): Record<string, string> {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || ''
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+  return {}
+}
+
+function buildApiUrl(path: string): string {
+  // 如果 BASE_URL 以 // 或 http(s) 开头，自动补齐协议
+  if (/^\/\//.test(API_CONFIG.BASE_URL)) {
+    return `${window.location.protocol}${API_CONFIG.BASE_URL}${path}`
+  }
+  if (/^https?:\/\//.test(API_CONFIG.BASE_URL)) {
+    return API_CONFIG.BASE_URL + path
+  }
+  // 默认相对路径
+  return API_CONFIG.BASE_URL + path
+}
+
 export const caseApi = {
   async getCases(params: PaginationParams): Promise<{ data: Case[]; pagination?: any }> {
     const { page = 1, pageSize = 20, search = "" } = params
     const skip = (page - 1) * pageSize
-    const url = `${API_CONFIG.BASE_URL}/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    const url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -18,9 +38,9 @@ export const caseApi = {
   },
 
   async getCaseById(id: number): Promise<{ data: Case }> {
-    const url = `${API_CONFIG.BASE_URL}/cases/${id}`
+    const url = buildApiUrl(`/cases/${id}`)
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -31,12 +51,12 @@ export const caseApi = {
   },
 
   async createCase(data: Partial<Case>): Promise<{ data: Case }> {
-    const url = `${API_CONFIG.BASE_URL}/cases`
+    const url = buildApiUrl(`/cases`)
     const resp = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
+        ...getAuthHeader(),
       },
       body: JSON.stringify(data),
     })
@@ -49,12 +69,12 @@ export const caseApi = {
   },
 
   async updateCase(id: number, data: Partial<Case>): Promise<{ data: Case }> {
-    const url = `${API_CONFIG.BASE_URL}/cases/${id}`
+    const url = buildApiUrl(`/cases/${id}`)
     const resp = await fetch(url, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
+        ...getAuthHeader(),
       },
       body: JSON.stringify(data),
     })
@@ -67,12 +87,10 @@ export const caseApi = {
   },
 
   async deleteCase(id: number): Promise<void> {
-    const url = `${API_CONFIG.BASE_URL}/cases/${id}`
+    const url = buildApiUrl(`/cases/${id}`)
     const resp = await fetch(url, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
-      },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -87,9 +105,9 @@ export const userApi = {
   async getUsers(params: PaginationParams): Promise<ApiResponse<User[]>> {
     const { page = 1, pageSize = 20, search = "" } = params
     const skip = (page - 1) * pageSize
-    const url = `${API_CONFIG.BASE_URL}/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    const url = buildApiUrl(`/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -104,9 +122,9 @@ export const userApi = {
   },
 
   async getUserById(id: string): Promise<ApiResponse<User>> {
-    const url = `${API_CONFIG.BASE_URL}/users/${id}`
+    const url = buildApiUrl(`/users/${id}`)
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -120,12 +138,12 @@ export const userApi = {
   },
 
   async updateUser(id: string, updates: Partial<User>): Promise<ApiResponse<User>> {
-    const url = `${API_CONFIG.BASE_URL}/users/${id}`
+    const url = buildApiUrl(`/users/${id}`)
     const resp = await fetch(url, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
+        ...getAuthHeader(),
       },
       body: JSON.stringify(updates),
     })
@@ -196,11 +214,11 @@ export const evidenceApi = {
     const { page = 1, pageSize = 20, search = "", case_id } = params
     const skip = (page - 1) * pageSize
     const limit = pageSize
-    let url = `${API_CONFIG.BASE_URL}/evidences?skip=${skip}&limit=${limit}`
+    let url = buildApiUrl(`/evidences?skip=${skip}&limit=${limit}`)
     if (search) url += `&search=${encodeURIComponent(search)}`
     if (case_id !== undefined && case_id !== null) url += `&case_id=${case_id}`
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -211,9 +229,9 @@ export const evidenceApi = {
   },
 
   async getEvidenceById(id: number, withCase = false): Promise<{ data: Evidence | EvidenceWithCase }> {
-    const url = `${API_CONFIG.BASE_URL}/evidences/${id}${withCase ? '/with-case' : ''}`
+    const url = buildApiUrl(`/evidences/${id}${withCase ? '/with-case' : ''}`)
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     const result = await resp.json()
     if (result.code === 200) {
@@ -227,10 +245,12 @@ export const evidenceApi = {
     const formData = new FormData()
     formData.append("case_id", String(params.case_id))
     params.files.forEach(file => formData.append("files", file))
-    const url = `${API_CONFIG.BASE_URL}/evidences${params.withClassification ? '/batch-with-classification' : '/batch'}`
+    const url = buildApiUrl(`/evidences${params.withClassification ? '/batch-with-classification' : '/batch'}`)
     const resp = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: {
+        ...getAuthHeader(),
+      },
       body: formData,
     })
     const result = await resp.json()
@@ -242,12 +262,12 @@ export const evidenceApi = {
   },
 
   async updateEvidence(id: number, data: EvidenceUpdateParams): Promise<{ data: Evidence }> {
-    const url = `${API_CONFIG.BASE_URL}/evidences/${id}`
+    const url = buildApiUrl(`/evidences/${id}`)
     const resp = await fetch(url, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
+        ...getAuthHeader(),
       },
       body: JSON.stringify(data),
     })
@@ -260,10 +280,10 @@ export const evidenceApi = {
   },
 
   async deleteEvidence(id: number): Promise<void> {
-    const url = `${API_CONFIG.BASE_URL}/evidences/${id}`
+    const url = buildApiUrl(`/evidences/${id}`)
     const resp = await fetch(url, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: getAuthHeader(),
     })
     if (resp.status === 204) {
       return
@@ -274,12 +294,12 @@ export const evidenceApi = {
   },
 
   async batchDeleteEvidences(ids: number[]): Promise<void> {
-    const url = `${API_CONFIG.BASE_URL}/evidences/batch-delete`
+    const url = buildApiUrl(`/evidences/batch-delete`)
     const resp = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`,
+        ...getAuthHeader(),
       },
       body: JSON.stringify({ evidence_ids: ids }),
     })
@@ -292,12 +312,12 @@ export const evidenceApi = {
   },
 
   async classifyEvidencesByUrls(urls: string[]): Promise<any> {
-    const url = `${API_CONFIG.BASE_URL}/agentic/classification-by-urls`;
+    const url = buildApiUrl(`/agentic/classification-by-urls`);
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`
+        ...getAuthHeader()
       },
       body: JSON.stringify({ urls }),
     });
@@ -310,12 +330,12 @@ export const evidenceApi = {
   },
 
   async extractFeaturesByUrls(urls: string[], evidence_type: string = "微信聊天记录", consider_correlations: boolean = false): Promise<any> {
-    const url = `${API_CONFIG.BASE_URL}/agentic/extract-features-by-urls`;
+    const url = buildApiUrl(`/agentic/extract-features-by-urls`);
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}`
+        ...getAuthHeader()
       },
       body: JSON.stringify({ 
         urls, 
@@ -332,10 +352,12 @@ export const evidenceApi = {
   },
 
   async autoProcess(formData: FormData): Promise<{ data: Evidence[]; pagination?: any }> {
-    const url = `${API_CONFIG.BASE_URL}/evidences/auto-process`;
+    const url = buildApiUrl(`/evidences/auto-process`);
     const resp = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
+      headers: {
+        ...getAuthHeader(),
+      },
       body: formData,
     });
     const result = await resp.json();

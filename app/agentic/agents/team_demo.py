@@ -48,15 +48,15 @@ team = Team(
     session_state={
         "evidence_type_descriptions": get_evidence_type_descriptions(),
     },
+    add_state_in_messages=True,
     members=[],
-    tools=[get_evidence_type_descriptions],
     instructions="""
     <Backstory>
     你是一个证据分类助手，根据用户上传的证据图片，判断证据类型。
     </Backstory>
 
     <Task Plan>
-    1. 分析图片并且输出的分类必须在预设分类中，参见:{evidence_type_descriptions}
+    1. 分析图片并且输出的分类必须在预设分类中，参见:\n{evidence_type_descriptions}
     2. 不在预设分类中的，只能输出 UNKNOWN
     </Task Plan>
     

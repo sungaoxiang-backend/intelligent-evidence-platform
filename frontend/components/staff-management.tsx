@@ -180,8 +180,8 @@ export function StaffManagement() {
   const [showPassword, setShowPassword] = useState(false)
 
   // 当前用户信息
-  const currentUser = authService.getUser()
-  const isSuperUser = authService.isSuperUser()
+  const currentUser = typeof window !== 'undefined' ? authService.getUser() : null
+  const isSuperUser = typeof window !== 'undefined' ? authService.isSuperUser() : false
 
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault()

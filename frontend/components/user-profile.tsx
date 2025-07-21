@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { User, Shield, Edit, Save, X, Loader2, CheckCircle, AlertTriangle, Eye, EyeOff, Calendar } from "lucide-react"
 import { authService } from "@/lib/auth"
 import type { Staff } from "@/lib/config"
+import { useEffect } from "react"
 
 interface UserProfileProps {
   user: Staff
@@ -83,6 +84,18 @@ export function UserProfile({ user, onUserUpdate }: UserProfileProps) {
       minute: "2-digit",
     })
   }
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (typeof window !== 'undefined') {
+        const userInfo = await authService.getCurrentUser()
+        if (userInfo.success && userInfo.user) {
+          onUserUpdate(userInfo.user)
+        }
+      }
+    }
+    fetchUser()
+  }, [onUserUpdate])
 
   return (
     <div className="space-y-6">
