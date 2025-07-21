@@ -1,6 +1,8 @@
 import type { Case, User, ApiResponse, PaginationParams } from "./types"
 import { API_CONFIG } from "./config"
 
+console.log("API_CONFIG.BASE_URL =", API_CONFIG.BASE_URL)
+
 function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || ''
