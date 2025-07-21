@@ -108,7 +108,7 @@ export const userApi = {
       return {
         success: true,
         data: result.data,
-        total: result.total,
+        pagination: result.pagination,
       }
     } else {
       throw new Error(result.message || "请求失败")

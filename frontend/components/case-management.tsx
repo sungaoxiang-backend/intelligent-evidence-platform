@@ -525,7 +525,7 @@ export function CaseManagement() {
       </div>
 
       {/* 使用Suspense包裹数据展示部分 */}
-      <Suspense fallback={<CaseTableSkeleton />}>
+      <Suspense fallback={null}>
         <CaseTableContent 
           searchTerm={searchTerm}
           currentPage={currentPage}

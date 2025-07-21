@@ -108,15 +108,6 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
               <Moon className="absolute h-3.5 w-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
-            {/* 快速录入 */}
-            <Button
-              size="sm"
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-200 h-7 px-2.5"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              <span className="text-xs">录入案件</span>
-            </Button>
-
             {/* 用户菜单 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

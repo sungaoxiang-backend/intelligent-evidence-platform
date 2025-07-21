@@ -123,7 +123,9 @@ export function WorkbenchDashboard() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">用户总数</p>
-              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">{userData?.pagination?.total ?? "-"}</p>
+              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">
+                {userData?.pagination?.total ?? "-"}
+              </p>
             </div>
             <div className="p-3 rounded-full bg-muted/50 text-green-600 group-hover:bg-primary/20 transition-colors">
               <Users className="h-7 w-7" />
