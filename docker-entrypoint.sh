@@ -21,4 +21,4 @@ python -m app.initial_data
 
 # 启动应用
 echo "启动应用..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8008
+exec uvicorn app.main:app --host 0.0.0.0 --port 8008 --proxy-headers --forwarded-allow-ips=*
