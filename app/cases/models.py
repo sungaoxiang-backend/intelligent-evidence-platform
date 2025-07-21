@@ -45,11 +45,11 @@ class Case(Base):
     # 当事人信息
     creditor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     debtor_name: Mapped[Optional[str]] = mapped_column(String(50), index=True, nullable=True)
-    creditor_type: Mapped[Optional[PartyType]] = mapped_column(
-        SQLAlchemyEnum(PartyType), nullable=True
+    creditor_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
     )
-    debtor_type: Mapped[Optional[PartyType]] = mapped_column(
-        SQLAlchemyEnum(PartyType), nullable=True
+    debtor_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     

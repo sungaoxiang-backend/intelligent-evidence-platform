@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # 数据库配置
     POSTGRES_SERVER: str
+    POSTGRES_PORT: str
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
@@ -40,6 +41,7 @@ class Settings(BaseSettings):
             username=values.data.get("POSTGRES_USER"),
             password=values.data.get("POSTGRES_PASSWORD"),
             host=values.data.get("POSTGRES_SERVER"),
+            port=int(values.data.get("POSTGRES_PORT")) if values.data.get("POSTGRES_PORT") else None,
             path=f"{values.data.get('POSTGRES_DB') or ''}",
         )
 

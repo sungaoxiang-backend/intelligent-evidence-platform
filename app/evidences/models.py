@@ -23,7 +23,7 @@ class Evidence(Base):
     file_name: Mapped[str] = mapped_column(String(200), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
-    evidence_status: Mapped[EvidenceStatus] = mapped_column(String(20), default=EvidenceStatus.UPLOADED)
+    evidence_status: Mapped[str] = mapped_column(String(20), default=EvidenceStatus.UPLOADED)
     
     # 分类元数据
     classification_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
