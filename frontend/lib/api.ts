@@ -10,14 +10,6 @@ function getAuthHeader(): Record<string, string> {
 }
 
 function buildApiUrl(path: string): string {
-  // 如果 BASE_URL 以 // 或 http(s) 开头，自动补齐协议
-  if (/^\/\//.test(API_CONFIG.BASE_URL)) {
-    return `${window.location.protocol}${API_CONFIG.BASE_URL}${path}`
-  }
-  if (/^https?:\/\//.test(API_CONFIG.BASE_URL)) {
-    return API_CONFIG.BASE_URL + path
-  }
-  // 默认相对路径
   return API_CONFIG.BASE_URL + path
 }
 
