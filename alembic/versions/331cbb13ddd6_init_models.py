@@ -1,8 +1,8 @@
 """init models
 
-Revision ID: 170e082badc5
+Revision ID: 331cbb13ddd6
 Revises: 
-Create Date: 2025-07-19 22:49:02.916357
+Create Date: 2025-07-21 13:28:29.706364
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '170e082badc5'
+revision: str = '331cbb13ddd6'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -52,8 +52,8 @@ def upgrade() -> None:
     sa.Column('case_status', postgresql.ENUM('DRAFT', 'INFO_ENTERED', 'EVIDENCE_ANNOTATED', 'DOCUMENTS_GENERATED', name='casestatus', create_type=False), nullable=False),
     sa.Column('creditor_name', sa.String(length=50), nullable=False),
     sa.Column('debtor_name', sa.String(length=50), nullable=True),
-    sa.Column('creditor_type', postgresql.ENUM('PERSON', 'COMPANY', 'INDIVIDUAL', name='partytype', create_type=False), nullable=True),
-    sa.Column('debtor_type', postgresql.ENUM('PERSON', 'COMPANY', 'INDIVIDUAL', name='partytype', create_type=False), nullable=True),
+    sa.Column('creditor_type', sa.String(length=50), nullable=True),
+    sa.Column('debtor_type', sa.String(length=50), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
