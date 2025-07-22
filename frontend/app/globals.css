@@ -93,3 +93,6 @@
 .divider {
   @apply border-t border-border/50;
 }
+
+/* 引入进度条动画 */
+@import '../styles/progress-animations.css';

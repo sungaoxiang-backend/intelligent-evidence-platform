@@ -1,6 +1,6 @@
 // API配置
 export const API_CONFIG = {
-  BASE_URL: "/api/v1",
+  BASE_URL: "http://127.0.0.1:8008/api/v1",
   ENDPOINTS: {
     // 认证相关 - 根据您的API档修正
     LOGIN: "/login/access-token", // 修正后的登录端点

@@ -382,77 +382,117 @@ async def auto_process(
             q = await db.execute(select(Evidence).where(Evidence.id == evidence_id, Evidence.case_id == case_id))
             if evidence := q.scalars().first():
                 evidences.append(evidence)
-        if send_progress:
-            await send_progress({"status": "loaded", "message": "证据已成功加载"})
     else:
         evidences = []
 
 
     # 2. 证据分类（可选）
     if auto_classification:
-        evidence_classifier = EvidenceClassifier()
-        message_parts = ["请对以下证据进行分类："]
-        for i, ev in enumerate(evidences):
-            message_parts.append(f"{i+1}. file_url: {ev.file_url}")
-        messages = "\n".join(message_parts)
-        run_response: RunResponse = await evidence_classifier.agent.arun(
-            messages,
-            images=[Image(url=ev.file_url) for ev in evidences]
-        )
-        evidence_classifi_results: EvidenceClassifiResults = run_response.content
-        if results := evidence_classifi_results.results:
-            from urllib.parse import unquote
-            for res in results:
-                res_url = unquote(res.image_url)
+        try:
+            if send_progress:
+                await send_progress({"status": "classifying", "message": "开始证据分类分析"})
+            
+            evidence_classifier = EvidenceClassifier()
+            message_parts = ["请对以下证据进行分类："]
+            for i, ev in enumerate(evidences):
+                message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+            messages = "\n".join(message_parts)
+            
+            # 设置超时时间（3分钟）
+            import asyncio
+            run_response: RunResponse = await asyncio.wait_for(
+                evidence_classifier.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
+                timeout=180.0
+            )
+            
+            evidence_classifi_results: EvidenceClassifiResults = run_response.content
+            if results := evidence_classifi_results.results:
+                from urllib.parse import unquote
+                for res in results:
+                    res_url = unquote(res.image_url)
+                    for evidence in evidences:
+                        ev_url = unquote(evidence.file_url)
+                        if ev_url == res_url:
+                            evidence.classification_category = res.evidence_type
+                            evidence.classification_confidence = res.confidence
+                            evidence.classification_reasoning = res.reasoning
+                            evidence.classified_at = datetime.now()
+                            evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
+                            db.add(evidence)
+                            break
+                await db.commit()
                 for evidence in evidences:
-                    ev_url = unquote(evidence.file_url)
-                    if ev_url == res_url:
-                        evidence.classification_category = res.evidence_type
-                        evidence.classification_confidence = res.confidence
-                        evidence.classification_reasoning = res.reasoning
-                        evidence.classified_at = datetime.now()
-                        evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
-                        db.add(evidence)
-                        break
-            await db.commit()
-            for evidence in evidences:
-                await db.refresh(evidence)
-        if send_progress:
-            await send_progress({"status": "classified", "message": "文件已成功分类"})
+                    await db.refresh(evidence)
+            
+            if send_progress:
+                await send_progress({"status": "classified", "message": "证据分类完成"})
+                
+        except asyncio.TimeoutError:
+            if send_progress:
+                await send_progress({"status": "error", "message": "证据分类超时，请稍后重试"})
+            raise Exception("证据分类超时")
+        except Exception as e:
+            if send_progress:
+                await send_progress({"status": "error", "message": f"证据分类失败: {str(e)}"})
+            raise
 
     # 3. 证据特征提取（可选，且只能在分类后）
     if auto_feature_extraction:
-        extractor = EvidenceFeaturesExtractor()
-        message_parts = ["请从以下证据图片中提取关键信息:"]
-        for i, ev in enumerate(evidences):
-            message_parts.append(f"{i+1}. file_url: {ev.file_url}")
-            message_parts.append(f"证据类型: {ev.classification_category}")
-        messages = "\n".join(message_parts)
-        run_response: RunResponse = await extractor.agent.arun(
-            messages,
-            images=[Image(url=ev.file_url) for ev in evidences]
-        )
-        evidence_extraction_results: EvidenceExtractionResults = run_response.content
-        if results := evidence_extraction_results.results:
-            from urllib.parse import unquote
-            for res in results:
-                res_url = unquote(res.image_url)
+        try:
+            if send_progress:
+                await send_progress({"status": "extracting", "message": "开始证据特征分析"})
+            
+            extractor = EvidenceFeaturesExtractor()
+            message_parts = ["请从以下证据图片中提取关键信息:"]
+            for i, ev in enumerate(evidences):
+                message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+                message_parts.append(f"证据类型: {ev.classification_category}")
+            messages = "\n".join(message_parts)
+            
+            # 设置超时时间（3分钟）
+            import asyncio
+            run_response: RunResponse = await asyncio.wait_for(
+                extractor.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
+                timeout=180.0
+            )
+            
+            evidence_extraction_results: EvidenceExtractionResults = run_response.content
+            if results := evidence_extraction_results.results:
+                from urllib.parse import unquote
+                for res in results:
+                    res_url = unquote(res.image_url)
+                    for evidence in evidences:
+                        ev_url = unquote(evidence.file_url)
+                        if ev_url == res_url:
+                            evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
+                            evidence.features_extracted_at = datetime.now()
+                            evidence.evidence_status = EvidenceStatus.FEATURES_EXTRACTED.value
+                            db.add(evidence)
+                            break
+                await db.commit()
                 for evidence in evidences:
-                    ev_url = unquote(evidence.file_url)
-                    if ev_url == res_url:
-                        evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
-                        evidence.features_extracted_at = datetime.now()
-                        evidence.evidence_status = EvidenceStatus.FEATURES_EXTRACTED.value
-                        db.add(evidence)
-                        break
-            await db.commit()
-            for evidence in evidences:
-                await db.refresh(evidence)
-        if send_progress:
-            await send_progress({"status": "classified", "message": "文件已成功提取特征"})
+                    await db.refresh(evidence)
+            
+            if send_progress:
+                await send_progress({"status": "features_extracted", "message": "证据特征分析完成"})
+                
+        except asyncio.TimeoutError:
+            if send_progress:
+                await send_progress({"status": "error", "message": "证据特征分析超时，请稍后重试"})
+            raise Exception("证据特征分析超时")
+        except Exception as e:
+            if send_progress:
+                await send_progress({"status": "error", "message": f"证据特征分析失败: {str(e)}"})
+            raise
         
         
-    # 4. 返回证据列表
+    # 4. 发送完成状态
+    if send_progress:
+        logger.info(f"发送完成状态: 成功处理 {len(evidences)} 个证据")
+        await send_progress({"status": "completed", "message": f"成功处理 {len(evidences)} 个证据"})
+    
+    # 5. 返回证据列表
+    logger.info(f"auto_process函数完成，返回 {len(evidences)} 个证据")
     return evidences
 
         

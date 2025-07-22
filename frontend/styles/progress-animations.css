@@ -1,0 +1,194 @@
+/* 进度条动画效果 */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+  }
+}
+
+@keyframes textShimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+/* 自定义动画类 */
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+.animate-float {
+  animation: float 2s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+.text-shimmer {
+  background: linear-gradient(90deg, #3B82F6, #8B5CF6, #EC4899, #3B82F6);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: textShimmer 3s ease-in-out infinite;
+}
+
+/* 进度条光效 */
+.progress-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: shimmer 2s infinite;
+}
+
+/* 旋转点动画 */
+.spin-dot {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 跳动的省略号动画 */
+@keyframes bounceDots {
+  0%, 20% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-bounce-dots {
+  animation: bounceDots 1.5s infinite;
+}
+
+/* 状态文本反光效果 */
+.status-text {
+  position: relative;
+  overflow: hidden;
+}
+
+.status-text::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+  pointer-events: none;
+}
+
+/* 向上翻转动画 */
+@keyframes flipUp {
+  0% {
+    transform: rotateX(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: rotateX(-90deg);
+    opacity: 0;
+  }
+  100% {
+    transform: rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+.flip-up {
+  animation: flipUp 0.6s ease-in-out;
+} 
+
+/* 完成时的激励动画 */
+@keyframes completionPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes completionGlow {
+  0%, 100% { 
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+    background: linear-gradient(45deg, #22c55e, #10b981);
+  }
+  50% { 
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.6);
+    background: linear-gradient(45deg, #16a34a, #059669);
+  }
+}
+
+@keyframes completionSparkle {
+  0% { opacity: 0; transform: scale(0) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(180deg); }
+  100% { opacity: 0; transform: scale(0) rotate(360deg); }
+}
+
+/* 应用动画的类 */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* 完成时的激励样式 */
+.completion-success {
+  animation: completionPulse 0.6s ease-in-out, completionGlow 1s ease-in-out infinite;
+}
+
+.completion-sparkle {
+  animation: completionSparkle 0.8s ease-in-out;
+}
+
+/* 简单的烟花动画 */
+@keyframes sparkle {
+  0% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.2) rotate(180deg); }
+  100% { transform: scale(1) rotate(360deg); }
+}
+
+.animate-sparkle {
+  animation: sparkle 1s ease-in-out infinite;
+  display: inline-block;
+} 

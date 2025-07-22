@@ -116,8 +116,8 @@ function EvidenceGalleryContent({
   selectedIds,
   setSelectedIds,
   handleBatchAnalysis,
-  extracting,
   handleSave,
+  toast,
 }: {
   caseId: string | number
   searchTerm: string
@@ -128,8 +128,8 @@ function EvidenceGalleryContent({
   selectedIds: number[]
   setSelectedIds: (ids: number[]) => void
   handleBatchAnalysis: () => void
-  extracting: boolean
   handleSave: (editForm: any, setEditing: (v: boolean) => void) => void
+  toast: any
 }) {
   const { data: evidenceData } = useSWR(
     ['/api/evidences', String(caseId), searchTerm, page, pageSize],
@@ -167,9 +167,31 @@ function EvidenceGalleryContent({
     setSelectedIds(checked ? [...selectedIds, id] : selectedIds.filter((i) => i !== id))
   }
 
+  // 处理文件下载
+  const handleDownload = () => {
+    if (selectedEvidence?.file_url) {
+      try {
+        const link = document.createElement('a')
+        link.href = selectedEvidence.file_url
+        link.download = selectedEvidence.file_name || 'evidence'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        // 这里可以添加成功提示，但需要toast context
+      } catch (error) {
+        console.error('下载失败:', error)
+        // 这里可以添加错误提示，但需要toast context
+      }
+    } else {
+      console.warn('文件URL不存在')
+      // 这里可以添加错误提示，但需要toast context
+    }
+  }
+
   // 右侧数据标注区域
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState<any>(selectedEvidence)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     setEditForm(selectedEvidence)
@@ -383,12 +405,15 @@ function EvidenceGalleryContent({
                   </div>
                 </div>
               ) : (
-                <div className="relative h-full">
+                <div 
+                  className="relative h-full overflow-hidden"
+                >
                   {selectedEvidence?.file_url ? (
                     <img
                       src={selectedEvidence.file_url}
                       alt={selectedEvidence?.file_name || ''}
-                      className="w-full h-full object-contain bg-muted/30"
+                      className="w-full h-full object-contain bg-muted/30 cursor-pointer transition-all duration-300"
+                      onClick={() => setIsPreviewOpen(true)}
                       onError={(e) => {
                         // 图片加载失败时，替换为占位符
                         const target = e.target as HTMLImageElement;
@@ -421,15 +446,38 @@ function EvidenceGalleryContent({
                     </div>
                   )}
                   <div className="absolute top-3 right-3 flex space-x-2">
-                    <Button size="sm" variant="secondary" className="bg-background/80 backdrop-blur-sm h-8">
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      className="bg-background/80 backdrop-blur-sm h-8"
+                      onClick={() => setIsPreviewOpen(true)}
+                    >
                       <ZoomIn className="h-3.5 w-3.5 mr-1.5" />
                       放大
                     </Button>
-                    <Button size="sm" variant="secondary" className="bg-background/80 backdrop-blur-sm h-8">
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      className="bg-background/80 backdrop-blur-sm h-8"
+                      onClick={handleDownload}
+                    >
                       <Download className="h-3.5 w-3.5 mr-1.5" />
                       下载
                     </Button>
                   </div>
+                  
+                  {/* 大图弹窗 Dialog */}
+                  <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                    <DialogContent className="flex flex-col items-center justify-center bg-black/80">
+                      <DialogTitle className="sr-only">图片预览</DialogTitle>
+                      <img
+                        src={selectedEvidence?.file_url}
+                        alt={selectedEvidence?.file_name || ''}
+                        style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }}
+                      />
+                      <Button onClick={() => setIsPreviewOpen(false)} className="mt-4">关闭</Button>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               )}
             </div>
@@ -654,7 +702,6 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [extracting, setExtracting] = useState(false)
   const { toast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -664,9 +711,11 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
   const [reviewEvidenceIds, setReviewEvidenceIds] = useState<number[]>([])
   const [reviewing, setReviewing] = useState(false)
+  const [statusAnimation, setStatusAnimation] = useState(false)
+  const [isCompleted, setIsCompleted] = useState(false)
 
   // WebSocket进度管理
-  const { progress: wsProgress, error: wsError, startAutoProcess, disconnect } = useAutoProcessWebSocket()
+  const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect } = useAutoProcessWebSocket()
 
   // 获取案件信息
   const { data: caseData } = useSWR(
@@ -718,13 +767,48 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
     if (wsProgress?.status === 'completed') {
       toast({ title: "智能分析完成", description: wsProgress.message })
       setSelectedIds([])
-      setExtracting(false)
+      setIsCompleted(true) // 设置完成状态
       mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      
+      // 不立即调用disconnect，让WebSocket hook自己管理清理
+      // setTimeout(() => {
+      //   setIsCompleted(false)
+      //   disconnect()
+      // }, 3000)
+    } else if (wsProgress?.status === 'error') {
+      toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
+      setSelectedIds([])
+      // 立即清理错误状态
+      setTimeout(() => {
+        disconnect()
+      }, 1000)
     } else if (wsError) {
       toast({ title: "智能分析失败", description: wsError, variant: "destructive" })
-      setExtracting(false)
+      setSelectedIds([])
+      // 立即清理错误状态
+      setTimeout(() => {
+        disconnect()
+      }, 1000)
     }
-  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast])
+  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, disconnect])
+
+  // 状态切换动画
+  useEffect(() => {
+    if (wsProgress?.status) {
+      setStatusAnimation(true)
+      const timer = setTimeout(() => setStatusAnimation(false), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [wsProgress?.status])
+
+
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      disconnect()
+    }
+  }, [disconnect])
 
   // 智能分类功能已注释 - 分类和特征提取合并为一个原子操作
   // const handleBatchClassify = async () => {
@@ -751,7 +835,6 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   // }
 
   const handleBatchAnalysis = async () => {
-    setExtracting(true)
     try {
       if (selectedIds.length === 0) {
         toast({ title: "提示", description: "请先选择证据", variant: "destructive" })
@@ -764,11 +847,13 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         evidence_ids: selectedIds,
         auto_classification: true,
         auto_feature_extraction: true
+      }, () => {
+        // 完成回调：清理完成状态
+        setIsCompleted(false)
       })
       
     } catch (e: any) {
       toast({ title: "智能分析失败", description: e?.message || '未知错误', variant: "destructive" })
-      setExtracting(false)
     }
   }
 
@@ -1152,47 +1237,93 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         </div>
       </div>
 
-      {/* 多选智能分析按钮 */}
-      {selectedIds.length > 0 && (
+      {/* 智能分析按钮 - 标准版本 */}
+      {(selectedIds.length > 0 || isProcessing || isCompleted) && (
         <div className="mb-2 flex items-center gap-3">
-          {/* 智能分类按钮已注释 - 分类和特征提取合并为一个原子操作 */}
-          {/* <Button onClick={handleBatchClassify} disabled={classifying} className="bg-gradient-to-r from-blue-500 to-green-500 text-white">
-            {classifying ? "分类中..." : "智能分类"}
-          </Button> */}
-          <Button onClick={handleBatchAnalysis} disabled={extracting} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-            {extracting ? "分析中..." : "智能分析"}
+          {/* 标准宽度的智能分析按钮 */}
+          <Button 
+            onClick={handleBatchAnalysis} 
+            disabled={isProcessing && !isCompleted} 
+            className={`relative overflow-hidden transition-all duration-300 ${
+              isCompleted
+                ? 'bg-green-500 text-white shadow-md' 
+                : isProcessing 
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
+                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+            }`}
+          >
+            <span className="relative z-10 flex items-center gap-2">
+              {isCompleted ? (
+                <>
+                  <span>100%</span>
+                  <span>✓</span>
+                  <span className="animate-sparkle">🎆</span>
+                </>
+              ) : isProcessing ? (
+                "分析中..."
+              ) : (
+                "智能分析"
+              )}
+            </span>
+            
+            {/* 水波动画进度条 */}
+            {(isProcessing || isCompleted) && (wsProgress || isCompleted) && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div 
+                  className="absolute inset-0 bg-gradient-to-r from-white/20 via-white/40 to-white/20 animate-shimmer"
+                  style={{ 
+                    width: `${isCompleted ? 100 : (wsProgress?.progress || 0)}%`,
+                    transition: 'width 0.8s ease-out'
+                  }}
+                />
+                {/* 水波效果 */}
+                <div className="absolute inset-0">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" 
+                       style={{ animationDelay: '0s' }} />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
+                       style={{ animationDelay: '0.5s' }} />
+                </div>
+              </div>
+            )}
           </Button>
+          
+          {/* 状态文本 */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>已选 {selectedIds.length} 项</span>
-            <span>•</span>
+            {selectedIds.length > 0 ? (
+              <>
+                <span>已选 {selectedIds.length} 项</span>
+                <span>•</span>
+              </>
+            ) : null}
             <span className="flex items-center gap-1">
               <Brain className="h-3 w-3" />
-              自动分类 + 特征提取
+              {isCompleted ? '分析完成' : isProcessing ? '自动分类 + 特征提取' : '自动分类 + 特征提取'}
             </span>
           </div>
-        </div>
-      )}
-
-      {/* WebSocket智能分析进度显示 */}
-      {wsProgress && (
-        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-              {wsProgress.status === 'uploaded' && '文件上传中...'}
-              {wsProgress.status === 'loaded' && '证据加载中...'}
-              {wsProgress.status === 'classified' && '智能分类中...'}
-              {wsProgress.status === 'features_extracted' && '特征提取中...'}
-              {wsProgress.status === 'completed' && '处理完成'}
-            </span>
-          </div>
-          <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">{wsProgress.message}</p>
-          {wsProgress.progress !== undefined && (
-            <div className="w-full bg-blue-200 dark:bg-blue-800/30 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${wsProgress.progress}%` }}
-              ></div>
+          
+          {/* 进度状态显示 */}
+          {(wsProgress || isCompleted) && !isCompleted && (
+            <div className="flex items-center gap-2">
+              <div className="bg-muted/30 rounded-lg px-3 py-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+                  <div className="min-w-0">
+                    <div className={`text-xs font-medium text-foreground status-text ${statusAnimation ? 'flip-up' : ''}`}>
+                      {wsProgress?.status === 'classifying' ? '证据分类中' :
+                       wsProgress?.status === 'classified' ? '证据分类完成' :
+                       wsProgress?.status === 'extracting' ? '证据特征分析中' :
+                       wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
+                       wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
+                      <span className="animate-bounce-dots">...</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 进度百分比 */}
+              <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                {wsProgress?.progress ? Math.round(wsProgress.progress) : 0}%
+              </div>
             </div>
           )}
         </div>
@@ -1209,8 +1340,8 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           selectedIds={selectedIds}
           setSelectedIds={setSelectedIds}
           handleBatchAnalysis={handleBatchAnalysis}
-          extracting={extracting}
           handleSave={handleSave}
+          toast={toast}
         />
       </Suspense>
     </div>

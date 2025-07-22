@@ -373,21 +373,23 @@ async def websocket_auto_process(websocket: WebSocket):
                     send_progress=send_progress
                 )
                 
-                # 发送完成消息
-                await websocket.send_json({
-                    "status": "completed",
-                    "message": f"成功处理 {len(evidences)} 个证据",
-                    "data": [{"id": e.id, "file_name": e.file_name} for e in evidences]
-                })
-                
                 logger.info(f"处理完成 [ID: {connection_id}]: 成功处理 {len(evidences)} 个证据")
             
         except Exception as e:
             logger.error(f"处理过程中出错 [ID: {connection_id}]: {e}")
-            await websocket.send_json({
-                "status": "error",
-                "message": str(e)
-            })
+            try:
+                await websocket.send_json({
+                    "status": "error",
+                    "message": str(e)
+                })
+            except Exception as send_error:
+                logger.error(f"发送错误消息失败 [ID: {connection_id}]: {send_error}")
+        finally:
+            # 确保连接正常关闭
+            try:
+                await websocket.close(code=1000, reason="处理完成")
+            except Exception as close_error:
+                logger.error(f"关闭WebSocket连接失败 [ID: {connection_id}]: {close_error}")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket客户端断开连接 [ID: {connection_id}]")

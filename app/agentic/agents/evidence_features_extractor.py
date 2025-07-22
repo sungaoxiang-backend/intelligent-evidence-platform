@@ -245,6 +245,7 @@ class EvidenceFeaturesExtractor:
         1. 注意每个证据图片提取的关键信息词槽，仅能在{evidence_type_features}中指定的词槽范围内提取信息，也就是`target_slots_to_extract`中指定的词槽范围内提取信息。
         2. `target_slots_to_extract`中指定的词槽信息作为key,但其没有说明具体数据类型，你需要理解每个词槽的含义，并在赋值时给与适当的值类型和值（比如int/bool/string)。
         3. 如果`target_slots_to_extract`中指定的词槽信息，在当前证据图片中没有提取到，则将该词槽的值设置`未知`,并说明原因。
+        4. 注意输出的`slot_value`中永远不要有任何不应该存在于其中的内容，比如`reasoning`,`slot_name`,`confidence`等。
         </Notes>
         """
     def extract_features(
