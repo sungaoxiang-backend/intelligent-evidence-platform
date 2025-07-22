@@ -42,6 +42,50 @@ const casesFetcher = async ([key]: [string]) => {
   return res.data.map((c: any) => ({ id: c.id, title: c.title })) || []
 }
 
+// 判断特征提取是否完整
+const isFeatureComplete = (evidence: any) => {
+  const features = evidence.evidence_features || [];
+  if (features.length === 0) return false;
+  
+  const completedFeatures = features.filter((f: any) => 
+    f.slot_value && f.slot_value !== "未知" && f.slot_value.trim() !== ""
+  );
+  
+  return completedFeatures.length === features.length;
+};
+
+// 获取状态颜色
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "checked":
+      return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
+    case "features_extracted":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
+    case "classified":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
+    case "uploaded":
+      return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+};
+
+// 获取状态中文名称
+const getStatusText = (status: string) => {
+  switch (status) {
+    case "checked":
+      return "已审核";
+    case "features_extracted":
+      return "特征已提取";
+    case "classified":
+      return "已分类";
+    case "uploaded":
+      return "已上传";
+    default:
+      return "未知状态";
+  }
+};
+
 // 动态分组逻辑
 const groupEvidence = (evidenceList: any[]) => {
   const groupMap: Record<string, any[]> = {};
@@ -98,20 +142,7 @@ function EvidenceGalleryContent({
   const groupKeys = Object.keys(groupMap)
   const [activeCategory, setActiveCategory] = useState<string>('全部');
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "已标注":
-        return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
-      case "待标注":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400"
-      case "标注中":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400"
-      case "已拒绝":
-        return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
-      default:
-        return "bg-muted text-muted-foreground"
-    }
-  }
+  // 这个函数现在在外部定义，这里删除重复定义
 
   const groupedEvidence = activeCategory === '全部'
     ? evidenceList
@@ -229,6 +260,10 @@ function EvidenceGalleryContent({
                     className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
                       selectedEvidence?.id === evidence.id
                         ? "bg-primary/10 border-primary/30 shadow-sm"
+                        : evidence.evidence_status === "checked"
+                        ? "hover:bg-green-50/50 border-green-200/30 hover:border-green-300/50 bg-green-50/30"
+                        : evidence.evidence_status === "features_extracted"
+                        ? "hover:bg-blue-50/50 border-blue-200/30 hover:border-blue-300/50 bg-blue-50/30"
                         : "hover:bg-muted/50 border-transparent hover:border-border"
                     }`}
                   >
@@ -266,12 +301,21 @@ function EvidenceGalleryContent({
                         </div>
                       </div>
                       <div className="flex items-start space-x-1.5 mt-1 flex-wrap">
-                        <Badge className={getStatusColor(evidence.status)} variant="outline">
-                          {evidence.status}
+                        <Badge className={getStatusColor(evidence.evidence_status)} variant="outline">
+                          {getStatusText(evidence.evidence_status)}
                         </Badge>
                         {evidence.isKey && (
                           <Badge variant="destructive" className="text-xs">
                             关键
+                          </Badge>
+                        )}
+                        {/* 特征提取完整度指示器 */}
+                        {evidence.evidence_features && evidence.evidence_features.length > 0 && (
+                          <Badge 
+                            className={`${isFeatureComplete(evidence) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                            variant="outline"
+                          >
+                            {isFeatureComplete(evidence) ? "特征完整" : "特征不完整"}
                           </Badge>
                         )}
                       </div>
@@ -447,10 +491,22 @@ function EvidenceGalleryContent({
                   <div className="flex items-center space-x-2 mb-2">
                     <Brain className="h-3.5 w-3.5 text-purple-600" />
                     <h4 className="font-medium text-foreground text-sm">特征提取结果</h4>
+                    {editForm.evidence_features && editForm.evidence_features.length > 0 && (
+                      <Badge 
+                        className={`${isFeatureComplete(editForm) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                        variant="outline"
+                      >
+                        {isFeatureComplete(editForm) ? "特征完整" : "特征不完整"}
+                      </Badge>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {(editForm.evidence_features || []).map((slot: any, idx: number) => (
-                      <div key={idx} className="bg-purple-50 p-2 rounded-md border space-y-1">
+                      <div key={idx} className={`p-2 rounded-md border space-y-1 ${
+                        slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
+                          ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30"
+                          : "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30"
+                      }`}>
                         <div>
                           <Label className="text-xs">词槽名:</Label>
                           <span className="text-xs">{slot.slot_name}</span>
@@ -465,9 +521,19 @@ function EvidenceGalleryContent({
                                 newFeatures[idx].slot_value = e.target.value
                                 setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
                               }}
+                              className={slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "" 
+                                ? "border-green-300 focus:border-green-500" 
+                                : "border-red-300 focus:border-red-500"
+                              }
                             />
                           ) : (
-                            <span className="text-xs">{slot.slot_value}</span>
+                            <span className={`text-xs font-medium ${
+                              slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
+                                ? "text-green-700 dark:text-green-400"
+                                : "text-red-700 dark:text-red-400"
+                            }`}>
+                              {slot.slot_value}
+                            </span>
                           )}
                         </div>
                         <div>
@@ -484,6 +550,16 @@ function EvidenceGalleryContent({
                       <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
                       <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
                     </div>
+                  </div>
+                </div>
+
+                {/* 审核状态信息 */}
+                <div className="mt-4 p-3 bg-muted/30 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">审核状态</Label>
+                    <Badge className={getStatusColor(editForm.evidence_status)} variant="outline">
+                      {getStatusText(editForm.evidence_status)}
+                    </Badge>
                   </div>
                 </div>
 
@@ -526,6 +602,9 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
+  const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
+  const [reviewEvidenceIds, setReviewEvidenceIds] = useState<number[]>([])
+  const [reviewing, setReviewing] = useState(false)
 
   // 获取证据列表
   const { data: evidenceData } = useSWR(
@@ -638,6 +717,25 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
     }
   }
 
+  // 批量审核逻辑
+  async function handleBatchReview() {
+    if (reviewEvidenceIds.length === 0) return
+    setReviewing(true)
+    try {
+      await evidenceApi.batchCheckEvidence({
+        evidence_ids: reviewEvidenceIds
+      })
+      toast({ title: "批量审核成功", description: `成功审核 ${reviewEvidenceIds.length} 个证据` })
+      setIsReviewDialogOpen(false)
+      setReviewEvidenceIds([])
+      await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+    } catch (e: any) {
+      toast({ title: "批量审核失败", description: e?.message || '未知错误', variant: "destructive" })
+    } finally {
+      setReviewing(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* 页面头部 */}
@@ -647,6 +745,13 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           <p className="text-muted-foreground mt-2">智能证据处理</p>
         </div>
         <div className="flex gap-3 items-center ml-auto">
+          <Button 
+            size="lg" 
+            className="bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-lg" 
+            onClick={() => setIsReviewDialogOpen(true)}
+          >
+            审核证据
+          </Button>
           <Button size="lg" className="bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg" onClick={() => setIsUploadDialogOpen(true)}>
             上传证据
           </Button>
@@ -694,6 +799,117 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 批量审核弹窗 */}
+      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>批量审核证据</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              选择需要审核的证据（仅显示状态为"特征已提取"的证据）
+            </div>
+            
+            {/* 待审核证据列表 */}
+            <div className="max-h-[400px] overflow-y-auto border rounded-lg p-4">
+              <div className="space-y-2">
+                {evidenceList
+                  .filter((e: any) => e.evidence_status === "features_extracted")
+                  .map((evidence: any) => {
+                    const isSelected = reviewEvidenceIds.includes(evidence.id);
+                    return (
+                      <div
+                        key={evidence.id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          isSelected 
+                            ? "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/30" 
+                            : "hover:bg-muted/50 border-border"
+                        }`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setReviewEvidenceIds(reviewEvidenceIds.filter(id => id !== evidence.id));
+                          } else {
+                            setReviewEvidenceIds([...reviewEvidenceIds, evidence.id]);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
+                          />
+                          <div className="flex-shrink-0">
+                            {evidence.file_url ? (
+                              <img
+                                src={evidence.file_url}
+                                alt={evidence.file_name}
+                                className="w-12 h-12 object-cover rounded-md"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-muted rounded-md flex items-center justify-center">
+                                <Eye className="h-6 w-6 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-sm text-foreground truncate">
+                              {evidence.file_name}
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                              {evidence.classification_category} • {evidence.file_extension}
+                            </p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <Badge className={getStatusColor(evidence.evidence_status)} variant="outline">
+                                {getStatusText(evidence.evidence_status)}
+                              </Badge>
+                              {evidence.evidence_features && evidence.evidence_features.length > 0 && (
+                                <Badge 
+                                  className={`${isFeatureComplete(evidence) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs`}
+                                  variant="outline"
+                                >
+                                  {isFeatureComplete(evidence) ? "特征完整" : "特征不完整"}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              
+              {evidenceList.filter((e: any) => e.evidence_status === "features_extracted").length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>暂无待审核的证据</p>
+                  <p className="text-sm">所有证据都已审核完成或尚未完成特征提取</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                已选择 {reviewEvidenceIds.length} 个证据
+              </div>
+              <div className="flex space-x-3">
+                <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button 
+                  onClick={handleBatchReview} 
+                  disabled={reviewing || reviewEvidenceIds.length === 0}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {reviewing ? "审核中..." : `确认审核 ${reviewEvidenceIds.length} 个证据`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* 搜索栏 */}
       <div className="flex gap-4">
         <div className="relative flex-1">
@@ -709,6 +925,77 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           <Filter className="h-4 w-4 mr-2" />
           高级筛选
         </Button>
+      </div>
+
+      {/* 证据处理状态统计 */}
+      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
+        {/* 标题和说明 */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">证据处理状态统计</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              基于证据处理流程状态，显示各阶段证据数量和特征提取完整度
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">特征完整率</div>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+              {evidenceList.length > 0 
+                ? Math.round((evidenceList.filter((e: any) => isFeatureComplete(e)).length / evidenceList.length) * 100)
+                : 0}%
+            </div>
+          </div>
+        </div>
+        
+        {/* 统计指标 */}
+        <div className="grid grid-cols-4 gap-4">
+          <div className="text-center p-3 bg-white/50 dark:bg-white/5 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {evidenceList.length}
+            </div>
+            <div className="text-xs text-muted-foreground font-medium">总证据数</div>
+            <div className="text-xs text-muted-foreground mt-1">已上传的证据文件总数</div>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {evidenceList.filter((e: any) => e.evidence_status === "checked").length}
+            </div>
+            <div className="text-xs text-muted-foreground font-medium">已审核</div>
+            <div className="text-xs text-muted-foreground mt-1">人工审核确认无误</div>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-white/5 rounded-lg border border-orange-200/30 dark:border-orange-800/30">
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+              {evidenceList.filter((e: any) => e.evidence_status === "features_extracted").length}
+            </div>
+            <div className="text-xs text-muted-foreground font-medium">待审核</div>
+            <div className="text-xs text-muted-foreground mt-1">AI已处理，等待人工审核</div>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-white/5 rounded-lg border border-gray-200/30 dark:border-gray-800/30">
+            <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+              {evidenceList.filter((e: any) => e.evidence_status === "uploaded" || e.evidence_status === "classified").length}
+            </div>
+            <div className="text-xs text-muted-foreground font-medium">待处理</div>
+            <div className="text-xs text-muted-foreground mt-1">等待AI处理或分类</div>
+          </div>
+        </div>
+        
+        {/* 状态说明 */}
+        <div className="mt-3 pt-3 border-t border-blue-200/30 dark:border-blue-800/30">
+          <div className="flex items-center justify-center space-x-4 text-xs text-muted-foreground">
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span>已审核</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+              <span>待审核</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+              <span>待处理</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 多选智能分类和特征提取按钮 */}

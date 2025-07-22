@@ -62,3 +62,6 @@ out/
 
 logs/
 *.log
+
+# cursor
+.cursor/

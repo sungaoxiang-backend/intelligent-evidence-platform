@@ -5,9 +5,13 @@ from fastapi import UploadFile
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from datetime import datetime
+from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
+from app.agentic.agents.evidence_features_extractor import EvidenceFeaturesExtractor, EvidenceExtractionResults
+from loguru import logger
 from agno.media import Image
 from agno.run.response import RunResponse
-from app.evidences.models import Evidence
+from app.evidences.models import Evidence, EvidenceStatus
 from app.evidences.schemas import (
     EvidenceEditRequest, 
     UploadFileResponse
@@ -19,6 +23,10 @@ async def get_by_id(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
     """根据ID获取证据"""
     return await db.get(Evidence, evidence_id)
 
+async def get_multi_by_ids(db: AsyncSession, evidence_ids: List[int]) -> List[Evidence]:
+    """根据ID列表获取证据"""
+    result = await db.execute(select(Evidence).where(Evidence.id.in_(evidence_ids)))
+    return result.scalars().all()
 
 async def get_by_id_with_case(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
     """根据ID获取证据，包含案件信息"""
@@ -151,7 +159,7 @@ async def get_multi_with_cases(
 
 async def get_multi_with_cases_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100
-) -> (list[Evidence], int):
+):
     """获取多个证据，包含案件信息，并返回总数"""
     query = select(Evidence).options(joinedload(Evidence.case))
 
@@ -204,6 +212,7 @@ async def batch_create(
                 file_size=file_data.file_size,
                 file_extension=file_data.file_extension,
                 case_id=case_id,
+                evidence_status=EvidenceStatus.UPLOADED.value,
             )
             db.add(db_obj)
             evidences.append(db_obj)
@@ -278,6 +287,22 @@ async def batch_delete(
     return {"successful": successful, "failed": failed}
 
 
+async def batch_check_evidence(
+    db: AsyncSession,
+    evidence_ids: List[int]
+) -> List[Evidence]:
+    """批量审核证据"""
+    evidences: List[Evidence] = await get_multi_by_ids(db, evidence_ids)
+    for evidence in evidences:
+        if evidence.evidence_status == EvidenceStatus.FEATURES_EXTRACTED.value:
+            evidence.evidence_status = EvidenceStatus.CHECKED.value
+            db.add(evidence)
+    await db.commit()
+    for evidence in evidences:
+        await db.refresh(evidence)
+    return evidences
+
+
 async def batch_create_with_classification(
     db: AsyncSession,
     case_id: int,
@@ -330,9 +355,6 @@ async def auto_process(
     auto_feature_extraction: bool = False,
     send_progress: Callable[[dict], Awaitable[None]] = None
 )-> List[Evidence]:
-    from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
-    from app.agentic.agents.evidence_features_extractor import EvidenceFeaturesExtractor, EvidenceExtractionResults
-    from loguru import logger
     
     # 类型安全：确保 evidence_ids 为 int 列表
     if evidence_ids is not None:
@@ -388,8 +410,8 @@ async def auto_process(
                         evidence.classification_category = res.evidence_type
                         evidence.classification_confidence = res.confidence
                         evidence.classification_reasoning = res.reasoning
-                        from datetime import datetime
                         evidence.classified_at = datetime.now()
+                        evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
                         db.add(evidence)
                         break
             await db.commit()
@@ -419,8 +441,8 @@ async def auto_process(
                     ev_url = unquote(evidence.file_url)
                     if ev_url == res_url:
                         evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
-                        from datetime import datetime
                         evidence.features_extracted_at = datetime.now()
+                        evidence.evidence_status = EvidenceStatus.FEATURES_EXTRACTED.value
                         db.add(evidence)
                         break
             await db.commit()

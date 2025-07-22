@@ -34,7 +34,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["对话内容", "转账/收款信息", "语音/图片标识"],
         "key_visual_features": ["聊天气泡布局（左右分布）", "用户头像", "时间戳"],
         "layout_features": ["典型的即时通讯应用布局"],
-        "considercorrelations": True,
         "target_slots_to_extract": ["微信备注名", "欠款合意", "金额", "约定还款日期", "约定还款利息"]
     },
     EvidenceType.WECHAT_HOMEPAGE: {
@@ -42,7 +41,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["昵称", "微信号", "地区", "朋友圈"],
         "key_visual_features": ["个人头像", "'发消息'和'音视频通话'按钮"],
         "layout_features": ["顶部为头像和昵称，下方为功能按钮的布局"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["微信备注名", "微信号"]
     },
     EvidenceType.WECHAT_PAY_VOUCHER: {
@@ -50,7 +48,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["转账电子凭证", "付款方", "收款方", "转账金额", "支付时间"],
         "key_visual_features": ["微信支付Logo", "格式化的凭证布局", "通常有'微信支付'的水印或标识"],
         "layout_features": ["标题为‘转账电子凭证’，下方为表格化的详细信息。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["付款方真名", "付款方微信号", "收款方真名", "收款方微信号", "转账金额"]
     },
     EvidenceType.WECHAT_TRANSFER_PAGE: {
@@ -58,7 +55,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["转账金额", "添加转账说明"],
         "key_visual_features": ["橙色或绿色的转账按钮", "金额输入框", "收款人头像和昵称"],
         "layout_features": ["顶部显示收款人，中间是金额，底部是操作按钮。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["微信备注名", "真名", "微信号"]
     },
     EvidenceType.SMS_CHAT_RECORD: {
@@ -74,7 +70,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["转账", "收款方账户", "金额"],
         "key_visual_features": ["支付宝Logo", "蓝色的主色调", "‘确认付款’按钮"],
         "layout_features": ["支付宝App的典型转账界面布局"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["手机号码", "真名"]
     },
     EvidenceType.GOODS_IOU_NOTE: {
@@ -82,7 +77,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["欠条", "货款", "今欠到", "金额（大写和小写）", "欠款人签名", "日期"],
         "key_visual_features": ["手写或打印的条据", "签名或盖章"],
         "layout_features": ["标准的条据格式，包含标题、正文、落款。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["债权人真名", "债权人签字名字", "债权人盖章名字", "债务人真名", "债务人签字名字", "债务人盖章名字", "欠款金额", "欠款合意"]
     },
     EvidenceType.LOAN_IOU_NOTE: {
@@ -90,7 +84,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["借条", "借款", "今借到", "金额（大写和小写）", "利息", "借款人签名", "日期"],
         "key_visual_features": ["手写或打印的条据", "签名或盖章", "可能包含身份证号码"],
         "layout_features": ["标准的条据格式，包含标题、正文、落款。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["债权人真名", "债权人签字名字", "债权人盖章名字", "债务人真名", "债务人签字名字", "债务人盖章名字", "欠款金额", "欠款合意"]
     },
     EvidenceType.BANK_TRANSFER_RECORD: {
@@ -98,7 +91,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["交易流水号", "付款人账号/户名", "收款人账号/户名", "交易金额", "交易时间"],
         "key_visual_features": ["银行Logo", "表格化的交易详情", "银行回单的特定格式"],
         "layout_features": ["通常是表格或列表形式，清晰列出各项交易信息。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["转账账户", "转账账户真名", "转账金额"]
     },
     EvidenceType.WECHAT_TRANSFER_RECORD: {
@@ -106,7 +98,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["转账", "已收钱", "待收款", "转账金额", "转账时间"],
         "key_visual_features": ["微信转账的绿色或橙色图标", "聊天气泡中的转账消息样式"],
         "layout_features": ["出现在聊天流中或微信账单列表中。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["转账账户备注名", "转账金额"]
     },
     EvidenceType.VAT_INVOICE: {
@@ -114,7 +105,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["增值税专用/普通发票", "发票代码", "发票号码", "购买方信息", "销售方信息", "金额合计", "税额合计"],
         "key_visual_features": ["发票监制章（红色椭圆章）", "二维码", "标准的表格格式"],
         "layout_features": ["国家统一的发票版式，布局固定。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["购买方真名", "购买方纳税人识别号", "销售方真名", "销售方纳税人识别号", "价税合计"]
     },
     EvidenceType.ID_CARD: {
@@ -122,7 +112,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["中华人民共和国居民身份证", "姓名", "性别", "民族", "出生", "住址", "公民身份号码"],
         "key_visual_features": ["国徽（正面）", "个人头像照片（正面）", "长城图案（背面）", "签发机关（背面）"],
         "layout_features": ["国家标准的身份证正反面布局。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["姓名", "性别", "民族", "出生", "住址", "公民身份号码"]
     },
     EvidenceType.HOUSEHOLD_REGISTER: {
@@ -130,7 +119,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["居民户口簿", "户主页", "常住人口登记卡", "户号", "姓名", "与户主关系"],
         "key_visual_features": ["公安机关的户口专用章（红色公章）", "特定的表格和栏目"],
         "layout_features": ["户口簿内页的标准格式。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["姓名", "性别", "民族", "出生", "住址", "公民身份号码"]
     },
     EvidenceType.COMPANY_BUSINESS_LICENSE: {
@@ -138,7 +126,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["营业执照", "统一社会信用代码", "公司名称", "法定代表人", "成立日期"],
         "key_visual_features": ["国徽图标", "红色印章（市场监督管理局）"],
         "layout_features": ["标准的官方证件布局"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["公司名称", "统一社会信用代码", "法定代表人", "公司类型", "住所地"]
     },
     EvidenceType.INDIVIDUAL_BUSINESS_LICENSE: {
@@ -146,7 +133,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["个体工商户营业执照", "统一社会信用代码", "经营者姓名", "经营场所"],
         "key_visual_features": ["国徽图标", "红色印章（市场监督管理局）"],
         "layout_features": ["标准的官方证件布局，但标题明确为‘个体工商户’。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["经营名称", "统一社会信用代码", "经营类型", "经营者姓名", "住所地"]
     },
     EvidenceType.COMPANY_GSXT_LICENSE: {
@@ -154,7 +140,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["国家企业信用信息公示系统", "企业信用信息", "统一社会信用代码", "法定代表人"],
         "key_visual_features": ["网站的页眉和页脚", "网页的UI元素（如搜索框、导航栏）"],
         "layout_features": ["网页布局，信息以模块化方式展示。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["公司名称", "统一社会信用代码", "法定代表人", "公司类型", "住所地", "股东名称"]
     },
     EvidenceType.INDIVIDUAL_GSXT_LICENSE: {
@@ -162,7 +147,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["国家企业信用信息公示系统", "个体工商户", "经营者"],
         "key_visual_features": ["网站的页眉和页脚", "网页的UI元素"],
         "layout_features": ["网页布局，信息以模块化方式展示。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["经营名称", "统一社会信用代码", "经营类型", "经营者姓名", "住所地"]
     },
     EvidenceType.RESIDENCE_CERTIFICATE: {
@@ -170,7 +154,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["居住证明", "流动人口信息登记表", "住址", "姓名", "身份证号"],
         "key_visual_features": ["红色公章", "官方机构名称（如派出所、社区居委会）"],
         "layout_features": ["正式的官方文件或表格布局"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["真名", "经常居住地址", "居住开始时间", "居住截止时间", "居住是否满一年"]
     },
     EvidenceType.PHONE_NUMBER: {
@@ -178,7 +161,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["11位手机号码", "区号和固定电话号码"],
         "key_visual_features": ["数字是图片的主要视觉元素"],
         "layout_features": ["通常没有复杂的布局，主要是数字列表或文本。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["电话号码"]
     },
     EvidenceType.BANK_ACCOUNT: {
@@ -186,7 +168,6 @@ EVIDENCE_TYPE_FEATURES = {
         "key_text_features": ["银行卡号（通常为16-19位）", "开户行名称"],
         "key_visual_features": ["银行Logo", "银行卡特有的设计元素"],
         "layout_features": ["主要是银行卡或包含卡号的列表。"],
-        "consider_correlations": False,
         "target_slots_to_extract": ["银行卡号", "开户支行"]
     }
 }
@@ -234,29 +215,38 @@ class EvidenceFeaturesExtractor:
         self.agent = Agent(
             name="证据特征提取专家",
             model=openai_image_model,
-instructions="""你是一个专业的法律证据信息提取AI助手。你的任务是从已分类的证据图片中提取关键信息字段，支持单个证据的独立特征提取和跨证据的联合特征提取。
-
-**核心任务**: 从提供的图片中提取target_slots_to_extract中指定的所有词槽，支持单个图片提取和多个图片联合提取。
-
-**提取规则:**
-1. **严格词槽限制**: 只能提取target_slots_to_extract中明确列出的词槽，禁止创建新词槽名
-2. **统一格式**: 无论单个图片还是多个图片联合提取，都使用相同的SlotExtraction结构
-3. **值来源说明**: 在reasoning中明确说明信息提取的原因
-4. **置信度**: 为每个提取的字段给出0-1之间的置信度
-5. **联合提取**: 当consider_correlations=True时，某些词槽值需要综合分析多个图片得出
-
-
-**输出格式要求**:
-1. 返回EvidenceExtractionResults结构，其中results字段是ResultItem的列表，ResultItem中每个image_url和evidence_type对应SlotExtraction列表。
-
-**重要**: 
-1. 禁止输出任何不在target_slots_to_extract列表中的词槽名。
-""",
+            session_state={
+                "evidence_type_features": EVIDENCE_TYPE_FEATURES
+            },
+            add_state_in_messages=True,
+            instructions=self.build_instructions(),
             response_model=EvidenceExtractionResults,
             show_tool_calls=True,
             debug_mode=True
         )
     
+    def build_instructions(self):
+        return """
+        <Back Story>
+        你是一个专业的证据图片特征提取专家，擅长从特定类型的证据图片中提取目标关键信息。
+        </Back Story>
+        <Task Planner>
+        1. 根据用户消息中给定的图片和图片分类，提取目标关键信息。
+        2. 使用给定的分类检索{evidence_type_features}中对应的证据类型对应的object，获取更详细的提取要求,详见<Evidence Type Features>。
+        </Task Planner>
+        <Evidence Type Features>
+        1. `description`：证据类型的描述
+        2. `key_text_features`：证据类型中的关键文本信息
+        3. `key_visual_features`：证据类型中的关键视觉信息
+        4. `layout_features`：证据类型中的关键布局信息
+        5. `target_slots_to_extract`：证据类型中需要提取的目标关键词槽信息
+        </Evidence Type Features>
+        <Notes>
+        1. 注意每个证据图片提取的关键信息词槽，仅能在{evidence_type_features}中指定的词槽范围内提取信息，也就是`target_slots_to_extract`中指定的词槽范围内提取信息。
+        2. `target_slots_to_extract`中指定的词槽信息作为key,但其没有说明具体数据类型，你需要理解每个词槽的含义，并在赋值时给与适当的值类型和值（比如int/bool/string)。
+        3. 如果`target_slots_to_extract`中指定的词槽信息，在当前证据图片中没有提取到，则将该词槽的值设置`未知`,并说明原因。
+        </Notes>
+        """
     def extract_features(
         self, 
         image_urls: List[str], 
@@ -294,14 +284,14 @@ instructions="""你是一个专业的法律证据信息提取AI助手。你的�
         for i, (url, evidence_type, guide) in enumerate(zip(image_urls, evidence_types, extraction_guides)):
             message_parts.append(f"\n{i+1}. 图片: {url}")
             message_parts.append(f"   证据类型: {evidence_type.value}")
-            message_parts.append(f"   提取指南: {guide}")
+            # message_parts.append(f"   提取指南: {guide}")
         
-        # 添加统一的词槽提取要求
-        message_parts.append(f"\n**需要提取的词槽**: {list(all_target_slots)}")
-        message_parts.append("**输出格式**: 使用SlotExtraction结构，包含from_urls, slot_name, slot_value, confidence, reasoning")
+        # # 添加统一的词槽提取要求
+        # message_parts.append(f"\n**需要提取的词槽**: {list(all_target_slots)}")
+        # message_parts.append("**输出格式**: 使用SlotExtraction结构，包含from_urls, slot_name, slot_value, confidence, reasoning")
         
-        if consider_correlations:
-            message_parts.append("\n**注意**: 请分析各图片间的关联信息，支持跨图片联合提取")
+        # if consider_correlations:
+        #     message_parts.append("\n**注意**: 请分析各图片间的关联信息，支持跨图片联合提取")
         
         message = "\n".join(message_parts)
         
@@ -324,8 +314,9 @@ if __name__ == '__main__':
     ]
     
     test_evidence_types = [
-        EvidenceType.VAT_INVOICE,
-        EvidenceType.BANK_ACCOUNT
+        # EvidenceType.VAT_INVOICE,
+        # EvidenceType.BANK_ACCOUNT
+        EvidenceType.WECHAT_CHAT_RECORD,
     ]
     
     extractor = EvidenceFeaturesExtractor()
@@ -333,7 +324,7 @@ if __name__ == '__main__':
     # 测试1: 独立特征提取（不关联）
     print("=== 测试独立特征提取 ===")
     extractor.extract_features(
-        image_urls=test_images_need_consider_correlations[:2],
+        image_urls=test_images_need_consider_correlations,
         evidence_types=test_evidence_types,
         consider_correlations=False
     )

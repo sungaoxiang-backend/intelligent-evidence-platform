@@ -19,6 +19,9 @@ class EvidenceEditRequest(BaseModel):
     evidence_features: Optional[List[Dict]] = Field(None, description="证据提取特征列表")
 
 
+class BatchCheckEvidenceRequest(BaseModel):
+    evidence_ids: List[int] = Field(..., description="证据id列表")
+
 class BatchDeleteRequest(BaseModel):
     evidence_ids: List[int] = Field(..., description="证据id列表")
     

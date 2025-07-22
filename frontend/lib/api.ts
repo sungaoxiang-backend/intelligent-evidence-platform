@@ -361,4 +361,22 @@ export const evidenceApi = {
       throw new Error(result.message || "操作失败");
     }
   },
+
+  async batchCheckEvidence(data: { evidence_ids: number[] }): Promise<{ data: Evidence[] }> {
+    const url = buildApiUrl(`/evidences/batch-check`);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data };
+    } else {
+      throw new Error(result.message || "批量审核失败");
+    }
+  },
 }

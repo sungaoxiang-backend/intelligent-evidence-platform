@@ -13,7 +13,8 @@ from app.staffs.models import Staff
 from app.evidences.schemas import (
     EvidenceResponse,
     BatchDeleteRequest,
-    EvidenceEditRequest
+    EvidenceEditRequest,
+    BatchCheckEvidenceRequest
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -204,6 +205,16 @@ async def batch_delete_evidences(
     data = await evidence_service.batch_delete(db, request.evidence_ids)
     return SingleResponse(data=data)
 
+@router.post("/batch-check", response_model=ListResponse[EvidenceResponse])
+async def batch_check_evidences(
+    request: BatchCheckEvidenceRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """批量检查证据"""
+    evidences = await evidence_service.batch_check_evidence(db, request.evidence_ids)
+    return ListResponse(data=evidences)
+
 
 @router.post("/batch-with-classification", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceResponse])
 async def batch_create_evidences_with_classification(
@@ -298,3 +309,4 @@ async def auto_process(
         raise HTTPException(status_code=400, detail="不能只做特征提取，必须先分类")
     evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction)
     return ListResponse(data=evidences)
+
