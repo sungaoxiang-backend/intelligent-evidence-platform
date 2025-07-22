@@ -90,7 +90,8 @@ const getStatusText = (status: string) => {
 const groupEvidence = (evidenceList: any[]) => {
   const groupMap: Record<string, any[]> = {};
   evidenceList.forEach(e => {
-    const type = e.evidence_type || '其他';
+    // 优先使用AI分类结果，如果没有则使用evidence_type，都没有则归类为'其他'
+    const type = e.classification_category || e.evidence_type || '其他';
     if (!groupMap[type]) groupMap[type] = [];
     groupMap[type].push(e);
   });
@@ -322,6 +323,12 @@ function EvidenceGalleryContent({
                       <p className="text-xs text-muted-foreground mt-1 break-words leading-tight" title={(evidence.format ?? "") + " • " + (evidence.size ?? "")}>
                         {(evidence.format ?? "") + " • " + (evidence.size ?? "")}
                       </p>
+                      {/* 显示分类信息 */}
+                      {(evidence.classification_category || evidence.evidence_type) && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 break-words leading-tight" title={evidence.classification_category || evidence.evidence_type}>
+                          {evidence.classification_category || evidence.evidence_type}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )
@@ -403,7 +410,9 @@ function EvidenceGalleryContent({
                     </div>
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">证据类型:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.evidence_type}>{selectedEvidence.evidence_type || '未分类'}</span>
+                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.classification_category || selectedEvidence.evidence_type}>
+                        {selectedEvidence.classification_category || selectedEvidence.evidence_type || '未分类'}
+                      </span>
                     </div>
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">文件名:</span>
