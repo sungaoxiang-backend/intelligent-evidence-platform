@@ -1,9 +1,9 @@
 import asyncio
 import mimetypes
 import uuid
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Callable, Awaitable
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from app.core.config import settings
@@ -282,6 +282,7 @@ async def auto_process(
     evidence_ids: List[int] = Form(None),
     auto_classification: bool = Form(False),
     auto_feature_extraction: bool = Form(False),
+    send_progress: Callable[[dict], Awaitable[None]] = None,
     ):
     from app.evidences.services import auto_process
     from loguru import logger
@@ -307,6 +308,93 @@ async def auto_process(
     # 校验：不能只做特征提取，必须先分类
     if auto_feature_extraction and not auto_classification:
         raise HTTPException(status_code=400, detail="不能只做特征提取，必须先分类")
-    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction)
+    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction, send_progress=send_progress)
     return ListResponse(data=evidences)
+
+
+@router.websocket("/ws/auto-process")
+async def websocket_auto_process(websocket: WebSocket):
+    await websocket.accept()
+    connection_id = id(websocket)  # 为每个连接生成唯一ID
+    logger.info(f"WebSocket连接已建立 [ID: {connection_id}]")
+    
+    try:
+        # 接收JSON格式的请求
+        data = await websocket.receive_json()
+        logger.info(f"收到WebSocket请求 [ID: {connection_id}]: {data}")
+        
+        # 解析请求参数
+        case_id = data.get("case_id")
+        evidence_ids = data.get("evidence_ids", [])
+        auto_classification = data.get("auto_classification", False)
+        auto_feature_extraction = data.get("auto_feature_extraction", False)
+        
+        if not case_id:
+            await websocket.send_json({"error": "必须提供case_id"})
+            return
+        
+        # 验证案件是否存在且用户有权限
+        try:
+            from app.db.session import async_session_factory
+            from app.cases.services import get_by_id
+            
+            async with async_session_factory() as db:
+                case = await get_by_id(db, case_id)
+                if not case:
+                    await websocket.send_json({"error": "案件不存在"})
+                    return
+        except Exception as e:
+            logger.error(f"验证案件权限失败 [ID: {connection_id}]: {e}")
+            await websocket.send_json({"error": "验证案件权限失败"})
+            return
+                
+        # 使用回调发送进度
+        async def send_progress(update_data: dict):
+            try:
+                await websocket.send_json(update_data)
+                logger.debug(f"发送进度 [ID: {connection_id}]: {update_data}")
+            except Exception as e:
+                logger.error(f"发送进度失败 [ID: {connection_id}]: {e}")
+        
+        try:
+            from app.evidences.services import auto_process
+            
+            # 创建数据库会话
+            async with async_session_factory() as db:
+                logger.info(f"开始处理证据 [ID: {connection_id}, Case: {case_id}, Evidence IDs: {evidence_ids}]")
+                
+                evidences = await auto_process(
+                    db=db,
+                    case_id=case_id,
+                    files=None,
+                    evidence_ids=evidence_ids,
+                    auto_classification=auto_classification,
+                    auto_feature_extraction=auto_feature_extraction,
+                    send_progress=send_progress
+                )
+                
+                # 发送完成消息
+                await websocket.send_json({
+                    "status": "completed",
+                    "message": f"成功处理 {len(evidences)} 个证据",
+                    "data": [{"id": e.id, "file_name": e.file_name} for e in evidences]
+                })
+                
+                logger.info(f"处理完成 [ID: {connection_id}]: 成功处理 {len(evidences)} 个证据")
+            
+        except Exception as e:
+            logger.error(f"处理过程中出错 [ID: {connection_id}]: {e}")
+            await websocket.send_json({
+                "status": "error",
+                "message": str(e)
+            })
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket客户端断开连接 [ID: {connection_id}]")
+    except Exception as e:
+        logger.error(f"WebSocket错误 [ID: {connection_id}]: {e}")
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
 
