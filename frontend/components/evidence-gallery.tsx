@@ -224,7 +224,7 @@ function EvidenceGalleryContent({
   if (!editForm) return null;
 
   return (
-    <div className="grid grid-cols-12 gap-4 h-[calc(100vh-220px)]">
+    <div className="grid grid-cols-12 gap-4 items-start">
       {/* 左栏：文件列表 */}
       <Card className="col-span-3 card-shadow">
         <CardHeader className="pb-2">
@@ -385,11 +385,11 @@ function EvidenceGalleryContent({
       </Card>
 
       {/* 中栏：文件预览 */}
-      <Card className="col-span-6 card-shadow">
+      <Card className="col-span-6 card-shadow sticky top-4">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">文件预览</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 h-[calc(100vh-280px)]">
           {selectedEvidence ? (
             <div className="h-full">
               {(selectedEvidence?.format?.toLowerCase() ?? "") === "mp3" ? (
@@ -499,191 +499,189 @@ function EvidenceGalleryContent({
         </CardHeader>
         <CardContent className="p-0">
           {selectedEvidence ? (
-            <ScrollArea className="h-full custom-scrollbar">
-              <div className="p-3 space-y-4">
-                {/* 基本信息 */}
-                <div>
-                  <h4 className="font-medium text-foreground mb-2 text-sm">基本信息</h4>
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">证据ID:</span>
-                      <span className="font-medium text-right break-all">{selectedEvidence.id}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">证据类型:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.classification_category || selectedEvidence.evidence_type}>
-                        {selectedEvidence.classification_category || selectedEvidence.evidence_type || '未分类'}
-                      </span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">文件名:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.file_name}>{selectedEvidence.file_name}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">文件格式:</span>
-                      <span className="font-medium text-right">{selectedEvidence.file_extension}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">文件大小:</span>
-                      <span className="font-medium text-right">{selectedEvidence.file_size}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">上传时间:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.created_at}>{selectedEvidence.created_at ? new Date(selectedEvidence.created_at).toLocaleString() : '-'}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">更新时间:</span>
-                      <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.updated_at}>{selectedEvidence.updated_at ? new Date(selectedEvidence.updated_at).toLocaleString() : '-'}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">证据状态:</span>
-                      <Badge className={getStatusColor(selectedEvidence.evidence_status)} variant="outline">
-                        {getStatusText(selectedEvidence.evidence_status)}
-                      </Badge>
-                    </div>
+            <div className="p-3 space-y-4">
+              {/* 基本信息 */}
+              <div>
+                <h4 className="font-medium text-foreground mb-2 text-sm">基本信息</h4>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">证据ID:</span>
+                    <span className="font-medium text-right break-all">{selectedEvidence.id}</span>
                   </div>
-                </div>
-
-                <Separator />
-
-                {/* 分类结果 */}
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Brain className="h-3.5 w-3.5 text-blue-600" />
-                    <h4 className="font-medium text-foreground text-sm">AI分类结果</h4>
-                    <Badge variant="outline" className="text-xs">
-                      置信度: {((editForm.classification_confidence || 0) * 100).toFixed(0)}%
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">证据类型:</span>
+                    <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.classification_category || selectedEvidence.evidence_type}>
+                      {selectedEvidence.classification_category || selectedEvidence.evidence_type || '未分类'}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">文件名:</span>
+                    <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.file_name}>{selectedEvidence.file_name}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">文件格式:</span>
+                    <span className="font-medium text-right">{selectedEvidence.file_extension}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">文件大小:</span>
+                    <span className="font-medium text-right">{selectedEvidence.file_size}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">上传时间:</span>
+                    <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.created_at}>{selectedEvidence.created_at ? new Date(selectedEvidence.created_at).toLocaleString() : '-'}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">更新时间:</span>
+                    <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.updated_at}>{selectedEvidence.updated_at ? new Date(selectedEvidence.updated_at).toLocaleString() : '-'}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">证据状态:</span>
+                    <Badge className={getStatusColor(selectedEvidence.evidence_status)} variant="outline">
+                      {getStatusText(selectedEvidence.evidence_status)}
                     </Badge>
                   </div>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">分类类别:</Label>
-                      {editing ? (
-                        <Input
-                          value={editForm.classification_category || ""}
-                          onChange={e => setEditForm((f: any) => ({ ...f, classification_category: e.target.value }))}
-                        />
-                      ) : (
-                        <div className="text-xs">{editForm.classification_category || "未分类"}</div>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">置信度:</Label>
-                      {editing ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={editForm.classification_confidence ?? ""}
-                          onChange={e => setEditForm((f: any) => ({ ...f, classification_confidence: Number(e.target.value) }))}
-                        />
-                      ) : (
-                        <div className="text-xs">{((editForm.classification_confidence || 0) * 100).toFixed(2)}%</div>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">分类理由:</Label>
-                      {editing ? (
-                        <Textarea
-                          value={editForm.classification_reasoning || ""}
-                          onChange={e => setEditForm((f: any) => ({ ...f, classification_reasoning: e.target.value }))}
-                        />
-                      ) : (
-                        <div className="text-xs bg-muted/50 p-2 rounded-md mt-1 border max-h-[100px] overflow-y-auto">
-                          {editForm.classification_reasoning || ''}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">分类时间:</Label>
-                      <div className="text-xs">{editForm.classified_at ? new Date(editForm.classified_at).toLocaleString() : "-"}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 特征提取结果 */}
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Brain className="h-3.5 w-3.5 text-purple-600" />
-                    <h4 className="font-medium text-foreground text-sm">特征提取结果</h4>
-                    {editForm.evidence_features && editForm.evidence_features.length > 0 && (
-                      <Badge 
-                        className={`${isFeatureComplete(editForm) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
-                        variant="outline"
-                      >
-                        {isFeatureComplete(editForm) ? "特征完整" : "特征不完整"}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {(editForm.evidence_features || []).map((slot: any, idx: number) => (
-                      <div key={idx} className={`p-2 rounded-md border space-y-1 ${
-                        slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                          ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30"
-                          : "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30"
-                      }`}>
-                        <div>
-                          <Label className="text-xs">词槽名:</Label>
-                          <span className="text-xs">{slot.slot_name}</span>
-                        </div>
-                        <div>
-                          <Label className="text-xs">词槽值:</Label>
-                          {editing ? (
-                            <Input
-                              value={slot.slot_value}
-                              onChange={e => {
-                                const newFeatures = [...editForm.evidence_features]
-                                newFeatures[idx].slot_value = e.target.value
-                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                              }}
-                              className={slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "" 
-                                ? "border-green-300 focus:border-green-500" 
-                                : "border-red-300 focus:border-red-500"
-                              }
-                            />
-                          ) : (
-                            <span className={`text-xs font-medium ${
-                              slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                                ? "text-green-700 dark:text-green-400"
-                                : "text-red-700 dark:text-red-400"
-                            }`}>
-                              {slot.slot_value}
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <Label className="text-xs">置信度:</Label>
-                          <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
-                        </div>
-                        <div>
-                          <Label className="text-xs">理由:</Label>
-                          <span className="text-xs">{slot.reasoning}</span>
-                        </div>
-                      </div>
-                    ))}
-                    <div>
-                      <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
-                      <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
-                    </div>
-                  </div>
-                </div>
-
-
-
-                {/* 编辑/保存按钮 */}
-                <div className="flex gap-2 mt-2">
-                  {editing ? (
-                    <>
-                      <Button onClick={() => handleSave(editForm, setEditing)}>保存</Button>
-                      <Button variant="outline" onClick={() => setEditing(false)}>取消</Button>
-                    </>
-                  ) : (
-                    <Button variant="outline" onClick={() => setEditing(true)}>编辑标注</Button>
-                  )}
                 </div>
               </div>
-            </ScrollArea>
+
+              <Separator />
+
+              {/* 分类结果 */}
+              <div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <Brain className="h-3.5 w-3.5 text-blue-600" />
+                  <h4 className="font-medium text-foreground text-sm">AI分类结果</h4>
+                  <Badge variant="outline" className="text-xs">
+                    置信度: {((editForm.classification_confidence || 0) * 100).toFixed(0)}%
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">分类类别:</Label>
+                    {editing ? (
+                      <Input
+                        value={editForm.classification_category || ""}
+                        onChange={e => setEditForm((f: any) => ({ ...f, classification_category: e.target.value }))}
+                      />
+                    ) : (
+                      <div className="text-xs">{editForm.classification_category || "未分类"}</div>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">置信度:</Label>
+                    {editing ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={editForm.classification_confidence ?? ""}
+                        onChange={e => setEditForm((f: any) => ({ ...f, classification_confidence: Number(e.target.value) }))}
+                      />
+                    ) : (
+                      <div className="text-xs">{((editForm.classification_confidence || 0) * 100).toFixed(2)}%</div>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">分类理由:</Label>
+                    {editing ? (
+                      <Textarea
+                        value={editForm.classification_reasoning || ""}
+                        onChange={e => setEditForm((f: any) => ({ ...f, classification_reasoning: e.target.value }))}
+                      />
+                    ) : (
+                      <div className="text-xs bg-muted/50 p-2 rounded-md mt-1 border max-h-[100px] overflow-y-auto">
+                        {editForm.classification_reasoning || ''}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">分类时间:</Label>
+                    <div className="text-xs">{editForm.classified_at ? new Date(editForm.classified_at).toLocaleString() : "-"}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 特征提取结果 */}
+              <div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <Brain className="h-3.5 w-3.5 text-purple-600" />
+                  <h4 className="font-medium text-foreground text-sm">特征提取结果</h4>
+                  {editForm.evidence_features && editForm.evidence_features.length > 0 && (
+                    <Badge 
+                      className={`${isFeatureComplete(editForm) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                      variant="outline"
+                    >
+                      {isFeatureComplete(editForm) ? "特征完整" : "特征不完整"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {(editForm.evidence_features || []).map((slot: any, idx: number) => (
+                    <div key={idx} className={`p-2 rounded-md border space-y-1 ${
+                      slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
+                        ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30"
+                        : "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30"
+                    }`}>
+                      <div>
+                        <Label className="text-xs">词槽名:</Label>
+                        <span className="text-xs">{slot.slot_name}</span>
+                      </div>
+                      <div>
+                        <Label className="text-xs">词槽值:</Label>
+                        {editing ? (
+                          <Input
+                            value={slot.slot_value}
+                            onChange={e => {
+                              const newFeatures = [...editForm.evidence_features]
+                              newFeatures[idx].slot_value = e.target.value
+                              setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                            }}
+                            className={slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "" 
+                              ? "border-green-300 focus:border-green-500" 
+                              : "border-red-300 focus:border-red-500"
+                            }
+                          />
+                        ) : (
+                          <span className={`text-xs font-medium ${
+                            slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
+                              ? "text-green-700 dark:text-green-400"
+                              : "text-red-700 dark:text-red-400"
+                          }`}>
+                            {slot.slot_value}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <Label className="text-xs">置信度:</Label>
+                        <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                      </div>
+                      <div>
+                        <Label className="text-xs">理由:</Label>
+                        <span className="text-xs">{slot.reasoning}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
+                    <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
+                  </div>
+                </div>
+              </div>
+
+
+
+              {/* 编辑/保存按钮 */}
+              <div className="flex gap-2 mt-2">
+                {editing ? (
+                  <>
+                    <Button onClick={() => handleSave(editForm, setEditing)}>保存</Button>
+                    <Button variant="outline" onClick={() => setEditing(false)}>取消</Button>
+                  </>
+                ) : (
+                  <Button variant="outline" onClick={() => setEditing(true)}>编辑标注</Button>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center">
@@ -775,6 +773,17 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       //   setIsCompleted(false)
       //   disconnect()
       // }, 3000)
+    } else if (wsProgress?.status === 'ocr_success') {
+      // OCR成功状态不需要显示toast，因为会很频繁
+      // 只记录日志，不中断流程
+    } else if (wsProgress?.status === 'ocr_error') {
+      // OCR错误不应该中断整个流程，只显示警告
+      toast({ 
+        title: "OCR处理警告", 
+        description: wsProgress.message || "某个证据OCR处理失败，但会继续处理其他证据", 
+        variant: "destructive" 
+      })
+      // 不清理selectedIds，继续处理其他证据
     } else if (wsProgress?.status === 'error') {
       toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
       setSelectedIds([])
@@ -1312,6 +1321,10 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
                       {wsProgress?.status === 'classifying' ? '证据分类中' :
                        wsProgress?.status === 'classified' ? '证据分类完成' :
                        wsProgress?.status === 'extracting' ? '证据特征分析中' :
+                       wsProgress?.status === 'ocr_processing' ? 'OCR处理中' :
+                       wsProgress?.status === 'ocr_success' ? 'OCR处理成功' :
+                       wsProgress?.status === 'ocr_error' ? 'OCR处理失败' :
+                       wsProgress?.status === 'llm_processing' ? 'LLM处理中' :
                        wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
                        wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
                       <span className="animate-bounce-dots">...</span>

@@ -442,39 +442,118 @@ async def auto_process(
             if send_progress:
                 await send_progress({"status": "extracting", "message": "开始证据特征分析"})
             
-            extractor = EvidenceFeaturesExtractor()
-            message_parts = ["请从以下证据图片中提取关键信息:"]
-            for i, ev in enumerate(evidences):
-                message_parts.append(f"{i+1}. file_url: {ev.file_url}")
-                message_parts.append(f"证据类型: {ev.classification_category}")
-            messages = "\n".join(message_parts)
+            # 定义支持OCR的证据类型
+            ocr_supported_types = {
+                "公司营业执照",
+                "个体工商户营业执照", 
+                "身份证",
+                "增值税发票",
+                "公司全国企业公示系统营业执照",
+                "个体工商户全国企业公示系统营业执照"
+            }
             
-            # 设置超时时间（3分钟）
-            import asyncio
-            run_response: RunResponse = await asyncio.wait_for(
-                extractor.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
-                timeout=180.0
-            )
+            # 分离需要OCR处理和需要LLM处理的证据
+            ocr_evidences = []
+            llm_evidences = []
             
-            evidence_extraction_results: EvidenceExtractionResults = run_response.content
-            if results := evidence_extraction_results.results:
-                from urllib.parse import unquote
-                for res in results:
-                    res_url = unquote(res.image_url)
-                    for evidence in evidences:
-                        ev_url = unquote(evidence.file_url)
-                        if ev_url == res_url:
-                            evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
+            for evidence in evidences:
+                if evidence.classification_category in ocr_supported_types:
+                    ocr_evidences.append(evidence)
+                else:
+                    llm_evidences.append(evidence)
+            
+            # 处理OCR支持的证据类型
+            if ocr_evidences:
+                if send_progress:
+                    await send_progress({"status": "ocr_processing", "message": f"开始OCR处理 {len(ocr_evidences)} 个证据"})
+                
+                from app.utils.xunfei_ocr import XunfeiOcrService
+                ocr_service = XunfeiOcrService()
+                
+                for evidence in ocr_evidences:
+                    try:
+                        # 调用OCR服务
+                        ocr_result = ocr_service.extract_evidence_features(
+                            evidence.file_url, 
+                            evidence.classification_category
+                        )
+                        
+                        if "error" not in ocr_result and ocr_result.get("evidence_features"):
+                            # 更新证据记录
+                            evidence.evidence_features = ocr_result["evidence_features"]
                             evidence.features_extracted_at = datetime.now()
                             evidence.evidence_status = EvidenceStatus.FEATURES_EXTRACTED.value
                             db.add(evidence)
-                            break
-                await db.commit()
-                for evidence in evidences:
-                    await db.refresh(evidence)
+                            
+                            # 立即提交这个证据的更新
+                            await db.commit()
+                            await db.refresh(evidence)
+                            
+                            if send_progress:
+                                await send_progress({
+                                    "status": "ocr_success", 
+                                    "message": f"OCR处理成功: {evidence.file_name}",
+                                    "evidence_id": evidence.id
+                                })
+                        else:
+                            # OCR处理失败，记录错误
+                            error_msg = ocr_result.get("error", "OCR处理失败")
+                            logger.warning(f"OCR处理失败 {evidence.file_name}: {error_msg}")
+                            
+                            if send_progress:
+                                await send_progress({
+                                    "status": "ocr_error", 
+                                    "message": f"OCR处理失败: {evidence.file_name} - {error_msg}",
+                                    "evidence_id": evidence.id
+                                })
+                                
+                    except Exception as e:
+                        logger.error(f"OCR处理异常 {evidence.file_name}: {str(e)}")
+                        if send_progress:
+                            await send_progress({
+                                "status": "ocr_error", 
+                                "message": f"OCR处理异常: {evidence.file_name} - {str(e)}",
+                                "evidence_id": evidence.id
+                            })
             
-            if send_progress:
-                await send_progress({"status": "features_extracted", "message": "证据特征分析完成"})
+            # 处理需要LLM处理的证据类型
+            if llm_evidences:
+                if send_progress:
+                    await send_progress({"status": "llm_processing", "message": f"开始LLM处理 {len(llm_evidences)} 个证据"})
+                
+                extractor = EvidenceFeaturesExtractor()
+                message_parts = ["请从以下证据图片中提取关键信息:"]
+                for i, ev in enumerate(evidences):
+                    message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+                    message_parts.append(f"证据类型: {ev.classification_category}")
+                messages = "\n".join(message_parts)
+                
+                # 设置超时时间（3分钟）
+                import asyncio
+                run_response: RunResponse = await asyncio.wait_for(
+                    extractor.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
+                    timeout=180.0
+                )
+                
+                evidence_extraction_results: EvidenceExtractionResults = run_response.content
+                if results := evidence_extraction_results.results:
+                    from urllib.parse import unquote
+                    for res in results:
+                        res_url = unquote(res.image_url)
+                        for evidence in evidences:
+                            ev_url = unquote(evidence.file_url)
+                            if ev_url == res_url:
+                                evidence.evidence_features = [s.model_dump() for s in res.slot_extraction]
+                                evidence.features_extracted_at = datetime.now()
+                                evidence.evidence_status = EvidenceStatus.FEATURES_EXTRACTED.value
+                                db.add(evidence)
+                                break
+                    await db.commit()
+                    for evidence in evidences:
+                        await db.refresh(evidence)
+                
+                if send_progress:
+                    await send_progress({"status": "features_extracted", "message": "证据特征分析完成"})
                 
         except asyncio.TimeoutError:
             if send_progress:
