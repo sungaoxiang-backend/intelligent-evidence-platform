@@ -1,5 +1,7 @@
-import { CaseTableSkeleton } from "@/components/case-table-skeleton"
-
 export default function Loading() {
-  return null
+  return (
+    <div className="text-center py-8">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto" />
+    </div>
+  )
 }

@@ -119,6 +119,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <title>汇法律 智能证物平台</title>
+        <link rel="icon" href="/favicon.svg" />
+      </head>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <GlobalErrorBoundary>

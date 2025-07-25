@@ -24,7 +24,7 @@ import {
   PieChart,
 } from "lucide-react"
 import useSWR from "swr"
-import { caseApi, evidenceApi, userApi } from "@/lib/api"
+import { caseApi, userApi } from "@/lib/api"
 import { useEffect, useState } from "react"
 
 export function WorkbenchDashboard() {
@@ -35,10 +35,6 @@ export function WorkbenchDashboard() {
     const res = await caseApi.getCases({ page: 1, pageSize: 10 })
     return res
   })
-  const { data: evidenceData } = useSWR(["dashboard-evidences"], async () => {
-    const res = await evidenceApi.getEvidences({ page: 1, pageSize: 10 })
-    return res
-  })
   const { data: userData } = useSWR(["dashboard-users"], async () => {
     const res = await userApi.getUsers({ page: 1, pageSize: 10 })
     return res
@@ -46,7 +42,7 @@ export function WorkbenchDashboard() {
 
   // 最近数据
   const recentCases = caseData?.data || []
-  const recentEvidences = evidenceData?.data || []
+  const recentEvidences: any[] = []
   const recentUsers = userData?.data || []
 
   return (
@@ -96,7 +92,7 @@ export function WorkbenchDashboard() {
       </Card>
 
       {/* 统计卡片和最新数据列表可保留，放在说明下方 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/cases") }>
           <CardContent className="p-6 flex items-center justify-between">
             <div>
@@ -108,23 +104,12 @@ export function WorkbenchDashboard() {
             </div>
           </CardContent>
         </Card>
-        <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/evidence") }>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">证据总数</p>
-              <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">{evidenceData?.pagination?.total ?? "-"}</p>
-            </div>
-            <div className="p-3 rounded-full bg-muted/50 text-purple-600 group-hover:bg-primary/20 transition-colors">
-              <Shield className="h-7 w-7" />
-            </div>
-          </CardContent>
-        </Card>
         <Card className="card-shadow hover:card-shadow-hover transition-shadow cursor-pointer group" onClick={() => router.push("/users") }>
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground mb-1 group-hover:text-foreground transition-colors">用户总数</p>
               <p className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">
-                {userData?.pagination?.total ?? "-"}
+                {(userData as any)?.pagination?.total ?? "-"}
               </p>
             </div>
             <div className="p-3 rounded-full bg-muted/50 text-green-600 group-hover:bg-primary/20 transition-colors">
@@ -134,7 +119,7 @@ export function WorkbenchDashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         {/* 最近案件 */}
         <Card className="card-shadow h-full flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -157,35 +142,6 @@ export function WorkbenchDashboard() {
                       <span>债权人: {case_.creditor_name}</span>
                       <span>债务人: {case_.debtor_name}</span>
                       <span>类型: {case_.case_type}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 最近证据 */}
-        <Card className="card-shadow h-full flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-lg">最新证据</CardTitle>
-            <button className="text-sm text-blue-600 hover:underline" onClick={() => router.push("/evidence")}>全部</button>
-          </CardHeader>
-          <CardContent className="flex-1">
-            {recentEvidences.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">暂无证据数据</div>
-            ) : (
-              <div className="space-y-3">
-                {recentEvidences.map((evidence) => (
-                  <div key={evidence.id} className="p-3 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer" onClick={() => router.push(`/evidence`)}>
-                    <div className="flex items-center space-x-3 mb-1">
-                      <span className="font-medium text-sm">{evidence.file_name || evidence.name || '-'}</span>
-                      <span className="text-xs text-muted-foreground">#{evidence.id}</span>
-                      <span className="text-xs text-muted-foreground">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : "-"}</span>
-                    </div>
-                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                      <span>类型: {evidence.evidence_type || evidence.type || '-'}</span>
-                      <span>上传人: {evidence.uploader || '-'}</span>
                     </div>
                   </div>
                 ))}

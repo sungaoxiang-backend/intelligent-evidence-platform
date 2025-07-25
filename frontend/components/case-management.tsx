@@ -15,7 +15,6 @@ import { userApi } from "@/lib/user-api"
 import type { Case } from "@/lib/types"
 import { useToast } from "@/components/ui/use-toast"
 import useSWR, { mutate } from "swr"
-import { CaseTableSkeleton } from "./case-table-skeleton"
 import { User } from '@/lib/types'
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
@@ -525,7 +524,7 @@ export function CaseManagement() {
       </div>
 
       {/* 使用Suspense包裹数据展示部分 */}
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
         <CaseTableContent 
           searchTerm={searchTerm}
           currentPage={currentPage}

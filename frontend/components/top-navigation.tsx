@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { Home, Scale, Shield, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut } from "lucide-react"
+import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import type { Staff } from "@/lib/config"
@@ -29,7 +29,6 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
 
   const getActiveModule = () => {
     if (pathname.startsWith("/cases")) return "cases"
-    if (pathname.startsWith("/evidence")) return "evidence"
     if (pathname.startsWith("/users")) return "users"
     if (pathname.startsWith("/staff")) return "staff"
     if (pathname.startsWith("/profile")) return "profile"
@@ -41,7 +40,6 @@ export function TopNavigation({ userRole, currentUser, onLogout }: TopNavigation
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
-    { id: "evidence", label: "证据管理", icon: Shield, href: "/evidence" },
   ]
 
   if (userRole === "admin") {
