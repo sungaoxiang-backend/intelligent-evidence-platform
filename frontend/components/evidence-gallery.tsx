@@ -764,17 +764,22 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
     if (wsProgress?.status === 'completed') {
       toast({ title: "智能分析完成", description: wsProgress.message })
       setSelectedIds([])
-      setIsCompleted(true) // 设置完成状态
+      setIsCompleted(true)
       mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
       
-      // 不立即调用disconnect，让WebSocket hook自己管理清理
-      // setTimeout(() => {
-      //   setIsCompleted(false)
-      //   disconnect()
-      // }, 3000)
+      // 延迟清理状态
+      setTimeout(() => {
+        setIsCompleted(false)
+      }, 3000)
     } else if (wsProgress?.status === 'ocr_success') {
-      // OCR成功状态不需要显示toast，因为会很频繁
-      // 只记录日志，不中断流程
+      // OCR成功后继续流程，但不显示toast以避免频繁提示
+      // 更新数据以反映最新状态
+      mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      // 继续保持进度状态
+      setIsCompleted(false)
+    } else if (wsProgress?.status === 'ocr_processing') {
+      // OCR处理中，保持进度状态
+      setIsCompleted(false)
     } else if (wsProgress?.status === 'ocr_error') {
       // OCR错误不应该中断整个流程，只显示警告
       toast({ 
@@ -782,23 +787,20 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         description: wsProgress.message || "某个证据OCR处理失败，但会继续处理其他证据", 
         variant: "destructive" 
       })
-      // 不清理selectedIds，继续处理其他证据
+      // 更新数据以反映最新状态
+      mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      // 继续保持进度状态
+      setIsCompleted(false)
     } else if (wsProgress?.status === 'error') {
       toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
       setSelectedIds([])
-      // 立即清理错误状态
-      setTimeout(() => {
-        disconnect()
-      }, 1000)
+      setIsCompleted(false)
     } else if (wsError) {
       toast({ title: "智能分析失败", description: wsError, variant: "destructive" })
       setSelectedIds([])
-      // 立即清理错误状态
-      setTimeout(() => {
-        disconnect()
-      }, 1000)
+      setIsCompleted(false)
     }
-  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, disconnect])
+  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, mutate]);
 
   // 状态切换动画
   useEffect(() => {
@@ -855,9 +857,6 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         evidence_ids: selectedIds,
         auto_classification: true,
         auto_feature_extraction: true
-      }, () => {
-        // 完成回调：清理完成状态
-        setIsCompleted(false)
       })
       
     } catch (e: any) {

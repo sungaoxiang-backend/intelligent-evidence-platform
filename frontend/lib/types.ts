@@ -1,16 +1,19 @@
 // 数据类型定义
+export type CaseType = "debt" | "contract";
+export type PartyType = "person" | "company" | "individual";
+
 export interface Case {
-  id: number
-  user_id: number
-  case_type?: string
-  creditor_name: string
-  creditor_type?: string
-  debtor_name?: string
-  debtor_type?: string
-  description?: string
-  created_at: string
-  updated_at: string
-  user?: User
+  id: number;
+  user_id: number;
+  case_type: CaseType | null;
+  creditor_name: string;
+  creditor_type: PartyType | null;
+  debtor_name: string | null;
+  debtor_type: PartyType | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  user?: User;
 }
 
 export interface Evidence {

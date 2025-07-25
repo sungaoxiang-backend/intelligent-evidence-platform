@@ -1,36 +1,49 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Search, Eye, Edit, Trash2 } from "lucide-react"
-import { userApi } from "@/lib/user-api"
-import { ListPage } from "@/components/common/list-page"
-import { usePaginatedSWR } from "@/hooks/use-paginated-swr"
-import { useBulkSelection } from "@/hooks/use-bulk-selection"
-import type { User } from "@/lib/types"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Plus, Edit, Trash2 } from "lucide-react";
+import { userApi } from "@/lib/user-api";
+import { ListPage } from "@/components/common/list-page";
+import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
+import type { User } from "@/lib/types";
 
 export default function UserManagement() {
-  const [showAddDialog, setShowAddDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const [addForm, setAddForm] = useState({
     name: "",
     email: "",
     phone: "",
-  })
+    id_card: "",
+  });
 
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
     phone: "",
-  })
+    id_card: "",
+  });
 
   // Use paginated SWR hook
   const {
@@ -46,100 +59,75 @@ export default function UserManagement() {
   } = usePaginatedSWR<User>(
     "/users",
     (params) => userApi.getUsers(params),
-    [searchTerm]
-  )
-
-  // Use bulk selection hook
-  const {
-    selectedIds,
-    setSelectedIds,
-    toggle: toggleSelection,
-    toggleAll
-  } = useBulkSelection()
+    [],
+  );
 
   const handleAddUser = async () => {
     try {
-      await userApi.createUser(addForm)
-      setShowAddDialog(false)
+      await userApi.createUser(addForm);
+      setShowAddDialog(false);
       setAddForm({
         name: "",
         email: "",
         phone: "",
-      })
-      mutate()
+        id_card: "",
+      });
+      mutate();
     } catch (error) {
-      console.error("Failed to create user:", error)
+      console.error("Failed to create user:", error);
     }
-  }
+  };
 
   const handleEditUser = async () => {
-    if (!editingUser) return
+    if (!editingUser) return;
     
     try {
-      await userApi.updateUser(editingUser.id, editForm)
-      setShowEditDialog(false)
-      setEditingUser(null)
-      mutate()
+      await userApi.updateUser(editingUser.id, editForm);
+      setShowEditDialog(false);
+      setEditingUser(null);
+      mutate();
     } catch (error) {
-      console.error("Failed to update user:", error)
+      console.error("Failed to update user:", error);
     }
-  }
+  };
 
   const handleDeleteUser = async (id: number) => {
-    if (!confirm("确定要删除这个用户吗？")) return
+    if (!confirm("确定要删除这个用户吗？")) return;
     
     try {
-      await userApi.deleteUser(id)
-      mutate()
+      await userApi.deleteUser(id);
+      mutate();
     } catch (error) {
-      console.error("Failed to delete user:", error)
+      console.error("Failed to delete user:", error);
     }
-  }
+  };
 
   const openEditDialog = (user: User) => {
-    setEditingUser(user)
+    setEditingUser(user);
     setEditForm({
       name: user.name,
       email: user.email || "",
       phone: user.phone || "",
-    })
-    setShowEditDialog(true)
-  }
+      id_card: user.id_card || "",
+    });
+    setShowEditDialog(true);
+  };
 
   const openAddDialog = () => {
-    setShowAddDialog(true)
-  }
+    setShowAddDialog(true);
+  };
 
   const renderTable = (users: User[]) => (
     <>
-      {/* Search Bar */}
-      <div className="mb-6 flex items-center space-x-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="搜索用户姓名、邮箱或电话..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={selectedIds.length === users.length && users.length > 0}
-                  onCheckedChange={(checked) => toggleAll(users, !!checked)}
-                />
-              </TableHead>
               <TableHead>姓名</TableHead>
-              <TableHead>邮箱</TableHead>
-              <TableHead>电话</TableHead>
               <TableHead>身份证号</TableHead>
+              <TableHead>手机号</TableHead>
+              <TableHead>邮箱</TableHead>
               <TableHead>创建时间</TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
@@ -147,16 +135,10 @@ export default function UserManagement() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedIds.includes(user.id)}
-                    onCheckedChange={(checked) => toggleSelection(user.id, !!checked)}
-                  />
-                </TableCell>
                 <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell>{user.email || "-"}</TableCell>
-                <TableCell>{user.phone || "-"}</TableCell>
                 <TableCell>{user.id_card || "-"}</TableCell>
+                <TableCell>{user.phone || "-"}</TableCell>
+                <TableCell>{user.email || "-"}</TableCell>
                 <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "-"}</TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
@@ -183,7 +165,7 @@ export default function UserManagement() {
         </Table>
       </div>
     </>
-  )
+  );
 
   return (
     <>
@@ -204,8 +186,6 @@ export default function UserManagement() {
         total={total}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
         renderTable={renderTable}
         emptyMessage="暂无用户数据"
         emptyAction={
@@ -238,6 +218,28 @@ export default function UserManagement() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="id_card" className="text-right">
+                身份证号
+              </Label>
+              <Input
+                id="id_card"
+                value={addForm.id_card}
+                onChange={(e) => setAddForm({ ...addForm, id_card: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="phone" className="text-right">
+                手机号
+              </Label>
+              <Input
+                id="phone"
+                value={addForm.phone}
+                onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="email" className="text-right">
                 邮箱
               </Label>
@@ -246,17 +248,6 @@ export default function UserManagement() {
                 type="email"
                 value={addForm.email}
                 onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="phone" className="text-right">
-                电话
-              </Label>
-              <Input
-                id="phone"
-                value={addForm.phone}
-                onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
                 className="col-span-3"
               />
             </div>
@@ -291,6 +282,28 @@ export default function UserManagement() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-id_card" className="text-right">
+                身份证号
+              </Label>
+              <Input
+                id="edit-id_card"
+                value={editForm.id_card}
+                onChange={(e) => setEditForm({ ...editForm, id_card: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-phone" className="text-right">
+                手机号
+              </Label>
+              <Input
+                id="edit-phone"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-email" className="text-right">
                 邮箱
               </Label>
@@ -299,17 +312,6 @@ export default function UserManagement() {
                 type="email"
                 value={editForm.email}
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-phone" className="text-right">
-                电话
-              </Label>
-              <Input
-                id="edit-phone"
-                value={editForm.phone}
-                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                 className="col-span-3"
               />
             </div>
@@ -322,5 +324,5 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }

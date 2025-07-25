@@ -20,6 +20,7 @@ export function useWebSocket() {
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const connectionIdRef = useRef<string | null>(null)
+  const isCompletedRef = useRef(false)
 
   const connect = useCallback((url: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -28,7 +29,8 @@ export function useWebSocket() {
 
     const ws = new WebSocket(url)
     wsRef.current = ws
-    connectionIdRef.current = Math.random().toString(36).substring(2, 11) // 生成连接ID
+    connectionIdRef.current = Math.random().toString(36).substring(2, 11)
+    isCompletedRef.current = false
 
     ws.onopen = () => {
       setIsConnected(true)
@@ -51,6 +53,7 @@ export function useWebSocket() {
         }
 
         if (data.status === 'completed') {
+          isCompletedRef.current = true
           setProgress({
             status: 'completed',
             message: data.message,
@@ -103,8 +106,11 @@ export function useWebSocket() {
     ws.onclose = (event) => {
       console.log(`WebSocket连接已关闭 [ID: ${connectionIdRef.current}]:`, event.code, event.reason)
       setIsConnected(false)
-      setProgress(null)
-      setError(null) // 清除错误状态
+      // 只有在非完成状态下才清除进度
+      if (!isCompletedRef.current) {
+        setProgress(null)
+      }
+      setError(null)
       connectionIdRef.current = null
     }
 
@@ -186,18 +192,18 @@ export function useAutoProcessWebSocket() {
 
   // 监听进度完成或错误
   useEffect(() => {
-      if (progress?.status === 'completed') {
-      // 完成后延迟关闭连接
-        setTimeout(() => {
-          setIsProcessing(false)
-          // 调用完成回调
-          if (onCompleteRef.current) {
-            onCompleteRef.current()
-          }
+    if (progress?.status === 'completed') {
+      // 完成后延迟关闭连接和重置状态
+      setTimeout(() => {
+        setIsProcessing(false)
+        // 调用完成回调
+        if (onCompleteRef.current) {
+          onCompleteRef.current()
+        }
       }, 2000)
     } else if (progress?.status === 'error') {
-        // 错误状态立即清理
-        setIsProcessing(false)
+      // 错误状态立即清理
+      setIsProcessing(false)
     }
   }, [progress])
 

@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.users.models import User
 from app.users.schemas import UserCreate, UserUpdate
@@ -73,8 +74,9 @@ async def get_multi_with_count(db: AsyncSession, *, skip: int = 0, limit: int = 
     total_result = await db.execute(select(func.count()).select_from(User))
     total = total_result.scalar_one()
 
-    # 查询数据
-    items_result = await db.execute(select(User).offset(skip).limit(limit))
+    # 查询数据，使用selectinload预加载cases关系
+    query = select(User).options(selectinload(User.cases)).offset(skip).limit(limit)
+    items_result = await db.execute(query)
     items = items_result.scalars().all()
 
     return items, total

@@ -8,11 +8,10 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Search, Edit, Trash2 } from "lucide-react"
+import { Plus, Edit, Trash2 } from "lucide-react"
 import { staffApi } from "@/lib/staff-api"
 import { ListPage } from "@/components/common/list-page"
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr"
-import { useBulkSelection } from "@/hooks/use-bulk-selection"
 
 interface Staff {
   id: number
@@ -27,7 +26,6 @@ export default function StaffManagement() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
 
   const [addForm, setAddForm] = useState({
     username: "",
@@ -56,16 +54,8 @@ export default function StaffManagement() {
   } = usePaginatedSWR<Staff>(
     "/staff",
     (params) => staffApi.getStaff(params),
-    [searchTerm]
+    [],
   )
-
-  // Use bulk selection hook
-  const {
-    selectedIds,
-    setSelectedIds,
-    toggle: toggleSelection,
-    toggleAll
-  } = useBulkSelection()
 
   const handleAddStaff = async () => {
     try {
@@ -123,30 +113,11 @@ export default function StaffManagement() {
 
   const renderTable = (staff: Staff[]) => (
     <>
-      {/* Search Bar */}
-      <div className="mb-6 flex items-center space-x-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="搜索员工用户名..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
       {/* Staff Table */}
       <div className="bg-white rounded-lg shadow">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={selectedIds.length === staff.length && staff.length > 0}
-                  onCheckedChange={(checked) => toggleAll(staff, !!checked)}
-                />
-              </TableHead>
               <TableHead>用户名</TableHead>
               <TableHead>角色</TableHead>
               <TableHead>状态</TableHead>
@@ -158,12 +129,6 @@ export default function StaffManagement() {
           <TableBody>
             {staff.map((staffMember) => (
               <TableRow key={staffMember.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedIds.includes(staffMember.id)}
-                    onCheckedChange={(checked) => toggleSelection(staffMember.id, !!checked)}
-                  />
-                </TableCell>
                 <TableCell className="font-medium">{staffMember.username}</TableCell>
                 <TableCell>
                   {staffMember.is_superuser ? (
@@ -227,8 +192,6 @@ export default function StaffManagement() {
         total={total}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
         renderTable={renderTable}
         emptyMessage="暂无员工数据"
         emptyAction={

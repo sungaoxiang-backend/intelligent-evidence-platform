@@ -5,33 +5,21 @@ import { SpinnerFallback } from './spinner-fallback';
 import { Pagination } from '../ui/pagination';
 import { Button } from '../ui/button';
 import { AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface ListPageProps<T extends { id: number }> {
   title: string;
   subtitle?: string;
   headerActions?: React.ReactNode;
-  
-  // Data and loading states
   data?: T[];
   loading: boolean;
   error?: Error | null;
-  
-  // Pagination
   page: number;
   pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
-  
-  // Bulk selection
-  selectedIds: number[];
-  onSelectionChange: (ids: number[]) => void;
-  bulkActions?: React.ReactNode;
-  
-  // Table rendering
   renderTable: (data: T[]) => React.ReactNode;
-  
-  // Empty state
   emptyMessage?: string;
   emptyAction?: React.ReactNode;
 }
@@ -48,69 +36,69 @@ export function ListPage<T extends { id: number }>({
   total,
   onPageChange,
   onPageSizeChange,
-  selectedIds,
-  onSelectionChange,
-  bulkActions,
   renderTable,
   emptyMessage = "暂无数据",
-  emptyAction
+  emptyAction,
 }: ListPageProps<T>) {
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return <SpinnerFallback />;
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <PageHeader title={title} subtitle={subtitle} actions={headerActions} />
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <AlertTriangle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
-            <p className="text-gray-500">{error.message}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const isEmpty = !data || data.length === 0;
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <PageHeader title={title} subtitle={subtitle} actions={headerActions} />
-      
-      {selectedIds.length > 0 && (
-        <TableToolbar selectedCount={selectedIds.length}>
-          {bulkActions}
-        </TableToolbar>
-      )}
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
+          {subtitle && (
+            <p className="text-muted-foreground mt-2">{subtitle}</p>
+          )}
+        </div>
+        {headerActions}
+      </div>
 
-      {isEmpty ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-gray-500 mb-4">{emptyMessage}</p>
-            {emptyAction}
-          </div>
+      {loading ? (
+        <div className="flex justify-center items-center min-h-[200px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      ) : error ? (
+        <div className="flex justify-center items-center min-h-[200px] text-red-500">
+          {error.message || "加载失败"}
+        </div>
+      ) : !data?.length ? (
+        <div className="flex flex-col justify-center items-center min-h-[200px] gap-4">
+          <p className="text-muted-foreground">{emptyMessage}</p>
+          {emptyAction}
         </div>
       ) : (
         <>
           {renderTable(data)}
-          
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                显示 {(page - 1) * pageSize + 1} 到 {Math.min(page * pageSize, total)} 条，共 {total} 条
-              </div>
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={onPageChange}
-              />
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-muted-foreground">
+              共 {total} 条记录
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">每页显示</span>
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(value) => onPageSizeChange(parseInt(value))}
+              >
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground">条</span>
+              <div className="ml-4">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onChange={onPageChange}
+                />
+              </div>
+            </div>
+          </div>
         </>
       )}
     </div>

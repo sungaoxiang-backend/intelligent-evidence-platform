@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,14 +30,12 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit, Trash2, Eye, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Eye } from "lucide-react";
 import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
-import { useBulkSelection } from "@/hooks/use-bulk-selection";
-import type { Case, User } from "@/lib/types";
+import type { Case, User, CaseType, PartyType } from "@/lib/types";
 
 const caseTypeLabels = {
   debt: "借款纠纷",
@@ -50,29 +49,30 @@ const partyTypeLabels = {
 };
 
 export default function CaseManagement() {
+  const router = useRouter();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
 
+  // 初始化表单状态
   const [addForm, setAddForm] = useState({
-    case_type: "debt" as "debt" | "contract",
-    creditor_name: "",
-    creditor_type: "person" as "person" | "company" | "individual",
-    debtor_name: "",
-    debtor_type: "person" as "person" | "company" | "individual",
-    description: "",
     user_id: 0,
+    case_type: null as null | CaseType,
+    creditor_name: "",
+    creditor_type: null as null | PartyType,
+    debtor_name: null as null | string,
+    debtor_type: null as null | PartyType,
+    description: null as null | string,
   });
 
   const [editForm, setEditForm] = useState({
-    case_type: "debt" as "debt" | "contract",
-    creditor_name: "",
-    creditor_type: "person" as "person" | "company" | "individual",
-    debtor_name: "",
-    debtor_type: "person" as "person" | "company" | "individual",
-    description: "",
     user_id: 0,
+    case_type: null as null | CaseType,
+    creditor_name: "",
+    creditor_type: null as null | PartyType,
+    debtor_name: null as null | string,
+    debtor_type: null as null | PartyType,
+    description: null as null | string,
   });
 
   // Use paginated SWR hook
@@ -89,16 +89,8 @@ export default function CaseManagement() {
   } = usePaginatedSWR<Case>(
     "/cases",
     (params) => caseApi.getCases(params),
-    [searchTerm]
+    [],
   );
-
-  // Use bulk selection hook
-  const {
-    selectedIds,
-    setSelectedIds,
-    toggle: toggleSelection,
-    toggleAll
-  } = useBulkSelection();
 
   // Fetch users for dropdown
   const {
@@ -110,18 +102,19 @@ export default function CaseManagement() {
     100
   );
 
+  // 重置表单时也要修改
   const handleAddCase = async () => {
     try {
       await caseApi.createCase(addForm);
       setShowAddDialog(false);
       setAddForm({
-        case_type: "debt" as const,
-        creditor_name: "",
-        creditor_type: "person" as const,
-        debtor_name: "",
-        debtor_type: "person" as const,
-        description: "",
         user_id: 0,
+        case_type: null,
+        creditor_name: "",
+        creditor_type: null,
+        debtor_name: null,
+        debtor_type: null,
+        description: null,
       });
       mutate();
     } catch (error) {
@@ -156,13 +149,13 @@ export default function CaseManagement() {
   const openEditDialog = (caseItem: Case) => {
     setEditingCase(caseItem);
     setEditForm({
-      case_type: caseItem.case_type as "debt" | "contract",
-      creditor_name: caseItem.creditor_name,
-      creditor_type: caseItem.creditor_type as "person" | "company" | "individual",
-      debtor_name: caseItem.debtor_name || "",
-      debtor_type: caseItem.debtor_type as "person" | "company" | "individual",
-      description: caseItem.description || "",
       user_id: caseItem.user_id,
+      case_type: caseItem.case_type as CaseType,
+      creditor_name: caseItem.creditor_name,
+      creditor_type: caseItem.creditor_type as PartyType,
+      debtor_name: caseItem.debtor_name || "",
+      debtor_type: caseItem.debtor_type as PartyType,
+      description: caseItem.description || "",
     });
     setShowEditDialog(true);
   };
@@ -193,7 +186,6 @@ export default function CaseManagement() {
       ...prev,
       user_id: parseInt(userId),
       creditor_name: selectedUser?.name || "",
-      creditor_type: "person"
     }));
   };
 
@@ -203,36 +195,20 @@ export default function CaseManagement() {
       ...prev,
       user_id: parseInt(userId),
       creditor_name: selectedUser?.name || "",
-      creditor_type: "person"
     }));
   };
 
+  const handleViewCase = (caseId: number) => {
+    router.push(`/cases/${caseId}`);
+  };
+
+  // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => (
     <>
-      {/* Search Bar */}
-      <div className="mb-6 flex items-center space-x-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="搜索债权人、债务人或描述..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Cases Table */}
       <div className="bg-white rounded-lg shadow">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={selectedIds.length === cases.length && cases.length > 0}
-                  onCheckedChange={(checked) => toggleAll(cases, !!checked)}
-                />
-              </TableHead>
               <TableHead>关联用户</TableHead>
               <TableHead>案件类型</TableHead>
               <TableHead>债权人</TableHead>
@@ -245,31 +221,25 @@ export default function CaseManagement() {
           <TableBody>
             {cases.map((caseItem) => (
               <TableRow key={caseItem.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedIds.includes(caseItem.id)}
-                    onCheckedChange={(checked) => toggleSelection(caseItem.id, !!checked)}
-                  />
-                </TableCell>
-                <TableCell>{caseItem.user?.name || "未关联"}</TableCell>
+                <TableCell>{caseItem.user?.name || "-"}</TableCell>
                 <TableCell>
                   <Badge variant="outline">
-                    {caseTypeLabels[caseItem.case_type as keyof typeof caseTypeLabels] || caseItem.case_type || "-"}
+                    {caseTypeLabels[caseItem.case_type as keyof typeof caseTypeLabels] || "-"}
                   </Badge>
                 </TableCell>
                 <TableCell className="font-medium">
                   {caseItem.creditor_name}
                   {caseItem.creditor_type && (
                     <span className="text-sm text-gray-500 ml-1">
-                      ({partyTypeLabels[caseItem.creditor_type as keyof typeof partyTypeLabels]})
+                      ({partyTypeLabels[caseItem.creditor_type]})
                     </span>
                   )}
                 </TableCell>
                 <TableCell>
                   {caseItem.debtor_name || "-"}
-                  {caseItem.debtor_type && (
+                  {caseItem.debtor_type && caseItem.debtor_name && (
                     <span className="text-sm text-gray-500 ml-1">
-                      ({partyTypeLabels[caseItem.debtor_type as keyof typeof partyTypeLabels]})
+                      ({partyTypeLabels[caseItem.debtor_type]})
                     </span>
                   )}
                 </TableCell>
@@ -278,11 +248,13 @@ export default function CaseManagement() {
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => window.open(`/cases/${caseItem.id}`, '_blank')}
+                      onClick={() => handleViewCase(caseItem.id)}
+                      className="flex items-center text-blue-600 hover:text-blue-700"
                     >
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4 mr-1" />
+                      查看证据
                     </Button>
                     <Button
                       variant="ghost"
@@ -328,8 +300,6 @@ export default function CaseManagement() {
         total={total}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
         renderTable={renderTable}
         emptyMessage="暂无案件数据"
         emptyAction={
@@ -385,7 +355,7 @@ export default function CaseManagement() {
                 案件类型
               </Label>
                   <Select 
-                    value={addForm.case_type} 
+                    value={addForm.case_type || ""} 
                 onValueChange={(value: any) => setAddForm({ ...addForm, case_type: value })}
                   >
                 <SelectTrigger className="col-span-3">
@@ -413,7 +383,7 @@ export default function CaseManagement() {
                 债权人类型
               </Label>
                   <Select 
-                value={addForm.creditor_type}
+                value={addForm.creditor_type || ""}
                 onValueChange={(value: any) => setAddForm({ ...addForm, creditor_type: value })}
                   >
                 <SelectTrigger className="col-span-3">
@@ -432,7 +402,7 @@ export default function CaseManagement() {
               </Label>
               <Input
                 id="debtor_name"
-                value={addForm.debtor_name}
+                value={addForm.debtor_name || ""}
                 onChange={(e) => setAddForm({ ...addForm, debtor_name: e.target.value })}
                 className="col-span-3"
               />
@@ -442,7 +412,7 @@ export default function CaseManagement() {
                 债务人类型
               </Label>
                   <Select 
-                value={addForm.debtor_type}
+                value={addForm.debtor_type || ""}
                 onValueChange={(value: any) => setAddForm({ ...addForm, debtor_type: value })}
                   >
                 <SelectTrigger className="col-span-3">
@@ -461,7 +431,7 @@ export default function CaseManagement() {
               </Label>
                 <Textarea 
                   id="description" 
-                  value={addForm.description} 
+                  value={addForm.description || ""} 
                 onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
                 className="col-span-3"
               />
@@ -510,7 +480,7 @@ export default function CaseManagement() {
                 案件类型
               </Label>
               <Select 
-                value={editForm.case_type}
+                value={editForm.case_type || ""}
                 onValueChange={(value: any) => setEditForm({ ...editForm, case_type: value })}
               >
                 <SelectTrigger className="col-span-3">
@@ -538,7 +508,7 @@ export default function CaseManagement() {
                 债权人类型
               </Label>
               <Select 
-                value={editForm.creditor_type}
+                value={editForm.creditor_type || ""}
                 onValueChange={(value: any) => setEditForm({ ...editForm, creditor_type: value })}
               >
                 <SelectTrigger className="col-span-3">
@@ -557,7 +527,7 @@ export default function CaseManagement() {
               </Label>
               <Input
                 id="edit-debtor_name"
-                value={editForm.debtor_name}
+                value={editForm.debtor_name || ""}
                 onChange={(e) => setEditForm({ ...editForm, debtor_name: e.target.value })}
                 className="col-span-3"
               />
@@ -567,7 +537,7 @@ export default function CaseManagement() {
                 债务人类型
               </Label>
               <Select
-                value={editForm.debtor_type}
+                value={editForm.debtor_type || ""}
                 onValueChange={(value: any) => setEditForm({ ...editForm, debtor_type: value })}
               >
                 <SelectTrigger className="col-span-3">
@@ -586,7 +556,7 @@ export default function CaseManagement() {
               </Label>
               <Textarea
                 id="edit-description"
-                value={editForm.description}
+                value={editForm.description || ""}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                 className="col-span-3"
               />
