@@ -310,7 +310,7 @@ class XunfeiOcrClient:
                         "slot_name": business_field.value,  # 使用枚举的value作为slot_name
                         "slot_value": cleaned_value,
                         "confidence": confidence,
-                        "reasoning": ""  # OCR没有提供reasoning，留空
+                        "reasoning": "OCR识别"  # OCR没有提供reasoning，留空
                     }
                     
                     evidence_features.append(evidence_feature)

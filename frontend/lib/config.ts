@@ -1,6 +1,10 @@
 // API配置
 export const API_CONFIG = {
-  BASE_URL: "/api/v1",
+  // 优先读取环境变量，便于在不同环境（开发、本地、Docker、生产）切换
+  // - 在 Next.js 中，`NEXT_PUBLIC_` 前缀的变量会在客户端可用
+  // - 本地开发可在 `.env.local` 设置：  NEXT_PUBLIC_API_BASE_URL=http://localhost:8008/api/v1
+  // - 线上构建或 Docker 可在对应的环境文件中写为：  NEXT_PUBLIC_API_BASE_URL=/api/v1
+  BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1",
   ENDPOINTS: {
     // 认证相关 - 根据您的API档修正
     LOGIN: "/login/access-token", // 修正后的登录端点

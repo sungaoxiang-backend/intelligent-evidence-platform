@@ -53,12 +53,17 @@ services:
       build:
         context: ./frontend
         dockerfile: Dockerfile
+        args:
+          # 从 env_file 或宿主环境读取，以避免硬编码
+          NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL-/api/v1}
       ports:
         - "3000:3000"
       networks:
         - app-network
       depends_on:
         - app
+      env_file:
+        - ./frontend/.env.docker
       environment:
         - NODE_ENV=production
         

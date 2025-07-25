@@ -12,8 +12,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Search,
-  Filter,
   Eye,
   Download,
   Video,
@@ -697,7 +695,7 @@ function EvidenceGalleryContent({
 }
 
 export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; onBack?: () => void }) {
-  const [searchTerm, setSearchTerm] = useState("")
+  const searchTerm = ""
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const { toast } = useToast()
@@ -711,6 +709,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [reviewing, setReviewing] = useState(false)
   const [statusAnimation, setStatusAnimation] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   // WebSocket进度管理
   const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect } = useAutoProcessWebSocket()
@@ -927,6 +926,23 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
     }
   }
 
+  // 批量删除逻辑
+  const handleBatchDelete = async () => {
+    try {
+      if (selectedIds.length === 0) {
+        toast({ title: "提示", description: "请先选择证据", variant: "destructive" });
+        return;
+      }
+      await evidenceApi.batchDeleteEvidences(selectedIds);
+      toast({ title: "删除成功", description: `成功删除 ${selectedIds.length} 个证据` });
+      setSelectedIds([]);
+      setIsDeleteDialogOpen(false);
+      await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize]);
+    } catch (e: any) {
+      toast({ title: "删除失败", description: e?.message || '未知错误', variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 页面头部 */}
@@ -1101,22 +1117,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           </div>
         </DialogContent>
       </Dialog>
-      {/* 搜索栏 */}
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            placeholder="搜索证据名称、案件、类型..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-muted/50 border-0 focus:bg-background"
-          />
-        </div>
-        <Button variant="outline" className="border-primary/20 hover:bg-primary/5 bg-transparent">
-          <Filter className="h-4 w-4 mr-2" />
-          高级筛选
-        </Button>
-      </div>
+      {/* 搜索栏已移除 */}
 
       {/* 案件和证据概览 */}
       <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
@@ -1246,9 +1247,18 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         </div>
       </div>
 
-      {/* 智能分析按钮 - 标准版本 */}
+      {/* 智能分析和批量删除按钮 */}
       {(selectedIds.length > 0 || isProcessing || isCompleted) && (
         <div className="mb-2 flex items-center gap-3">
+          {/* 批量删除按钮 */}
+          <Button
+            variant="destructive"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isProcessing}
+          >
+            批量删除
+          </Button>
+
           {/* 标准宽度的智能分析按钮 */}
           <Button 
             onClick={handleBatchAnalysis} 
@@ -1341,6 +1351,22 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           )}
         </div>
       )}
+
+      {/* 删除确认弹窗 */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+          </DialogHeader>
+          <div>
+            <p>确定要删除选中的 {selectedIds.length} 个证据吗？此操作不可撤销。</p>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>取消</Button>
+            <Button variant="destructive" onClick={handleBatchDelete}>删除</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
         <EvidenceGalleryContent 
