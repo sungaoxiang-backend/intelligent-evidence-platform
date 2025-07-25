@@ -2,15 +2,15 @@
 export interface Case {
   id: number
   user_id: number
-  title: string
-  description?: string
-  case_type: string
+  case_type?: string
   creditor_name: string
   creditor_type?: string
-  debtor_name: string
+  debtor_name?: string
   debtor_type?: string
+  description?: string
   created_at: string
   updated_at: string
+  user?: User
 }
 
 export interface Evidence {
@@ -46,7 +46,7 @@ export interface Evidence {
 }
 
 export interface User {
-  id: string
+  id: number
   name: string
   id_card?: string
   phone?: string

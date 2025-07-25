@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.core.schemas import BaseSchema
 from app.cases.models import CaseType, PartyType, CaseStatus
-from app.users.schemas import UserCreate, User
+from app.users.schemas import User
 
 
 
@@ -50,6 +50,10 @@ class Case(BaseSchema):
 
     class Config:
         from_attributes = True
+
+
+class CaseWithUser(Case):
+    user: User
 
 
 # 综合案件录入模型

@@ -65,7 +65,9 @@ async def get_multi_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100, user_id: Optional[int] = None
 ) -> Tuple[list[CaseModel], int]:
     """获取多个案件和总数"""
-    query = select(CaseModel)
+    # 构建基础查询，包含 joinedload
+    query = select(CaseModel).options(joinedload(CaseModel.user))
+    
     if user_id is not None:
         query = query.where(CaseModel.user_id == user_id)
 
@@ -74,7 +76,7 @@ async def get_multi_with_count(
     total_result = await db.execute(total_query)
     total = total_result.scalar_one()
 
-    # 查询数据
+    # 查询数据，保持 joinedload
     items_query = query.offset(skip).limit(limit)
     items_result = await db.execute(items_query)
     items = items_result.scalars().all()

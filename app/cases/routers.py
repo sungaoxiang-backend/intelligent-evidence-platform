@@ -7,7 +7,7 @@ from sqlalchemy import Case
 from app.core.deps import DBSession, get_current_staff
 from app.core.response import SingleResponse, ListResponse, Pagination
 from app.staffs.models import Staff
-from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate
+from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser
 from app.cases import services as case_service
 from app.users import services as user_service
 from app.cases.schemas import CaseRegistrationRequest, CaseRegistrationResponse
@@ -16,7 +16,7 @@ from app.cases.services import register_case_with_user
 router = APIRouter()
 
 
-@router.get("/", response_model=ListResponse[CaseSchema])
+@router.get("/", response_model=ListResponse[CaseWithUser])
 async def read_cases(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],

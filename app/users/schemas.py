@@ -1,8 +1,7 @@
-from typing import Optional
+from typing import Optional, List
 import re
 from pydantic import BaseModel, field_validator, ValidationError
 
-from pydantic import BaseModel, field_validator, ValidationError
 from app.core.schemas import BaseSchema
 from datetime import datetime
 
