@@ -93,6 +93,55 @@ export const caseApi = {
       throw new Error(result.message || "请求失败")
     }
   },
+
+  async autoProcess(data: { case_id: number; evidence_ids: number[] }): Promise<any> {
+    const url = buildApiUrl(`/cases/auto-process`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
+
+  async updateAssociationEvidenceFeature(featureId: number, data: any): Promise<any> {
+    const url = buildApiUrl(`/cases/association-features/${featureId}`)
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
+
+  async getAssociationEvidenceFeature(featureId: number): Promise<any> {
+    const url = buildApiUrl(`/cases/association-features/${featureId}`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
 }
 
 export const userApi = {
@@ -211,6 +260,24 @@ export const evidenceApi = {
     let url = buildApiUrl(`/evidences?skip=${skip}&limit=${limit}`)
     if (search) url += `&search=${encodeURIComponent(search)}`
     if (case_id !== undefined && case_id !== null) url += `&case_id=${case_id}`
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return result
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
+
+  async getEvidencesByIds(evidenceIds: number[]) {
+    if (evidenceIds.length === 0) return { data: [] }
+    
+    const params = new URLSearchParams()
+    evidenceIds.forEach(id => params.append('evidence_ids', id.toString()))
+    
+    const url = buildApiUrl(`/evidences?${params.toString()}`)
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })

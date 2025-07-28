@@ -2,6 +2,23 @@
 export type CaseType = "debt" | "contract";
 export type PartyType = "person" | "company" | "individual";
 
+export interface AssociationEvidenceFeature {
+  id: number;
+  slot_group_name: string;
+  association_evidence_ids: number[];
+  evidence_feature_status: string;
+  evidence_features: Array<{
+    slot_name: string;
+    slot_value: string;
+    slot_value_from_url: string[];
+    confidence: number;
+    reasoning: string;
+  }>;
+  features_extracted_at: string;
+  validation_status: string;
+  case_id: number;
+}
+
 export interface Case {
   id: number;
   user_id: number;
@@ -14,6 +31,7 @@ export interface Case {
   created_at: string;
   updated_at: string;
   user?: User;
+  association_evidence_features?: AssociationEvidenceFeature[];
 }
 
 export interface Evidence {

@@ -1,7 +1,7 @@
 from datetime import datetime
 from optparse import Option
 from tokenize import OP
-from typing import Optional
+from typing import Optional, List, Callable, Awaitable
 
 from pydantic import BaseModel
 from app.core.schemas import BaseSchema
@@ -79,3 +79,61 @@ class CaseRegistrationResponse(BaseModel):
     user: User
     case: Case
     is_new_user: bool  # 标识是否创建了新用户
+
+
+class AssociationEvidenceFeature(BaseModel):
+    """关联证据特征模型 - 单个slot信息"""
+    slot_name: str
+    slot_value: str
+    slot_value_from_url: List[str]
+    confidence: float
+    reasoning: str
+
+
+class AssociationEvidenceFeatureGroup(BaseModel):
+    """关联证据特征组模型 - 整个slot_group信息"""
+    id: int
+    slot_group_name: str
+    association_evidence_ids: List[int]
+    evidence_feature_status: str
+    evidence_features: List[AssociationEvidenceFeature]
+    features_extracted_at: datetime
+    validation_status: str
+    case_id: int
+
+
+class AssociationEvidenceFeatureUpdateRequest(BaseModel):
+    """关联证据特征更新请求模型"""
+    slot_group_name: Optional[str] = None
+    evidence_feature_status: Optional[str] = None
+    validation_status: Optional[str] = None
+    evidence_features: Optional[List[AssociationEvidenceFeature]] = None
+
+    class Config:
+        from_attributes = True
+
+class AssociationEvidenceFeatureCreate(BaseModel):
+    """关联证据特征创建模型"""
+    slot_group_name: str
+    association_evidence_ids: List[int]
+    evidence_features: List[AssociationEvidenceFeature]
+    
+
+class AutoProcessRequest(BaseModel):
+    """自动处理请求模型"""
+    case_id: int
+    evidence_ids: List[int]
+    send_progress: Optional[Callable[[dict], Awaitable[None]]] = None
+    
+    
+class AutoProcessResponse(BaseModel):
+    """关联证据特征响应模型"""
+    id: int
+    slot_group_name: str
+    association_evidence_ids: List[int]
+    evidence_features: List[AssociationEvidenceFeature]
+    features_extracted_at: Optional[datetime]
+    
+    
+class CaseWithAssociationEvidenceFeaturesResponse(CaseWithUser):
+    association_evidence_features: Optional[List[AssociationEvidenceFeatureGroup]]

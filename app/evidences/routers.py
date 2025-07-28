@@ -30,15 +30,29 @@ async def read_evidences(
     limit: int = 100,
     case_id: Optional[int] = None,
     search: Optional[str] = None,
+    evidence_ids: Optional[List[int]] = Query(None),
 ):
     """获取证据列表"""
-    evidences, total = await evidence_service.get_multi_with_count(
-        db, skip=skip, limit=limit, case_id=case_id, search=search
-    )
-    return ListResponse(
-        data=evidences,
-        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
-    )
+    if evidence_ids:
+        # 如果提供了evidence_ids，直接根据ID获取
+        evidences = []
+        for evidence_id in evidence_ids:
+            evidence = await evidence_service.get_by_id(db, evidence_id)
+            if evidence:
+                evidences.append(evidence)
+        return ListResponse(
+            data=evidences,
+            pagination=Pagination(total=len(evidences), page=1, size=len(evidences), pages=1)
+        )
+    else:
+        # 原有的分页查询逻辑
+        evidences, total = await evidence_service.get_multi_with_count(
+            db, skip=skip, limit=limit, case_id=case_id, search=search
+        )
+        return ListResponse(
+            data=evidences,
+            pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
+        )
 
 
 @router.get("/{evidence_id}", response_model=SingleResponse[EvidenceResponse])

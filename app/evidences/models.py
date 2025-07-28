@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB  # 使用JSONB替代JSON以获�
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
-
+from app.cases.models import VaildationStatus
 
 class EvidenceStatus(str, Enum):
     """证据状态"""
@@ -24,6 +24,7 @@ class Evidence(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
     evidence_status: Mapped[str] = mapped_column(String(20), default=EvidenceStatus.UPLOADED)
+    validation_status: Mapped[str] = mapped_column(String(20), default=VaildationStatus.PENDING)
     
     # 分类元数据
     classification_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

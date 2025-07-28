@@ -1,6 +1,6 @@
 from typing import Optional, List
 import re
-from pydantic import BaseModel, field_validator, ValidationError
+from pydantic import BaseModel, field_validator, ValidationError, model_validator
 
 from app.core.schemas import BaseSchema
 from datetime import datetime
@@ -12,10 +12,18 @@ class UserBase(BaseModel):
     id_card: Optional[str] = None
     phone: Optional[str] = None
     
+    @field_validator('id_card', 'phone')
+    @classmethod
+    def normalize_empty_strings(cls, v):
+        """将空字符串转换为None，避免数据库唯一性约束冲突"""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+    
     @field_validator('id_card')
     @classmethod
     def validate_id_card(cls, v):
-        if v is None or v == "":
+        if v is None:
             return v
         
         # 去除空格
@@ -38,7 +46,7 @@ class UserBase(BaseModel):
     @field_validator('phone')
     @classmethod
     def validate_phone(cls, v):
-        if v is None or v == "":
+        if v is None:
             return v
         
         # 去除空格和特殊字符

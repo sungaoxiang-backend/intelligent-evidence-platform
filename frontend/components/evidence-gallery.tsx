@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, Suspense, useEffect, useRef } from "react"
 import useSWR, { mutate } from "swr"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
 import { Button } from "@/components/ui/button"
@@ -188,12 +188,15 @@ function EvidenceGalleryContent({
 
   // 右侧数据标注区域
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState<any>(selectedEvidence)
+  const [editForm, setEditForm] = useState<any>({})
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
-    setEditForm(selectedEvidence)
-  }, [selectedEvidence])
+    // 只有在非编辑状态下才同步数据，避免编辑时数据被重置
+    if (!editing) {
+      setEditForm(selectedEvidence)
+    }
+  }, [selectedEvidence, editing])
 
   // // 编辑保存逻辑
   // const handleSave = async () => {
@@ -651,11 +654,42 @@ function EvidenceGalleryContent({
                         </div>
                         <div>
                           <Label className="text-xs">置信度:</Label>
-                          <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                          {editing ? (
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="1"
+                              value={slot.confidence || 0}
+                              onChange={e => {
+                                const newFeatures = [...editForm.evidence_features]
+                                newFeatures[idx].confidence = parseFloat(e.target.value)
+                                // 当用户编辑置信度时，自动将reasoning改为"人工编辑"
+                                newFeatures[idx].reasoning = "人工编辑"
+                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                              }}
+                              className="text-xs h-6"
+                            />
+                          ) : (
+                            <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                          )}
                         </div>
                         <div>
                           <Label className="text-xs">理由:</Label>
-                          <span className="text-xs">{slot.reasoning}</span>
+                          {editing ? (
+                            <Textarea
+                              value={slot.reasoning || ""}
+                              onChange={e => {
+                                const newFeatures = [...editForm.evidence_features]
+                                newFeatures[idx].reasoning = e.target.value
+                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                              }}
+                              rows={2}
+                              className="text-xs"
+                            />
+                          ) : (
+                            <span className="text-xs">{slot.reasoning}</span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -750,14 +784,17 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const featureCompleteRate = evidenceList.length > 0 ? Math.round((featureCompleteCount / evidenceList.length) * 100) : 0
   const evidenceCompleteRate = evidenceList.length > 0 ? Math.round((featureCompleteReviewedCount / evidenceList.length) * 100) : 0
 
-  // 自动选中第一个证据
+  // 自动选中第一个证据，但保持当前选中状态
   useEffect(() => {
     if (evidenceList.length > 0) {
-      setSelectedEvidence(evidenceList[0]);
+      // 如果当前没有选中的证据，或者当前选中的证据不在列表中，则选中第一个
+      if (!selectedEvidence || !evidenceList.find((e: any) => e.id === selectedEvidence.id)) {
+        setSelectedEvidence(evidenceList[0]);
+      }
     } else {
       setSelectedEvidence(null);
     }
-  }, [evidenceList]);
+  }, [evidenceList, selectedEvidence]);
 
   // WebSocket进度监听
   useEffect(() => {
@@ -766,31 +803,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       setSelectedIds([])
       setIsCompleted(true)
       mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-      
-      // 延迟清理状态
-      setTimeout(() => {
-        setIsCompleted(false)
-      }, 3000)
-    } else if (wsProgress?.status === 'ocr_success') {
-      // OCR成功后继续流程，但不显示toast以避免频繁提示
-      // 更新数据以反映最新状态
-      mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-      // 继续保持进度状态
-      setIsCompleted(false)
-    } else if (wsProgress?.status === 'ocr_processing') {
-      // OCR处理中，保持进度状态
-      setIsCompleted(false)
-    } else if (wsProgress?.status === 'ocr_error') {
-      // OCR错误不应该中断整个流程，只显示警告
-      toast({ 
-        title: "OCR处理警告", 
-        description: wsProgress.message || "某个证据OCR处理失败，但会继续处理其他证据", 
-        variant: "destructive" 
-      })
-      // 更新数据以反映最新状态
-      mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-      // 继续保持进度状态
-      setIsCompleted(false)
+      setTimeout(() => setIsCompleted(false), 3000)
     } else if (wsProgress?.status === 'error') {
       toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
       setSelectedIds([])
@@ -810,6 +823,8 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       return () => clearTimeout(timer)
     }
   }, [wsProgress?.status])
+
+
 
 
 
@@ -874,7 +889,9 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       };
       if (Array.isArray(editForm.evidence_features)) {
         payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
-          slot_value: slot.slot_value
+          slot_value: slot.slot_value,
+          confidence: slot.confidence,
+          reasoning: slot.reasoning
         }))
       }
       await evidenceApi.updateEvidence(editForm.id, payload)

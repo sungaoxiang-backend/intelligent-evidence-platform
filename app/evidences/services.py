@@ -128,7 +128,7 @@ async def delete(db: AsyncSession, evidence_id: int) -> bool:
 
 async def get_multi_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None, search: Optional[str] = None
-) -> (List[Evidence], int):
+):
     """获取多个证据，并返回总数"""
     query = select(Evidence).options(joinedload(Evidence.case))
     if case_id is not None:
@@ -276,6 +276,37 @@ async def batch_delete(
         await db.delete(evidence)
         successful.append(evidence_id)
     
+    # 删除关联的association_evidence_features记录
+    # 检查是否包含"微信聊天记录"类型的证据
+    from app.cases.models import AssociationEvidenceFeature
+    from sqlalchemy import func
+    
+    # 获取被删除的证据信息，检查是否包含"微信聊天记录"类型
+    deleted_evidences = []
+    for evidence_id in evidence_ids:
+        evidence = await get_by_id(db, evidence_id)
+        if evidence and evidence.classification_category == "微信聊天记录":
+            deleted_evidences.append(evidence)
+    
+    # 如果包含"微信聊天记录"类型的证据，删除所有相关的association_evidence_features记录
+    if deleted_evidences:
+        deleted_evidence_ids = [e.id for e in deleted_evidences]
+        
+        # 查找所有包含被删除证据ID的关联特征记录
+        for evidence_id in deleted_evidence_ids:
+            # 使用正确的 JSONB 操作符来检查数组是否包含特定值
+            # association_evidence_ids 存储的是整数列表，所以我们需要检查是否包含整数
+            association_features = await db.execute(
+                select(AssociationEvidenceFeature).where(
+                    AssociationEvidenceFeature.association_evidence_ids.contains([evidence_id])
+                )
+            )
+            association_features = association_features.scalars().all()
+            
+            # 直接删除所有包含被删除证据ID的关联特征记录
+            for feature in association_features:
+                await db.delete(feature)
+    
     # 批量删除COS文件
     if object_keys:
         for object_key in object_keys:
@@ -385,7 +416,10 @@ async def auto_process(
     else:
         evidences = []
 
-
+    if not evidences:
+        logger.error("没有成功上传或检索到证据")
+        return []
+    
     # 2. 证据分类（可选）
     if auto_classification:
         try:

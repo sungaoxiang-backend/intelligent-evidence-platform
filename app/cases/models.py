@@ -1,9 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict
 
 from sqlalchemy import Column, DateTime, Enum as SQLAlchemyEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
 
@@ -29,6 +30,19 @@ class CaseStatus(str, Enum):
     # IN_PROGRESS = "in_progress"  # 进行中（诉中通用）
     # CLOSED = "closed"  # 案件已结案
     # ARCHIVED = "archived"  # 已归档
+
+class AssociationEvidenceFeatureStatus(str, Enum):
+    """关联证据特征状态枚举"""
+    FEATURES_EXTRACTED = "features_extracted"  # 特征已提取
+    CHECKED = "checked"  # 已审核
+    
+    
+class VaildationStatus(str, Enum):
+    """验证状态枚举"""
+    PENDING = "pending"  # 待验证
+    VALID = "valid"  # 有效
+    INVALID = "invalid"  # 无效
+    
 
 class Case(Base):
     """案件模型"""
@@ -59,3 +73,21 @@ class Case(Base):
     # 关系
     user = relationship("User", back_populates="cases")
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")
+    association_evidence_features = relationship("AssociationEvidenceFeature", back_populates="case", cascade="all, delete-orphan")
+    
+    
+class AssociationEvidenceFeature(Base):
+    """关联证据特征模型"""
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    slot_group_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    association_evidence_ids: Mapped[List[int]] = mapped_column(JSONB, nullable=False)
+    evidence_feature_status: Mapped[str] = mapped_column(String(20), default=AssociationEvidenceFeatureStatus.FEATURES_EXTRACTED)
+    evidence_features: Mapped[List[Dict]] = mapped_column(JSONB, nullable=False)
+    features_extracted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)    
+    validation_status: Mapped[str] = mapped_column(String(20), default=VaildationStatus.PENDING)
+
+    
+    # 关系
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
+    case = relationship("Case", back_populates="association_evidence_features")

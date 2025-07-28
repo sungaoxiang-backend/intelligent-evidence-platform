@@ -154,18 +154,21 @@ export function useAutoProcessWebSocket() {
   const { isConnected, progress, error, connect, disconnect, sendMessage } = useWebSocket()
   const [isProcessing, setIsProcessing] = useState(false)
   const onCompleteRef = useRef<(() => void) | null>(null)
+  
+  // 确保 progress 有一个默认值，避免初始化时的 undefined 问题
+  const safeProgress = progress || null
 
   const startAutoProcess = useCallback((params: {
     case_id: number
     evidence_ids: number[]
     auto_classification: boolean
     auto_feature_extraction: boolean
-  }, onComplete?: () => void) => {
+  }, onComplete?: () => void, customWsPath?: string) => {
     setIsProcessing(true)
     onCompleteRef.current = onComplete || null
     
     // 构建WebSocket URL
-    const wsUrl = API_CONFIG.BASE_URL.replace('http', 'ws') + '/evidences/ws/auto-process'
+    const wsUrl = API_CONFIG.BASE_URL.replace('http', 'ws') + (customWsPath || '/evidences/ws/auto-process')
     const ws = connect(wsUrl)
     
     // 监听连接建立事件
@@ -216,7 +219,7 @@ export function useAutoProcessWebSocket() {
 
   return {
     isConnected,
-    progress,
+    progress: safeProgress,
     error,
     isProcessing,
     startAutoProcess,
