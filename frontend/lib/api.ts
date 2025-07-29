@@ -16,10 +16,16 @@ function buildApiUrl(path: string): string {
 }
 
 export const caseApi = {
-  async getCases(params: PaginationParams): Promise<{ data: Case[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "" } = params
+  async getCases(params: PaginationParams & { user_id?: number }): Promise<{ data: Case[]; pagination?: any }> {
+    const { page = 1, pageSize = 20, search = "", user_id } = params
     const skip = (page - 1) * pageSize
-    const url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+    let url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+    
+    // Add user_id parameter if provided
+    if (user_id) {
+      url += `&user_id=${user_id}`
+    }
+    
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })

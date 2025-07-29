@@ -138,24 +138,7 @@ export default function CaseManagement() {
       // Add user_id filter if selected
       const apiParams = { ...params };
       if (selectedUserId) {
-        // Add user_id as a query parameter
-        const url = new URL(buildApiUrl(`/cases`));
-        url.searchParams.set('skip', ((params.page - 1) * params.pageSize).toString());
-        url.searchParams.set('limit', params.pageSize.toString());
-        if (params.search) {
-          url.searchParams.set('search', params.search);
-        }
-        url.searchParams.set('user_id', selectedUserId);
-        
-        return fetch(url.toString(), {
-          headers: getAuthHeader(),
-        }).then(resp => resp.json()).then(result => {
-          if (result.code === 200) {
-            return { data: result.data, pagination: result.pagination };
-          } else {
-            throw new Error(result.message || "请求失败");
-          }
-        });
+        apiParams.user_id = parseInt(selectedUserId);
       }
       return caseApi.getCases(apiParams);
     },

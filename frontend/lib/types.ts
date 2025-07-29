@@ -110,4 +110,5 @@ export interface PaginationParams {
   pageSize: number
   search?: string
   filters?: Record<string, any>
+  user_id?: number
 }
