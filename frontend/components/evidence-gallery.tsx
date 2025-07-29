@@ -473,14 +473,61 @@ function EvidenceGalleryContent({
                   
                   {/* 大图弹窗 Dialog */}
                   <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-                    <DialogContent className="flex flex-col items-center justify-center bg-black/80">
+                    <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
                       <DialogTitle className="sr-only">图片预览</DialogTitle>
-                      <img
-                        src={selectedEvidence?.file_url}
-                        alt={selectedEvidence?.file_name || ''}
-                        style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }}
-                      />
-                      <Button onClick={() => setIsPreviewOpen(false)} className="mt-4">关闭</Button>
+                      <div className="relative">
+                        <img
+                          src={selectedEvidence?.file_url}
+                          alt={selectedEvidence?.file_name || ''}
+                          className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+                        />
+                        
+                        {/* 关闭按钮 */}
+                        <Button 
+                          onClick={() => setIsPreviewOpen(false)} 
+                          className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0"
+                          size="sm"
+                        >
+                          关闭
+                        </Button>
+                        
+                        {/* 上一张按钮 */}
+                        {filteredEvidenceList.length > 1 && (
+                          <Button 
+                            onClick={() => {
+                              const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                              const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
+                              setSelectedEvidence(filteredEvidenceList[prevIndex]);
+                            }}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                            size="sm"
+                          >
+                            ←
+                          </Button>
+                        )}
+                        
+                        {/* 下一张按钮 */}
+                        {filteredEvidenceList.length > 1 && (
+                          <Button 
+                            onClick={() => {
+                              const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                              const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
+                              setSelectedEvidence(filteredEvidenceList[nextIndex]);
+                            }}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                            size="sm"
+                          >
+                            →
+                          </Button>
+                        )}
+                        
+                        {/* 图片计数器 */}
+                        {filteredEvidenceList.length > 1 && (
+                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+                            {filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id) + 1} / {filteredEvidenceList.length}
+                          </div>
+                        )}
+                      </div>
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -783,6 +830,45 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
 
   // 使用所有证据，不进行筛选
   const filteredEvidenceList = evidenceList
+
+  // 键盘导航处理
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // 检查是否有预览弹窗打开
+      const isPreviewOpen = document.querySelector('[data-state="open"]') !== null;
+      
+      if (!isPreviewOpen || filteredEvidenceList.length <= 1) return;
+      
+      const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+      
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
+          setSelectedEvidence(filteredEvidenceList[prevIndex]);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
+          setSelectedEvidence(filteredEvidenceList[nextIndex]);
+          break;
+        case 'Escape':
+          event.preventDefault();
+          // 关闭预览弹窗
+          const closeButton = document.querySelector('[data-state="open"] button[aria-label="Close"]') as HTMLButtonElement;
+          if (closeButton) {
+            closeButton.click();
+          }
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedEvidence, filteredEvidenceList]);
 
   // 计算特征完整率和证据完备率
   const featureCompleteCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e)).length

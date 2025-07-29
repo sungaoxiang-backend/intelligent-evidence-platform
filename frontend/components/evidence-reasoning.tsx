@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video } from "lucide-react"
+import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn } from "lucide-react"
 import { caseApi, evidenceApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
@@ -95,6 +95,9 @@ function EvidenceReasoningContent({
   setEditing,
   editForm,
   setEditForm,
+  setIsPreviewOpen,
+  setSelectedEvidence,
+  selectedEvidence,
 }: {
   caseId: string | number
   selectedEvidenceIds: number[]
@@ -110,9 +113,10 @@ function EvidenceReasoningContent({
   setEditing: (editing: boolean) => void
   editForm: any
   setEditForm: (form: any) => void
+  setIsPreviewOpen: (open: boolean) => void
+  setSelectedEvidence: (evidence: any) => void
+  selectedEvidence: any
 }) {
-  // 添加单个证据预览状态
-  const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   // 获取案件数据
   const { data: caseData, error: caseError } = useSWR(
     ['case', caseId.toString()],
@@ -409,7 +413,8 @@ function EvidenceReasoningContent({
                   <img
                     src={selectedEvidence.file_url}
                     alt={`证据图片 ${selectedEvidence.file_name || selectedEvidence.id}`}
-                    className="w-full h-auto max-h-[calc(100vh-500px)] object-contain transition-all duration-300"
+                    className="w-full h-auto max-h-[calc(100vh-500px)] object-contain transition-all duration-300 cursor-pointer hover:scale-105"
+                    onClick={() => setIsPreviewOpen(true)}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
@@ -429,6 +434,18 @@ function EvidenceReasoningContent({
                       }
                     }}
                   />
+                  {/* 放大按钮 */}
+                  <div className="absolute top-3 right-3 flex space-x-2">
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      className="bg-background/80 backdrop-blur-sm h-8"
+                      onClick={() => setIsPreviewOpen(true)}
+                    >
+                      <ZoomIn className="h-3.5 w-3.5 mr-1.5" />
+                      放大
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -651,11 +668,15 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
   const [reviewEvidenceIds, setReviewEvidenceIds] = useState<number[]>([])
   const [reviewing, setReviewing] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   // WebSocket进度管理
   const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect } = useAutoProcessWebSocket()
 
   const [isCompleted, setIsCompleted] = useState(false)
   const { toast } = useToast()
+
+
 
 
 
@@ -684,6 +705,45 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
     }
   )
   const evidenceList = evidenceData?.data || []
+  
+  // 筛选出微信聊天记录类型的证据（用于图片预览导航）
+  const filteredEvidenceList = evidenceList.filter((evidence: any) => 
+    evidence.classification_category === "微信聊天记录"
+  )
+
+  // 键盘导航处理
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isPreviewOpen || filteredEvidenceList.length <= 1) return;
+      
+      const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+      
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
+          setSelectedEvidence(filteredEvidenceList[prevIndex]);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
+          setSelectedEvidence(filteredEvidenceList[nextIndex]);
+          break;
+        case 'Escape':
+          event.preventDefault();
+          setIsPreviewOpen(false);
+          break;
+      }
+    };
+
+    if (isPreviewOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPreviewOpen, selectedEvidence, filteredEvidenceList]);
 
   // 保持选中状态 - 当数据刷新时，保持当前选中的分组和特征
   useEffect(() => {
@@ -1146,6 +1206,9 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         setEditing={setEditing}
         editForm={editForm}
         setEditForm={setEditForm}
+        setIsPreviewOpen={setIsPreviewOpen}
+        setSelectedEvidence={setSelectedEvidence}
+        selectedEvidence={selectedEvidence}
       />
 
       {/* 批量审核弹窗 */}
@@ -1265,7 +1328,65 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         </DialogContent>
       </Dialog>
 
-
+      {/* 图片预览弹窗 */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
+          <DialogTitle className="sr-only">图片预览</DialogTitle>
+          <div className="relative">
+            <img
+              src={selectedEvidence?.file_url}
+              alt={selectedEvidence?.file_name || ''}
+              className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+            />
+            
+            {/* 关闭按钮 */}
+            <Button 
+              onClick={() => setIsPreviewOpen(false)} 
+              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0"
+              size="sm"
+            >
+              关闭
+            </Button>
+            
+            {/* 上一张按钮 */}
+            {filteredEvidenceList.length > 1 && (
+              <Button 
+                onClick={() => {
+                  const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                  const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
+                  setSelectedEvidence(filteredEvidenceList[prevIndex]);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                size="sm"
+              >
+                ←
+              </Button>
+            )}
+            
+            {/* 下一张按钮 */}
+            {filteredEvidenceList.length > 1 && (
+              <Button 
+                onClick={() => {
+                  const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                  const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
+                  setSelectedEvidence(filteredEvidenceList[nextIndex]);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                size="sm"
+              >
+                →
+              </Button>
+            )}
+            
+            {/* 图片计数器 */}
+            {filteredEvidenceList.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+                {filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id) + 1} / {filteredEvidenceList.length}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )
