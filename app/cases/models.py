@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, DateTime, Enum as SQLAlchemyEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum as SQLAlchemyEnum, ForeignKey, Integer, String, Text, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -55,10 +55,10 @@ class Case(Base):
     case_status: Mapped[CaseStatus] = mapped_column(
             SQLAlchemyEnum(CaseStatus), nullable=False, default=CaseStatus.DRAFT
         )
-
+    loan_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     # 当事人信息
     creditor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
-    debtor_name: Mapped[Optional[str]] = mapped_column(String(50), index=True, nullable=True)
+    debtor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     creditor_type: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True
     )

@@ -143,7 +143,7 @@ class AssociationFeaturesExtractor:
         2. 你需要理解范围目标提取词槽中每个目标词槽的含义，并在赋值时给与适当的值类型和值（比如int/bool/string)。
         3. 注意即便是没有提取到目标词槽信息，也要将该词槽对应的`slot_value`值设置为`未知`，并说明原因。
         4. 注意输出的`slot_value`中永远不要有任何不应该存在于其中的内容，比如`reasoning`,`slot_name`,`confidence`等。
-        5. 输出`sequence_number`必须是连续整数且不能重复。
+        5. 注意始终确保使用中文输出`reasoning`。
         </Notes>
         """
 

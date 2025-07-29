@@ -14,10 +14,11 @@ from app.users.schemas import User
 class CaseCreate(BaseModel):
     """案件创建模型"""
     user_id: int
+    loan_amount: float
     case_type: Optional[CaseType] = None
     creditor_name: str
     creditor_type: Optional[PartyType] = None
-    debtor_name: Optional[str] = None
+    debtor_name: str
     debtor_type: Optional[PartyType] = None
     description: Optional[str] = None
 
@@ -25,6 +26,7 @@ class CaseCreate(BaseModel):
 # 更新时可以修改的属性
 class CaseUpdate(BaseModel):
     """案件更新模型"""
+    loan_amount: Optional[float] = None
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
     creditor_name: Optional[str] = None
@@ -40,10 +42,11 @@ class Case(BaseSchema):
     id: int
     user_id: int
     creditor_name: str
+    loan_amount: Optional[float] = 0.0
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
     creditor_type: Optional[PartyType] = None
-    debtor_name: Optional[str] = None
+    debtor_name: str
     debtor_type: Optional[PartyType] = None
     created_at: datetime
     updated_at: datetime
@@ -67,6 +70,7 @@ class CaseRegistrationRequest(BaseModel):
     # 案件信息 - 不包含title，将自动生成
     description: Optional[str] = None
     case_type: CaseType
+    loan_amount: float
     creditor_name: str
     creditor_type: Optional[PartyType] = None
     debtor_name: str

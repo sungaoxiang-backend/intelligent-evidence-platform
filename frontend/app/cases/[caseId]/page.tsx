@@ -4,6 +4,7 @@ import { EvidenceGallery } from "@/components/evidence-gallery"
 import { EvidenceReasoning } from "@/components/evidence-reasoning"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
+import { FileText, Network } from "lucide-react"
 
 export default function CaseDetailPage() {
   const router = useRouter()
@@ -52,7 +53,7 @@ export default function CaseDetailPage() {
   return (
     <div className="space-y-6">
       {/* 标签页导航 */}
-      <div className="flex space-x-1 bg-muted p-1 rounded-lg">
+      <div className="flex space-x-1 bg-muted/50 p-1 rounded-lg border border-border/50">
         <button
           onClick={() => {
             setActiveTab('evidence')
@@ -63,13 +64,16 @@ export default function CaseDetailPage() {
             newUrl.searchParams.set('tab', 'evidence')
             router.replace(newUrl.pathname + newUrl.search)
           }}
-          className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+          className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${
             activeTab === 'evidence'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-background text-foreground shadow-sm border border-border/50'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
           }`}
         >
-          证据管理
+          <div className="flex items-center justify-center gap-2">
+            <FileText className={`w-4 h-4 ${activeTab === 'evidence' ? 'text-blue-600' : 'text-muted-foreground'}`} />
+            独立证据分析
+          </div>
         </button>
         <button
           onClick={() => {
@@ -81,13 +85,16 @@ export default function CaseDetailPage() {
             newUrl.searchParams.set('tab', 'reasoning')
             router.replace(newUrl.pathname + newUrl.search)
           }}
-          className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+          className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${
             activeTab === 'reasoning'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-background text-foreground shadow-sm border border-border/50'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
           }`}
         >
-          证据推理
+          <div className="flex items-center justify-center gap-2">
+            <Network className={`w-4 h-4 ${activeTab === 'reasoning' ? 'text-purple-600' : 'text-muted-foreground'}`} />
+            联合证据分析
+          </div>
         </button>
       </div>
 

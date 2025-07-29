@@ -11,7 +11,7 @@ from app.users import services as user_service
 router = APIRouter()
 
 
-@router.get("/", response_model=ListResponse[UserSchema])
+@router.get("", response_model=ListResponse[UserSchema])
 async def read_users(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -26,7 +26,7 @@ async def read_users(
     )
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[UserSchema])
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[UserSchema])
 async def create_user(
     db: DBSession,
     user_in: UserCreate,

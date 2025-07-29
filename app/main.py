@@ -15,6 +15,7 @@ app = FastAPI(
     title="智能证据平台 API",
     description="法律债务纠纷领域的证据智能管理平台",
     version="0.1.0",
+    redirect_slashes=False,  # 禁用自动重定向，符合大厂API设计标准
 )
 
 # app.mount("/static", StaticFiles(directory="static"), name="static")

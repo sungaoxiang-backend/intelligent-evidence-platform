@@ -58,7 +58,7 @@ async def update_staff_me(
     return SingleResponse(data=current_staff)
 
 
-@router.get("/", response_model=ListResponse[StaffSchema])
+@router.get("", response_model=ListResponse[StaffSchema])
 async def read_staff_list(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_active_superuser)],
@@ -73,7 +73,7 @@ async def read_staff_list(
     )
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[StaffSchema])
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[StaffSchema])
 async def create_staff(
     db: DBSession,
     staff_in: StaffCreate,

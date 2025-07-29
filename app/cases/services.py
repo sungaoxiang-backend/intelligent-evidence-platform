@@ -40,6 +40,7 @@ async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:
         debtor_name=obj_in.debtor_name,
         debtor_type=obj_in.debtor_type,
         user_id=obj_in.user_id,
+        loan_amount=obj_in.loan_amount,
     )
     db.add(db_obj)
     await db.commit()
@@ -274,11 +275,33 @@ async def auto_process(
         # 使用更宽松的字符串匹配，处理各种格式差异
         def normalize_string(s: str) -> str:
             """标准化字符串，处理各种格式差异"""
-            # 1. 中英文括号转换
-            s = s.replace('（', '(').replace('）', ')')
-            # 2. 移除所有空格
-            s = s.replace(' ', '')
-            # 3. 统一标点符号（可选，根据需要添加）
+            import unicodedata
+            
+            # 1. Unicode标准化 (NFKC: 兼容性分解 + 组合)
+            s = unicodedata.normalize('NFKC', s)
+            
+            # 2. 移除所有空白字符（包括空格、制表符、换行符等）
+            s = ''.join(s.split())
+            
+            # 3. 统一常见的中英文标点符号
+            replacements = {
+                # 括号类
+                '（': '(', '）': ')', '【': '[', '】': ']', '｛': '{', '｝': '}',
+                # 数学符号
+                '＋': '+', '－': '-', '×': '*', '÷': '/', '＝': '=', '≠': '!=',
+                # 标点符号
+                '：': ':', '；': ';', '，': ',', '。': '.', '！': '!', '？': '?',
+                '、': ',', '…': '...', '—': '-', '–': '-',
+                # 引号类
+                '"': '"', '"': '"', ''': "'", ''': "'", '『': '"', '』': '"',
+                # 其他常见符号
+                '～': '~', '＠': '@', '＃': '#', '＄': '$', '％': '%', '＆': '&',
+                '＊': '*', '＼': '\\', '｜': '|', '／': '/'
+            }
+            
+            for old, new in replacements.items():
+                s = s.replace(old, new)
+            
             return s
         
         normalized_slot_group_name = normalize_string(slot_group_name)

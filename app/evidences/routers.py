@@ -22,7 +22,7 @@ from app.evidences import services as evidence_service
 router = APIRouter()
 
 
-@router.get("/", response_model=ListResponse[EvidenceResponse])
+@router.get("", response_model=ListResponse[EvidenceResponse])
 async def read_evidences(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],

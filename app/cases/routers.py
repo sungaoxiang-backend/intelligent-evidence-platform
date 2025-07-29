@@ -19,7 +19,7 @@ from app.cases.services import register_case_with_user
 router = APIRouter()
 
 
-@router.get("/", response_model=ListResponse[CaseWithUser])
+@router.get("", response_model=ListResponse[CaseWithUser])
 async def read_cases(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
@@ -43,7 +43,7 @@ async def read_cases(
     )
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[CaseSchema])
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=SingleResponse[CaseSchema])
 async def create_case(
     db: DBSession,
     case_in: CaseCreate,

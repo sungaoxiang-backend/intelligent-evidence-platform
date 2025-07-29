@@ -89,6 +89,11 @@ const getStatusText = (status: string) => {
 const groupEvidence = (evidenceList: any[]) => {
   const groupMap: Record<string, any[]> = {};
   evidenceList.forEach(e => {
+    // 过滤掉微信聊天记录，因为它们在联合分析页面处理
+    if (e.classification_category === "微信聊天记录") {
+      return;
+    }
+    
     // 优先使用AI分类结果，如果没有则使用evidence_type，都没有则归类为'其他'
     let type = e.classification_category || e.evidence_type || '其他';
     
@@ -140,14 +145,18 @@ function EvidenceGalleryContent({
   )
 
   const evidenceList = evidenceData?.data || []
-  const groupMap = groupEvidence(evidenceList)
+  
+  // 过滤掉微信聊天记录，因为它们在联合分析页面处理
+  const filteredEvidenceList = evidenceList.filter((e: any) => e.classification_category !== "微信聊天记录")
+  
+  const groupMap = groupEvidence(filteredEvidenceList)
   const groupKeys = Object.keys(groupMap)
   const [activeCategory, setActiveCategory] = useState<string>('全部');
 
   // 这个函数现在在外部定义，这里删除重复定义
 
   const groupedEvidence = activeCategory === '全部'
-    ? evidenceList
+    ? filteredEvidenceList
     : (groupMap[activeCategory] || []);
 
   const allIds = groupedEvidence.map((e: any) => e.id)
@@ -232,7 +241,7 @@ function EvidenceGalleryContent({
           <CardTitle className="text-base flex items-center justify-between">
             全部分类
             <Badge variant="secondary" className="text-xs">
-              {evidenceList.length}
+              {filteredEvidenceList.length}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -247,7 +256,7 @@ function EvidenceGalleryContent({
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">全部证据</span>
-                    <Badge variant="outline" className="text-xs">{evidenceList.length}</Badge>
+                    <Badge variant="outline" className="text-xs">{filteredEvidenceList.length}</Badge>
                   </div>
                 </button>
                 {groupKeys.map(cat => (
@@ -777,24 +786,27 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   )
   const evidenceList = evidenceData?.data || []
 
+  // 过滤掉微信聊天记录，因为它们在联合分析页面处理
+  const filteredEvidenceList = evidenceList.filter((e: any) => e.classification_category !== "微信聊天记录")
+
   // 计算特征完整率和证据完备率
-  const featureCompleteCount = evidenceList.filter((e: any) => isFeatureComplete(e)).length
-  const featureCompleteReviewedCount = evidenceList.filter((e: any) => isFeatureComplete(e) && e.evidence_status === "checked").length
+  const featureCompleteCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e)).length
+  const featureCompleteReviewedCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e) && e.evidence_status === "checked").length
   
-  const featureCompleteRate = evidenceList.length > 0 ? Math.round((featureCompleteCount / evidenceList.length) * 100) : 0
-  const evidenceCompleteRate = evidenceList.length > 0 ? Math.round((featureCompleteReviewedCount / evidenceList.length) * 100) : 0
+  const featureCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteCount / filteredEvidenceList.length) * 100) : 0
+  const evidenceCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteReviewedCount / filteredEvidenceList.length) * 100) : 0
 
   // 自动选中第一个证据，但保持当前选中状态
   useEffect(() => {
-    if (evidenceList.length > 0) {
-      // 如果当前没有选中的证据，或者当前选中的证据不在列表中，则选中第一个
-      if (!selectedEvidence || !evidenceList.find((e: any) => e.id === selectedEvidence.id)) {
-        setSelectedEvidence(evidenceList[0]);
+    if (filteredEvidenceList.length > 0) {
+      // 如果当前没有选中的证据，或者当前选中的证据不在过滤后的列表中，则选中第一个
+      if (!selectedEvidence || !filteredEvidenceList.find((e: any) => e.id === selectedEvidence.id)) {
+        setSelectedEvidence(filteredEvidenceList[0]);
       }
     } else {
       setSelectedEvidence(null);
     }
-  }, [evidenceList, selectedEvidence]);
+  }, [filteredEvidenceList, selectedEvidence]);
 
   // WebSocket进度监听
   useEffect(() => {
@@ -964,7 +976,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">证据管理</h1>
+          <h1 className="text-3xl font-bold text-foreground">独立证据分析</h1>
           <p className="text-muted-foreground mt-2">智能证据处理</p>
         </div>
         <div className="flex gap-3 items-center ml-auto">
@@ -1142,7 +1154,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           <div>
             <h3 className="text-lg font-semibold text-foreground">案件和证据概览</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              显示当前案件基本信息和证据处理流程状态统计
+              显示当前案件基本信息和独立证据分析处理流程状态统计
             </p>
           </div>
           <div className="flex items-center space-x-6">
@@ -1164,43 +1176,49 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
               <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
               案件基本信息
             </h4>
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">案件ID:</span>
-                <span className="font-medium">{caseData.data.id || 'N/A'}</span>
+            <div className="space-y-3">
+              {/* 第一行：债权人，债务人，欠款金额 */}
+              <div className="grid grid-cols-3 gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">债权人:</span>
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.creditor_name}>
+                    {caseData.data.creditor_name || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">债务人:</span>
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.debtor_name || ''}>
+                    {caseData.data.debtor_name || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">欠款金额:</span>
+                  <span className="font-medium">
+                    {caseData.data.loan_amount !== null && caseData.data.loan_amount !== undefined 
+                      ? `¥${caseData.data.loan_amount.toLocaleString()}` 
+                      : 'N/A'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">案件类型:</span>
-                <Badge variant="outline" className="text-xs">
-                  {caseData.data.case_type === 'debt' ? '债务纠纷' : 
-                   caseData.data.case_type === 'contract' ? '合同纠纷' :
-                   caseData.data.case_type === 'property' ? '财产纠纷' :
-                   caseData.data.case_type || '未知'}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">债权人:</span>
-                <span className="font-medium max-w-[100px] truncate" title={caseData.data.creditor_name}>
-                  {caseData.data.creditor_name || 'N/A'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">债务人:</span>
-                <span className="font-medium max-w-[100px] truncate" title={caseData.data.debtor_name}>
-                  {caseData.data.debtor_name || 'N/A'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">创建时间:</span>
-                <span className="font-medium">
-                  {caseData.data.created_at ? new Date(caseData.data.created_at).toLocaleDateString() : 'N/A'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">更新时间:</span>
-                <span className="font-medium">
-                  {caseData.data.updated_at ? new Date(caseData.data.updated_at).toLocaleDateString() : 'N/A'}
-                </span>
+              
+              {/* 第二行：ID，创建时间，更新时间 */}
+              <div className="grid grid-cols-3 gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">案件ID:</span>
+                  <span className="font-medium">{caseData.data.id || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">创建时间:</span>
+                  <span className="font-medium">
+                    {caseData.data.created_at ? new Date(caseData.data.created_at).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">更新时间:</span>
+                  <span className="font-medium">
+                    {caseData.data.updated_at ? new Date(caseData.data.updated_at).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1209,57 +1227,41 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         {/* 证据处理状态统计 */}
         <div>
           <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
             证据处理状态统计
           </h4>
           <div className="grid grid-cols-4 gap-3">
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
               <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                {evidenceList.length}
+                {filteredEvidenceList.length}
               </div>
-              <div className="text-xs text-muted-foreground font-medium">总证据数</div>
-              <div className="text-xs text-muted-foreground mt-0.5">已上传的证据文件总数</div>
-            </div>
-            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
-              <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                {evidenceList.filter((e: any) => e.evidence_status === "checked").length}
-              </div>
-              <div className="text-xs text-muted-foreground font-medium">已审核</div>
-              <div className="text-xs text-muted-foreground mt-0.5">人工审核确认无误</div>
-            </div>
-            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-orange-200/30 dark:border-orange-800/30">
-              <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                {evidenceList.filter((e: any) => e.evidence_status === "features_extracted").length}
-              </div>
-              <div className="text-xs text-muted-foreground font-medium">待审核</div>
-              <div className="text-xs text-muted-foreground mt-0.5">AI已处理，等待人工审核</div>
+              <div className="text-xs text-muted-foreground font-medium">证据总数</div>
+              <div className="text-xs text-muted-foreground mt-0.5">已上传的证据文件总数（不含微信聊天记录）</div>
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-gray-200/30 dark:border-gray-800/30">
               <div className="text-xl font-bold text-gray-600 dark:text-gray-400">
-                {evidenceList.filter((e: any) => e.evidence_status === "uploaded" || e.evidence_status === "classified").length}
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "uploaded" || e.evidence_status === "classified").length}
               </div>
               <div className="text-xs text-muted-foreground font-medium">待处理</div>
               <div className="text-xs text-muted-foreground mt-0.5">等待AI处理或分类</div>
             </div>
-          </div>
-          
-          {/* 状态说明 */}
-          <div className="mt-2 pt-2 border-t border-blue-200/30 dark:border-blue-800/30">
-            <div className="flex items-center justify-center space-x-4 text-xs text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span>已审核</span>
+            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-orange-200/30 dark:border-orange-800/30">
+              <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "features_extracted").length}
               </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                <span>待审核</span>
+              <div className="text-xs text-muted-foreground font-medium">待审核</div>
+              <div className="text-xs text-muted-foreground mt-0.5">AI已处理，等待人工审核</div>
+            </div>
+            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
+              <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "checked").length}
               </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
-                <span>待处理</span>
-              </div>
+              <div className="text-xs text-muted-foreground font-medium">已审核</div>
+              <div className="text-xs text-muted-foreground mt-0.5">人工审核确认无误</div>
             </div>
           </div>
+          
+
         </div>
       </div>
 

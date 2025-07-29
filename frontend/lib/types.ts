@@ -25,8 +25,9 @@ export interface Case {
   case_type: CaseType | null;
   creditor_name: string;
   creditor_type: PartyType | null;
-  debtor_name: string | null;
+  debtor_name: string;  // 从 string | null 改为 string
   debtor_type: PartyType | null;
+  loan_amount?: number;  // 新增贷款金额字段
   description: string | null;
   created_at: string;
   updated_at: string;

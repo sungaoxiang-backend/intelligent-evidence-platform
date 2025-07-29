@@ -111,6 +111,8 @@ function EvidenceReasoningContent({
   editForm: any
   setEditForm: (form: any) => void
 }) {
+  // 添加单个证据预览状态
+  const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   // 获取案件数据
   const { data: caseData, error: caseError } = useSWR(
     ['case', caseId.toString()],
@@ -132,7 +134,7 @@ function EvidenceReasoningContent({
 
   // 建立evidence ID到实际证据的映射
   const evidences = evidenceData?.data || []
-  const evidenceMap = new Map(evidences.map(evidence => [evidence.id, evidence]))
+  const evidenceMap = new Map(evidences.map((evidence: any) => [evidence.id, evidence]))
 
   // 按slot_group_name分组证据
   const groupedEvidences = caseData?.association_evidence_features?.reduce((acc: Record<string, any[]>, feature: any) => {
@@ -142,8 +144,8 @@ function EvidenceReasoningContent({
     // 添加该特征组关联的证据
     feature.association_evidence_ids?.forEach((evidenceId: number) => {
       const evidence = evidenceMap.get(evidenceId)
-      if (evidence && !acc[groupName].find(e => e.id === evidence.id)) {
-        acc[groupName].push(evidence)
+      if (evidence && !acc[groupName].find((e: any) => e.id === (evidence as any).id)) {
+        acc[groupName].push(evidence as any)
       }
     })
     
@@ -193,7 +195,7 @@ function EvidenceReasoningContent({
       const currentGroupEvidences = selectedGroup === '全部证据' 
         ? allWechatEvidences
         : groupedEvidences[selectedGroup] || []
-      const allIds = currentGroupEvidences.map(evidence => evidence.id)
+      const allIds = currentGroupEvidences.map((evidence: any) => evidence.id)
       setSelectedEvidenceIds(allIds)
     } else {
       setSelectedEvidenceIds([])
@@ -262,6 +264,7 @@ function EvidenceReasoningContent({
                   <button
                     onClick={() => {
                       setSelectedGroup('全部证据')
+                      setSelectedEvidence(null)
                       // 分组选择不再自动设置选中状态，让用户手动选择
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${selectedGroup === '全部证据' ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
@@ -276,6 +279,7 @@ function EvidenceReasoningContent({
                     key={groupName}
                     onClick={() => {
                       setSelectedGroup(groupName)
+                      setSelectedEvidence(null)
                       // 分组选择不再自动设置选中状态，让用户手动选择
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${selectedGroup === groupName ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
@@ -307,9 +311,12 @@ function EvidenceReasoningContent({
                 return (
                   <div
                     key={`${evidence.id}-${index}`}
+                    onClick={() => setSelectedEvidence(evidence)}
                     className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
-                      selectedEvidenceIds.includes(evidence.id)
+                      selectedEvidence?.id === evidence.id
                         ? "bg-primary/10 border-primary/30 shadow-sm"
+                        : selectedEvidenceIds.includes(evidence.id)
+                        ? "bg-primary/5 border-primary/20"
                         : "hover:bg-muted/50 border-transparent hover:border-border"
                     }`}
                   >
@@ -387,60 +394,41 @@ function EvidenceReasoningContent({
           <CardTitle className="text-base">关联图片预览</CardTitle>
         </CardHeader>
         <CardContent className="p-0 h-full">
-          {selectedEvidenceIds.length > 0 && selectedGroup !== '全部证据' ? (
+          {selectedEvidence ? (
             <div className="h-full">
               <div className="p-4">
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold mb-2">选中的证据</h3>
+                  <h3 className="text-lg font-semibold mb-2">证据预览</h3>
                   <p className="text-sm text-muted-foreground">
-                    关联 {selectedEvidenceIds.length} 张图片
+                    {selectedEvidence.file_name || `证据${selectedEvidence.id}`}
                   </p>
                 </div>
                 
-                {/* 图片预览 - 类似证据画廊的布局 */}
-                <div className="space-y-4 max-h-[calc(100vh-400px)] overflow-y-auto">
-                  {selectedEvidenceIds.map((evidenceId, index) => {
-                    const evidence = evidenceMap.get(evidenceId)
-                    if (!evidence) return null
-
-                    return (
-                      <div key={`${evidence.id}-${index}`} className="relative">
-                        <div className="mb-2">
-                          <h4 className="text-sm font-medium text-foreground">
-                            {evidence.file_name || `证据${evidence.id}`}
-                          </h4>
-                          <p className="text-xs text-muted-foreground">
-                            关联证据 #{evidence.id}
-                          </p>
-                        </div>
-                        <div className="relative overflow-hidden rounded-lg border bg-muted/30">
-                          <img
-                            src={evidence.file_url}
-                            alt={`关联图片 ${evidence.file_name || evidence.id}`}
-                            className="w-full h-auto max-h-[calc(100vh-500px)] object-contain cursor-pointer transition-all duration-300"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = `
-                                  <div class="w-full h-64 bg-muted/30 flex items-center justify-center">
-                                    <div class="text-center">
-                                      <svg class="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                      </svg>
-                                      <p class="text-muted-foreground">暂无预览</p>
-                                    </div>
-                                  </div>
-                                `;
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
+                {/* 单个图片预览 */}
+                <div className="relative overflow-hidden rounded-lg border bg-muted/30">
+                  <img
+                    src={selectedEvidence.file_url}
+                    alt={`证据图片 ${selectedEvidence.file_name || selectedEvidence.id}`}
+                    className="w-full h-auto max-h-[calc(100vh-500px)] object-contain transition-all duration-300"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div class="w-full h-64 bg-muted/30 flex items-center justify-center">
+                            <div class="text-center">
+                              <svg class="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                              </svg>
+                              <p class="text-muted-foreground">暂无预览</p>
+                            </div>
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -449,10 +437,7 @@ function EvidenceReasoningContent({
               <div className="text-center">
                 <Eye className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-base">
-                  {selectedGroup === '全部证据' 
-                    ? '请选择具体分组查看证据预览' 
-                    : '请从左侧选择证据进行预览'
-                  }
+                  请从左侧选择证据进行预览
                 </p>
               </div>
             </div>
@@ -531,7 +516,7 @@ function EvidenceReasoningContent({
               )}
               
               {((editing ? editForm.evidence_features : allSlots) || []).length > 0 ? (
-                (editing ? editForm.evidence_features : allSlots || []).map((slot, index) => {
+                (editing ? editForm.evidence_features : allSlots || []).map((slot: any, index: number) => {
                   // 对于单个特征项，使用isFeatureComplete函数
                   const isSelected = selectedSlot?.slot_name === slot.slot_name
                   
@@ -829,10 +814,10 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
       }
     } catch (error) {
       console.error('保存失败:', error)
-      console.error('错误详情:', error?.message || error)
+      console.error('错误详情:', (error as any)?.message || error)
       toast({
         title: "保存失败",
-        description: error?.message || "请稍后重试",
+        description: (error as any)?.message || "请稍后重试",
         variant: "destructive",
       })
     }
@@ -900,7 +885,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">证据推理</h1>
+          <h1 className="text-3xl font-bold text-foreground">联合证据分析</h1>
           <p className="text-muted-foreground mt-2">关联证据特征分析与推理</p>
         </div>
         <div className="flex gap-3 items-center ml-auto">
@@ -923,7 +908,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
           <div>
             <h3 className="text-lg font-semibold text-foreground">关联特征概览</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              显示当前案件的关联证据特征分析结果
+              显示当前案件联合证据分析结果汇总
             </p>
           </div>
           <div className="flex items-center space-x-6">
@@ -944,36 +929,54 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         
         {/* 案件基本信息 */}
         {caseData && (
-          <div className="mb-3 p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-purple-200/30 dark:border-purple-800/30">
+          <div className="mb-3 p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
             <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
               案件基本信息
             </h4>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">案件ID:</span>
-                <span className="font-medium">{caseData.id || 'N/A'}</span>
+            <div className="space-y-3">
+              {/* 第一行：债权人，债务人，欠款金额 */}
+              <div className="grid grid-cols-3 gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">债权人:</span>
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.creditor_name}>
+                    {caseData.creditor_name || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">债务人:</span>
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.debtor_name || ''}>
+                    {caseData.debtor_name || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">欠款金额:</span>
+                  <span className="font-medium">
+                    {caseData.loan_amount !== null && caseData.loan_amount !== undefined 
+                      ? `¥${caseData.loan_amount.toLocaleString()}` 
+                      : 'N/A'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">案件类型:</span>
-                <Badge variant="outline" className="text-xs">
-                  {caseData.case_type === 'debt' ? '债务纠纷' : 
-                   caseData.case_type === 'contract' ? '合同纠纷' :
-                   caseData.case_type === 'property' ? '财产纠纷' :
-                   caseData.case_type || '未知'}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">债权人:</span>
-                <span className="font-medium max-w-[100px] truncate" title={caseData.creditor_name}>
-                  {caseData.creditor_name || 'N/A'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">债务人:</span>
-                <span className="font-medium max-w-[100px] truncate" title={caseData.debtor_name || ''}>
-                  {caseData.debtor_name || 'N/A'}
-                </span>
+              
+              {/* 第二行：ID，创建时间，更新时间 */}
+              <div className="grid grid-cols-3 gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">案件ID:</span>
+                  <span className="font-medium">{caseData.id || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">创建时间:</span>
+                  <span className="font-medium">
+                    {caseData.created_at ? new Date(caseData.created_at).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground whitespace-nowrap">更新时间:</span>
+                  <span className="font-medium">
+                    {caseData.updated_at ? new Date(caseData.updated_at).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -982,36 +985,43 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         {/* 关联特征状态统计 */}
         <div>
           <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-            <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
+            <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
             关联特征状态统计
           </h4>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-purple-200/30 dark:border-purple-800/30">
-              <div className="text-xl font-bold text-purple-600 dark:text-purple-400">
-                {caseData?.association_evidence_features?.length || 0}
+                      <div className="grid grid-cols-4 gap-3">
+              <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
+                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                  {evidenceList?.length || 0}
+                </div>
+                <div className="text-xs text-muted-foreground font-medium">证据总数</div>
+                <div className="text-xs text-muted-foreground mt-0.5">已上传的微信聊天记录总数</div>
               </div>
-              <div className="text-xs text-muted-foreground font-medium">总特征组</div>
-              <div className="text-xs text-muted-foreground mt-0.5">已识别的关联特征组总数</div>
-            </div>
-            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
-              <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                {caseData?.association_evidence_features?.filter((f: any) => 
-                  f.validation_status === "valid" && isFeatureGroupComplete(f.evidence_features || [])
-                ).length || 0}
+              <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
+                <div className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                  {caseData?.association_evidence_features?.length || 0}
+                </div>
+                <div className="text-xs text-muted-foreground font-medium">特征组总数</div>
+                <div className="text-xs text-muted-foreground mt-0.5">已识别的关联特征组总数</div>
               </div>
-              <div className="text-xs text-muted-foreground font-medium">已验证</div>
-              <div className="text-xs text-muted-foreground mt-0.5">人工验证确认无误</div>
-            </div>
-            <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-yellow-200/30 dark:border-yellow-800/30">
-              <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
-                {caseData?.association_evidence_features?.filter((f: any) => 
-                  f.validation_status === "pending" || !isFeatureGroupComplete(f.evidence_features || [])
-                ).length || 0}
+              <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
+                <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                  {caseData?.association_evidence_features?.filter((f: any) => 
+                    f.validation_status === "pending" || !isFeatureGroupComplete(f.evidence_features || [])
+                  ).length || 0}
+                </div>
+                <div className="text-xs text-muted-foreground font-medium">待验证</div>
+                <div className="text-xs text-muted-foreground mt-0.5">等待人工验证确认</div>
               </div>
-              <div className="text-xs text-muted-foreground font-medium">待验证</div>
-              <div className="text-xs text-muted-foreground mt-0.5">等待人工验证确认</div>
+              <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
+                <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                  {caseData?.association_evidence_features?.filter((f: any) => 
+                    f.validation_status === "valid" && isFeatureGroupComplete(f.evidence_features || [])
+                  ).length || 0}
+                </div>
+                <div className="text-xs text-muted-foreground font-medium">已验证</div>
+                <div className="text-xs text-muted-foreground mt-0.5">人工验证确认无误</div>
+              </div>
             </div>
-          </div>
         </div>
       </div>
 
