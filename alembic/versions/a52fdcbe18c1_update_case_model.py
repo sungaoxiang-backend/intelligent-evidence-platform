@@ -30,10 +30,7 @@ def upgrade() -> None:
     # 2. 为debtor_name设置默认值，处理所有空值情况
     op.execute("UPDATE cases SET debtor_name = '未知债务人' WHERE debtor_name IS NULL OR debtor_name = '' OR debtor_name = 'EMPTY' OR TRIM(debtor_name) = ''")
     
-    # 3. 为evidences表的validation_status和evidence_status设置默认值
-    op.execute("UPDATE evidences SET validation_status = 'pending' WHERE validation_status IS NULL")
-    
-    # 4. 为association_evidence_features表的validation_status设置默认值
+    # 3. 为association_evidence_features表的validation_status设置默认值
     op.execute("UPDATE association_evidence_features SET validation_status = 'pending' WHERE validation_status IS NULL")
     
     # 5. 添加非空约束

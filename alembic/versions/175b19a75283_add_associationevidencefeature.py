@@ -36,7 +36,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_association_evidence_features_id'), 'association_evidence_features', ['id'], unique=False)
-    op.add_column('evidences', sa.Column('validation_status', sa.String(length=20), nullable=False))
+    # 添加validation_status列（先允许NULL，然后设置默认值，最后改为NOT NULL）
+    op.add_column('evidences', sa.Column('validation_status', sa.String(length=20), nullable=True))
+    op.execute("UPDATE evidences SET validation_status = 'pending' WHERE validation_status IS NULL")
+    op.alter_column('evidences', 'validation_status', nullable=False)
     # ### end Alembic commands ###
 
 
