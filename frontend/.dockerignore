@@ -1,12 +1,55 @@
-# 忽略本地依赖和构建产物
+# 依赖目录
 node_modules
+npm-debug.log*
+
+# 构建输出
 .next
 out
-dist
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.DS_Store
+
+# 环境文件
 .env
 .env.local
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 日志文件
+*.log
+
+# 运行时文件
+.DS_Store
+*.pem
+
+# 调试文件
+.npm
+.eslintcache
+
+# 测试文件
+coverage
+.nyc_output
+
+# Git文件
+.git
+.gitignore
+
+# IDE文件
+.vscode
+.idea
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.temp
+
+# Docker文件
+Dockerfile*
+.dockerignore
+
+# 文档
+README.md
+*.md
+
+# 其他
+.cache
+.parcel-cache

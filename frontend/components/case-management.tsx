@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +30,23 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, X } from "lucide-react";
 import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
+import { API_CONFIG } from "@/lib/config";
+
+// Helper functions for API calls
+function getAuthHeader(): Record<string, string> {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || ''
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+  return {}
+}
+
+function buildApiUrl(path: string): string {
+  return API_CONFIG.BASE_URL + path
+}
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
 import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
@@ -51,13 +65,23 @@ const partyTypeLabels = {
 
 export default function CaseManagement() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
     field: "created_at",
     direction: "desc"
   });
+
+  // Initialize user filter from URL params
+  useEffect(() => {
+    const userId = searchParams.get('user_id');
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+  }, [searchParams]);
 
   // 初始化表单状态
   const [addForm, setAddForm] = useState({
@@ -97,7 +121,7 @@ export default function CaseManagement() {
     loan_amount: "",
   });
 
-  // Use paginated SWR hook
+  // Use paginated SWR hook with user filter
   const {
     data: cases,
     loading,
@@ -110,8 +134,32 @@ export default function CaseManagement() {
     mutate
   } = usePaginatedSWR<Case>(
     "/cases",
-    (params) => caseApi.getCases(params),
-    [],
+    (params) => {
+      // Add user_id filter if selected
+      const apiParams = { ...params };
+      if (selectedUserId) {
+        // Add user_id as a query parameter
+        const url = new URL(buildApiUrl(`/cases`));
+        url.searchParams.set('skip', ((params.page - 1) * params.pageSize).toString());
+        url.searchParams.set('limit', params.pageSize.toString());
+        if (params.search) {
+          url.searchParams.set('search', params.search);
+        }
+        url.searchParams.set('user_id', selectedUserId);
+        
+        return fetch(url.toString(), {
+          headers: getAuthHeader(),
+        }).then(resp => resp.json()).then(result => {
+          if (result.code === 200) {
+            return { data: result.data, pagination: result.pagination };
+          } else {
+            throw new Error(result.message || "请求失败");
+          }
+        });
+      }
+      return caseApi.getCases(apiParams);
+    },
+    [selectedUserId], // Add selectedUserId as dependency
   );
 
   const handleSort = (field: string, direction: SortDirection) => {
@@ -337,6 +385,25 @@ export default function CaseManagement() {
     router.push(`/cases/${caseId}`);
   };
 
+  const handleUserFilterChange = (userId: string) => {
+    setSelectedUserId(userId === "all" ? null : userId);
+    setPage(1); // Reset to first page when filter changes
+  };
+
+  const clearUserFilter = () => {
+    setSelectedUserId(null);
+    setPage(1);
+    // Update URL to remove user_id parameter
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.delete('user_id');
+    router.replace(`/cases?${newSearchParams.toString()}`);
+  };
+
+  const getSelectedUserName = () => {
+    if (!selectedUserId) return null;
+    return users?.find(u => u.id === parseInt(selectedUserId))?.name;
+  };
+
   // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => {
     const sortedCases = getSortedCases(cases);
@@ -444,10 +511,49 @@ export default function CaseManagement() {
         title="案件管理"
         subtitle="管理和跟踪所有案件信息"
         headerActions={
-          <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="mr-2 h-4 w-4" />
-            新增案件
-          </Button>
+          <div className="flex items-center space-x-4">
+            {/* User Filter */}
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="user-filter" className="text-sm font-medium">
+                用户筛选:
+              </Label>
+              <Select
+                value={selectedUserId || "all"}
+                onValueChange={handleUserFilterChange}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="选择用户" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部用户</SelectItem>
+                  {(users || []).map((user) => (
+                    <SelectItem key={user.id} value={user.id.toString()}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedUserId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearUserFilter}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {selectedUserId && (
+              <Badge variant="secondary" className="text-sm">
+                筛选: {getSelectedUserName()}
+              </Badge>
+            )}
+            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="mr-2 h-4 w-4" />
+              新增案件
+            </Button>
+          </div>
         }
         data={cases}
         loading={loading}
@@ -458,12 +564,12 @@ export default function CaseManagement() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         renderTable={renderTable}
-        emptyMessage="暂无案件数据"
+        emptyMessage={selectedUserId ? "该用户暂无案件数据" : "暂无案件数据"}
         emptyAction={
           <Button onClick={openAddDialog} variant="outline">
             <Plus className="mr-2 h-4 w-4" />
             创建第一个案件
-            </Button>
+          </Button>
         }
       />
 

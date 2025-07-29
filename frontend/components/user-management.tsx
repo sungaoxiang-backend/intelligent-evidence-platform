@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Eye } from "lucide-react";
 import { userApi } from "@/lib/user-api";
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
@@ -28,6 +29,7 @@ import { SortableHeader, formatDateTime, type SortDirection } from "@/components
 import type { User } from "@/lib/types";
 
 export default function UserManagement() {
+  const router = useRouter();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -156,6 +158,10 @@ export default function UserManagement() {
     setShowAddDialog(true);
   };
 
+  const handleViewUserCases = (userId: number) => {
+    router.push(`/cases?user_id=${userId}`);
+  };
+
   const renderTable = (users: User[]) => {
     const sortedUsers = getSortedUsers(users);
     
@@ -206,6 +212,15 @@ export default function UserManagement() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewUserCases(user.id)}
+                      className="flex items-center text-blue-600 hover:text-blue-700"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      查看案件
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
