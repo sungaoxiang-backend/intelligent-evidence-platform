@@ -24,12 +24,17 @@ import { Plus, Edit, Trash2 } from "lucide-react";
 import { userApi } from "@/lib/user-api";
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
+import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
 import type { User } from "@/lib/types";
 
 export default function UserManagement() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
+    field: "created_at",
+    direction: "desc"
+  });
 
   const [addForm, setAddForm] = useState({
     name: "",
@@ -102,6 +107,40 @@ export default function UserManagement() {
     }
   };
 
+  const handleSort = (field: string, direction: SortDirection) => {
+    setSort({ field, direction });
+  };
+
+  // 对数据进行排序
+  const getSortedUsers = (users: User[]) => {
+    if (!sort.field || !sort.direction) {
+      return users;
+    }
+
+    return [...users].sort((a, b) => {
+      let aValue: any = a[sort.field as keyof User];
+      let bValue: any = b[sort.field as keyof User];
+
+      // 处理时间字段
+      if (sort.field === 'created_at' || sort.field === 'updated_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+
+      // 处理字符串字段
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (sort.direction === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+  };
+
   const openEditDialog = (user: User) => {
     setEditingUser(user);
     setEditForm({
@@ -117,7 +156,10 @@ export default function UserManagement() {
     setShowAddDialog(true);
   };
 
-  const renderTable = (users: User[]) => (
+  const renderTable = (users: User[]) => {
+    const sortedUsers = getSortedUsers(users);
+    
+    return (
     <>
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow">
@@ -128,18 +170,40 @@ export default function UserManagement() {
               <TableHead>身份证号</TableHead>
               <TableHead>手机号</TableHead>
               <TableHead>邮箱</TableHead>
-              <TableHead>创建时间</TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="created_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  创建时间
+                </SortableHeader>
+              </TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="updated_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  更新时间
+                </SortableHeader>
+              </TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
+            {sortedUsers.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.id_card || "-"}</TableCell>
                 <TableCell>{user.phone || "-"}</TableCell>
                 <TableCell>{user.email || "-"}</TableCell>
-                <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "-"}</TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(user.created_at)}
+                </TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(user.updated_at)}
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Button
@@ -166,6 +230,7 @@ export default function UserManagement() {
       </div>
     </>
   );
+  };
 
   return (
     <>

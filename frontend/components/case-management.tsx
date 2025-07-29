@@ -35,6 +35,7 @@ import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
+import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
 import type { Case, User, CaseType, PartyType } from "@/lib/types";
 
 const caseTypeLabels = {
@@ -53,6 +54,10 @@ export default function CaseManagement() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
+  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
+    field: "created_at",
+    direction: "desc"
+  });
 
   // 初始化表单状态
   const [addForm, setAddForm] = useState({
@@ -108,6 +113,46 @@ export default function CaseManagement() {
     (params) => caseApi.getCases(params),
     [],
   );
+
+  const handleSort = (field: string, direction: SortDirection) => {
+    setSort({ field, direction });
+  };
+
+  // 对数据进行排序
+  const getSortedCases = (cases: Case[]) => {
+    if (!sort.field || !sort.direction) {
+      return cases;
+    }
+
+    return [...cases].sort((a, b) => {
+      let aValue: any = a[sort.field as keyof Case];
+      let bValue: any = b[sort.field as keyof Case];
+
+      // 处理时间字段
+      if (sort.field === 'created_at' || sort.field === 'updated_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+
+      // 处理数字字段
+      if (sort.field === 'loan_amount') {
+        aValue = aValue || 0;
+        bValue = bValue || 0;
+      }
+
+      // 处理字符串字段
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (sort.direction === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+  };
 
   // Fetch users for dropdown
   const {
@@ -293,7 +338,10 @@ export default function CaseManagement() {
   };
 
   // 修改表格渲染逻辑
-  const renderTable = (cases: Case[]) => (
+  const renderTable = (cases: Case[]) => {
+    const sortedCases = getSortedCases(cases);
+    
+    return (
     <>
       <div className="bg-white rounded-lg shadow">
         <Table>
@@ -303,11 +351,29 @@ export default function CaseManagement() {
               <TableHead>债权人</TableHead>
               <TableHead>债务人</TableHead>
               <TableHead>欠款金额</TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="created_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  创建时间
+                </SortableHeader>
+              </TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="updated_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  更新时间
+                </SortableHeader>
+              </TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {cases.map((caseItem) => (
+            {sortedCases.map((caseItem) => (
               <TableRow key={caseItem.id}>
                 <TableCell>{caseItem.user?.name || "-"}</TableCell>
                 <TableCell className="font-medium">
@@ -328,6 +394,12 @@ export default function CaseManagement() {
                 </TableCell>
                 <TableCell>
                   {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
+                </TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(caseItem.created_at)}
+                </TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(caseItem.updated_at)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
@@ -364,6 +436,7 @@ export default function CaseManagement() {
       </div>
     </>
   );
+  };
 
   return (
     <>

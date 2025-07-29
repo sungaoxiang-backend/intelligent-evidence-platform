@@ -991,7 +991,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                       <div className="grid grid-cols-4 gap-3">
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                  {evidenceList?.length || 0}
+                  {evidenceList?.filter((evidence: any) => evidence.classification_category === "微信聊天记录").length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">证据总数</div>
                 <div className="text-xs text-muted-foreground mt-0.5">已上传的微信聊天记录总数</div>

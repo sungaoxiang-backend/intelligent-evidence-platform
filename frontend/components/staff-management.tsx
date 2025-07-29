@@ -12,6 +12,7 @@ import { Plus, Edit, Trash2 } from "lucide-react"
 import { staffApi } from "@/lib/staff-api"
 import { ListPage } from "@/components/common/list-page"
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr"
+import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header"
 
 interface Staff {
   id: number
@@ -26,6 +27,10 @@ export default function StaffManagement() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null)
+  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
+    field: "created_at",
+    direction: "desc"
+  });
 
   const [addForm, setAddForm] = useState({
     username: "",
@@ -97,6 +102,40 @@ export default function StaffManagement() {
     }
   }
 
+  const handleSort = (field: string, direction: SortDirection) => {
+    setSort({ field, direction });
+  };
+
+  // 对数据进行排序
+  const getSortedStaff = (staff: Staff[]) => {
+    if (!sort.field || !sort.direction) {
+      return staff;
+    }
+
+    return [...staff].sort((a, b) => {
+      let aValue: any = a[sort.field as keyof Staff];
+      let bValue: any = b[sort.field as keyof Staff];
+
+      // 处理时间字段
+      if (sort.field === 'created_at' || sort.field === 'updated_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+
+      // 处理字符串字段
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (sort.direction === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+  };
+
   const openEditDialog = (staffMember: Staff) => {
     setEditingStaff(staffMember)
     setEditForm({
@@ -111,7 +150,10 @@ export default function StaffManagement() {
     setShowAddDialog(true)
   }
 
-  const renderTable = (staff: Staff[]) => (
+  const renderTable = (staff: Staff[]) => {
+    const sortedStaff = getSortedStaff(staff);
+    
+    return (
     <>
       {/* Staff Table */}
       <div className="bg-white rounded-lg shadow">
@@ -121,13 +163,29 @@ export default function StaffManagement() {
               <TableHead>用户名</TableHead>
               <TableHead>角色</TableHead>
               <TableHead>状态</TableHead>
-              <TableHead>创建时间</TableHead>
-              <TableHead>更新时间</TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="created_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  创建时间
+                </SortableHeader>
+              </TableHead>
+              <TableHead>
+                <SortableHeader
+                  field="updated_at"
+                  currentSort={sort}
+                  onSort={handleSort}
+                >
+                  更新时间
+                </SortableHeader>
+              </TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staff.map((staffMember) => (
+            {sortedStaff.map((staffMember) => (
               <TableRow key={staffMember.id}>
                 <TableCell className="font-medium">{staffMember.username}</TableCell>
                 <TableCell>
@@ -144,8 +202,12 @@ export default function StaffManagement() {
                     <Badge variant="destructive">禁用</Badge>
                   )}
                 </TableCell>
-                <TableCell>{new Date(staffMember.created_at).toLocaleDateString()}</TableCell>
-                <TableCell>{new Date(staffMember.updated_at).toLocaleDateString()}</TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(staffMember.created_at)}
+                </TableCell>
+                <TableCell className="text-sm text-gray-600">
+                  {formatDateTime(staffMember.updated_at)}
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Button
@@ -171,7 +233,8 @@ export default function StaffManagement() {
         </Table>
       </div>
     </>
-  )
+  );
+  };
 
   return (
     <>

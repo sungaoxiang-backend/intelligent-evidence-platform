@@ -25,6 +25,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { caseApi } from "@/lib/api"
 import useSWR, { mutate } from "swr"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
+import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header"
 
 // SWR数据获取函数
 const evidenceFetcher = async ([key, search, page, pageSize]: [string, string, number, number]) => {
@@ -57,6 +58,44 @@ function EvidenceTableContent({
   onDownload: (evidence: any) => void
   onDelete: (evidence: any) => void
 }) {
+  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
+    field: "created_at",
+    direction: "desc"
+  });
+
+  const handleSort = (field: string, direction: SortDirection) => {
+    setSort({ field, direction });
+  };
+
+  // 对数据进行排序
+  const getSortedEvidence = (evidenceList: any[]) => {
+    if (!sort.field || !sort.direction) {
+      return evidenceList;
+    }
+
+    return [...evidenceList].sort((a, b) => {
+      let aValue: any = a[sort.field];
+      let bValue: any = b[sort.field];
+
+      // 处理时间字段
+      if (sort.field === 'created_at' || sort.field === 'updated_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+
+      // 处理字符串字段
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (sort.direction === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+  };
   const { data, error } = useSWR(
     ['/api/evidences', searchTerm, page, pageSize],
     evidenceFetcher,
@@ -72,6 +111,7 @@ function EvidenceTableContent({
   }
 
   const evidenceList = data?.data || []
+  const sortedEvidenceList = getSortedEvidence(evidenceList)
   const total = data?.pagination?.total || 0
 
   const getFileIcon = (format: string | undefined) => {
@@ -135,21 +175,43 @@ function EvidenceTableContent({
                 <TableHead>文件类型</TableHead>
                 <TableHead>文件大小</TableHead>
                 <TableHead>关联案件</TableHead>
-                <TableHead>上传时间</TableHead>
+                <TableHead>
+                  <SortableHeader
+                    field="created_at"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  >
+                    上传时间
+                  </SortableHeader>
+                </TableHead>
+                <TableHead>
+                  <SortableHeader
+                    field="updated_at"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  >
+                    更新时间
+                  </SortableHeader>
+                </TableHead>
                 <TableHead className="text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {evidenceList.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+              {sortedEvidenceList.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">暂无数据</TableCell></TableRow>
               ) : (
-                evidenceList.map((evidence: any) => (
+                sortedEvidenceList.map((evidence: any) => (
                   <TableRow key={evidence.id}>
                     <TableCell className="whitespace-nowrap">{evidence.file_name || '-'}</TableCell>
                     <TableCell className="whitespace-nowrap">{getFileType(evidence.file_name)}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatFileSize(evidence.file_size)}</TableCell>
                     <TableCell className="whitespace-nowrap">{"case" in evidence && evidence.case?.title ? evidence.case.title : "-"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{evidence.created_at ? new Date(evidence.created_at).toLocaleString() : '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-gray-600">
+                      {formatDateTime(evidence.created_at)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-gray-600">
+                      {formatDateTime(evidence.updated_at)}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap text-center">
                       <Button variant="outline" size="sm" className="mr-2" onClick={() => onPreview(evidence)}>预览</Button>
                       <Button variant="outline" size="sm" className="mr-2" onClick={() => onDownload(evidence)}>下载</Button>
