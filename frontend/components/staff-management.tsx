@@ -45,7 +45,7 @@ export default function StaffManagement() {
     is_superuser: false,
   })
 
-  // Use paginated SWR hook
+  // Use paginated SWR hook with sorting
   const {
     data: staff,
     loading,
@@ -58,8 +58,15 @@ export default function StaffManagement() {
     mutate
   } = usePaginatedSWR<Staff>(
     "/staff",
-    (params) => staffApi.getStaff(params),
-    [],
+    (params) => {
+      const apiParams: any = {
+        ...params,
+        sort_by: sort.field,
+        sort_order: sort.direction || "desc" // 提供默认值，避免null
+      };
+      return staffApi.getStaff(apiParams);
+    },
+    [sort.field, sort.direction], // Add sorting as dependencies
   )
 
   const handleAddStaff = async () => {
@@ -106,35 +113,8 @@ export default function StaffManagement() {
     setSort({ field, direction });
   };
 
-  // 对数据进行排序
-  const getSortedStaff = (staff: Staff[]) => {
-    if (!sort.field || !sort.direction) {
-      return staff;
-    }
-
-    return [...staff].sort((a, b) => {
-      let aValue: any = a[sort.field as keyof Staff];
-      let bValue: any = b[sort.field as keyof Staff];
-
-      // 处理时间字段
-      if (sort.field === 'created_at' || sort.field === 'updated_at') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      // 处理字符串字段
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sort.direction === 'asc') {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      } else {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      }
-    });
-  };
+  // 移除客户端排序逻辑，使用服务端排序
+  const sortedStaff = staff || [];
 
   const openEditDialog = (staffMember: Staff) => {
     setEditingStaff(staffMember)
@@ -151,8 +131,6 @@ export default function StaffManagement() {
   }
 
   const renderTable = (staff: Staff[]) => {
-    const sortedStaff = getSortedStaff(staff);
-    
     return (
     <>
       {/* Staff Table */}

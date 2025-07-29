@@ -16,8 +16,8 @@ function buildApiUrl(path: string): string {
 }
 
 export const caseApi = {
-  async getCases(params: PaginationParams & { user_id?: number }): Promise<{ data: Case[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "", user_id } = params
+  async getCases(params: PaginationParams & { user_id?: number; sort_by?: string; sort_order?: string }): Promise<{ data: Case[]; pagination?: any }> {
+    const { page = 1, pageSize = 20, search = "", user_id, sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
     let url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
     
@@ -25,6 +25,22 @@ export const caseApi = {
     if (user_id) {
       url += `&user_id=${user_id}`
     }
+    
+    // Add sorting parameters if provided
+    if (sort_by) {
+      url += `&sort_by=${encodeURIComponent(sort_by)}`
+    }
+    if (sort_order) {
+      url += `&sort_order=${encodeURIComponent(sort_order)}`
+    }
+    
+    // 添加调试日志
+    console.log("🔍 Case API Request:", {
+      url,
+      sort_by,
+      sort_order,
+      params
+    });
     
     const resp = await fetch(url, {
       headers: getAuthHeader(),
@@ -151,10 +167,19 @@ export const caseApi = {
 }
 
 export const userApi = {
-  async getUsers(params: PaginationParams): Promise<ApiResponse<User[]>> {
-    const { page = 1, pageSize = 20, search = "" } = params
+  async getUsers(params: PaginationParams & { sort_by?: string; sort_order?: string }): Promise<ApiResponse<User[]>> {
+    const { page = 1, pageSize = 20, search = "", sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
-    const url = buildApiUrl(`/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+    let url = buildApiUrl(`/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+    
+    // Add sorting parameters if provided
+    if (sort_by) {
+      url += `&sort_by=${encodeURIComponent(sort_by)}`
+    }
+    if (sort_order) {
+      url += `&sort_order=${encodeURIComponent(sort_order)}`
+    }
+    
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })
@@ -259,13 +284,24 @@ export interface EvidenceUpdateParams {
 }
 
 export const evidenceApi = {
-  async getEvidences(params: { page?: number; pageSize?: number; search?: string; case_id?: number }) {
-    const { page = 1, pageSize = 20, search = "", case_id } = params
+  async getEvidences(params: { page?: number; pageSize?: number; search?: string; case_id?: number; sort_by?: string; sort_order?: string }) {
+    const { page = 1, pageSize = 20, search = "", case_id, sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
     const limit = pageSize
     let url = buildApiUrl(`/evidences?skip=${skip}&limit=${limit}`)
     if (search) url += `&search=${encodeURIComponent(search)}`
     if (case_id !== undefined && case_id !== null) url += `&case_id=${case_id}`
+    if (sort_by) url += `&sort_by=${encodeURIComponent(sort_by)}`
+    if (sort_order) url += `&sort_order=${encodeURIComponent(sort_order)}`
+    
+    // 添加调试日志
+    console.log("🔍 Evidence API Request:", {
+      url,
+      sort_by,
+      sort_order,
+      params
+    });
+    
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })

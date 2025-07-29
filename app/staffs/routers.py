@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -64,9 +64,13 @@ async def read_staff_list(
     current_staff: Annotated[Staff, Depends(get_current_active_superuser)],
     skip: int = 0,
     limit: int = 100,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
 ):
-    """获取员工列表（仅超级管理员）"""
-    staff_list, total = await staff_service.get_multi_with_count(db, skip=skip, limit=limit)
+    """获取员工列表（仅超级管理员），支持动态排序"""
+    staff_list, total = await staff_service.get_multi_with_count(
+        db, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order
+    )
     return ListResponse(
         data=staff_list,
         pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)

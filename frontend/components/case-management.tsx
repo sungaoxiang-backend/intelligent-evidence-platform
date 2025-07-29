@@ -121,7 +121,7 @@ export default function CaseManagement() {
     loan_amount: "",
   });
 
-  // Use paginated SWR hook with user filter
+  // Use paginated SWR hook with user filter and sorting
   const {
     data: cases,
     loading,
@@ -135,55 +135,26 @@ export default function CaseManagement() {
   } = usePaginatedSWR<Case>(
     "/cases",
     (params) => {
-      // Add user_id filter if selected
-      const apiParams = { ...params };
+      // Add user_id filter and sorting parameters
+      const apiParams: any = { 
+        ...params,
+        sort_by: sort.field,
+        sort_order: sort.direction || "desc" // 提供默认值，避免null
+      };
       if (selectedUserId) {
         apiParams.user_id = parseInt(selectedUserId);
       }
       return caseApi.getCases(apiParams);
     },
-    [selectedUserId], // Add selectedUserId as dependency
+    [selectedUserId, sort.field, sort.direction], // Add sorting as dependencies
   );
 
   const handleSort = (field: string, direction: SortDirection) => {
     setSort({ field, direction });
   };
 
-  // 对数据进行排序
-  const getSortedCases = (cases: Case[]) => {
-    if (!sort.field || !sort.direction) {
-      return cases;
-    }
-
-    return [...cases].sort((a, b) => {
-      let aValue: any = a[sort.field as keyof Case];
-      let bValue: any = b[sort.field as keyof Case];
-
-      // 处理时间字段
-      if (sort.field === 'created_at' || sort.field === 'updated_at') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      // 处理数字字段
-      if (sort.field === 'loan_amount') {
-        aValue = aValue || 0;
-        bValue = bValue || 0;
-      }
-
-      // 处理字符串字段
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sort.direction === 'asc') {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      } else {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      }
-    });
-  };
+  // 移除客户端排序逻辑，使用服务端排序
+  const sortedCases = cases || [];
 
   // Fetch users for dropdown
   const {
@@ -389,7 +360,7 @@ export default function CaseManagement() {
 
   // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => {
-    const sortedCases = getSortedCases(cases);
+    const sortedCases = cases;
     
     return (
     <>

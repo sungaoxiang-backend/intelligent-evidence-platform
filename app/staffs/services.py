@@ -72,14 +72,45 @@ async def delete(db: AsyncSession, staff_id: int) -> bool:
     return True
 
 
-async def get_multi_with_count(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> Tuple[list[Staff], int]:
-    """获取多个员工及总数"""
+async def get_multi_with_count(
+    db: AsyncSession, *, skip: int = 0, limit: int = 100,
+    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"
+) -> Tuple[list[Staff], int]:
+    """获取多个员工及总数，支持动态排序"""
     # 获取总数
     count_result = await db.execute(select(func.count()).select_from(Staff))
     total = count_result.scalar_one()
 
+    # 构建查询
+    query = select(Staff)
+    
+    # 添加排序
+    if sort_by:
+        # 验证排序字段
+        valid_sort_fields = {
+            'created_at': Staff.created_at,
+            'updated_at': Staff.updated_at,
+            'username': Staff.username,
+            'is_active': Staff.is_active,
+            'is_superuser': Staff.is_superuser
+        }
+        
+        if sort_by in valid_sort_fields:
+            sort_column = valid_sort_fields[sort_by]
+            if sort_order.lower() == 'desc':
+                query = query.order_by(sort_column.desc())
+            else:
+                query = query.order_by(sort_column.asc())
+        else:
+            # 默认按创建时间倒序
+            query = query.order_by(Staff.created_at.desc())
+    else:
+        # 默认按创建时间倒序
+        query = query.order_by(Staff.created_at.desc())
+
     # 获取分页数据
-    result = await db.execute(select(Staff).offset(skip).limit(limit))
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
     items = result.scalars().all()
     
     return items, total

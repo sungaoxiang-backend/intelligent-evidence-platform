@@ -52,7 +52,7 @@ export default function UserManagement() {
     id_card: "",
   });
 
-  // Use paginated SWR hook
+  // Use paginated SWR hook with sorting
   const {
     data: users,
     loading,
@@ -65,8 +65,15 @@ export default function UserManagement() {
     mutate
   } = usePaginatedSWR<User>(
     "/users",
-    (params) => userApi.getUsers(params),
-    [],
+    (params) => {
+      const apiParams: any = {
+        ...params,
+        sort_by: sort.field,
+        sort_order: sort.direction || "desc" // 提供默认值，避免null
+      };
+      return userApi.getUsers(apiParams);
+    },
+    [sort.field, sort.direction], // Add sorting as dependencies
   );
 
   const handleAddUser = async () => {
@@ -113,35 +120,8 @@ export default function UserManagement() {
     setSort({ field, direction });
   };
 
-  // 对数据进行排序
-  const getSortedUsers = (users: User[]) => {
-    if (!sort.field || !sort.direction) {
-      return users;
-    }
-
-    return [...users].sort((a, b) => {
-      let aValue: any = a[sort.field as keyof User];
-      let bValue: any = b[sort.field as keyof User];
-
-      // 处理时间字段
-      if (sort.field === 'created_at' || sort.field === 'updated_at') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      // 处理字符串字段
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sort.direction === 'asc') {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      } else {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      }
-    });
-  };
+  // 移除客户端排序逻辑，使用服务端排序
+  const sortedUsers = users || [];
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
@@ -163,8 +143,6 @@ export default function UserManagement() {
   };
 
   const renderTable = (users: User[]) => {
-    const sortedUsers = getSortedUsers(users);
-    
     return (
     <>
       {/* Users Table */}
@@ -198,7 +176,7 @@ export default function UserManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedUsers.map((user) => (
+            {users.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.id_card || "-"}</TableCell>

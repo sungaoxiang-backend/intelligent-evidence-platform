@@ -7,13 +7,32 @@ interface UserListParams {
   page?: number
   pageSize?: number
   search?: string
+  sort_by?: string
+  sort_order?: string
 }
 
 export const userApi = {
   async getUsers(params: UserListParams = {}): Promise<{ data: User[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "" } = params
+    const { page = 1, pageSize = 20, search = "", sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
-    const url = `${API_CONFIG.BASE_URL}/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    let url = `${API_CONFIG.BASE_URL}/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    
+    // Add sorting parameters if provided
+    if (sort_by) {
+      url += `&sort_by=${encodeURIComponent(sort_by)}`
+    }
+    if (sort_order) {
+      url += `&sort_order=${encodeURIComponent(sort_order)}`
+    }
+    
+    // 添加调试日志
+    console.log("🔍 User API Request:", {
+      url,
+      sort_by,
+      sort_order,
+      params
+    });
+    
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${localStorage.getItem(API_CONFIG.TOKEN_KEY) || ""}` },
     })

@@ -74,9 +74,15 @@ async def delete(db: AsyncSession, case_id: int) -> bool:
 
 
 async def get_multi_with_count(
-    db: AsyncSession, *, skip: int = 0, limit: int = 100, user_id: Optional[int] = None
+    db: AsyncSession, *, skip: int = 0, limit: int = 100, user_id: Optional[int] = None,
+    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"
 ) -> Tuple[list[CaseModel], int]:
-    """获取多个案件和总数"""
+    """获取多个案件和总数，支持动态排序"""
+    from loguru import logger
+    
+    # 添加调试日志
+    logger.debug(f"Sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
+    
     # 构建基础查询，包含 joinedload
     query = select(CaseModel).options(joinedload(CaseModel.user))
     
@@ -88,7 +94,37 @@ async def get_multi_with_count(
     total_result = await db.execute(total_query)
     total = total_result.scalar_one()
 
-    # 查询数据，保持 joinedload
+    # 添加排序
+    if sort_by:
+        # 验证排序字段
+        valid_sort_fields = {
+            'created_at': CaseModel.created_at,
+            'updated_at': CaseModel.updated_at,
+            'loan_amount': CaseModel.loan_amount,
+            'creditor_name': CaseModel.creditor_name,
+            'debtor_name': CaseModel.debtor_name,
+            'case_type': CaseModel.case_type,
+            'case_status': CaseModel.case_status
+        }
+        
+        if sort_by in valid_sort_fields:
+            sort_column = valid_sort_fields[sort_by]
+            if sort_order and sort_order.lower() == 'desc':
+                logger.debug(f"Applying DESC sort on {sort_by}")
+                query = query.order_by(sort_column.desc())
+            else:
+                logger.debug(f"Applying ASC sort on {sort_by}")
+                query = query.order_by(sort_column.asc())
+        else:
+            # 默认按创建时间倒序
+            logger.debug("Invalid sort field, using default DESC sort on created_at")
+            query = query.order_by(CaseModel.created_at.desc())
+    else:
+        # 默认按创建时间倒序
+        logger.debug("No sort field provided, using default DESC sort on created_at")
+        query = query.order_by(CaseModel.created_at.desc())
+
+    # 获取数据，保持 joinedload
     items_query = query.offset(skip).limit(limit)
     items_result = await db.execute(items_query)
     items = items_result.scalars().all()

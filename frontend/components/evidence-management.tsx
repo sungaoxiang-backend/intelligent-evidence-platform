@@ -67,38 +67,19 @@ function EvidenceTableContent({
     setSort({ field, direction });
   };
 
-  // 对数据进行排序
-  const getSortedEvidence = (evidenceList: any[]) => {
-    if (!sort.field || !sort.direction) {
-      return evidenceList;
-    }
-
-    return [...evidenceList].sort((a, b) => {
-      let aValue: any = a[sort.field];
-      let bValue: any = b[sort.field];
-
-      // 处理时间字段
-      if (sort.field === 'created_at' || sort.field === 'updated_at') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      // 处理字符串字段
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sort.direction === 'asc') {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      } else {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      }
-    });
-  };
+  // 移除客户端排序逻辑，使用服务端排序
   const { data, error } = useSWR(
-    ['/api/evidences', searchTerm, page, pageSize],
-    evidenceFetcher,
+    ['/api/evidences', searchTerm, page, pageSize, sort.field, sort.direction],
+    async () => {
+      const response = await evidenceApi.getEvidences({
+        page,
+        pageSize,
+        search: searchTerm,
+        sort_by: sort.field,
+        sort_order: sort.direction || 'desc'
+      });
+      return response;
+    },
     {
       suspense: true,
       revalidateOnFocus: false,
@@ -111,7 +92,8 @@ function EvidenceTableContent({
   }
 
   const evidenceList = data?.data || []
-  const sortedEvidenceList = getSortedEvidence(evidenceList)
+  // 移除客户端排序，使用服务端排序
+  const sortedEvidenceList = evidenceList
   const total = data?.pagination?.total || 0
 
   const getFileIcon = (format: string | undefined) => {
@@ -494,7 +476,9 @@ function CaseSelect({ value, onChange }: { value: string; onChange: (val: string
       </SelectTrigger>
       <SelectContent>
         {caseList?.map((c) => (
-          <SelectItem key={c.id} value={String(c.id)}>{c.title}</SelectItem>
+          <SelectItem key={c.id} value={String(c.id)}>
+            {c.creditor_name} vs {c.debtor_name}
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>

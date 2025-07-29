@@ -25,12 +25,16 @@ export function SortableHeader({
     let newDirection: SortDirection;
     
     if (!isActive) {
+      // 如果字段未激活，设置为升序
       newDirection = "asc";
     } else if (currentSort.direction === "asc") {
+      // 如果当前是升序，切换到降序
       newDirection = "desc";
     } else if (currentSort.direction === "desc") {
-      newDirection = null;
+      // 如果当前是降序，切换回升序
+      newDirection = "asc";
     } else {
+      // 如果当前是null，设置为升序
       newDirection = "asc";
     }
     

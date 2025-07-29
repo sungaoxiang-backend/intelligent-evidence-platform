@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -17,9 +17,13 @@ async def read_users(
     current_staff: Annotated[Staff, Depends(get_current_staff)],
     skip: int = 0,
     limit: int = 10,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
 ):
-    """获取用户列表"""
-    users, total = await user_service.get_multi_with_count(db, skip=skip, limit=limit)
+    """获取用户列表，支持动态排序"""
+    users, total = await user_service.get_multi_with_count(
+        db, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order
+    )
     return ListResponse(
         data=users,
         pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)

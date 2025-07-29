@@ -25,6 +25,8 @@ interface PaginationParams {
   page?: number
   pageSize?: number
   search?: string
+  sort_by?: string
+  sort_order?: string
 }
 
 class StaffApiService {
@@ -39,9 +41,18 @@ class StaffApiService {
 
   // 获取员工列表
   async getStaff(params: PaginationParams = {}): Promise<{ data: Staff[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "" } = params
+    const { page = 1, pageSize = 20, search = "", sort_by, sort_order } = params
     const headers = await this.getAuthHeaders()
-    const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STAFFS}?page=${page}&size=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    let url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STAFFS}?skip=${(page - 1) * pageSize}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    
+    // Add sorting parameters if provided
+    if (sort_by) {
+      url += `&sort_by=${encodeURIComponent(sort_by)}`
+    }
+    if (sort_order) {
+      url += `&sort_order=${encodeURIComponent(sort_order)}`
+    }
+    
     const response = await fetch(url, {
       method: "GET",
       headers,

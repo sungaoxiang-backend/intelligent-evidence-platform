@@ -127,9 +127,15 @@ async def delete(db: AsyncSession, evidence_id: int) -> bool:
 
 
 async def get_multi_with_count(
-    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None, search: Optional[str] = None
+    db: AsyncSession, *, skip: int = 0, limit: int = 100, case_id: Optional[int] = None, search: Optional[str] = None,
+    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"
 ):
-    """获取多个证据，并返回总数"""
+    """获取多个证据，并返回总数，支持动态排序"""
+    from loguru import logger
+    
+    # 添加调试日志
+    logger.debug(f"Evidence sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
+    
     query = select(Evidence).options(joinedload(Evidence.case))
     if case_id is not None:
         query = query.where(Evidence.case_id == case_id)
@@ -139,6 +145,36 @@ async def get_multi_with_count(
     # 获取总数
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query)
+
+    # 添加排序
+    if sort_by:
+        # 验证排序字段
+        valid_sort_fields = {
+            'created_at': Evidence.created_at,
+            'updated_at': Evidence.updated_at,
+            'file_name': Evidence.file_name,
+            'file_size': Evidence.file_size,
+            'evidence_status': Evidence.evidence_status,
+            'classification_category': Evidence.classification_category,
+            'classification_confidence': Evidence.classification_confidence
+        }
+        
+        if sort_by in valid_sort_fields:
+            sort_column = valid_sort_fields[sort_by]
+            if sort_order and sort_order.lower() == 'desc':
+                logger.debug(f"Applying DESC sort on {sort_by}")
+                query = query.order_by(sort_column.desc())
+            else:
+                logger.debug(f"Applying ASC sort on {sort_by}")
+                query = query.order_by(sort_column.asc())
+        else:
+            # 默认按创建时间倒序
+            logger.debug("Invalid sort field, using default DESC sort on created_at")
+            query = query.order_by(Evidence.created_at.desc())
+    else:
+        # 默认按创建时间倒序
+        logger.debug("No sort field provided, using default DESC sort on created_at")
+        query = query.order_by(Evidence.created_at.desc())
 
     # 获取数据
     query = query.offset(skip).limit(limit)

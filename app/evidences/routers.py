@@ -31,8 +31,10 @@ async def read_evidences(
     case_id: Optional[int] = None,
     search: Optional[str] = None,
     evidence_ids: Optional[List[int]] = Query(None),
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
 ):
-    """获取证据列表"""
+    """获取证据列表，支持动态排序"""
     if evidence_ids:
         # 如果提供了evidence_ids，直接根据ID获取
         evidences = []
@@ -45,9 +47,10 @@ async def read_evidences(
             pagination=Pagination(total=len(evidences), page=1, size=len(evidences), pages=1)
         )
     else:
-        # 原有的分页查询逻辑
+        # 原有的分页查询逻辑，支持排序
         evidences, total = await evidence_service.get_multi_with_count(
-            db, skip=skip, limit=limit, case_id=case_id, search=search
+            db, skip=skip, limit=limit, case_id=case_id, search=search,
+            sort_by=sort_by, sort_order=sort_order
         )
         return ListResponse(
             data=evidences,

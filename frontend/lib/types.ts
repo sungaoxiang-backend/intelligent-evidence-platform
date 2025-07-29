@@ -102,6 +102,7 @@ export interface ApiResponse<T> {
   data: T
   message?: string
   total?: number
+  pagination?: any
 }
 
 // 分页参数
