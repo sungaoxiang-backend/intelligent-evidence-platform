@@ -89,11 +89,6 @@ const getStatusText = (status: string) => {
 const groupEvidence = (evidenceList: any[]) => {
   const groupMap: Record<string, any[]> = {};
   evidenceList.forEach(e => {
-    // 过滤掉微信聊天记录，因为它们在联合分析页面处理
-    if (e.classification_category === "微信聊天记录") {
-      return;
-    }
-    
     // 优先使用AI分类结果，如果没有则使用evidence_type，都没有则归类为'其他'
     let type = e.classification_category || e.evidence_type || '其他';
     
@@ -146,8 +141,8 @@ function EvidenceGalleryContent({
 
   const evidenceList = evidenceData?.data || []
   
-  // 过滤掉微信聊天记录，因为它们在联合分析页面处理
-  const filteredEvidenceList = evidenceList.filter((e: any) => e.classification_category !== "微信聊天记录")
+  // 使用所有证据，不进行筛选
+  const filteredEvidenceList = evidenceList
   
   const groupMap = groupEvidence(filteredEvidenceList)
   const groupKeys = Object.keys(groupMap)
@@ -786,8 +781,8 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   )
   const evidenceList = evidenceData?.data || []
 
-  // 过滤掉微信聊天记录，因为它们在联合分析页面处理
-  const filteredEvidenceList = evidenceList.filter((e: any) => e.classification_category !== "微信聊天记录")
+  // 使用所有证据，不进行筛选
+  const filteredEvidenceList = evidenceList
 
   // 计算特征完整率和证据完备率
   const featureCompleteCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e)).length
@@ -976,8 +971,8 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">独立证据分析</h1>
-          <p className="text-muted-foreground mt-2">智能证据处理</p>
+          <h1 className="text-3xl font-bold text-foreground">证据分析</h1>
+          <p className="text-muted-foreground mt-2">智能证据处理与分类</p>
         </div>
         <div className="flex gap-3 items-center ml-auto">
           <Button 
@@ -1236,7 +1231,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
                 {filteredEvidenceList.length}
               </div>
               <div className="text-xs text-muted-foreground font-medium">证据总数</div>
-              <div className="text-xs text-muted-foreground mt-0.5">已上传的证据文件总数（不含微信聊天记录）</div>
+              <div className="text-xs text-muted-foreground mt-0.5">已上传的证据文件总数</div>
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-gray-200/30 dark:border-gray-800/30">
               <div className="text-xl font-bold text-gray-600 dark:text-gray-400">
