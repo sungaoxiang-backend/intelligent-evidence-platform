@@ -41,17 +41,7 @@ const casesFetcher = async ([key]: [string]) => {
   return res.data.map((c: any) => ({ id: c.id, title: c.title })) || []
 }
 
-// 判断特征提取是否完整
-const isFeatureComplete = (evidence: any) => {
-  const features = evidence.evidence_features || [];
-  if (features.length === 0) return false;
-  
-  const completedFeatures = features.filter((f: any) => 
-    f.slot_value && f.slot_value !== "未知" && f.slot_value.trim() !== ""
-  );
-  
-  return completedFeatures.length === features.length;
-};
+
 
 // 获取状态颜色
 const getStatusColor = (status: string) => {
@@ -66,6 +56,37 @@ const getStatusColor = (status: string) => {
       return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
     default:
       return "bg-muted text-muted-foreground";
+  }
+};
+
+// 获取特征项的颜色样式
+const getFeatureColor = (slot: any) => {
+  const slotRequired = slot.slot_required ?? true; // 默认为true
+  const slotValue = slot.slot_value || "";
+  const hasValue = slotValue !== "未知" && slotValue.trim() !== "";
+  
+  if (slotRequired) {
+    // required = true
+    if (hasValue) {
+      return {
+        container: "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30",
+        text: "text-green-700 dark:text-green-400",
+        input: "border-green-300 focus:border-green-500"
+      };
+    } else {
+      return {
+        container: "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30",
+        text: "text-red-700 dark:text-red-400",
+        input: "border-red-300 focus:border-red-500"
+      };
+    }
+  } else {
+    // required = false
+    return {
+      container: "bg-gray-50 border-gray-200 dark:bg-gray-900/10 dark:border-gray-800/30",
+      text: "text-gray-700 dark:text-gray-400",
+      input: "border-gray-300 focus:border-gray-500"
+    };
   }
 };
 
@@ -246,7 +267,10 @@ function EvidenceGalleryContent({
             <ScrollArea className="h-28">
               <div className="space-y-1">
                 <button
-                  onClick={() => setActiveCategory('全部')}
+                  onClick={() => {
+                    setActiveCategory('全部')
+                    setSelectedIds([]) // 清空选中的证据ID
+                  }}
                   className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${activeCategory === '全部' ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
                 >
                   <div className="flex items-center justify-between">
@@ -257,7 +281,10 @@ function EvidenceGalleryContent({
                 {groupKeys.map(cat => (
                   <button
                     key={cat}
-                    onClick={() => setActiveCategory(cat)}
+                    onClick={() => {
+                      setActiveCategory(cat)
+                      setSelectedIds([]) // 清空选中的证据ID
+                    }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${activeCategory === cat ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
                   >
                     <div className="flex items-center justify-between">
@@ -364,10 +391,10 @@ function EvidenceGalleryContent({
                         {/* 特征提取完整度指示器 */}
                         {evidence.evidence_features && evidence.evidence_features.length > 0 && (
                           <Badge 
-                            className={`${isFeatureComplete(evidence) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                            className={`${evidence.features_complete ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
                             variant="outline"
                           >
-                            {isFeatureComplete(evidence) ? "特征完整" : "特征不完整"}
+                            {evidence.features_complete ? "特征完整" : "特征不完整"}
                           </Badge>
                         )}
                       </div>
@@ -660,49 +687,48 @@ function EvidenceGalleryContent({
                     <h4 className="font-medium text-foreground text-sm">特征提取结果</h4>
                     {editForm.evidence_features && editForm.evidence_features.length > 0 && (
                       <Badge 
-                        className={`${isFeatureComplete(editForm) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                        className={`${editForm.features_complete ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
                         variant="outline"
                       >
-                        {isFeatureComplete(editForm) ? "特征完整" : "特征不完整"}
+                        {editForm.features_complete ? "特征完整" : "特征不完整"}
                       </Badge>
                     )}
                   </div>
                   <div className="space-y-2">
-                    {(editForm.evidence_features || []).map((slot: any, idx: number) => (
-                      <div key={idx} className={`p-2 rounded-md border space-y-1 ${
-                        slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                          ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30"
-                          : "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30"
-                      }`}>
-                        <div>
-                          <Label className="text-xs">词槽名:</Label>
-                          <span className="text-xs">{slot.slot_name}</span>
-                        </div>
-                        <div>
-                          <Label className="text-xs">词槽值:</Label>
-                          {editing ? (
-                            <Input
-                              value={slot.slot_value}
-                              onChange={e => {
-                                const newFeatures = [...editForm.evidence_features]
-                                newFeatures[idx].slot_value = e.target.value
-                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                              }}
-                              className={slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "" 
-                                ? "border-green-300 focus:border-green-500" 
-                                : "border-red-300 focus:border-red-500"
-                              }
-                            />
-                          ) : (
-                            <span className={`text-xs font-medium ${
-                              slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                                ? "text-green-700 dark:text-green-400"
-                                : "text-red-700 dark:text-red-400"
-                            }`}>
-                              {slot.slot_value}
-                            </span>
-                          )}
-                        </div>
+                    {(editForm.evidence_features || []).map((slot: any, idx: number) => {
+                      const colors = getFeatureColor(slot)
+                      return (
+                        <div key={idx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <Label className="text-xs">词槽名:</Label>
+                              <span className="text-xs">{slot.slot_name}</span>
+                            </div>
+                            <div>
+                              <Label className="text-xs">必需:</Label>
+                              <span className={`text-xs font-medium ${slot.slot_required ? 'text-red-600' : 'text-gray-600'}`}>
+                                {slot.slot_required ? '是' : '否'}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs">词槽值:</Label>
+                            {editing ? (
+                              <Input
+                                value={slot.slot_value}
+                                onChange={e => {
+                                  const newFeatures = [...editForm.evidence_features]
+                                  newFeatures[idx].slot_value = e.target.value
+                                  setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                }}
+                                className={colors.input}
+                              />
+                            ) : (
+                              <span className={`text-xs font-medium ${colors.text}`}>
+                                {slot.slot_value}
+                              </span>
+                            )}
+                          </div>
                         <div>
                           <Label className="text-xs">置信度:</Label>
                           {editing ? (
@@ -743,7 +769,7 @@ function EvidenceGalleryContent({
                           )}
                         </div>
                       </div>
-                    ))}
+                    )})}
                     <div>
                       <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
                       <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
@@ -871,8 +897,8 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   }, [selectedEvidence, filteredEvidenceList]);
 
   // 计算特征完整率和证据完备率
-  const featureCompleteCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e)).length
-  const featureCompleteReviewedCount = filteredEvidenceList.filter((e: any) => isFeatureComplete(e) && e.evidence_status === "checked").length
+  const featureCompleteCount = filteredEvidenceList.filter((e: any) => e.features_complete).length
+  const featureCompleteReviewedCount = filteredEvidenceList.filter((e: any) => e.features_complete && e.evidence_status === "checked").length
   
   const featureCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteCount / filteredEvidenceList.length) * 100) : 0
   const evidenceCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteReviewedCount / filteredEvidenceList.length) * 100) : 0
@@ -982,6 +1008,10 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       };
       if (Array.isArray(editForm.evidence_features)) {
         payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
+          slot_name: slot.slot_name,
+          slot_desc: slot.slot_desc || slot.slot_name,
+          slot_value_type: slot.slot_value_type || "string",
+          slot_required: slot.slot_required !== undefined ? slot.slot_required : true,
           slot_value: slot.slot_value,
           confidence: slot.confidence,
           reasoning: slot.reasoning
@@ -1131,7 +1161,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
             <div className="max-h-[400px] overflow-y-auto border rounded-lg p-4">
               <div className="space-y-2">
                 {evidenceList
-                  .filter((e: any) => isFeatureComplete(e) && e.evidence_status !== "checked")
+                  .filter((e: any) => e.features_complete && e.evidence_status !== "checked")
                   .map((evidence: any) => {
                     const isSelected = reviewEvidenceIds.includes(evidence.id);
                     return (
@@ -1183,10 +1213,10 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
                               </Badge>
                               {evidence.evidence_features && evidence.evidence_features.length > 0 && (
                                 <Badge 
-                                  className={`${isFeatureComplete(evidence) ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs`}
+                                  className={`${evidence.features_complete ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs`}
                                   variant="outline"
                                 >
-                                  {isFeatureComplete(evidence) ? "特征完整" : "特征不完整"}
+                                  {evidence.features_complete ? "特征完整" : "特征不完整"}
                                 </Badge>
                               )}
                             </div>
@@ -1197,7 +1227,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
                   })}
               </div>
               
-              {evidenceList.filter((e: any) => isFeatureComplete(e) && e.evidence_status !== "checked").length === 0 && (
+              {evidenceList.filter((e: any) => e.features_complete && e.evidence_status !== "checked").length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>暂无待审核的证据</p>
@@ -1328,14 +1358,14 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-orange-200/30 dark:border-orange-800/30">
               <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                {filteredEvidenceList.filter((e: any) => e.evidence_status === "features_extracted").length}
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "features_extracted" && e.features_complete).length}
               </div>
               <div className="text-xs text-muted-foreground font-medium">待审核</div>
               <div className="text-xs text-muted-foreground mt-0.5">AI已处理，等待人工审核</div>
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
               <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                {filteredEvidenceList.filter((e: any) => e.evidence_status === "checked").length}
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "checked" && e.features_complete).length}
               </div>
               <div className="text-xs text-muted-foreground font-medium">已审核</div>
               <div className="text-xs text-muted-foreground mt-0.5">人工审核确认无误</div>

@@ -3,7 +3,7 @@ from optparse import Option
 from tokenize import OP
 from typing import Optional, List, Callable, Awaitable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from app.core.schemas import BaseSchema
 from app.cases.models import CaseType, PartyType, CaseStatus
 from app.users.schemas import User
@@ -88,6 +88,9 @@ class CaseRegistrationResponse(BaseModel):
 class AssociationEvidenceFeature(BaseModel):
     """关联证据特征模型 - 单个slot信息"""
     slot_name: str
+    slot_desc: str
+    slot_value_type: str
+    slot_required: bool
     slot_value: str
     slot_value_from_url: List[str]
     confidence: float
@@ -104,6 +107,22 @@ class AssociationEvidenceFeatureGroup(BaseModel):
     features_extracted_at: datetime
     validation_status: str
     case_id: int
+    
+    @computed_field
+    @property
+    def features_complete(self) -> bool:
+        """判断特征提取是否完整
+        
+        判断标准：所有required=true的slot_value都不是"未知"
+        """
+        if not self.evidence_features:
+            return False
+        
+        for feature in self.evidence_features:
+            if feature.slot_required and feature.slot_value == "未知":
+                return False
+        
+        return True
 
 
 class AssociationEvidenceFeatureUpdateRequest(BaseModel):

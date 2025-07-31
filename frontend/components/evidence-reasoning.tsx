@@ -33,21 +33,41 @@ const evidenceFetcher = async ([key, evidenceIds]: [string, number[]]) => {
 }
 
 // 判断特征组是否完整（基于特征组的所有特征项）
-const isFeatureGroupComplete = (evidenceFeatures: any[]) => {
-  if (evidenceFeatures.length === 0) return false;
+
+
+// 获取特征项的颜色样式
+const getFeatureColor = (slot: any) => {
+  const slotRequired = slot.slot_required ?? true; // 默认为true
+  const slotValue = slot.slot_value || "";
+  const hasValue = slotValue !== "未知" && slotValue.trim() !== "";
   
-  // 检查所有特征项的slot_value是否都不是"未知"
-  const allFeaturesComplete = evidenceFeatures.every((f: any) => 
-    f.slot_value && f.slot_value !== "未知" && f.slot_value.trim() !== ""
-  );
-  
-  return allFeaturesComplete;
+  if (slotRequired) {
+    // required = true
+    if (hasValue) {
+      return {
+        container: "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30",
+        text: "text-green-700 dark:text-green-400",
+        input: "border-green-300 focus:border-green-500"
+      };
+    } else {
+      return {
+        container: "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30",
+        text: "text-red-700 dark:text-red-400",
+        input: "border-red-300 focus:border-red-500"
+      };
+    }
+  } else {
+    // required = false
+    return {
+      container: "bg-gray-50 border-gray-200 dark:bg-gray-900/10 dark:border-gray-800/30",
+      text: "text-gray-700 dark:text-gray-400",
+      input: "border-gray-300 focus:border-gray-500"
+    };
+  }
 };
 
 // 判断单个特征项是否完整
-const isFeatureComplete = (slot: any) => {
-  return slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "";
-};
+
 
 
 
@@ -269,6 +289,7 @@ function EvidenceReasoningContent({
                     onClick={() => {
                       setSelectedGroup('全部证据')
                       setSelectedEvidence(null)
+                      setSelectedEvidenceIds([]) // 清空选中的证据ID
                       // 分组选择不再自动设置选中状态，让用户手动选择
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${selectedGroup === '全部证据' ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
@@ -284,6 +305,7 @@ function EvidenceReasoningContent({
                     onClick={() => {
                       setSelectedGroup(groupName)
                       setSelectedEvidence(null)
+                      setSelectedEvidenceIds([]) // 清空选中的证据ID
                       // 分组选择不再自动设置选中状态，让用户手动选择
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${selectedGroup === groupName ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
@@ -465,28 +487,8 @@ function EvidenceReasoningContent({
       {/* 右栏：特征标注 */}
       <Card className="col-span-3 card-shadow h-full">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center justify-between">
+          <CardTitle className="text-base">
             特征提取结果
-            {selectedFeatureGroup && selectedGroup !== '全部证据' && selectedFeatureGroup.evidence_features && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditing(true);
-                  setEditForm({
-                    id: selectedFeatureGroup.id,
-                    slot_group_name: selectedFeatureGroup.slot_group_name,
-                    evidence_feature_status: selectedFeatureGroup.evidence_feature_status,
-                    validation_status: selectedFeatureGroup.validation_status,
-                    evidence_features: selectedFeatureGroup.evidence_features || []
-                  });
-                }}
-                className="text-xs"
-              >
-                <Edit className="h-3 w-3 mr-1" />
-                编辑标注
-              </Button>
-            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 h-full">
@@ -499,19 +501,7 @@ function EvidenceReasoningContent({
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <div className="flex justify-between">
                       <span>验证状态:</span>
-                      {editing ? (
-                        <select
-                          value={editForm.validation_status || 'pending'}
-                          onChange={(e) => setEditForm({ ...editForm, validation_status: e.target.value })}
-                          className="text-xs border border-input bg-background rounded px-2 py-1"
-                        >
-                          <option value="pending">待验证</option>
-                          <option value="valid">已验证</option>
-                          <option value="invalid">无效</option>
-                        </select>
-                      ) : (
-                        <span className="text-foreground">{getStatusText(selectedFeatureGroup.validation_status)}</span>
-                      )}
+                      <span className="text-foreground">{getStatusText(selectedFeatureGroup.validation_status)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>提取时间:</span>
@@ -524,8 +514,8 @@ function EvidenceReasoningContent({
                     </div>
                     <div className="flex justify-between">
                       <span>特征完整性:</span>
-                      <span className={`${isFeatureGroupComplete(selectedFeatureGroup.evidence_features || []) ? 'text-green-600' : 'text-red-600'}`}>
-                        {isFeatureGroupComplete(selectedFeatureGroup.evidence_features || []) ? '完整' : '不完整'}
+                      <span className={`${selectedFeatureGroup.features_complete ? 'text-green-600' : 'text-red-600'}`}>
+                        {selectedFeatureGroup.features_complete ? '完整' : '不完整'}
                       </span>
                     </div>
                   </div>
@@ -534,18 +524,22 @@ function EvidenceReasoningContent({
               
               {((editing ? editForm.evidence_features : allSlots) || []).length > 0 ? (
                 (editing ? editForm.evidence_features : allSlots || []).map((slot: any, index: number) => {
-                  // 对于单个特征项，使用isFeatureComplete函数
                   const isSelected = selectedSlot?.slot_name === slot.slot_name
+                  const colors = getFeatureColor(slot)
                   
                   return (
-                    <div key={index} className={`p-2 rounded-md border space-y-1 ${
-                      slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                        ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30"
-                        : "bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/30"
-                    }`}>
-                      <div>
-                        <Label className="text-xs">词槽名:</Label>
-                        <span className="text-xs">{slot.slot_name}</span>
+                    <div key={index} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <Label className="text-xs">词槽名:</Label>
+                          <span className="text-xs">{slot.slot_name}</span>
+                        </div>
+                        <div>
+                          <Label className="text-xs">必需:</Label>
+                          <span className={`text-xs font-medium ${slot.slot_required ? 'text-red-600' : 'text-gray-600'}`}>
+                            {slot.slot_required ? '是' : '否'}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <Label className="text-xs">词槽值:</Label>
@@ -557,17 +551,10 @@ function EvidenceReasoningContent({
                               newFeatures[index].slot_value = e.target.value;
                               setEditForm({ ...editForm, evidence_features: newFeatures });
                             }}
-                            className={slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== "" 
-                              ? "border-green-300 focus:border-green-500" 
-                              : "border-red-300 focus:border-red-500"
-                            }
+                            className={colors.input}
                           />
                         ) : (
-                          <span className={`text-xs font-medium ${
-                            slot.slot_value && slot.slot_value !== "未知" && slot.slot_value.trim() !== ""
-                              ? "text-green-700 dark:text-green-400"
-                              : "text-red-700 dark:text-red-400"
-                          }`}>
+                          <span className={`text-xs font-medium ${colors.text}`}>
                             {slot.slot_value || "未知"}
                           </span>
                         )}
@@ -645,7 +632,13 @@ function EvidenceReasoningContent({
                     <Button variant="outline" onClick={() => {
                       console.log('编辑按钮被点击')
                       console.log('selectedFeatureGroup:', selectedFeatureGroup)
-                      setEditing(true)
+                      setEditing(true);
+                      setEditForm({
+                        id: selectedFeatureGroup.id,
+                        slot_group_name: selectedFeatureGroup.slot_group_name,
+                        evidence_feature_status: selectedFeatureGroup.evidence_feature_status,
+                        evidence_features: selectedFeatureGroup.evidence_features || []
+                      });
                     }}>编辑标注</Button>
                   )}
                 </div>
@@ -756,6 +749,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         // 如果当前分组不存在了，重置为全部证据
         setSelectedGroup('全部证据')
         setSelectedSlot(null)
+        setSelectedEvidenceIds([]) // 清空选中的证据ID
       }
     }
   }, [caseData, selectedGroup])
@@ -839,11 +833,19 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
       // 调用API保存标注信息
       console.log('保存特征组:', editForm)
       
-      // 构建更新请求数据
+      // 构建更新请求数据，确保包含所有必需字段
       const updateData = {
         slot_group_name: editForm.slot_group_name,
-        validation_status: editForm.validation_status,
-        evidence_features: editForm.evidence_features
+        evidence_features: editForm.evidence_features.map((slot: any) => ({
+          slot_name: slot.slot_name,
+          slot_desc: slot.slot_desc || slot.slot_name,
+          slot_value_type: slot.slot_value_type || "string",
+          slot_required: slot.slot_required !== undefined ? slot.slot_required : true,
+          slot_value: slot.slot_value,
+          slot_value_from_url: slot.slot_value_from_url || [],
+          confidence: slot.confidence,
+          reasoning: slot.reasoning
+        }))
       }
       
       console.log('更新数据:', updateData)
@@ -902,9 +904,24 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
       });
       setSelectedEvidenceIds([]);
       
-      // 重新获取案件数据以更新显示，保持选中状态
-      await mutate(['case', caseId.toString()])
-      await mutate(['evidences', caseId.toString()])
+      // 重新获取所有相关数据以更新显示
+      await Promise.all([
+        mutate(['case', caseId.toString()]),
+        mutate(['evidences', caseId.toString()]),
+        // 更新EvidenceReasoningContent中的微信聊天记录数据
+        mutate(['evidences', caseId])
+      ]);
+      
+      // 如果当前选中的证据被删除了，清空选中状态
+      if (selectedEvidence && selectedEvidenceIds.includes(selectedEvidence.id)) {
+        setSelectedEvidence(null);
+      }
+      
+      // 清空选中的分组，因为可能相关的特征组也被删除了
+      if (selectedGroup !== '全部证据') {
+        setSelectedGroup('全部证据');
+        setSelectedSlot(null);
+      }
     } catch (error: any) {
       toast({ 
         title: "删除失败", 
@@ -1066,16 +1083,16 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                   {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.validation_status === "pending" || !isFeatureGroupComplete(f.evidence_features || [])
+                    f.features_complete && f.validation_status === "pending"
                   ).length || 0}
                 </div>
-                <div className="text-xs text-muted-foreground font-medium">待验证</div>
-                <div className="text-xs text-muted-foreground mt-0.5">等待人工验证确认</div>
+                <div className="text-xs text-muted-foreground font-medium">待审核</div>
+                <div className="text-xs text-muted-foreground mt-0.5">等待人工审核确认</div>
               </div>
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-green-600 dark:text-green-400">
                   {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.validation_status === "valid" && isFeatureGroupComplete(f.evidence_features || [])
+                    f.validation_status === "valid" && f.features_complete
                   ).length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">已验证</div>
@@ -1227,7 +1244,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               <div className="space-y-2">
                 {caseData?.association_evidence_features
                   ?.filter((feature: any) => 
-                    isFeatureGroupComplete(feature.evidence_features || []) && 
+                    feature.features_complete && 
                     feature.validation_status !== "valid"
                   )
                   .map((feature: any) => {
@@ -1276,13 +1293,13 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                                 {getStatusText(feature.validation_status)}
                               </Badge>
                               <Badge 
-                                className={isFeatureGroupComplete(feature.evidence_features || []) 
+                                className={feature.features_complete 
                                   ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" 
                                   : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
                                 } 
                                 variant="outline"
                               >
-                                {isFeatureGroupComplete(feature.evidence_features || []) ? '特征完整' : '特征不完整'}
+                                {feature.features_complete ? '特征完整' : '特征不完整'}
                               </Badge>
                             </div>
                           </div>
@@ -1294,7 +1311,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                 {/* 空状态显示 */}
                 {caseData?.association_evidence_features
                   ?.filter((feature: any) => 
-                    isFeatureGroupComplete(feature.evidence_features || []) && 
+                    feature.features_complete && 
                     feature.validation_status !== "valid"
                   ).length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">

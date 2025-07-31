@@ -1,9 +1,10 @@
 import json
 from typing import Any, Optional, List, Dict
 from datetime import datetime
-from pydantic import BaseModel, model_validator, Field
+from pydantic import BaseModel, model_validator, Field, computed_field
 from app.cases.schemas import Case
 from app.evidences.models import EvidenceStatus
+from app.agentic.agents.evidence_extractor_v2 import SlotExtraction
     
     
 class AutoProcessRequest(BaseModel):
@@ -14,9 +15,8 @@ class AutoProcessRequest(BaseModel):
 
 class EvidenceEditRequest(BaseModel):
     classification_category: Optional[str] = Field(None, description="证据分类类型")
-    classification_confidence: Optional[float] = Field(None, description="证据分类置信度")
     classification_reasoning: Optional[str] = Field(None, description="证据分类推理过程")    
-    evidence_features: Optional[List[Dict]] = Field(None, description="证据提取特征列表")
+    evidence_features: Optional[List[SlotExtraction]] = Field(None, description="证据提取特征列表")
 
 
 class BatchCheckEvidenceRequest(BaseModel):
@@ -46,10 +46,24 @@ class EvidenceResponse(BaseModel):
     classification_reasoning: Optional[str] = Field(None, description="证据分类推理过程")
     classified_at: Optional[datetime] = Field(None, description="证据最近分类时间")
     
-    evidence_features: Optional[List[Dict]] = Field(None, description="证据提取特征列表")
+    evidence_features: Optional[List[SlotExtraction]] = Field(None, description="证据提取特征列表")
     features_extracted_at: Optional[datetime] = Field(None, description="证据最近特征提取时间")
     
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
     
-    
+    @computed_field
+    @property
+    def features_complete(self) -> bool:
+        """判断特征提取是否完整
+        
+        判断标准：所有required=true的slot_value都不是"未知"
+        """
+        if not self.evidence_features:
+            return False
+        
+        for feature in self.evidence_features:
+            if feature.slot_required and feature.slot_value == "未知":
+                return False
+        
+        return True

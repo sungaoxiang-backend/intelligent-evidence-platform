@@ -235,10 +235,7 @@ async def auto_process(
         })
     
     association_features_extractor = AssociationFeaturesExtractor()
-    message_parts = ["请从以下证据图片中提取关键信息:"]
-    for i, e in enumerate(evidences):
-        message_parts.append(f"\n{i+1}. url: {e.file_url}")
-    message = "\n".join(message_parts)
+   
     
     # 发送AI处理进度
     if send_progress:
@@ -249,7 +246,7 @@ async def auto_process(
         })
     
     run_response: RunResponse = await asyncio.wait_for(
-        association_features_extractor.agent.arun(message, images=[Image(url=ev.file_url) for ev in evidences]),
+        association_features_extractor.arun(image_urls=[ev.file_url for ev in evidences]),
         timeout=180.0
     )
     
@@ -288,6 +285,9 @@ async def auto_process(
             # 创建处理后的slot数据，将URL转换为ID字符串
             processed_slot = {
                 "slot_name": slot.slot_name,
+                "slot_desc": slot.slot_desc,
+                "slot_value_type": slot.slot_value_type,
+                "slot_required": slot.slot_required,
                 "slot_value": slot.slot_value,
                 "slot_value_from_url": slot_evidence_ids,
                 "confidence": slot.confidence,
