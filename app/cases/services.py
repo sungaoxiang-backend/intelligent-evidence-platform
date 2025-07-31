@@ -267,20 +267,30 @@ async def auto_process(
         slot_group_name = res.slot_group_name
         slot_extraction = res.slot_extraction
         
-        # 收集该result涉及的所有证据ID
+        # 收集该result涉及的所有证据ID，并按照image_sequence_info排序
         all_evidence_ids = set()
         processed_evidence_features = []
+        
+        # 创建URL到证据ID的映射
+        url_to_evidence_id = {}
+        for evidence in evidences:
+            url_to_evidence_id[evidence.file_url] = evidence.id
+        
+        # 按照image_sequence_info中的sequence_number排序证据ID
+        sorted_evidence_ids = []
+        for image_info in res.image_sequence_info:
+            url = unquote(image_info.url)
+            if url in url_to_evidence_id:
+                sorted_evidence_ids.append(url_to_evidence_id[url])
         
         for slot in slot_extraction:
             slot_value_from_url = [unquote(url) for url in slot.slot_value_from_url]
             # 找到对应的证据ID
             slot_evidence_ids = []
             for url in slot_value_from_url:
-                for evidence in evidences:
-                    if evidence.file_url == url:
-                        slot_evidence_ids.append(str(evidence.id))  # 转换为字符串
-                        all_evidence_ids.add(evidence.id)
-                        break
+                if url in url_to_evidence_id:
+                    slot_evidence_ids.append(str(url_to_evidence_id[url]))  # 转换为字符串
+                    all_evidence_ids.add(url_to_evidence_id[url])
             
             # 创建处理后的slot数据，将URL转换为ID字符串
             processed_slot = {
@@ -375,7 +385,7 @@ async def auto_process(
         
         if existing_feature:
             # 更新现有记录
-            existing_feature.association_evidence_ids = list(all_evidence_ids)
+            existing_feature.association_evidence_ids = sorted_evidence_ids
             existing_feature.evidence_features = processed_evidence_features
             existing_feature.features_extracted_at = datetime.now()
             existing_feature.validation_status = "pending"  # 重置验证状态
@@ -385,7 +395,7 @@ async def auto_process(
             association_evidence_feature = AssociationEvidenceFeature(
                 case_id=case_id,
                 slot_group_name=normalized_slot_group_name,
-                association_evidence_ids=list(all_evidence_ids),
+                association_evidence_ids=sorted_evidence_ids,
                 evidence_features=processed_evidence_features,
                 features_extracted_at=datetime.now()
             )

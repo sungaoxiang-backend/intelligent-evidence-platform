@@ -483,11 +483,19 @@ async def auto_process(
                     for evidence in evidences:
                         ev_url = unquote(evidence.file_url)
                         if ev_url == res_url:
-                            evidence.classification_category = res.evidence_type
-                            evidence.classification_confidence = res.confidence
-                            evidence.classification_reasoning = res.reasoning
-                            evidence.classified_at = datetime.now()
-                            evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
+                            # 检查分类结果是否有效
+                            if res.evidence_type and res.evidence_type.strip() and res.confidence > 0:
+                                # 只有有效的分类结果才更新状态
+                                evidence.classification_category = res.evidence_type
+                                evidence.classification_confidence = res.confidence
+                                evidence.classification_reasoning = res.reasoning
+                                evidence.classified_at = datetime.now()
+                                evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
+                                logger.info(f"有效分类结果: {evidence.file_name} -> {res.evidence_type} (置信度: {res.confidence})")
+                            else:
+                                # 无效的分类结果，不更新状态
+                                logger.warning(f"无效分类结果: {evidence.file_name} -> evidence_type='{res.evidence_type}', confidence={res.confidence}")
+                                # 保持原有状态，不更新为已分类
                             db.add(evidence)
                             break
                 await db.commit()
@@ -527,11 +535,15 @@ async def auto_process(
             llm_evidences = []
             
             for evidence in evidences:
-                if evidence.classification_category in ocr_supported_types:
-                    ocr_evidences.append(evidence)
+                # 只有已分类且有效的证据才进行特征提取
+                if evidence.evidence_status == EvidenceStatus.CLASSIFIED.value and evidence.classification_category:
+                    if evidence.classification_category in ocr_supported_types:
+                        ocr_evidences.append(evidence)
+                    else:
+                        if evidence.classification_category != "微信聊天记录":  # 微信聊天记录不使用独立证据分析agent,而是另外的agent
+                            llm_evidences.append(evidence)
                 else:
-                    if evidence.classification_category != "微信聊天记录":  # 微信聊天记录不使用独立证据分析agent,而是另外的agent
-                        llm_evidences.append(evidence)
+                    logger.warning(f"跳过特征提取: {evidence.file_name} - 状态: {evidence.evidence_status}, 分类: {evidence.classification_category}")
             
             # 处理OCR支持的证据类型
             if ocr_evidences:

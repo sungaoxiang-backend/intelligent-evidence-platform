@@ -29,7 +29,6 @@ class ResultItem(BaseModel):
     """单个词槽提取结果"""
     slot_group_name: str
     image_sequence_info: List[ImageSequenceInfo]
-    slot_extraction: List[SlotExtraction]
    
 
 class AssociationFeaturesExtractionResults(BaseModel):
@@ -58,10 +57,10 @@ class AssociationFeaturesExtractor:
         self.agent = Agent(
             name="关联特征提取专家",
             model=openai_image_model,
-            session_state={
-                "target_slots_to_extract": target_slots_to_extract
-            },
-            add_state_in_messages=True,
+            # session_state={
+            #     "target_slots_to_extract": target_slots_to_extract
+            # },
+            # add_state_in_messages=True,
             instructions=self.build_instructions(),
             response_model=AssociationFeaturesExtractionResults,
             show_tool_calls=True,
@@ -70,64 +69,14 @@ class AssociationFeaturesExtractor:
     
     def build_instructions(self):
         return """
-        <Back Story>
-        你是一名专业的证据处理专家，你非常熟悉且擅长处理债务纠纷中的证据，尤其是微信(WeChat)聊天记录类型的证据。你能很精准的将批量的聊天记录进行分组、排序、分析上下文和关联关系，进而提取出关键的信息。
-        </Back Story>
-        
-        <Enhanced Sorting Guide>
-        排序必须严格遵循以下优先级：
-        1. 时间戳优先：提取图片中的日期
-        2. 对话连续性：通过以下特征判断连续性：
-        - 最后一条消息的发送者与下张图片第一条消息接收者相同
-        - 相同用户连续发送的消息
-        - 转账记录与确认消息的先后关系
-        3. 视觉连续性：
-        - 顶部备注名相同的图片组
-        - 相似聊天背景的图片组
-        - 消息气泡切割位置衔接
-        </Enhanced Sorting Guide>
-    
-        <Target Slots Extraction Guide>
-        构建结构化的过程本质就是对{target_slots_to_extract}的标注补充。
-        `target_slots_to_extract`中每个item的说明:
-        1. `slot_name`: 目标词槽的名称
-        2. `slot_desc`: 目标词槽的描述，也是你提取词槽的依据和指南
-        3. `slot_value_type`: 目标词槽的值的标准JSON类型
-        4. `slot_required`: 原样输出，不要修改
-        
-        标注结果说明:
-        1. `slot_group_name`: 根据某个`微信备注名`分组的名称。
-        2. `image_sequence_info`: 某个分组的图片序列信息，每个item包含`url`和`sequence_number`,其中`sequence_number`表示图片在上下文中的顺序，从1开始, 作用域是某个具体分组内而非当前处理的整个图片批次。
-        3. `slot_extraction.slot_value`: 提取到的具体的目标词槽的对应的词槽值。
-        4. `slot_extraction.slot_value_from_url`: 提取到的词槽值的来源图片URL列表。
-        5. `slot_extraction.confidence`: 提取到的具体的目标词槽的对应的词槽值的置信度。
-        6. `slot_extraction.reasoning`: 提取到的具体的目标词槽的对应的词槽值的提取理由。
-        
-        
-        特殊说明:
-        1. 债权人和债务人：`债务人`和`债权人`的区分，通常是左侧为`债务人`，右侧为`债权人`。
-        2. 欠款合意：为真的情况是：债务人主动承认向债权人欠款，或者债权人主动向债务人索要欠款且债务人同意的合意。其余情况为假。
-        3. 欠款的金额：通常是数字，表示欠款或还款的金额。有时候你需要关注其中是否存在一定的需要计算的逻辑。
-        4. 约定还款日期：通常是文字描述，表示欠款或还款的日期。
-        5. 约定还款利息：通常是数字，表示欠款或还款的利息。
-        </Target Slots Extraction Guide>
-        
-        <Task Planner>
-        1. 分组：精准识别图片顶部的`微信备注名`（手机端），也可能来自左上角（pc端），并根据`微信备注名`信息将图片进行分组。
-        2. 排序: 使用<Enhanced Sorting Guide>规则，为每组生成从1开始的连续序号（url和sequence_number）。
-        4. 提取信息: 根据排序后的图片，以及<Target Slots Extraction Guide>提取指南，充分分析上图片内容、下文和关联关系，提取出目标词槽信息。
-        5. 输出: 构建结构化数据并返回输出。
-        </Task Planner>
-        
-        <Notes>
-        1. 注意永远不要提取和输出`target_slots_to_extract`中没有标注的词槽信息。
-        2. 注意即便是没有提取到目标词槽信息，也要将该词槽对应的`slot_value`值设置为`未知`，并说明原因。
-        3. 注意输出的`slot_value`中永远不要有任何不应该存在于其中的内容，比如`reasoning`,`slot_name`,`confidence`等。
-        4. 注意始终确保使用中文输出`reasoning`。
-        </Notes>
+        请你对接收的图片进行关联的分析, 识别`微信备注名`分组并输出其顺序。
+        1. `slot_group_name` 是图片的关联分组名称
+        2. `image_sequence_info` 是图片的关联分组信息
+        3. `image_sequence_info.url` 是图片的URL
+        4. `image_sequence_info.sequence_number` 是图片在上下文中的顺序，从1开始
         """
     async def arun(self, image_urls: List[str]) -> AssociationFeaturesExtractionResults:
-        message_parts = ["请从以下证据图片中提取关键信息:"]
+        message_parts = ["请分析、分组、排序以下图片:"]
         for i, image_url in enumerate(image_urls):
             message_parts.append(f"\n{i+1}. 图片: {image_url}")
         message = "\n".join(message_parts)
@@ -171,7 +120,7 @@ if __name__ == '__main__':
     ]
     
     extractor = AssociationFeaturesExtractor()
-    message_parts = ["请从以下证据图片中提取关键信息:"]
+    message_parts = ["请分析、分组、排序以下图片:"]
     for i, image_url in enumerate(test_images):
         message_parts.append(f"\n{i+1}. 图片: {image_url}")
     message = "\n".join(message_parts)

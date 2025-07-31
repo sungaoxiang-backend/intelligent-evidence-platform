@@ -268,6 +268,14 @@ class EvidenceClassifier:
             show_tool_calls=True,
             debug_mode=True
         )
+        
+    async def arun(self, image_urls: List[str]):
+        message_parts = ["请对以下证据进行分类："]
+        for i, url in enumerate(image_urls):
+            message_parts.append(f"{i+1}. file_url: {url}")
+        messages = "\n".join(message_parts)
+        images = [Image(url=url) for url in image_urls]
+        return await self.agent.arun(message=messages, images=images)
 
 
 if __name__ == '__main__':

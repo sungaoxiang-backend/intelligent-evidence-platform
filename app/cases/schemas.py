@@ -128,6 +128,7 @@ class AssociationEvidenceFeatureGroup(BaseModel):
 class AssociationEvidenceFeatureUpdateRequest(BaseModel):
     """关联证据特征更新请求模型"""
     slot_group_name: Optional[str] = None
+    association_evidence_ids: Optional[List[int]] = None
     evidence_feature_status: Optional[str] = None
     validation_status: Optional[str] = None
     evidence_features: Optional[List[AssociationEvidenceFeature]] = None
