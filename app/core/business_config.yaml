@@ -1,0 +1,847 @@
+# 业务规则配置文件
+# 包含证据类型特征、提取规则、分类阈值等业务配置
+
+evidence_types:
+  微信聊天记录:
+    description: "中国知名社交软件微信(WeChat)的聊天记录的截图"
+    dimension_labels: ["factual_reasoning"]
+    key_text_features: ["对话内容", "转账/收款信息", "语音/图片标识"]
+    key_visual_features: ["用户头像(左右分布)", "顶部微信备注名或左上角微信备注名（取决于移动端还是pc端）", "时间戳", "语音标识气泡", "常规文本气泡(左侧灰色,右侧绿色)"]
+    layout_features: ["典型的即时通讯应用布局"]
+    consider_correlations: true
+    target_slots_to_extract:
+      - slot_name: "债务人微信备注名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "微信聊天中截图中，位于顶部显示的备注名称或昵称"
+      - slot_name: "欠款合意"
+        slot_value_type: "boolean"
+        required: true
+        slot_desc: "聊天中关于欠款、借款的合意内容"
+      - slot_name: "欠款金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "欠款或借款的具体金额数值"
+      - slot_name: "约定还款日期"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "约定的还款日期，格式为YYYY-MM-DD或具体日期描述"
+      - slot_name: "约定还款利息"
+        slot_value_type: "number"
+        required: false
+        slot_desc: "约定的还款利息或利率信息"
+    
+  微信主页:
+    description: "微信个人主页的完整截图。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["昵称", "微信号", "地区", "朋友圈"]
+    key_visual_features: ["个人头像", "`发消息`和`音视频通话`按钮"]
+    layout_features: ["顶部为头像和昵称，下方为功能按钮的布局"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "微信备注名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "微信个人主页显示的备注名称或昵称"
+      - slot_name: "微信号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "微信账号的唯一标识符"
+    
+  微信支付转账电子凭证:
+    description: "微信支付官方出具的转账电子凭证。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["转账电子凭证", "付款方", "收款方", "转账金额", "支付时间"]
+    key_visual_features: ["微信支付Logo", "格式化的凭证布局", "通常有'微信支付'的水印或标识"]
+    layout_features: ["标题为'转账电子凭证'，下方为表格化的详细信息。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "付款方真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "转账凭证中显示的付款方真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "付款方微信号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "付款方的微信账号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[a-zA-Z][a-zA-Z0-9_-]{5,19}$"
+      - slot_name: "收款方真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "转账凭证中显示的收款方真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "收款方微信号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "收款方的微信账号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[a-zA-Z][a-zA-Z0-9_-]{5,19}$"
+      - slot_name: "转账金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "转账的具体金额数值"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+    
+  微信转账页面:
+    description: "微信转账操作界面截图。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["转账金额", "添加转账说明"]
+    key_visual_features: ["橙色或绿色的转账按钮", "金额输入框", "收款人头像和昵称"]
+    layout_features: ["顶部显示收款人，中间是金额，底部是操作按钮。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "债务人微信备注名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "转账页面显示的收款人备注名称或昵称"
+        validation_rules:
+          - type: "string"
+          - minLength: 1
+          - maxLength: 50
+      - slot_name: "债务人脱敏真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "转账页面显示的收款人的真实姓名，脱敏处理的，只显示最后的一个字符"
+        validation_rules:
+          - type: "string"
+          - pattern: "^.*[\\u4e00-\\u9fa5]$"
+      - slot_name: "债务人微信号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "收款人的微信账号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[a-zA-Z][a-zA-Z0-9_-]{5,19}$"
+    
+  短信聊天记录:
+    description: "手机系统原生的短信应用聊天记录截图。"
+    dimension_labels: ["factual_reasoning"]
+    key_text_features: ["短信内容", "发送/接收时间", "发件人手机号或名称"]
+    key_visual_features: ["手机系统UI的短信气泡", "顶部的信号、电量等状态栏图标"]
+    layout_features: ["手机短信应用的典型布局"]
+    consider_correlations: true
+    target_slots_to_extract:
+      - slot_name: "债务人通讯录备注名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "短信中涉及的债务人通讯录备注名，或显示电话号码"
+        validation_rules:
+          - type: "string"
+          - minLength: 1
+          - maxLength: 50
+      - slot_name: "欠款合意"
+        slot_value_type: "boolean"
+        required: true
+        slot_desc: "短信中关于欠款、借款的合意内容"
+        validation_rules:
+          - type: "boolean"
+      - slot_name: "欠款金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "欠款或借款的具体金额数值"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+      - slot_name: "约定还款日期"
+        slot_value_type: "string"
+        required: false
+        group_required: "还款信息"
+        slot_desc: "约定的还款日期，格式为YYYY-MM-DD或具体日期描述"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{4}-\\d{2}-\\d{2}$|^\\d{4}年\\d{1,2}月\\d{1,2}日$"
+      - slot_name: "约定还款利息"
+        slot_value_type: "number"
+        required: false
+        group_required: "还款信息"
+        slot_desc: "约定的还款利息或利率信息"
+        validation_rules:
+          - type: "number"
+          - minimum: 0
+          - maximum: 100
+    group_validation_rules:
+      - group_name: "还款信息"
+        rule_type: "at_least_one"
+        slots: ["约定还款日期", "约定还款利息"]
+        message: "还款日期和利息至少需要填写一个"
+    
+  支付宝转账页面:
+    description: "支付宝转账操作界面截图。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["转账", "收款方账户", "金额"]
+    key_visual_features: ["支付宝Logo", "蓝色的主色调", "'确认付款'按钮"]
+    layout_features: ["支付宝App的典型转账界面布局"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "脱敏手机号码"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "支付宝转账中涉及的手机号码，脱敏处理的，只显示两端的一些字符"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{3}\\*{4}\\d{4}$"
+      - slot_name: "债务人昵称和真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "支付宝转账中显示的债务人昵称和真实姓名，它们在同一行，括号分隔，括号内是真名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+    
+  货款欠条:
+    description: "明确因'货款'事由产生的欠条。"
+    dimension_labels: ["factual_reasoning"]
+    key_text_features: ["欠条", "货款", "今欠到", "金额（大写和小写）", "欠款人签名", "日期"]
+    key_visual_features: ["手写或打印的条据", "签名或盖章"]
+    layout_features: ["标准的条据格式，包含标题、正文、落款。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "债权人真名"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "欠条中债权人的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债权人签字名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "欠条中债权人签字的名字"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债权人盖章名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "欠条中债权人盖章的名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "债务人真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "欠条中债务人的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债务人签字名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "欠条中债务人签字的名字"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债务人盖章名字"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "欠条中债务人盖章的名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "欠款金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "欠条中明确的欠款金额"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+      - slot_name: "欠款合意"
+        slot_value_type: "boolean"
+        required: true
+        slot_desc: "欠条中关于欠款的合意内容"
+        validation_rules:
+          - type: "boolean"
+    
+  借款借条:
+    description: "明确为'借款'事由产生的借条。"
+    dimension_labels: ["factual_reasoning"]
+    key_text_features: ["借条", "借款", "今借到", "金额（大写和小写）", "利息", "借款人签名", "日期"]
+    key_visual_features: ["手写或打印的条据", "签名或盖章", "可能包含身份证号码"]
+    layout_features: ["标准的条据格式，包含标题、正文、落款。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "债权人真名"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "借条中债权人的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债权人签字名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "借条中债权人签字的名字"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债权人盖章名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "借条中债权人盖章的名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "债务人真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "借条中债务人的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债务人签字名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "借条中债务人签字的名字"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "债务人盖章名字"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "借条中债务人盖章的名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "欠款金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "借条中明确的借款金额"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+      - slot_name: "欠款合意"
+        slot_value_type: "boolean"
+        required: true
+        slot_desc: "借条中关于借款的合意内容"
+        validation_rules:
+          - type: "boolean"
+    
+  银行转账记录:
+    description: "银行App、网上银行或银行柜台回单的转账记录。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["交易流水号", "付款人账号/户名", "收款人账号/户名", "交易金额", "交易时间"]
+    key_visual_features: ["银行Logo", "表格化的交易详情", "银行回单的特定格式"]
+    layout_features: ["通常是表格或列表形式，清晰列出各项交易信息。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "转账账户"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "银行转账中涉及的银行账户号码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{16,19}$"
+      - slot_name: "转账账户真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "银行转账中账户持有人的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+      - slot_name: "转账金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "银行转账的具体金额"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+    
+  微信转账记录:
+    description: "微信转账记录的快照截图。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["扫码二维码付款", "当前状态", "收款方备注", "转账时间", "转账单号", "财付通"]
+    key_visual_features: ["微信转账的快照记录", "黄色的圆形的钱袋图标"]
+    layout_features: ["转账记录的快照截图", "前进或后退的箭头"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "债务人转账账户微信备注名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "微信转账中账户的备注名称或昵称，通常在转账给...的备注中"
+        validation_rules:
+          - type: "string"
+          - minLength: 1
+          - maxLength: 50
+      - slot_name: "转账金额"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "微信转账的具体金额"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+    
+  增值税发票:
+    description: "国家税务局监制的增值税发票。"
+    dimension_labels: ["factual_reasoning", "identity_authentication"]
+    key_text_features: ["增值税专用/普通发票", "发票代码", "发票号码", "购买方信息", "销售方信息", "金额合计", "税额合计"]
+    key_visual_features: ["发票监制章（红色椭圆章）", "二维码", "标准的表格格式"]
+    layout_features: ["国家统一的发票版式，布局固定。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "购买方真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "增值税发票中购买方的真实名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "购买方纳税人识别号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "购买方的纳税人识别号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{15,20}$"
+      - slot_name: "销售方真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "增值税发票中销售方的真实名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "销售方纳税人识别号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "销售方的纳税人识别号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{15,20}$"
+      - slot_name: "价税合计"
+        slot_value_type: "number"
+        required: true
+        slot_desc: "增值税发票中的价税合计金额"
+        validation_rules:
+          - type: "number"
+          - minimum: 0.01
+          - maximum: 999999.99
+    
+  身份证:
+    description: "中华人民共和国居民身份证。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["中华人民共和国居民身份证", "姓名", "性别", "民族", "出生", "住址", "公民身份号码"]
+    key_visual_features: ["国徽（正面）", "个人头像照片（正面）", "长城图案（背面）", "签发机关（背面）"]
+    layout_features: ["国家标准的身份证正反面布局。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "姓名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上显示的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 10
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "性别"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上显示的性别信息"
+        validation_rules:
+          - type: "string"
+          - enum: ["男", "女"]
+      - slot_name: "民族"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上显示的民族信息"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 10
+      - slot_name: "出生"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上显示的出生日期"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{4}年\\d{1,2}月\\d{1,2}日$"
+      - slot_name: "住址"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上显示的住址信息"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+      - slot_name: "公民身份号码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "身份证上的18位公民身份号码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{17}[\\dXx]$"
+    
+  户籍档案:
+    description: "中华人民共和国居民户口簿。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["居民户口簿", "户主页", "常住人口登记卡", "户号", "姓名", "与户主关系"]
+    key_visual_features: ["公安机关的户口专用章（红色公章）", "特定的表格和栏目"]
+    layout_features: ["户口簿内页的标准格式。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "姓名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上显示的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 10
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "性别"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上显示的性别信息"
+        validation_rules:
+          - type: "string"
+          - enum: ["男", "女"]
+      - slot_name: "民族"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上显示的民族信息"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 10
+      - slot_name: "出生"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上显示的出生日期"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{4}年\\d{1,2}月\\d{1,2}日$"
+      - slot_name: "住址"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上显示的住址信息"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+      - slot_name: "公民身份号码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "户口簿上的18位公民身份号码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{17}[\\dXx]$"
+    
+  公司营业执照:
+    description: "公司或企业的官方营业执照。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["营业执照", "统一社会信用代码", "公司名称", "法定代表人", "成立日期"]
+    key_visual_features: ["国徽图标", "红色印章（市场监督管理局）"]
+    layout_features: ["标准的官方证件布局"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "公司名称"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "营业执照上显示的公司或企业名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "统一社会信用代码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的统一社会信用代码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[0-9A-HJ-NPQRTUWXY]{2}\\d{6}[0-9A-HJ-NPQRTUWXY]{10}$"
+      - slot_name: "法定代表人"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的法定代表人姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "公司类型"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的类型（如有限责任公司、股份有限公司等）"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "住所地"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的注册住所地址"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+    
+  个体工商户营业执照:
+    description: "个体工商户的官方LICENSE。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["个体工商户营业执照", "统一社会信用代码", "经营者姓名", "经营场所"]
+    key_visual_features: ["国徽图标", "红色印章（市场监督管理局）"]
+    layout_features: ["标准的官方证件布局，但标题明确为'个体工商户'。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "经营名称"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户营业执照上显示的经营名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "统一社会信用代码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的统一社会信用代码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[0-9A-HJ-NPQRTUWXY]{2}\\d{6}[0-9A-HJ-NPQRTUWXY]{10}$"
+      - slot_name: "经营类型"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的经营类型"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "经营者姓名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户经营者的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "住所地"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的经营场所地址"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+    
+  公司全国企业公示系统营业执照:
+    description: "国家企业信用信息公示系统（GSXT）网站上关于公司的信息页面截图。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["国家企业信用信息公示系统", "企业信用信息", "统一社会信用代码", "法定代表人"]
+    key_visual_features: ["网站的页眉和页脚", "网页的UI元素（如搜索框、导航栏）"]
+    layout_features: ["网页布局，信息以模块化方式展示。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "公司名称"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公示系统中显示的公司或企业名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "统一社会信用代码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的统一社会信用代码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[0-9A-HJ-NPQRTUWXY]{2}\\d{6}[0-9A-HJ-NPQRTUWXY]{10}$"
+      - slot_name: "法定代表人"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的法定代表人姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "公司类型"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的类型（如有限责任公司、股份有限公司等）"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "住所地"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公司的注册住所地址"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+      - slot_name: "股东名称"
+        slot_value_type: "string"
+        required: false
+        slot_desc: "公司的股东名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 200
+    
+  个体工商户全国企业公示系统营业执照:
+    description: "国家企业信用信息公示系统（GSXT）网站上关于个体工商户的信息页面截图。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["国家企业信用信息公示系统", "个体工商户", "经营者"]
+    key_visual_features: ["网站的页眉和页脚", "网页的UI元素"]
+    layout_features: ["网页布局，信息以模块化方式展示。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "经营名称"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "公示系统中显示的个体工商户经营名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100
+      - slot_name: "统一社会信用代码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的统一社会信用代码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^[0-9A-HJ-NPQRTUWXY]{2}\\d{6}[0-9A-HJ-NPQRTUWXY]{10}$"
+      - slot_name: "经营类型"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的经营类型"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 50
+      - slot_name: "经营者姓名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户经营者的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "住所地"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "个体工商户的经营场所地址"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+    
+  经常居住地证明:
+    description: "由社区、派出所等官方机构出具的用于证明居住事实的文件。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["居住证明", "流动人口信息登记表", "住址", "姓名", "身份证号"]
+    key_visual_features: ["红色公章", "官方机构名称（如派出所、社区居委会）"]
+    layout_features: ["正式的官方文件或表格布局"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "真名"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "居住证明中显示的真实姓名"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 20
+          - pattern: "^[\\u4e00-\\u9fa5]+$"
+      - slot_name: "经常居住地址"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "居住证明中显示的经常居住地址"
+        validation_rules:
+          - type: "string"
+          - minLength: 5
+          - maxLength: 200
+      - slot_name: "居住开始时间"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "居住证明中显示的居住开始时间"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{4}年\\d{1,2}月\\d{1,2}日$"
+      - slot_name: "居住截止时间"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "居住证明中显示的居住截止时间"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{4}年\\d{1,2}月\\d{1,2}日$"
+      - slot_name: "居住是否满一年"
+        slot_value_type: "boolean"
+        required: true
+    
+  电话号码:
+    description: "图片的核心内容是一个或多个电话号码。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["11位手机号码", "区号和固定电话号码"]
+    key_visual_features: ["数字是图片的主要视觉元素"]
+    layout_features: ["通常没有复杂的布局，主要是数字列表或文本。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "电话号码"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "图片中显示的电话号码"
+        validation_rules:
+          - type: "string"
+          - pattern: "^1[3-9]\\d{9}$|^0\\d{2,3}-?\\d{7,8}$"
+    
+  银行账户:
+    description: "图片的核心内容是一个或多个银行卡号或银行卡照片。"
+    dimension_labels: ["identity_authentication"]
+    key_text_features: ["银行卡号（通常为16-19位）", "开户行名称"]
+    key_visual_features: ["银行Logo", "银行卡特有的设计元素"]
+    layout_features: ["主要是银行卡或包含卡号的列表。"]
+    consider_correlations: false
+    target_slots_to_extract:
+      - slot_name: "银行卡号"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "银行卡的完整卡号"
+        validation_rules:
+          - type: "string"
+          - pattern: "^\\d{16,19}$"
+      - slot_name: "开户支行"
+        slot_value_type: "string"
+        required: true
+        slot_desc: "银行卡的开户支行名称"
+        validation_rules:
+          - type: "string"
+          - minLength: 2
+          - maxLength: 100

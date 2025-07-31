@@ -1,0 +1,813 @@
+# Evidence Types Configuration
+# Optimized YAML structure for evidence classification
+
+# Metadata
+metadata:
+  version: "1.0"
+  last_updated: "2024-01-01"
+  total_evidence_types: 18
+  categories:
+    - "个人身份证明类"
+    - "交易记录类"
+    - "电话号码类"
+    - "票据类"
+    - "经营资质证明类"
+    - "通讯聊天类"
+    - "银行卡类"
+
+# Evidence Types Definition
+evidence_types:
+  # WeChat Related Evidence Types
+  wechat_chat_record:
+    type: "微信聊天记录"
+    description: "微信聊天记录的截图，包含对话内容"
+    category: "通讯聊天类"
+    features:
+      decisive:
+        - "微信聊天界面"
+        - "聊天气泡布局"
+      important:
+        - "对话内容"
+        - "转账收款信息"
+        - "语音图片标识"
+        - "语音转文本内容"
+        - "用户头像"
+        - "时间戳"
+      common:
+        - "即时通讯应用布局"
+        - "左右分布的气泡"
+    exclusions:
+      - "个人主页"
+      - "短信聊天记录"
+      - "其他聊天应用"
+    extraction_slots:
+      - slot_name: "债务人微信备注名"
+        slot_desc: "微信聊天界面顶部用户备注名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "欠款合意"
+        slot_desc: "双方对欠款事实的确认"
+        slot_value_type: "boolean"
+        slot_required: true
+      - slot_name: "欠款金额"
+        slot_desc: "欠款涉及的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+      - slot_name: "约定还款日期"
+        slot_desc: "约定的还款日期"
+        slot_value_type: "date"
+        slot_required: false
+      - slot_name: "约定还款利息"
+        slot_desc: "约定的还款利息率"
+        slot_value_type: "number"
+        slot_required: false
+  
+  wechat_homepage:
+    type: "微信个人主页"
+    description: "微信个人主页的完整截图"
+    category: "通讯聊天类"
+    features:
+      decisive:
+        - "微信个人主页"
+        - "发消息按钮"
+        - "音视频通话按钮"
+      important:
+        - "个人头像"
+        - "昵称"
+        - "微信号"
+        - "地区"
+        - "朋友圈"
+      common:
+        - "电话号码"
+        - "下方功能按钮"
+    exclusions:
+      - "聊天记录中的头像弹窗"
+      - "不完整的个人主页"
+    extraction_slots:
+      - slot_name: "微信备注名"
+        slot_desc: "微信中设置的备注名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "微信号"
+        slot_desc: "微信账号ID"
+        slot_value_type: "string"
+        slot_required: true
+
+  wechat_pay_voucher:
+    type: "微信支付转账电子凭证"
+    description: "微信支付官方出具的转账电子凭证"
+    category: "交易记录类"
+    features:
+      decisive:
+        - "微信支付转账电子凭证"
+        - "腾讯支付科技有限公司"
+        - "财付通支付科技有限公司"
+        - "业务凭证专用章"
+      important:
+        - "红色圆形印章"
+        - "表格化交易详情布局"
+        - "转账单号"
+        - "申请时间和转账时间"
+        - "付款方收款方微信号和姓名"
+      common:
+        - "币种人民币单位元"
+        - "交易场景微信转账"
+        - "交易状态已收款"
+        - "转账说明"
+    exclusions:
+      - "转账成功页面"
+      - "聊天记录"
+      - "转账操作界面"
+    extraction_slots:
+      - slot_name: "付款方真名"
+        slot_desc: "付款方的真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "付款方微信号"
+        slot_desc: "付款方的微信号"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "收款方真名"
+        slot_desc: "收款方的真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "收款方微信号"
+        slot_desc: "收款方的微信号"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "转账金额"
+        slot_desc: "转账的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+
+  wechat_transfer_page:
+    type: "微信转账页面"
+    description: "微信转账操作过程中的界面截图，为了证明对方的身份而非交易记录"
+    category: "个人身份证明类"
+    features:
+      decisive:
+        - "转账给"
+        - "橙色或绿色转账按钮"
+        - "金额输入框"
+      important:
+        - "收款人头像和昵称"
+        - "添加转账说明"
+        - "转账金额"
+        - "微信转账界面"
+      common:
+        - "顶部显示收款人"
+        - "中间是金额"
+        - "底部是操作按钮"
+    exclusions:
+      - "转账完成后的截图"
+      - "聊天记录中的转账消息"
+      - "转账记录"
+    extraction_slots:
+      - slot_name: "债务人微信备注名"
+        slot_desc: "转账页面显示的债务人头像下方微信备注名，括号之外的，括号内的是脱敏真名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人脱敏真名"
+        slot_desc: "债务人头像下方微信备注名，括号内的脱敏真实姓名（仅显示最右侧的一个字符），括号外的是微信备注名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人微信号"
+        slot_desc: "转账页面显示的债务人头像下方微信号"
+        slot_value_type: "string"
+        slot_required: true
+
+  # SMS Related
+  sms_chat_record:
+    type: "短信聊天记录"
+    description: "手机系统原生的短信应用聊天记录截图"
+    category: "通讯聊天类"
+    features:
+      decisive:
+        - "手机系统短信"
+        - "短信气泡"
+      important:
+        - "短信内容"
+        - "发送接收时间"
+        - "发件人手机号或名称"
+        - "信号电量状态栏图标"
+      common:
+        - "手机短信应用布局"
+        - "系统UI短信气泡"
+    exclusions:
+      - "微信QQ等第三方应用"
+      - "其他聊天应用"
+    extraction_slots:
+      - slot_name: "债务人通讯录备注名"
+        slot_desc: "债务人通讯录备注名，可能是名称或是电话号码或是两者"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "欠款合意"
+        slot_desc: "双方对欠款事实的确认"
+        slot_value_type: "boolean"
+        slot_required: true
+      - slot_name: "欠款金额"
+        slot_desc: "欠款的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+      - slot_name: "约定还款日期"
+        slot_desc: "约定的还款日期"
+        slot_value_type: "date"
+        slot_required: false
+      - slot_name: "约定还款利息"
+        slot_desc: "约定的还款利息率"
+        slot_value_type: "number"
+        slot_required: false
+
+  # Payment Related
+  alipay_transfer_page:
+    type: "支付宝转账页面"
+    description: "支付宝转账操作过程中的界面截图，为了证明对方的身份而非交易记录"
+    category: "个人身份证明类"
+    features:
+      decisive:
+        - "支付宝转账"
+        - "确认付款按钮"
+        - "支付宝Logo"
+      important:
+        - "收款方账户"
+        - "金额"
+        - "蓝色主色调"
+        - "支付宝App界面"
+      common:
+        - "支付宝App转账界面布局"
+    exclusions:
+      - "支付宝账单详情"
+      - "转账记录列表"
+    extraction_slots:
+      - slot_name: "债务人支付宝备注名"
+        slot_desc: "债务人头像下方支付宝备注名，括号之外的，括号内的是真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人支付宝真实姓名"
+        slot_desc: "债务人头像下方支付宝备注名，括号内的真实姓名，括号外的是支付宝备注名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人手机号码"
+        slot_desc: "债务人头像下方手机号码"
+        slot_value_type: "string"
+        slot_required: true
+
+  # Legal Documents
+  goods_iou_note:
+    type: "货款欠条"
+    description: "明确因'货款'事由产生的欠条"
+    category: "票据类"
+    features:
+      decisive:
+        - "欠条"
+        - "拿货"
+        - "货款"
+        - "今欠到"
+      important:
+        - "金额大写和小写"
+        - "欠款人签名"
+        - "日期"
+        - "手写或打印条据"
+        - "签名或盖章"
+      common:
+        - "标准条据格式"
+        - "标题正文落款"
+    exclusions:
+      - "借款"
+      - "收条"
+      - "发货单"
+    extraction_slots:
+      - slot_name: "债权人真名"
+        slot_desc: "债权人的真实姓名"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债权人签字名字"
+        slot_desc: "债权人签字的名字"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债权人盖章名字"
+        slot_desc: "债权人盖章的名字"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债务人真名"
+        slot_desc: "债务人的真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人签字名字"
+        slot_desc: "债务人签字的名字"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人盖章名字"
+        slot_desc: "债务人盖章的名字"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "欠款金额"
+        slot_desc: "欠款的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+      - slot_name: "欠款合意"
+        slot_desc: "双方对欠款事实的确认"
+        slot_value_type: "boolean"
+        slot_required: true
+
+  loan_iou_note:
+    type: "借款借条"
+    description: "明确为'借款'事由产生的借条"
+    category: "票据类"
+    features:
+      decisive:
+        - "借条"
+        - "借款"
+        - "今借到"
+        - "今欠"
+      important:
+        - "金额大写和小写"
+        - "利息"
+        - "借款人签名"
+        - "日期"
+        - "手写或打印条据"
+        - "签名或盖章"
+        - "身份证号码"
+      common:
+        - "标准条据格式"
+        - "标题正文落款"
+    exclusions:
+      - "货款"
+      - "还款收据"
+    extraction_slots:
+      - slot_name: "债权人真名"
+        slot_desc: "债权人的真实姓名"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债权人签字名字"
+        slot_desc: "债权人签字的名字"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债权人盖章名字"
+        slot_desc: "债权人盖章的名字"
+        slot_value_type: "string"
+        slot_required: false
+      - slot_name: "债务人真名"
+        slot_desc: "债务人的真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人签字名字"
+        slot_desc: "债务人签字的名字"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "债务人盖章名字"
+        slot_desc: "债务人盖章的名字"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "欠款金额"
+        slot_desc: "欠款的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+      - slot_name: "欠款合意"
+        slot_desc: "双方对欠款事实的确认"
+        slot_value_type: "boolean"
+        slot_required: true
+
+  bank_transfer_record:
+    type: "银行转账记录"
+    description: "银行App、网上银行或银行柜台回单的转账记录"
+    category: "交易记录类"
+    features:
+      decisive:
+        - "银行Logo"
+        - "交易流水号"
+        - "银行回单格式"
+      important:
+        - "付款人账号户名"
+        - "收款人账号户名"
+        - "交易金额"
+        - "交易时间"
+        - "表格化交易详情"
+      common:
+        - "表格或列表形式"
+        - "清晰列出交易信息"
+    exclusions:
+      - "微信转账记录"
+      - "支付宝转账记录"
+    extraction_slots:
+      - slot_name: "转账账户"
+        slot_desc: "转账的银行账户"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "转账账户真名"
+        slot_desc: "转账账户的真实姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "转账金额"
+        slot_desc: "转账的金额数值"
+        slot_value_type: "number"
+        slot_required: true
+
+  # Official Documents
+  vat_invoice:
+    type: "增值税发票"
+    description: "国家税务局监制的增值税发票"
+    category: "票据类"
+    features:
+      decisive:
+        - "增值税专用发票"
+        - "增值税普通发票"
+        - "发票监制章"
+        - "发票代码"
+        - "发票号码"
+      important:
+        - "购买方信息"
+        - "销售方信息"
+        - "金额合计"
+        - "税额合计"
+        - "二维码"
+        - "标准表格格式"
+      common:
+        - "国家统一发票版式"
+        - "布局固定"
+    exclusions:
+      - "购物小票"
+      - "收据"
+      - "非官方发票"
+    extraction_slots:
+      - slot_name: "购买方真名"
+        slot_desc: "购买方的真实名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "购买方纳税人识别号"
+        slot_desc: "购买方的纳税人识别号"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "销售方真名"
+        slot_desc: "销售方的真实名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "销售方纳税人识别号"
+        slot_desc: "销售方的纳税人识别号"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "价税合计"
+        slot_desc: "价税合计金额"
+        slot_value_type: "number"
+        slot_required: true
+
+  id_card:
+    type: "身份证"
+    description: "中华人民共和国居民身份证"
+    category: "个人身份证明类"
+    features:
+      decisive:
+        - "中华人民共和国居民身份证"
+        - "国徽"
+        - "长城图案"
+        - "签发机关"
+      important:
+        - "姓名"
+        - "性别"
+        - "民族"
+        - "出生"
+        - "住址"
+        - "公民身份号码"
+        - "个人头像照片"
+      common:
+        - "国家标准身份证布局"
+        - "正反面布局"
+    exclusions:
+      - "临时身份证"
+      - "户口簿"
+      - "驾驶证"
+    extraction_slots:
+      - slot_name: "姓名"
+        slot_desc: "身份证上的姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "性别"
+        slot_desc: "身份证上的性别"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "民族"
+        slot_desc: "身份证上的民族"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "出生"
+        slot_desc: "身份证上的出生日期"
+        slot_value_type: "date"
+        slot_required: true
+      - slot_name: "住址"
+        slot_desc: "身份证上的住址"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "公民身份号码"
+        slot_desc: "身份证号码"
+        slot_value_type: "string"
+        slot_required: true
+
+  household_register:
+    type: "中华人民共和国居民户籍档案"
+    description: "中华人民共和国居民户籍档案"
+    category: "个人身份证明类"
+    features:
+      decisive:
+        - "居民户口簿"
+        - "公安机关户口专用章"
+        - "户主页"
+        - "常住人口登记卡"
+      important:
+        - "户号"
+        - "姓名"
+        - "与户主关系"
+        - "红色公章"
+        - "特定表格和栏目"
+      common:
+        - "户口簿内页标准格式"
+    exclusions:
+      - "户籍证明信"
+      - "单页户籍证明"
+    extraction_slots:
+      - slot_name: "姓名"
+        slot_desc: "户口簿上的姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "性别"
+        slot_desc: "户口簿上的性别"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "民族"
+        slot_desc: "户口簿上的民族"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "出生"
+        slot_desc: "户口簿上的出生日期"
+        slot_value_type: "date"
+        slot_required: true
+      - slot_name: "住址"
+        slot_desc: "户口簿上的住址"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "公民身份号码"
+        slot_desc: "身份证号码"
+        slot_value_type: "string"
+        slot_required: true
+
+  # Business License Related
+  company_business_license:
+    type: "公司营业执照"
+    description: "公司或企业的官方营业执照"
+    category: "经营资质证明类"
+    features:
+      decisive:
+        - "营业执照"
+        - "国徽图标"
+        - "红色印章"
+        - "市场监督管理局"
+      important:
+        - "统一社会信用代码"
+        - "公司名称"
+        - "法定代表人"
+        - "成立日期"
+      common:
+        - "标准官方证件布局"
+    exclusions:
+      - "个体工商户"
+      - "企业信用信息公示系统"
+    extraction_slots:
+      - slot_name: "公司名称"
+        slot_desc: "公司的名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "统一社会信用代码"
+        slot_desc: "统一社会信用代码"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "法定代表人"
+        slot_desc: "法定代表人姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "公司类型"
+        slot_desc: "公司的类型"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "住所地"
+        slot_desc: "公司的住所地"
+        slot_value_type: "string"
+        slot_required: true
+
+  individual_business_license:
+    type: "个体工商户营业执照"
+    description: "个体工商户的官方营业执照"
+    category: "经营资质证明类"
+    features:
+      decisive:
+        - "个体工商户营业执照"
+        - "国徽图标"
+        - "红色印章"
+        - "市场监督管理局"
+      important:
+        - "统一社会信用代码"
+        - "经营者姓名"
+        - "经营场所"
+      common:
+        - "标准官方证件布局"
+        - "标题明确为个体工商户"
+    exclusions:
+      - "公司"
+      - "企业"
+    extraction_slots:
+      - slot_name: "经营名称"
+        slot_desc: "个体工商户的经营名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "统一社会信用代码"
+        slot_desc: "统一社会信用代码"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "经营类型"
+        slot_desc: "经营的类型"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "经营者姓名"
+        slot_desc: "经营者的姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "住所地"
+        slot_desc: "住所地"
+        slot_value_type: "string"
+        slot_required: true
+
+  company_gsxt_license:
+    type: "公司全国企业公示系统截图"
+    description: "国家企业信用信息公示系统（GSXT）网站上关于公司的信息页面截图"
+    category: "经营资质证明类"
+    features:
+      decisive:
+        - "国家企业信用信息公示系统"
+        - "企业信用信息"
+        - "网页布局"
+      important:
+        - "统一社会信用代码"
+        - "法定代表人"
+        - "网站页眉页脚"
+        - "网页UI元素"
+      common:
+        - "信息模块化展示"
+    exclusions:
+      - "营业执照原件照片"
+      - "非网站截图"
+    extraction_slots:
+      - slot_name: "公司名称"
+        slot_desc: "公司的名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "统一社会信用代码"
+        slot_desc: "统一社会信用代码"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "法定代表人"
+        slot_desc: "法定代表人姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "公司类型"
+        slot_desc: "公司的类型"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "住所地"
+        slot_desc: "公司的住所地"
+        slot_value_type: "string"
+        slot_required: true
+
+  individual_gsxt_license:
+    type: "个体工商户全国企业公示系统截图"
+    description: "国家企业信用信息公示系统（GSXT）网站上关于个体工商户的信息页面截图"
+    category: "经营资质证明类"
+    features:
+      decisive:
+        - "国家企业信用信息公示系统"
+        - "个体工商户"
+        - "网页布局"
+      important:
+        - "经营者"
+        - "网站页眉页脚"
+        - "网页UI元素"
+      common:
+        - "信息模块化展示"
+    exclusions:
+      - "营业执照原件照片"
+      - "非网站截图"
+    extraction_slots:
+      - slot_name: "经营名称"
+        slot_desc: "个体工商户的经营名称"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "统一社会信用代码"
+        slot_desc: "统一社会信用代码"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "经营类型"
+        slot_desc: "经营的类型"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "经营者姓名"
+        slot_desc: "经营者的姓名"
+        slot_value_type: "string"
+        slot_required: true
+      - slot_name: "住所地"
+        slot_desc: "住所地"
+        slot_value_type: "string"
+        slot_required: true
+
+  residence_certificate:
+      type: "经常居住地证明"
+      description: "由社区、派出所等官方机构出具的用于证明居住事实的文件"
+      category: "个人身份证明类"
+      features:
+        decisive:
+          - "居住证明"
+          - "流动人口信息登记表"
+          - "红色公章"
+          - "官方机构名称"
+        important:
+          - "住址"
+          - "姓名"
+          - "身份证号"
+          - "派出所"
+          - "社区居委会"
+        common:
+          - "正式官方文件"
+          - "表格布局"
+      exclusions:
+        - "身份证信息"
+        - "快递单"
+        - "外卖单"
+      extraction_slots:
+        - slot_name: "真名"
+          slot_desc: "真实姓名"
+          slot_value_type: "string"
+          slot_required: true
+        - slot_name: "经常居住地址"
+          slot_desc: "经常居住的地址"
+          slot_value_type: "string"
+          slot_required: true
+        - slot_name: "居住开始时间"
+          slot_desc: "居住开始的时间"
+          slot_value_type: "date"
+          slot_required: true
+        - slot_name: "居住截止时间"
+          slot_desc: "居住截止的时间"
+          slot_value_type: "date"
+          slot_required: true
+        - slot_name: "居住是否满一年"
+          slot_desc: "居住是否满一年的判断"
+          slot_value_type: "boolean"
+          slot_required: true
+  # Simple Information Types
+  phone_number:
+    type: "电话号码截图"
+    description: "图片的核心内容是一个或多个电话号码"
+    category: "电话号码类"
+    features:
+      decisive:
+        - "11位手机号码"
+        - "区号和固定电话号码"
+      important:
+        - "数字是主要视觉元素"
+      common:
+        - "数字列表或文本"
+        - "无复杂布局"
+    exclusions:
+      - "名片"
+      - "收据"
+      - "合同"
+      - "复杂文档"
+    extraction_slots:
+      - slot_name: "电话号码"
+        slot_desc: "电话号码"
+        slot_value_type: "string"
+        slot_required: true
+
+  bank_account:
+    type: "收款银行账户截图"
+    description: "图片的核心内容是一个或多个银行卡号或银行卡照片"
+    category: "银行卡类"
+    features:
+      decisive:
+        - "银行卡号"
+        - "银行Logo"
+        - "银行卡设计元素"
+      important:
+        - "开户行名称"
+        - "16-19位卡号"
+      common:
+        - "银行卡或卡号列表"
+        - "简单布局"
+    exclusions:
+      - "转账记录"
+      - "合同"
+      - "复杂文档"
+    extraction_slots:
+      - slot_name: "银行卡号"
+        slot_desc: "银行卡号码"
+        slot_value_type: "string"
+      - slot_name: "开户支行"
+        slot_desc: "开户支行名称"
+        slot_value_type: "string"
+        slot_required: true

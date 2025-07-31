@@ -6,8 +6,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from datetime import datetime
-from app.agentic.agents.evidence_classifier import EvidenceClassifier, EvidenceClassifiResults
-from app.agentic.agents.evidence_features_extractor import EvidenceFeaturesExtractor, EvidenceExtractionResults
+from app.agentic.agents.evidence_classifier_v2 import EvidenceClassifier, EvidenceClassifiResults
+from app.agentic.agents.evidence_extractor_v2 import EvidenceFeaturesExtractor, EvidenceExtractionResults, EvidenceImage
 from loguru import logger
 from agno.media import Image
 from agno.run.response import RunResponse
@@ -463,15 +463,15 @@ async def auto_process(
                 await send_progress({"status": "classifying", "message": "开始证据分类分析"})
             
             evidence_classifier = EvidenceClassifier()
-            message_parts = ["请对以下证据进行分类："]
-            for i, ev in enumerate(evidences):
-                message_parts.append(f"{i+1}. file_url: {ev.file_url}")
-            messages = "\n".join(message_parts)
+            # message_parts = ["请对以下证据进行分类："]
+            # for i, ev in enumerate(evidences):
+            #     message_parts.append(f"{i+1}. file_url: {ev.file_url}")
+            # messages = "\n".join(message_parts)
             
             # 设置超时时间（3分钟）
             import asyncio
             run_response: RunResponse = await asyncio.wait_for(
-                evidence_classifier.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
+                evidence_classifier.arun([ev.file_url for ev in evidences]),
                 timeout=180.0
             )
             
@@ -530,7 +530,8 @@ async def auto_process(
                 if evidence.classification_category in ocr_supported_types:
                     ocr_evidences.append(evidence)
                 else:
-                    llm_evidences.append(evidence)
+                    if evidence.classification_category != "微信聊天记录":  # 微信聊天记录不使用独立证据分析agent,而是另外的agent
+                        llm_evidences.append(evidence)
             
             # 处理OCR支持的证据类型
             if ocr_evidences:
@@ -592,16 +593,18 @@ async def auto_process(
                     await send_progress({"status": "llm_processing", "message": f"开始LLM处理 {len(llm_evidences)} 个证据"})
                 
                 extractor = EvidenceFeaturesExtractor()
-                message_parts = ["请从以下证据图片中提取关键信息:"]
-                for i, ev in enumerate(evidences):
-                    message_parts.append(f"{i+1}. file_url: {ev.file_url}")
-                    message_parts.append(f"证据类型: {ev.classification_category}")
-                messages = "\n".join(message_parts)
+                images = [
+                    EvidenceImage(
+                        url=ev.file_url,
+                        evidence_type=ev.classification_category
+                    )
+                    for ev in llm_evidences
+                ]
                 
                 # 设置超时时间（3分钟）
                 import asyncio
                 run_response: RunResponse = await asyncio.wait_for(
-                    extractor.agent.arun(messages, images=[Image(url=ev.file_url) for ev in evidences]),
+                    extractor.arun(images),
                     timeout=180.0
                 )
                 

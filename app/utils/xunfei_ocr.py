@@ -305,9 +305,12 @@ class XunfeiOcrClient:
                     # 清理和标准化slot_value
                     cleaned_value = self._clean_slot_value(slot_value, business_field)
                     
-                    # 构建evidence_feature
+                    # 构建evidence_feature，添加与LLM agent一致的字段
                     evidence_feature = {
                         "slot_name": business_field.value,  # 使用枚举的value作为slot_name
+                        "slot_desc": business_field.value,  # 使用字段名作为描述
+                        "slot_value_type": "string",  # OCR识别结果都是字符串类型
+                        "slot_required": True,  # OCR识别的字段都认为是必需的
                         "slot_value": cleaned_value,
                         "confidence": confidence,
                         "reasoning": "OCR识别"  # OCR没有提供reasoning，留空
