@@ -12,10 +12,60 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn } from "lucide-react"
+import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical } from "lucide-react"
 import { caseApi, evidenceApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import {
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// 添加拖拽相关的CSS样式
+const dragStyles = `
+  .drag-overlay {
+    opacity: 0.8;
+    transform: rotate(5deg);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  }
+  
+  .sortable-item {
+    transition: transform 0.2s ease;
+  }
+  
+  .sortable-item:hover {
+    transform: translateY(-2px);
+  }
+  
+  .grip-handle {
+    cursor: grab;
+    transition: all 0.2s ease;
+  }
+  
+  .grip-handle:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+  
+  .grip-handle:active {
+    cursor: grabbing;
+  }
+`
 
 // 案件数据获取函数
 const caseFetcher = async ([key, caseId]: [string, string]) => {
@@ -99,6 +149,198 @@ const getStatusText = (status: string) => {
   }
 };
 
+// 可拖拽的证据列表组件
+function DraggableEvidenceList({
+  evidences,
+  selectedEvidenceIds,
+  selectedEvidence,
+  setSelectedEvidence,
+  handleSelectAll,
+  handleSelectOne,
+  onEvidenceReorder,
+}: {
+  evidences: any[]
+  selectedEvidenceIds: number[]
+  selectedEvidence: any
+  setSelectedEvidence: (evidence: any) => void
+  handleSelectAll: (e: React.ChangeEvent<HTMLInputElement>) => void
+  handleSelectOne: (id: number, checked: boolean) => void
+  onEvidenceReorder: (newOrder: any[]) => void
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={(event: DragEndEvent) => {
+        const { active, over } = event
+        
+        if (active.id !== over?.id) {
+          const oldIndex = evidences.findIndex((e: any) => e.id === active.id)
+          const newIndex = evidences.findIndex((e: any) => e.id === over?.id)
+          
+          if (oldIndex !== -1 && newIndex !== -1) {
+            const newOrder = arrayMove(evidences, oldIndex, newIndex)
+            onEvidenceReorder(newOrder)
+          }
+        }
+      }}
+    >
+      <SortableContext
+        items={evidences.map((e: any) => e.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2">
+          {evidences.map((evidence: any, index: number) => {
+            const checked = selectedEvidenceIds.includes(evidence.id)
+            return (
+              <SortableEvidenceItem
+                key={evidence.id}
+                evidence={evidence}
+                index={index}
+                checked={checked}
+                onSelect={handleSelectAll}
+                onSelectOne={handleSelectOne}
+                selectedEvidence={selectedEvidence}
+                setSelectedEvidence={setSelectedEvidence}
+              />
+            )
+          })}
+        </div>
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+// 可拖拽的证据项组件
+function SortableEvidenceItem({ 
+  evidence, 
+  index, 
+  checked, 
+  onSelect, 
+  onSelectOne, 
+  selectedEvidence, 
+  setSelectedEvidence 
+}: {
+  evidence: any
+  index: number
+  checked: boolean
+  onSelect: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onSelectOne: (id: number, checked: boolean) => void
+  selectedEvidence: any
+  setSelectedEvidence: (evidence: any) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: evidence.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
+        isDragging ? "opacity-50 bg-muted/50" : ""
+      } ${
+        selectedEvidence?.id === evidence.id
+          ? "bg-primary/10 border-primary/30 shadow-sm"
+          : checked
+          ? "bg-primary/5 border-primary/20"
+          : "hover:bg-muted/50 border-transparent hover:border-border"
+      }`}
+      onClick={() => setSelectedEvidence(evidence)}
+    >
+      {/* 拖拽手柄 - 只在可拖拽模式下显示 */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="mr-2 p-1 cursor-grab active:cursor-grabbing hover:bg-muted/30 rounded"
+      >
+        <GripVertical className="h-3 w-3 text-muted-foreground" />
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => {
+          e.stopPropagation();
+          onSelectOne(evidence.id, e.target.checked)
+        }}
+        className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
+      />
+      <div className="flex-shrink-0">
+        {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
+          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
+            <Video className="h-5 w-5 text-purple-600" />
+          </div>
+        ) : evidence.file_url ? (
+          <img
+            src={evidence.file_url}
+            alt={evidence.file_name || ''}
+            className="w-10 h-10 object-cover rounded-md"
+            onError={(e) => {
+              // 图片加载失败时，替换为占位符
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              const parent = target.parentElement;
+              if (parent) {
+                parent.innerHTML = `
+                  <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+                    <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                  </div>
+                `;
+              }
+            }}
+          />
+        ) : (
+          <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+            <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+            </svg>
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0 ml-2 overflow-hidden">
+        <div className="group relative">
+          <h4 className="font-medium text-sm text-foreground break-words leading-tight" title={evidence.file_name}>
+            {evidence.file_name}
+          </h4>
+        </div>
+        <div className="flex items-start space-x-1.5 mt-1 flex-wrap">
+          <Badge variant="outline" className="text-xs">
+            {evidence.file_extension?.toUpperCase()}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {(evidence.file_size / 1024).toFixed(1)} KB
+          </Badge>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 使用Suspense的证据推理列表组件
 function EvidenceReasoningContent({ 
   caseId, 
@@ -118,6 +360,7 @@ function EvidenceReasoningContent({
   setIsPreviewOpen,
   setSelectedEvidence,
   selectedEvidence,
+  onEvidenceReorder,
 }: {
   caseId: string | number
   selectedEvidenceIds: number[]
@@ -136,6 +379,7 @@ function EvidenceReasoningContent({
   setIsPreviewOpen: (open: boolean) => void
   setSelectedEvidence: (evidence: any) => void
   selectedEvidence: any
+  onEvidenceReorder: (newOrder: any[]) => void
 }) {
   // 获取案件数据
   const { data: caseData, error: caseError } = useSWR(
@@ -331,84 +575,103 @@ function EvidenceReasoningContent({
                   className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
                 />
                 <span className="ml-2 text-xs text-muted-foreground">全选</span>
+                {selectedGroup !== '全部证据' && (
+                  <span className="ml-2 text-xs text-muted-foreground">长按拖动可重新排序</span>
+                )}
               </div>
-              {(selectedGroup === '全部证据' ? allWechatEvidences : groupedEvidences[selectedGroup] || []).map((evidence: any, index: number) => {
-                const checked = selectedEvidenceIds.includes(evidence.id)
-                return (
-                  <div
-                    key={`${evidence.id}-${index}`}
-                    onClick={() => setSelectedEvidence(evidence)}
-                    className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
-                      selectedEvidence?.id === evidence.id
-                        ? "bg-primary/10 border-primary/30 shadow-sm"
-                        : selectedEvidenceIds.includes(evidence.id)
-                        ? "bg-primary/5 border-primary/20"
-                        : "hover:bg-muted/50 border-transparent hover:border-border"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleSelectOne(evidence.id, e.target.checked)
-                      }}
-                      className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
-                    />
-                    <div className="flex-shrink-0">
-                      {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
-                        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
-                          <Video className="h-5 w-5 text-purple-600" />
-                        </div>
-                      ) : evidence.file_url ? (
-                        <img
-                          src={evidence.file_url}
-                          alt={evidence.file_name || ''}
-                          className="w-10 h-10 object-cover rounded-md"
-                          onError={(e) => {
-                            // 图片加载失败时，替换为占位符
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `
-                                <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                                  <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                  </svg>
-                                </div>
-                              `;
-                            }
+              
+              {/* 拖拽排序区域 */}
+              {selectedGroup !== '全部证据' ? (
+                <DraggableEvidenceList
+                  evidences={groupedEvidences[selectedGroup] || []}
+                  selectedEvidenceIds={selectedEvidenceIds}
+                  selectedEvidence={selectedEvidence}
+                  setSelectedEvidence={setSelectedEvidence}
+                  handleSelectAll={handleSelectAll}
+                  handleSelectOne={handleSelectOne}
+                  onEvidenceReorder={onEvidenceReorder}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {allWechatEvidences.map((evidence: any, index: number) => {
+                    const checked = selectedEvidenceIds.includes(evidence.id)
+                    return (
+                      <div
+                        key={`${evidence.id}-${index}`}
+                        onClick={() => setSelectedEvidence(evidence)}
+                        className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
+                          selectedEvidence?.id === evidence.id
+                            ? "bg-primary/10 border-primary/30 shadow-sm"
+                            : selectedEvidenceIds.includes(evidence.id)
+                            ? "bg-primary/5 border-primary/20"
+                            : "hover:bg-muted/50 border-transparent hover:border-border"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleSelectOne(evidence.id, e.target.checked)
                           }}
+                          className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
                         />
-                      ) : (
-                        <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                          <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                          </svg>
+                        <div className="flex-shrink-0">
+                          {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
+                            <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
+                              <Video className="h-5 w-5 text-purple-600" />
+                            </div>
+                          ) : evidence.file_url ? (
+                            <img
+                              src={evidence.file_url}
+                              alt={evidence.file_name || ''}
+                              className="w-10 h-10 object-cover rounded-md"
+                              onError={(e) => {
+                                // 图片加载失败时，替换为占位符
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `
+                                    <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+                                      <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                      </svg>
+                                    </div>
+                                  `;
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+                              <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                              </svg>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 ml-2 overflow-hidden">
-                      <div className="group relative">
-                        <h4 className="font-medium text-sm text-foreground break-words leading-tight" title={evidence.file_name}>
-                          {evidence.file_name}
-                        </h4>
+                        <div className="flex-1 min-w-0 ml-2 overflow-hidden">
+                          <div className="group relative">
+                            <h4 className="font-medium text-sm text-foreground break-words leading-tight" title={evidence.file_name}>
+                              {evidence.file_name}
+                            </h4>
+                          </div>
+                          <div className="flex items-start space-x-1.5 mt-1 flex-wrap">
+                            <Badge variant="outline" className="text-xs">
+                              {evidence.file_extension?.toUpperCase()}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {(evidence.file_size / 1024).toFixed(1)} KB
+                            </Badge>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-start space-x-1.5 mt-1 flex-wrap">
-                        <Badge variant="outline" className="text-xs">
-                          {evidence.file_extension?.toUpperCase()}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {(evidence.file_size / 1024).toFixed(1)} KB
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -931,6 +1194,36 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
     }
   };
 
+  // 处理证据重新排序
+  const handleEvidenceReorder = async (newOrder: any[]) => {
+    try {
+      // 获取当前选中的特征组
+      const selectedFeatureGroup = caseData?.association_evidence_features?.find((feature: any) => 
+        feature.slot_group_name === selectedGroup
+      )
+      
+      if (!selectedFeatureGroup) {
+        toast({ title: "错误", description: "未找到对应的特征组", variant: "destructive" })
+        return
+      }
+      
+      // 提取新的证据ID顺序
+      const newEvidenceIds = newOrder.map((evidence: any) => evidence.id)
+      
+      // 调用API更新association_evidence_ids
+      await caseApi.updateAssociationEvidenceFeature(selectedFeatureGroup.id, {
+        association_evidence_ids: newEvidenceIds
+      })
+      
+      toast({ title: "排序更新成功", description: "证据顺序已更新" })
+      
+      // 重新获取案件数据以更新显示
+      await mutate(['case', caseId.toString()])
+    } catch (error: any) {
+      toast({ title: "排序更新失败", description: error?.message || "请稍后重试", variant: "destructive" })
+    }
+  }
+
   // 批量审核功能
   const handleBatchReview = async () => {
     if (reviewEvidenceIds.length === 0) return
@@ -959,6 +1252,8 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
 
   return (
     <div className="space-y-6">
+      {/* 注入拖拽样式 */}
+      <style dangerouslySetInnerHTML={{ __html: dragStyles }} />
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
@@ -1226,6 +1521,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         setIsPreviewOpen={setIsPreviewOpen}
         setSelectedEvidence={setSelectedEvidence}
         selectedEvidence={selectedEvidence}
+        onEvidenceReorder={handleEvidenceReorder}
       />
 
       {/* 批量审核弹窗 */}

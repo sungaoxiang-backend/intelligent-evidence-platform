@@ -32,6 +32,8 @@ const evidenceFetcher = async ([key, caseId, search, page, pageSize]: [string, s
     pageSize,
     search,
     case_id: Number(caseId),
+    sort_by: "created_at",  // 按上传时间排序
+    sort_order: "desc",     // 降序，新上传的在上面
   })
   return response
 }

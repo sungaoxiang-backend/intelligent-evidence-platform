@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 from agno.agent import Agent
 from agno.media import Image
 from pydantic import BaseModel
-from app.agentic.llm.base import openai_image_model
+from app.agentic.llm.base import openai_image_model, qwen_muti_model
 from app.core.config_manager import config_manager
 
 
@@ -60,7 +60,7 @@ class EvidenceClassifiResult(BaseModel):
     
 
 class EvidenceClassifiResults(BaseModel):
-    results: Optional[List[EvidenceClassifiResult]]
+    results: List[EvidenceClassifiResult]
 
 
 class EvidenceClassifier:
@@ -69,7 +69,7 @@ class EvidenceClassifier:
     def __init__(self) -> None:
         self.agent = Agent(
             name="证据分类专家V2",
-            model=openai_image_model,
+            model=qwen_muti_model,
             session_state={
                 "evidence_type_descriptions": get_evidence_type_features_guide_v2(),
             },
