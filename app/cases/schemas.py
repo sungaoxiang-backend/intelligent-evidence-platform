@@ -105,7 +105,7 @@ class AssociationEvidenceFeatureGroup(BaseModel):
     evidence_feature_status: str
     evidence_features: List[AssociationEvidenceFeature]
     features_extracted_at: datetime
-    validation_status: str
+    evidence_feature_status: str
     case_id: int
     
     @computed_field
@@ -130,7 +130,7 @@ class AssociationEvidenceFeatureUpdateRequest(BaseModel):
     slot_group_name: Optional[str] = None
     association_evidence_ids: Optional[List[int]] = None
     evidence_feature_status: Optional[str] = None
-    validation_status: Optional[str] = None
+    evidence_feature_status: Optional[str] = None
     evidence_features: Optional[List[AssociationEvidenceFeature]] = None
 
     class Config:

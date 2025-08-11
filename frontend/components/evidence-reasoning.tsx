@@ -124,12 +124,10 @@ const getFeatureColor = (slot: any) => {
 // 获取状态颜色
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "valid":
+    case "checked":
       return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
-    case "pending":
+    case "features_extracted":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
-    case "invalid":
-      return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -138,12 +136,10 @@ const getStatusColor = (status: string) => {
 // 获取状态中文名称
 const getStatusText = (status: string) => {
   switch (status) {
-    case "valid":
-      return "已验证";
-    case "pending":
-      return "待验证";
-    case "invalid":
-      return "无效";
+    case "checked":
+      return "已审核";
+    case "features_extracted":
+      return "特征已提取";
     default:
       return "未知状态";
   }
@@ -763,8 +759,8 @@ function EvidenceReasoningContent({
                   <h4 className="font-medium text-sm mb-2">{selectedFeatureGroup.slot_group_name}</h4>
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <div className="flex justify-between">
-                      <span>验证状态:</span>
-                      <span className="text-foreground">{getStatusText(selectedFeatureGroup.validation_status)}</span>
+                      <span>审核状态:</span>
+                      <span className="text-foreground">{getStatusText(selectedFeatureGroup.evidence_feature_status)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>提取时间:</span>
@@ -1229,10 +1225,10 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
     if (reviewEvidenceIds.length === 0) return
     setReviewing(true)
     try {
-      // 批量更新 AssociationEvidenceFeature 记录的 validation_status
+      // 批量更新 AssociationEvidenceFeature 记录的 evidence_feature_status
       const updatePromises = reviewEvidenceIds.map(async (featureId) => {
         return await caseApi.updateAssociationEvidenceFeature(featureId, {
-          validation_status: "valid"
+          evidence_feature_status: "checked"
         })
       })
       
@@ -1291,9 +1287,9 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               </div>
             </div>
             <div className="text-center">
-              <div className="text-xs text-muted-foreground">已验证</div>
+              <div className="text-xs text-muted-foreground">已审核</div>
               <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                {caseData?.association_evidence_features?.filter((f: any) => f.validation_status === "valid").length || 0}
+                {caseData?.association_evidence_features?.filter((f: any) => f.evidence_feature_status === "checked").length || 0}
               </div>
             </div>
           </div>
@@ -1378,7 +1374,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                   {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.features_complete && f.validation_status === "pending"
+                    f.features_complete && f.evidence_feature_status === "features_extracted"
                   ).length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">待审核</div>
@@ -1387,10 +1383,10 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-green-600 dark:text-green-400">
                   {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.validation_status === "valid" && f.features_complete
+                    f.evidence_feature_status === "checked" && f.features_complete
                   ).length || 0}
                 </div>
-                <div className="text-xs text-muted-foreground font-medium">已验证</div>
+                <div className="text-xs text-muted-foreground font-medium">已审核</div>
                 <div className="text-xs text-muted-foreground mt-0.5">人工验证确认无误</div>
               </div>
             </div>
@@ -1541,7 +1537,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                 {caseData?.association_evidence_features
                   ?.filter((feature: any) => 
                     feature.features_complete && 
-                    feature.validation_status !== "valid"
+                    feature.evidence_feature_status !== "checked"
                   )
                   .map((feature: any) => {
                     const isSelected = reviewEvidenceIds.includes(feature.id);
@@ -1585,8 +1581,8 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                               }
                             </p>
                             <div className="flex items-center space-x-2 mt-1">
-                              <Badge className={getStatusColor(feature.validation_status)} variant="outline">
-                                {getStatusText(feature.validation_status)}
+                              <Badge className={getStatusColor(feature.evidence_feature_status)} variant="outline">
+                                {getStatusText(feature.evidence_feature_status)}
                               </Badge>
                               <Badge 
                                 className={feature.features_complete 
@@ -1608,7 +1604,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                 {caseData?.association_evidence_features
                   ?.filter((feature: any) => 
                     feature.features_complete && 
-                    feature.validation_status !== "valid"
+                    feature.evidence_feature_status !== "checked"
                   ).length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />

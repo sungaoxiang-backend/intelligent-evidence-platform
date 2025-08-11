@@ -388,7 +388,7 @@ async def auto_process(
             existing_feature.association_evidence_ids = sorted_evidence_ids
             existing_feature.evidence_features = processed_evidence_features
             existing_feature.features_extracted_at = datetime.now()
-            existing_feature.validation_status = "pending"  # 重置验证状态
+            existing_feature.evidence_feature_status = "features_extracted"  # 重置为特征已提取状态
             association_evidence_features.append(existing_feature)
         else:
             # 创建新记录，使用标准化的slot_group_name
