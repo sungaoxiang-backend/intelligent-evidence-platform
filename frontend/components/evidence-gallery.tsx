@@ -19,11 +19,14 @@ import {
   Edit,
   Brain,
   Upload,
+  CheckCircle,
+  XCircle,
 } from "lucide-react"
 import { evidenceApi } from "@/lib/api"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // SWR数据获取函数
 const evidenceFetcher = async ([key, caseId, search, page, pageSize]: [string, string, string, number, number]) => {
@@ -67,9 +70,22 @@ const getFeatureColor = (slot: any) => {
   const slotValue = slot.slot_value || "";
   const hasValue = slotValue !== "未知" && slotValue.trim() !== "";
   
+  // 判断特征是否有效：有值且如果该特征字段需要校对且校对成功时，为有效
+  let isValid = false;
+  
+  if (hasValue) {
+    if (slot.slot_proofread_at) {
+      // 如果有校对信息，必须校对成功才算有效
+      isValid = slot.slot_is_consistent;
+    } else {
+      // 如果没有校对信息，有值就算有效
+      isValid = true;
+    }
+  }
+  
   if (slotRequired) {
     // required = true
-    if (hasValue) {
+    if (isValid) {
       return {
         container: "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30",
         text: "text-green-700 dark:text-green-400",
@@ -702,9 +718,108 @@ function EvidenceGalleryContent({
                       return (
                         <div key={idx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
                           <div className="flex justify-between items-center">
-                            <div>
+                            <div className="flex items-center gap-1">
                               <Label className="text-xs">词槽名:</Label>
                               <span className="text-xs">{slot.slot_name}</span>
+                              {/* 校对状态图标 - 毛玻璃悬浮球 */}
+                              {slot.slot_proofread_at && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="ml-2 relative group cursor-pointer">
+                                        {/* 毛玻璃矩形标签 */}
+                                        <div 
+                                          className={`
+                                            w-8 h-4 rounded-sm flex items-center justify-center
+                                            backdrop-blur-sm border border-white/30
+                                            transition-all duration-300 ease-out
+                                            group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
+                                            ${slot.slot_is_consistent 
+                                              ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
+                                              : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
+                                            }
+                                          `}
+                                          style={{
+                                            animation: 'proofreadBreathe 4s ease-in-out infinite'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.animation = 'none';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
+                                          }}
+                                        >
+                                          {slot.slot_is_consistent ? (
+                                            <CheckCircle className="w-3 h-3 drop-shadow-sm" />
+                                          ) : (
+                                            <XCircle className="w-3 h-3 drop-shadow-sm" />
+                                          )}
+                                        </div>
+                                        
+                                        {/* 底部阴影 - 与跳动联动 */}
+                                        <div 
+                                          className={`
+                                            absolute top-5 left-1/2 -translate-x-1/2 
+                                            w-5 h-1 rounded-full blur-sm opacity-30
+                                            transition-all duration-300
+                                            ${slot.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
+                                            group-hover:opacity-60 group-hover:w-6
+                                          `}
+                                        ></div>
+                                        
+                                        {/* 光晕效果 */}
+                                        <div className={`
+                                          absolute inset-0 rounded-sm opacity-0 
+                                          transition-all duration-300 blur-sm
+                                          group-hover:opacity-40 group-hover:scale-125
+                                          ${slot.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
+                                        `}></div>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent 
+                                      side="top" 
+                                      className={`max-w-xs p-3 shadow-lg border-2 ${
+                                        slot.slot_is_consistent 
+                                          ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
+                                          : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                                      }`}
+                                    >
+                                      <div className="space-y-2">
+                                        <div className={`font-semibold text-sm flex items-center gap-1 ${
+                                          slot.slot_is_consistent ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                        }`}>
+                                          {slot.slot_is_consistent ? (
+                                            <>
+                                              <CheckCircle className="w-4 h-4" />
+                                              校对匹配
+                                            </>
+                                          ) : (
+                                            <>
+                                              <XCircle className="w-4 h-4" />
+                                              校对不匹配
+                                            </>
+                                          )}
+                                        </div>
+                                        {slot.slot_expected_value && (
+                                          <div className="text-xs">
+                                            <span className="font-medium text-muted-foreground">期待值:</span> 
+                                            <span className="ml-1 font-medium text-blue-600 dark:text-blue-400">{slot.slot_expected_value}</span>
+                                          </div>
+                                        )}
+                                        {slot.slot_proofread_reasoning && (
+                                          <div className="text-xs p-2 bg-muted/50 rounded border-l-2 border-muted-foreground/20">
+                                            {slot.slot_proofread_reasoning}
+                                          </div>
+                                        )}
+                                        <div className="text-xs text-muted-foreground border-t pt-1 flex items-center gap-1">
+                                          <span>🕒</span>
+                                          {slot.slot_proofread_at ? new Date(slot.slot_proofread_at).toLocaleString() : ''}
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
                             </div>
                             <div>
                               <Label className="text-xs">必需:</Label>
@@ -1021,7 +1136,17 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       }
       await evidenceApi.updateEvidence(editForm.id, payload)
       setEditing(false)
+      
+      // 刷新证据列表
       await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      
+      // 重新获取更新后的证据列表数据，并更新selectedEvidence
+      const updatedData = await evidenceFetcher(['/api/evidences', String(caseId), searchTerm, page, pageSize])
+      const updatedEvidence = updatedData?.data?.find((e: any) => e.id === editForm.id)
+      if (updatedEvidence) {
+        setSelectedEvidence(updatedEvidence)
+      }
+      
       toast({ title: "保存成功" })
     } catch (e: any) {
       toast({ title: "保存失败", description: e?.message || '未知错误', variant: "destructive" })
@@ -1085,7 +1210,20 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* 校对图标呼吸动画样式 */}
+      <style jsx>{`
+        @keyframes proofreadBreathe {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-2px);
+          }
+        }
+      `}</style>
+      
+      <div className="space-y-6">
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
@@ -1514,6 +1652,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           toast={toast}
         />
       </Suspense>
-    </div>
+      </div>
+    </>
   )
 }

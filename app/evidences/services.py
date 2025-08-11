@@ -8,6 +8,8 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime
 from app.agentic.agents.evidence_classifier_v2 import EvidenceClassifier, EvidenceClassifiResults
 from app.agentic.agents.evidence_extractor_v2 import EvidenceFeaturesExtractor, EvidenceExtractionResults, EvidenceImage
+
+
 from loguru import logger
 from agno.media import Image
 from agno.run.response import RunResponse
@@ -17,11 +19,115 @@ from app.evidences.schemas import (
     UploadFileResponse
 )
 from app.integrations.cos import cos_service
+from app.agentic.agents.evidence_proofreader import evidence_proofreader
+from app.cases.models import Case
+
+
+async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSession) -> Evidence:
+    """为证据添加校对信息"""
+    logger.info(f"开始为证据 {evidence.id} 添加校对信息")
+    
+    if not evidence.evidence_features:
+        logger.info(f"证据 {evidence.id} 没有evidence_features，跳过校对")
+        return evidence
+        
+    if not evidence.case_id:
+        logger.info(f"证据 {evidence.id} 没有case_id，跳过校对")
+        return evidence
+        
+    if not evidence.case:
+        logger.warning(f"证据 {evidence.id} 的case数据未加载，跳过校对")
+        return evidence
+    
+    logger.info(f"证据 {evidence.id} 有 {len(evidence.evidence_features)} 个特征，关联案件 {evidence.case_id}")
+    
+    try:
+        # 执行校对
+        logger.info(f"开始调用校对器，证据ID: {evidence.id}, 案件ID: {evidence.case_id}")
+        proofread_result = await evidence_proofreader.proofread_evidence_features(
+            db=db,
+            evidence=evidence,
+            case=evidence.case  # 假设case已经通过joinedload加载
+        )
+        logger.info(f"校对器调用完成，结果: {proofread_result is not None}")
+        
+        if proofread_result and proofread_result.proofread_results:
+            logger.info(f"校对结果包含 {len(proofread_result.proofread_results)} 个项目")
+            # 为每个特征添加校对信息
+            enhanced_features = []
+            
+            for feature in evidence.evidence_features:
+                # 转换为dict格式
+                if isinstance(feature, dict):
+                    enhanced_feature = feature.copy()
+                    logger.debug(f"特征是dict格式: {feature.get('slot_name', 'unknown')}")
+                else:
+                    # 如果不是dict，转换为dict
+                    logger.debug(f"特征不是dict格式，类型: {type(feature)}")
+                    if hasattr(feature, 'model_dump'):
+                        enhanced_feature = feature.model_dump()
+                        logger.debug(f"转换为dict: {enhanced_feature.get('slot_name', 'unknown')}")
+                    else:
+                        enhanced_feature = dict(feature) if hasattr(feature, '__dict__') else feature
+                
+                # 查找对应的校对结果
+                slot_name = enhanced_feature.get("slot_name") if isinstance(enhanced_feature, dict) else getattr(enhanced_feature, 'slot_name', None)
+                if slot_name:
+                    for proofread_item in proofread_result.proofread_results:
+                        if proofread_item.field_name == slot_name:
+                            # 添加校对信息到slot级别
+                            logger.info(f"为slot '{slot_name}' 添加校对信息: {proofread_item.is_consistent}")
+                            if isinstance(enhanced_feature, dict):
+                                before_keys = set(enhanced_feature.keys())
+                                enhanced_feature.update({
+                                    "slot_is_consistent": proofread_item.is_consistent,
+                                    "slot_proofread_at": datetime.now().isoformat(),
+                                    "slot_proofread_reasoning": proofread_item.proofread_reasoning,
+                                    "slot_expected_value": proofread_item.expected_value
+                                })
+                                after_keys = set(enhanced_feature.keys())
+                                new_keys = after_keys - before_keys
+                                logger.debug(f"slot '{slot_name}' 添加了新键: {new_keys}")
+                            else:
+                                logger.warning(f"slot '{slot_name}' 不是dict格式，无法添加校对信息")
+                            break
+                
+                enhanced_features.append(enhanced_feature)
+            
+            # 更新evidence的features（仅在内存中）
+            logger.info(f"成功为证据 {evidence.id} 添加校对信息，共处理 {len(enhanced_features)} 个特征")
+            # 调试：检查最终的特征结构
+            for i, feature in enumerate(enhanced_features[:2]):  # 只检查前2个
+                if isinstance(feature, dict):
+                    has_proofreading = any(key.startswith('slot_') and 'proofread' in key for key in feature.keys())
+                    logger.debug(f"特征 {i} 包含校对字段: {has_proofreading}, 键: {list(feature.keys())}")
+            
+            evidence.evidence_features = enhanced_features
+        else:
+            logger.warning(f"证据 {evidence.id} 没有校对结果")
+            
+    except Exception as e:
+        logger.error(f"为证据 {evidence.id} 添加校对信息失败: {str(e)}")
+        import traceback
+        logger.error(f"错误详情: {traceback.format_exc()}")
+        # 校对失败不影响返回，返回原始数据
+    
+    logger.info(f"完成证据 {evidence.id} 的校对处理")
+    return evidence
 
 
 async def get_by_id(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
-    """根据ID获取证据"""
-    return await db.get(Evidence, evidence_id)
+    """根据ID获取证据，包含案件信息和校对功能"""
+    result = await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id).options(joinedload(Evidence.case))
+    )
+    evidence = result.scalars().first()
+    
+    if evidence:
+        # 添加校对信息
+        evidence = await enhance_evidence_with_proofreading(evidence, db)
+    
+    return evidence
 
 async def get_multi_by_ids(db: AsyncSession, evidence_ids: List[int]) -> List[Evidence]:
     """根据ID列表获取证据"""
@@ -104,8 +210,10 @@ async def update(db: AsyncSession, db_obj: Evidence, obj_in: EvidenceEditRequest
     
     db.add(db_obj)
     await db.commit()
-    await db.refresh(db_obj)
-    return db_obj
+    
+    # 重新获取完整的evidence对象，包括case关系和校对信息
+    updated_evidence = await get_by_id(db, db_obj.id)
+    return updated_evidence
 
 
 async def delete(db: AsyncSession, evidence_id: int) -> bool:
@@ -181,7 +289,15 @@ async def get_multi_with_count(
     result = await db.execute(query)
     data = result.scalars().all()
 
-    return data, total
+    # 为每个证据添加校对信息
+    logger.info(f"开始为 {len(data)} 个证据添加校对信息")
+    enhanced_data = []
+    for evidence in data:
+        enhanced_evidence = await enhance_evidence_with_proofreading(evidence, db)
+        enhanced_data.append(enhanced_evidence)
+    logger.info(f"完成所有证据的校对处理")
+
+    return enhanced_data, total
 
 
 async def get_multi_with_cases(
@@ -648,14 +764,16 @@ async def auto_process(
             if send_progress:
                 await send_progress({"status": "error", "message": f"证据特征分析失败: {str(e)}"})
             raise
+
+    # 4. 证据特征校对已移除 - 改为动态计算
+    # 校对结果将在获取证据时实时计算，确保始终反映最新的特征和案件数据
         
-        
-    # 4. 发送完成状态
+    # 5. 发送完成状态
     if send_progress:
         logger.info(f"发送完成状态: 成功处理 {len(evidences)} 个证据")
         await send_progress({"status": "completed", "message": f"成功处理 {len(evidences)} 个证据"})
     
-    # 5. 返回证据列表
+    # 6. 返回证据列表
     logger.info(f"auto_process函数完成，返回 {len(evidences)} 个证据")
     return evidences
 

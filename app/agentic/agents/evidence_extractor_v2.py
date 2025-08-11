@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from agno.agent import Agent
 from agno.media import Image
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ class SlotExtraction(BaseModel):
     slot_desc: str
     slot_value_type: str
     slot_required: bool
-    slot_value: str
+    slot_value: Any
     confidence: float
     reasoning: str  # 提取理由，特别说明来自哪些图片
     

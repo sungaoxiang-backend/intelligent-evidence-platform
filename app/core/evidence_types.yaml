@@ -123,6 +123,11 @@ evidence_types:
         slot_desc: "付款方的真实姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人或债权人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "付款方微信号"
         slot_desc: "付款方的微信号"
         slot_value_type: "string"
@@ -131,6 +136,11 @@ evidence_types:
         slot_desc: "收款方的真实姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人或债权人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "收款方微信号"
         slot_desc: "收款方的微信号"
         slot_value_type: "string"
@@ -168,9 +178,14 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
       - slot_name: "债务人脱敏真名"
-        slot_desc: "债务人头像下方微信备注名，括号内的脱敏真实姓名（仅显示最右侧的一个字符），括号外的是微信备注名"
+        slot_desc: "债务人头像下方微信备注名，括号内的脱敏真实姓名（仅显示最右侧的一个字符），括号外的是微信备注名。提取时应该输出完整的脱敏姓名，包含脱敏符号"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "fuzzy"
+            match_condition: "all"
       - slot_name: "债务人微信号"
         slot_desc: "转账页面显示的债务人头像下方微信号"
         slot_value_type: "string"
@@ -247,6 +262,11 @@ evidence_types:
         slot_desc: "债务人头像下方支付宝备注名，括号内的真实姓名，括号外的是支付宝备注名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人手机号码"
         slot_desc: "债务人头像下方手机号码"
         slot_value_type: "string"
@@ -293,18 +313,38 @@ evidence_types:
         slot_desc: "债务人的真实姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人签字名字"
         slot_desc: "债务人签字的名字"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人盖章名字"
         slot_desc: "债务人盖章的名字"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款金额"
         slot_desc: "欠款的金额数值"
         slot_value_type: "number"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "欠款金额匹配"
+            case_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款合意"
         slot_desc: "双方对欠款事实的确认"
         slot_value_type: "boolean"
@@ -351,18 +391,38 @@ evidence_types:
         slot_desc: "债务人的真实姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人签字名字"
         slot_desc: "债务人签字的名字"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人盖章名字"
         slot_desc: "债务人盖章的名字"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人姓名匹配"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款金额"
         slot_desc: "欠款的金额数值"
         slot_value_type: "number"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "欠款金额匹配"
+            case_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款合意"
         slot_desc: "双方对欠款事实的确认"
         slot_value_type: "boolean"
@@ -390,14 +450,15 @@ evidence_types:
       - "微信转账记录"
       - "支付宝转账记录"
     extraction_slots:
-      - slot_name: "转账账户"
-        slot_desc: "转账的银行账户"
-        slot_value_type: "string"
-        slot_required: true
       - slot_name: "转账账户真名"
         slot_desc: "转账账户的真实姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人姓名匹配"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "转账金额"
         slot_desc: "转账的金额数值"
         slot_value_type: "number"
@@ -434,6 +495,11 @@ evidence_types:
         slot_desc: "购买方的真实名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "购买方纳税人识别号"
         slot_desc: "购买方的纳税人识别号"
         slot_value_type: "string"
@@ -442,6 +508,11 @@ evidence_types:
         slot_desc: "销售方的真实名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "销售方纳税人识别号"
         slot_desc: "销售方的纳税人识别号"
         slot_value_type: "string"
@@ -481,6 +552,11 @@ evidence_types:
         slot_desc: "身份证上的姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "性别"
         slot_desc: "身份证上的性别"
         slot_value_type: "string"
@@ -528,6 +604,11 @@ evidence_types:
         slot_desc: "户口簿上的姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "性别"
         slot_desc: "户口簿上的性别"
         slot_value_type: "string"
@@ -575,6 +656,11 @@ evidence_types:
         slot_desc: "公司的名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -617,6 +703,11 @@ evidence_types:
         slot_desc: "个体工商户的经营名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -658,6 +749,11 @@ evidence_types:
         slot_desc: "公司的名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -698,6 +794,11 @@ evidence_types:
         slot_desc: "个体工商户的经营名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -743,6 +844,11 @@ evidence_types:
           slot_desc: "真实姓名"
           slot_value_type: "string"
           slot_required: true
+          proofread_with_case:
+            - rule_name: "债权人姓名匹配"
+              case_fields: ["creditor_name"]
+              match_strategy: "exact"
+              match_condition: "all"
         - slot_name: "经常居住地址"
           slot_desc: "经常居住的地址"
           slot_value_type: "string"
@@ -804,6 +910,10 @@ evidence_types:
       - "合同"
       - "复杂文档"
     extraction_slots:
+      - slot_name: "银行帐号实名"
+        slot_desc: "银行帐号实名"
+        slot_value_type: "string"
+        slot_required: true
       - slot_name: "银行卡号"
         slot_desc: "银行卡号码"
         slot_value_type: "string"

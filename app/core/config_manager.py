@@ -237,6 +237,43 @@ class ConfigManager:
             result[key] = config.get("extraction_slots", [])
         return result
     
+    def get_proofread_config_by_evidence_type(self, evidence_type_key: str) -> Optional[Dict[str, Any]]:
+        """根据证据类型key获取校对配置"""
+        evidence_type_config = self.get_evidence_type_by_key(evidence_type_key)
+        if evidence_type_config:
+            return evidence_type_config.get("proofread_with_case")
+        return None
+    
+    def get_proofread_config_by_type_name(self, type_name: str) -> Optional[Dict[str, Any]]:
+        """根据type名称获取校对配置"""
+        evidence_type_config = self.get_evidence_type_by_type_name(type_name)
+        if evidence_type_config:
+            return evidence_type_config.get("proofread_with_case")
+        return None
+    
+    def get_proofread_configs_by_chinese_types(self, chinese_types: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
+        """根据中文type列表批量获取校对配置"""
+        evidence_types = self.get_all_evidence_types()
+        result = {}
+        for chinese_type in chinese_types:
+            # 找到对应的key
+            for key, config in evidence_types.items():
+                if config.get("type") == chinese_type:
+                    result[chinese_type] = config.get("proofread_with_case")
+                    break
+            else:
+                # 如果没找到，返回None
+                result[chinese_type] = None
+        return result
+    
+    def get_all_proofread_configs(self) -> Dict[str, Optional[Dict[str, Any]]]:
+        """获取所有证据类型的校对配置"""
+        evidence_types = self.get_all_evidence_types()
+        result = {}
+        for key, config in evidence_types.items():
+            result[key] = config.get("proofread_with_case")
+        return result
+    
     def get_extraction_rules(self) -> Dict[str, Any]:
         """获取提取规则配置（从YAML）"""
         business_config = self.load_business_config()

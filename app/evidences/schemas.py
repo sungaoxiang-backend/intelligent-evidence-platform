@@ -5,6 +5,7 @@ from pydantic import BaseModel, model_validator, Field, computed_field
 from app.cases.schemas import Case
 from app.evidences.models import EvidenceStatus
 from app.agentic.agents.evidence_extractor_v2 import SlotExtraction
+
     
     
 class AutoProcessRequest(BaseModel):
@@ -46,8 +47,11 @@ class EvidenceResponse(BaseModel):
     classification_reasoning: Optional[str] = Field(None, description="证据分类推理过程")
     classified_at: Optional[datetime] = Field(None, description="证据最近分类时间")
     
-    evidence_features: Optional[List[SlotExtraction]] = Field(None, description="证据提取特征列表")
+    evidence_features: Optional[List[Dict[str, Any]]] = Field(None, description="证据提取特征列表（包含校对信息）")
     features_extracted_at: Optional[datetime] = Field(None, description="证据最近特征提取时间")
+    
+    # 包含case信息用于校对
+    case: Optional[Case] = Field(None, description="关联案件信息")
     
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
@@ -57,13 +61,30 @@ class EvidenceResponse(BaseModel):
     def features_complete(self) -> bool:
         """判断特征提取是否完整
         
-        判断标准：所有required=true的slot_value都不是"未知"
+        判断标准：
+        1. 所有required=true的slot_value都不是"未知"
+        2. 如果字段有校对信息，必须校对成功(slot_is_consistent=True)
         """
         if not self.evidence_features:
             return False
         
         for feature in self.evidence_features:
-            if feature.slot_required and feature.slot_value == "未知":
-                return False
+            slot_required = feature.get("slot_required", True)  # 默认为必需
+            slot_value = feature.get("slot_value", "")
+            slot_proofread_at = feature.get("slot_proofread_at")
+            slot_is_consistent = feature.get("slot_is_consistent")
+            
+            if slot_required:
+                # 检查是否有值
+                has_value = slot_value != "未知" and str(slot_value).strip() != ""
+                if not has_value:
+                    return False
+                
+                # 如果有校对信息，检查校对是否成功
+                if slot_proofread_at and not slot_is_consistent:
+                    return False
         
         return True
+    
+
+    
