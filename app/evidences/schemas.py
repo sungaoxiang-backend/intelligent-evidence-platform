@@ -71,19 +71,11 @@ class EvidenceResponse(BaseModel):
         for feature in self.evidence_features:
             slot_required = feature.get("slot_required", True)  # 默认为必需
             slot_value = feature.get("slot_value", "")
-            slot_proofread_at = feature.get("slot_proofread_at")
-            slot_is_consistent = feature.get("slot_is_consistent")
-            
             if slot_required:
                 # 检查是否有值
                 has_value = slot_value != "未知" and str(slot_value).strip() != ""
                 if not has_value:
                     return False
-                
-                # 如果有校对信息，检查校对是否成功
-                if slot_proofread_at and not slot_is_consistent:
-                    return False
-        
         return True
     
 

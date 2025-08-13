@@ -64,6 +64,26 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// 检查证据是否真正可以审核（features_complete && 所有需要校对的slot都校对成功）
+const isEvidenceReadyForReview = (evidence: any) => {
+  // 首先检查特征是否完整
+  if (!evidence.features_complete) {
+    return false;
+  }
+  
+  // 检查所有需要校对的特征是否都校对成功
+  if (evidence.evidence_features && Array.isArray(evidence.evidence_features)) {
+    for (const feature of evidence.evidence_features) {
+      // 如果有校对信息，必须校对成功
+      if (feature.slot_proofread_at && !feature.slot_is_consistent) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+};
+
 // 获取特征项的颜色样式
 const getFeatureColor = (slot: any) => {
   const slotRequired = slot.slot_required ?? true; // 默认为true
@@ -1015,10 +1035,11 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
 
   // 计算特征完整率和证据完备率
   const featureCompleteCount = filteredEvidenceList.filter((e: any) => e.features_complete).length
-  const featureCompleteReviewedCount = filteredEvidenceList.filter((e: any) => e.features_complete && e.evidence_status === "checked").length
+  const readyForReviewCount = filteredEvidenceList.filter((e: any) => isEvidenceReadyForReview(e)).length
+  const evidenceReviewedCount = filteredEvidenceList.filter((e: any) => isEvidenceReadyForReview(e) && e.evidence_status === "checked").length
   
   const featureCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteCount / filteredEvidenceList.length) * 100) : 0
-  const evidenceCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteReviewedCount / filteredEvidenceList.length) * 100) : 0
+  const evidenceCompleteRate = filteredEvidenceList.length > 0 ? Math.round((evidenceReviewedCount / filteredEvidenceList.length) * 100) : 0
 
   // 自动选中第一个证据，但保持当前选中状态
   useEffect(() => {
@@ -1294,14 +1315,14 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           </DialogHeader>
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              选择需要审核的证据（仅显示特征完整且未审核的证据）
+              选择需要审核的证据（仅显示特征完整、校对通过且未审核的证据）
             </div>
             
             {/* 待审核证据列表 */}
             <div className="max-h-[400px] overflow-y-auto border rounded-lg p-4">
               <div className="space-y-2">
                 {evidenceList
-                  .filter((e: any) => e.features_complete && e.evidence_status !== "checked")
+                  .filter((e: any) => isEvidenceReadyForReview(e) && e.evidence_status !== "checked")
                   .map((evidence: any) => {
                     const isSelected = reviewEvidenceIds.includes(evidence.id);
                     return (
@@ -1367,11 +1388,11 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
                   })}
               </div>
               
-              {evidenceList.filter((e: any) => e.features_complete && e.evidence_status !== "checked").length === 0 && (
+              {evidenceList.filter((e: any) => isEvidenceReadyForReview(e) && e.evidence_status !== "checked").length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>暂无待审核的证据</p>
-                  <p className="text-sm">所有证据都已审核完成或特征不完整</p>
+                  <p className="text-sm">所有证据都已审核完成或特征不完整/校对未通过</p>
                 </div>
               )}
             </div>
@@ -1498,14 +1519,14 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-orange-200/30 dark:border-orange-800/30">
               <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                {filteredEvidenceList.filter((e: any) => e.evidence_status === "features_extracted" && e.features_complete).length}
+                {filteredEvidenceList.filter((e: any) => e.evidence_status === "features_extracted" && isEvidenceReadyForReview(e)).length}
               </div>
               <div className="text-xs text-muted-foreground font-medium">待审核</div>
-              <div className="text-xs text-muted-foreground mt-0.5">AI已处理，等待人工审核</div>
+              <div className="text-xs text-muted-foreground mt-0.5">特征完整且校对通过，等待人工审核</div>
             </div>
             <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-green-200/30 dark:border-green-800/30">
               <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                {filteredEvidenceList.filter((e: any) => e.evidence_status === "checked" && e.features_complete).length}
+                {evidenceReviewedCount}
               </div>
               <div className="text-xs text-muted-foreground font-medium">已审核</div>
               <div className="text-xs text-muted-foreground mt-0.5">人工审核确认无误</div>

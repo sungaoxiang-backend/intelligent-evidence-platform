@@ -45,6 +45,11 @@ evidence_types:
         slot_desc: "微信聊天界面顶部用户备注名称，可能来自左上角（pc端），也可能来自顶部（手机端），也可能不存在（这时候你需要尝试从上下文推断，比如确定头像的连续性）"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人真名"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款合意"
         slot_desc: "双方对欠款事实的确认"
         slot_value_type: "boolean"

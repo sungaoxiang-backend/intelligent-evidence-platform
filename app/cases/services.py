@@ -19,15 +19,129 @@ from loguru import logger
 from app.evidences.services import batch_create
 from app.evidences.models import Evidence
 from app.agentic.agents.association_features_extractor import AssociationFeaturesExtractor, AssociationFeaturesExtractionResults
+from app.agentic.agents.evidence_proofreader import EvidenceProofreader
+
+# 创建校对器实例
+evidence_proofreader = EvidenceProofreader()
+
+async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
+    """为案件的关联特征组添加校对信息"""
+    logger.info(f"开始为案件 {case.id} 添加校对信息")
+    
+    if not case.association_evidence_features:
+        logger.info(f"案件 {case.id} 没有关联特征组，跳过校对")
+        return case
+    
+    try:
+        # 为每个关联特征组添加校对信息
+        for feature_group in case.association_evidence_features:
+            if not feature_group.evidence_features:
+                continue
+                
+            logger.info(f"处理特征组 {feature_group.slot_group_name}，包含 {len(feature_group.evidence_features)} 个特征")
+            
+            # 为每个特征添加校对信息
+            enhanced_features = []
+            
+            for feature in feature_group.evidence_features:
+                # 转换为dict格式
+                if isinstance(feature, dict):
+                    enhanced_feature = feature.copy()
+                else:
+                    # 如果不是dict，转换为dict
+                    if hasattr(feature, 'model_dump'):
+                        enhanced_feature = feature.model_dump()
+                    elif hasattr(feature, '__dict__'):
+                        enhanced_feature = vars(feature)
+                    else:
+                        enhanced_feature = dict(feature) if hasattr(feature, 'items') else feature
+                
+                # 执行校对逻辑
+                slot_name = enhanced_feature.get("slot_name")
+                slot_value = enhanced_feature.get("slot_value")
+                
+                if slot_name and slot_value and slot_value != "未知":
+                    try:
+                        # 使用证据校对器的逻辑
+                        from app.core.config_manager import config_manager
+                        
+                        # 联合分析目前只针对微信聊天记录，固定使用这个证据类型的配置
+                        wechat_config = config_manager.get_evidence_type_by_key("wechat_chat_record")
+                        
+                        # 在微信聊天记录的extraction_slots中查找对应slot的校对配置
+                        slot_proofread_config = None
+                        if wechat_config and wechat_config.get("extraction_slots"):
+                            for slot_config in wechat_config["extraction_slots"]:
+                                if slot_config.get("slot_name") == slot_name:
+                                    slot_proofread_config = slot_config.get("proofread_with_case")
+                                    break
+                        
+                        if slot_proofread_config:
+                            # 执行校对 - slot_proofread_config是一个规则列表
+                            for rule in slot_proofread_config:
+                                case_fields = rule.get("case_fields", [])
+                                expected_values = []
+                                
+                                # 从案件中获取期待值
+                                for case_field in case_fields:
+                                    case_value = getattr(case, case_field, None)
+                                    if case_value is not None:
+                                        expected_values.append(str(case_value))
+                                
+                                if expected_values:
+                                    # 简单的精确匹配逻辑
+                                    is_consistent = False
+                                    expected_value = " 或 ".join(expected_values)  # 多个期待值用"或"连接
+                                    
+                                    for expected in expected_values:
+                                        if str(slot_value).strip() == expected.strip():
+                                            is_consistent = True
+                                            break
+                                    
+                                    reasoning = f"实际提取: '{slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'}"
+                                    
+                                    enhanced_feature["slot_proofread_at"] = datetime.now().isoformat()
+                                    enhanced_feature["slot_is_consistent"] = is_consistent
+                                    enhanced_feature["slot_expected_value"] = expected_value
+                                    enhanced_feature["slot_proofread_reasoning"] = reasoning
+                                    logger.info(f"特征 {slot_name} 校对完成: {is_consistent}")
+                                    break  # 只处理第一个有效规则
+                                else:
+                                    logger.info(f"特征 {slot_name} 的规则 {rule.get('rule_name')} 没有期待值")
+                        else:
+                            logger.info(f"特征 {slot_name} 没有校对配置，跳过校对")
+                            
+                    except Exception as e:
+                        logger.error(f"校对特征 {slot_name} 时出错: {e}")
+                        # 即使校对失败，也继续处理其他特征
+                
+                enhanced_features.append(enhanced_feature)
+            
+            # 更新特征组的特征列表
+            feature_group.evidence_features = enhanced_features
+            
+        logger.info(f"案件 {case.id} 校对处理完成")
+        
+    except Exception as e:
+        logger.error(f"为案件 {case.id} 添加校对信息时出错: {e}")
+        # 即使出错，也返回原始案件数据
+    
+    return case
 
 async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
-    """根据ID获取案件"""
+    """根据ID获取案件，包含校对信息"""
     query = select(CaseModel).options(
         joinedload(CaseModel.user),
         joinedload(CaseModel.association_evidence_features)
     ).where(CaseModel.id == case_id)
     result = await db.execute(query)
-    return result.scalars().first()
+    case = result.scalars().first()
+    
+    if case:
+        # 添加校对信息
+        case = await enhance_case_features_with_proofreading(case)
+    
+    return case
 
 
 async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:

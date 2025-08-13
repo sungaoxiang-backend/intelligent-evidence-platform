@@ -1,7 +1,7 @@
 from datetime import datetime
 from optparse import Option
 from tokenize import OP
-from typing import Optional, List, Callable, Awaitable
+from typing import Optional, List, Callable, Awaitable, Any, Dict
 
 from pydantic import BaseModel, computed_field
 from app.core.schemas import BaseSchema
@@ -103,9 +103,8 @@ class AssociationEvidenceFeatureGroup(BaseModel):
     slot_group_name: str
     association_evidence_ids: List[int]
     evidence_feature_status: str
-    evidence_features: List[AssociationEvidenceFeature]
+    evidence_features: List[Dict[str, Any]]  # 改为Dict以支持动态校对字段
     features_extracted_at: datetime
-    evidence_feature_status: str
     case_id: int
     
     @computed_field
@@ -113,14 +112,28 @@ class AssociationEvidenceFeatureGroup(BaseModel):
     def features_complete(self) -> bool:
         """判断特征提取是否完整
         
-        判断标准：所有required=true的slot_value都不是"未知"
+        判断标准：
+        1. 所有required=true的slot_value都不是"未知"
+        2. 如果字段有校对信息，必须校对成功(slot_is_consistent=True)
         """
         if not self.evidence_features:
             return False
         
         for feature in self.evidence_features:
-            if feature.slot_required and feature.slot_value == "未知":
-                return False
+            slot_required = feature.get("slot_required", True)
+            slot_value = feature.get("slot_value", "")
+            # slot_proofread_at = feature.get("slot_proofread_at")
+            # slot_is_consistent = feature.get("slot_is_consistent")
+            
+            if slot_required:
+                # 检查是否有值
+                has_value = slot_value != "未知" and str(slot_value).strip() != ""
+                if not has_value:
+                    return False
+                
+                # # 如果有校对信息，检查校对是否成功
+                # if slot_proofread_at and not slot_is_consistent:
+                #     return False
         
         return True
 

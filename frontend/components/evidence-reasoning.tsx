@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical, CheckCircle, XCircle } from "lucide-react"
 import { caseApi, evidenceApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
@@ -86,14 +87,47 @@ const evidenceFetcher = async ([key, evidenceIds]: [string, number[]]) => {
 
 
 // 获取特征项的颜色样式
+// 检查证据是否真正可以审核（features_complete && 所有需要校对的slot都校对成功）
+const isEvidenceReadyForReview = (evidence: any) => {
+  // 首先检查特征是否完整
+  if (!evidence.features_complete) {
+    return false;
+  }
+  
+  // 检查所有需要校对的特征是否都校对成功
+  if (evidence.evidence_features && Array.isArray(evidence.evidence_features)) {
+    for (const feature of evidence.evidence_features) {
+      // 如果有校对信息，必须校对成功
+      if (feature.slot_proofread_at && !feature.slot_is_consistent) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+};
+
 const getFeatureColor = (slot: any) => {
   const slotRequired = slot.slot_required ?? true; // 默认为true
   const slotValue = slot.slot_value || "";
   const hasValue = slotValue !== "未知" && slotValue.trim() !== "";
   
+  // 判断特征是否有效：有值且如果该特征字段需要校对且校对成功时，为有效
+  let isValid = false;
+  
+  if (hasValue) {
+    if (slot.slot_proofread_at) {
+      // 如果有校对信息，必须校对成功才算有效
+      isValid = slot.slot_is_consistent;
+    } else {
+      // 如果没有校对信息，有值就算有效
+      isValid = true;
+    }
+  }
+  
   if (slotRequired) {
     // required = true
-    if (hasValue) {
+    if (isValid) {
       return {
         container: "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/30",
         text: "text-green-700 dark:text-green-400",
@@ -773,8 +807,8 @@ function EvidenceReasoningContent({
                     </div>
                     <div className="flex justify-between">
                       <span>特征完整性:</span>
-                      <span className={`${selectedFeatureGroup.features_complete ? 'text-green-600' : 'text-red-600'}`}>
-                        {selectedFeatureGroup.features_complete ? '完整' : '不完整'}
+                      <span className={`${(selectedFeatureGroup as any).features_complete ? 'text-green-600' : 'text-red-600'}`}>
+                        {(selectedFeatureGroup as any).features_complete ? '完整' : '不完整'}
                       </span>
                     </div>
                   </div>
@@ -789,9 +823,95 @@ function EvidenceReasoningContent({
                   return (
                     <div key={index} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
                       <div className="flex justify-between items-center">
-                        <div>
+                        <div className="flex items-center gap-1">
                           <Label className="text-xs">词槽名:</Label>
                           <span className="text-xs">{slot.slot_name}</span>
+                          {/* 校对状态图标 */}
+                          {slot.slot_proofread_at && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="ml-2 relative group cursor-pointer">
+                                    {/* 毛玻璃矩形标签 */}
+                                    <div 
+                                      className={`
+                                        w-8 h-4 rounded-sm flex items-center justify-center
+                                        backdrop-blur-sm border border-white/30
+                                        transition-all duration-300 ease-out
+                                        animate-proofread-breathe group-hover:animate-none
+                                        group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
+                                        ${slot.slot_is_consistent 
+                                          ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
+                                          : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
+                                        }
+                                      `}
+                                      style={{
+                                        animation: 'proofreadBreathe 4s ease-in-out infinite',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.animation = 'none';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
+                                      }}
+                                    >
+                                      {slot.slot_is_consistent ? (
+                                        <CheckCircle className="w-3 h-3 drop-shadow-sm" />
+                                      ) : (
+                                        <XCircle className="w-3 h-3 drop-shadow-sm" />
+                                      )}
+                                    </div>
+                                    
+                                    {/* 底部阴影 */}
+                                    <div 
+                                      className={`
+                                        absolute top-5 left-1/2 -translate-x-1/2 
+                                        w-5 h-1 rounded-full blur-sm opacity-30
+                                        transition-all duration-300
+                                        ${slot.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
+                                        group-hover:opacity-60 group-hover:w-6
+                                      `}
+                                    ></div>
+                                    
+                                    {/* 光晕效果 */}
+                                    <div className={`
+                                      absolute inset-0 rounded-sm opacity-0 
+                                      transition-all duration-300 blur-sm
+                                      group-hover:opacity-40 group-hover:scale-125
+                                      ${slot.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
+                                    `}></div>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent 
+                                  side="top" 
+                                  className={`max-w-xs p-3 shadow-lg border-2 ${
+                                    slot.slot_is_consistent 
+                                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
+                                      : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                                  }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="font-semibold text-sm">
+                                      校对结果: {slot.slot_is_consistent ? '✅ 一致' : '❌ 不一致'}
+                                    </div>
+                                    {slot.slot_expected_value && (
+                                      <div className="text-xs">
+                                        <span className="font-medium">期待值:</span> {slot.slot_expected_value}
+                                      </div>
+                                    )}
+                                    {slot.slot_proofread_reasoning && (
+                                      <div className="text-xs">
+                                        <span className="font-medium">原因:</span> {slot.slot_proofread_reasoning}
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-muted-foreground">
+                                      校对时间: {new Date(slot.slot_proofread_at).toLocaleString('zh-CN')}
+                                    </div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                         <div>
                           <Label className="text-xs">必需:</Label>
@@ -1247,7 +1367,20 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* 校对图标呼吸动画样式 */}
+      <style jsx>{`
+        @keyframes proofreadBreathe {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-2px);
+          }
+        }
+      `}</style>
+      
+      <div className="space-y-6">
       {/* 注入拖拽样式 */}
       <style dangerouslySetInnerHTML={{ __html: dragStyles }} />
       {/* 页面头部 */}
@@ -1373,18 +1506,48 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
               </div>
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                  {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.features_complete && f.evidence_feature_status === "features_extracted"
-                  ).length || 0}
+                  {caseData?.association_evidence_features?.filter((f: any) => {
+                    // 检查特征完整性
+                    if (!f.features_complete) return false;
+                    
+                    // 检查是否已审核
+                    if (f.evidence_feature_status === "checked") return false;
+                    
+                    // 检查所有需要校对的特征是否都校对成功
+                    if (f.evidence_features && Array.isArray(f.evidence_features)) {
+                      for (const slot of f.evidence_features) {
+                        if (slot.slot_proofread_at && !slot.slot_is_consistent) {
+                          return false;
+                        }
+                      }
+                    }
+                    
+                    return true;
+                  }).length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">待审核</div>
-                <div className="text-xs text-muted-foreground mt-0.5">等待人工审核确认</div>
+                <div className="text-xs text-muted-foreground mt-0.5">特征完整且校对通过，等待人工审核确认</div>
               </div>
               <div className="text-center p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-border/50">
                 <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                  {caseData?.association_evidence_features?.filter((f: any) => 
-                    f.evidence_feature_status === "checked" && f.features_complete
-                  ).length || 0}
+                  {caseData?.association_evidence_features?.filter((f: any) => {
+                    // 必须已审核
+                    if (f.evidence_feature_status !== "checked") return false;
+                    
+                    // 检查特征完整性
+                    if (!f.features_complete) return false;
+                    
+                    // 检查所有需要校对的特征是否都校对成功
+                    if (f.evidence_features && Array.isArray(f.evidence_features)) {
+                      for (const slot of f.evidence_features) {
+                        if (slot.slot_proofread_at && !slot.slot_is_consistent) {
+                          return false;
+                        }
+                      }
+                    }
+                    
+                    return true;
+                  }).length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">已审核</div>
                 <div className="text-xs text-muted-foreground mt-0.5">人工验证确认无误</div>
@@ -1528,17 +1691,31 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
           </DialogHeader>
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              选择需要审核的关联证据特征（仅显示特征完整且未验证的特征组）
+              选择需要审核的关联证据特征（仅显示特征完整、校对通过且未验证的特征组）
             </div>
             
             {/* 待审核特征组列表 */}
             <div className="max-h-[400px] overflow-y-auto border rounded-lg p-4">
               <div className="space-y-2">
                 {caseData?.association_evidence_features
-                  ?.filter((feature: any) => 
-                    feature.features_complete && 
-                    feature.evidence_feature_status !== "checked"
-                  )
+                  ?.filter((feature: any) => {
+                    // 检查特征完整性
+                    if (!feature.features_complete) return false;
+                    
+                    // 检查是否已审核
+                    if (feature.evidence_feature_status === "checked") return false;
+                    
+                    // 检查所有需要校对的特征是否都校对成功
+                    if (feature.evidence_features && Array.isArray(feature.evidence_features)) {
+                      for (const slot of feature.evidence_features) {
+                        if (slot.slot_proofread_at && !slot.slot_is_consistent) {
+                          return false;
+                        }
+                      }
+                    }
+                    
+                    return true;
+                  })
                   .map((feature: any) => {
                     const isSelected = reviewEvidenceIds.includes(feature.id);
                     return (
@@ -1602,14 +1779,28 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
                 
                 {/* 空状态显示 */}
                 {caseData?.association_evidence_features
-                  ?.filter((feature: any) => 
-                    feature.features_complete && 
-                    feature.evidence_feature_status !== "checked"
-                  ).length === 0 && (
+                  ?.filter((feature: any) => {
+                    // 检查特征完整性
+                    if (!feature.features_complete) return false;
+                    
+                    // 检查是否已审核
+                    if (feature.evidence_feature_status === "checked") return false;
+                    
+                    // 检查所有需要校对的特征是否都校对成功
+                    if (feature.evidence_features && Array.isArray(feature.evidence_features)) {
+                      for (const slot of feature.evidence_features) {
+                        if (slot.slot_proofread_at && !slot.slot_is_consistent) {
+                          return false;
+                        }
+                      }
+                    }
+                    
+                    return true;
+                  }).length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>暂无待审核的特征组</p>
-                    <p className="text-sm">所有特征组都已验证完成或特征不完整</p>
+                    <p className="text-sm">所有特征组都已验证完成或特征不完整/校对未通过</p>
                   </div>
                 )}
               </div>
@@ -1697,6 +1888,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         </DialogContent>
       </Dialog>
 
-    </div>
+      </div>
+    </>
   )
 } 
