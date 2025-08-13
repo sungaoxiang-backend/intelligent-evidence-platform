@@ -253,6 +253,7 @@ function EvidenceGalleryContent({
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [showOptionalFields, setShowOptionalFields] = useState(false)
 
   useEffect(() => {
     // 只有在非编辑状态下才同步数据，避免编辑时数据被重置
@@ -733,13 +734,16 @@ function EvidenceGalleryContent({
                     )}
                   </div>
                   <div className="space-y-2">
-                    {(editForm.evidence_features || []).map((slot: any, idx: number) => {
-                      const colors = getFeatureColor(slot)
-                      return (
-                        <div key={idx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
-                          <div className="flex justify-between items-center">
+                    {/* 必需特征 */}
+                    {(editForm.evidence_features || [])
+                      .filter((slot: any) => slot.slot_required !== false)
+                      .map((slot: any, idx: number) => {
+                        const colors = getFeatureColor(slot)
+                        const originalIdx = editForm.evidence_features.findIndex((f: any) => f === slot)
+                        return (
+                          <div key={originalIdx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
                             <div className="flex items-center gap-1">
-                              <Label className="text-xs">词槽名:</Label>
+                              <Label className="text-xs font-medium">词槽名:</Label>
                               <span className="text-xs">{slot.slot_name}</span>
                               {/* 校对状态图标 - 毛玻璃悬浮球 */}
                               {slot.slot_proofread_at && (
@@ -842,71 +846,161 @@ function EvidenceGalleryContent({
                               )}
                             </div>
                             <div>
-                              <Label className="text-xs">必需:</Label>
-                              <span className={`text-xs font-medium ${slot.slot_required ? 'text-red-600' : 'text-gray-600'}`}>
-                                {slot.slot_required ? '是' : '否'}
-                              </span>
+                              <Label className="text-xs">词槽值:</Label>
+                              {editing ? (
+                                <Input
+                                  value={slot.slot_value}
+                                  onChange={e => {
+                                    const newFeatures = [...editForm.evidence_features]
+                                    newFeatures[originalIdx].slot_value = e.target.value
+                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                  }}
+                                  className={colors.input}
+                                />
+                              ) : (
+                                <span className={`text-xs font-medium ${colors.text}`}>
+                                  {slot.slot_value}
+                                </span>
+                              )}
                             </div>
-                          </div>
                           <div>
-                            <Label className="text-xs">词槽值:</Label>
+                            <Label className="text-xs">置信度:</Label>
                             {editing ? (
                               <Input
-                                value={slot.slot_value}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={slot.confidence || 0}
                                 onChange={e => {
                                   const newFeatures = [...editForm.evidence_features]
-                                  newFeatures[idx].slot_value = e.target.value
+                                  newFeatures[originalIdx].confidence = parseFloat(e.target.value)
+                                  // 当用户编辑置信度时，自动将reasoning改为"人工编辑"
+                                  newFeatures[originalIdx].reasoning = "人工编辑"
                                   setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
                                 }}
-                                className={colors.input}
+                                className="text-xs h-6"
                               />
                             ) : (
-                              <span className={`text-xs font-medium ${colors.text}`}>
-                                {slot.slot_value}
-                              </span>
+                              <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
                             )}
                           </div>
-                        <div>
-                          <Label className="text-xs">置信度:</Label>
-                          {editing ? (
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="1"
-                              value={slot.confidence || 0}
-                              onChange={e => {
-                                const newFeatures = [...editForm.evidence_features]
-                                newFeatures[idx].confidence = parseFloat(e.target.value)
-                                // 当用户编辑置信度时，自动将reasoning改为"人工编辑"
-                                newFeatures[idx].reasoning = "人工编辑"
-                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                              }}
-                              className="text-xs h-6"
-                            />
-                          ) : (
-                            <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
-                          )}
+                          <div>
+                            <Label className="text-xs">理由:</Label>
+                            {editing ? (
+                              <Textarea
+                                value={slot.reasoning || ""}
+                                onChange={e => {
+                                  const newFeatures = [...editForm.evidence_features]
+                                  newFeatures[originalIdx].reasoning = e.target.value
+                                  setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                }}
+                                rows={2}
+                                className="text-xs"
+                              />
+                            ) : (
+                              <span className="text-xs">{slot.reasoning}</span>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-xs">理由:</Label>
-                          {editing ? (
-                            <Textarea
-                              value={slot.reasoning || ""}
-                              onChange={e => {
-                                const newFeatures = [...editForm.evidence_features]
-                                newFeatures[idx].reasoning = e.target.value
-                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                              }}
-                              rows={2}
-                              className="text-xs"
-                            />
-                          ) : (
-                            <span className="text-xs">{slot.reasoning}</span>
-                          )}
-                        </div>
-                      </div>
-                    )})}
+                      )})}
+
+                    {/* 非必需特征展开按钮 */}
+                    {(editForm.evidence_features || []).filter((slot: any) => slot.slot_required === false).length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowOptionalFields(!showOptionalFields)}
+                        className="w-full text-xs h-8 mt-2"
+                      >
+                        {showOptionalFields ? '收起' : '展开'} 非必需特征 
+                        ({(editForm.evidence_features || []).filter((slot: any) => slot.slot_required === false).length} 个)
+                        <svg 
+                          className={`ml-1 h-3 w-3 transition-transform duration-200 ${showOptionalFields ? 'rotate-180' : ''}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </Button>
+                    )}
+
+                    {/* 非必需特征 */}
+                    {showOptionalFields && (editForm.evidence_features || [])
+                      .filter((slot: any) => slot.slot_required === false)
+                      .map((slot: any, idx: number) => {
+                        const colors = getFeatureColor(slot)
+                        const originalIdx = editForm.evidence_features.findIndex((f: any) => f === slot)
+                        return (
+                          <div key={`optional-${originalIdx}`} className={`p-2 rounded-md border space-y-1 ${colors.container} opacity-80`}>
+                            <div className="flex items-center gap-1">
+                              <Label className="text-xs font-medium text-muted-foreground">词槽名:</Label>
+                              <span className="text-xs text-muted-foreground">{slot.slot_name}</span>
+                              <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-auto">
+                                可选
+                              </Badge>
+                            </div>
+                            <div>
+                              <Label className="text-xs">词槽值:</Label>
+                              {editing ? (
+                                <Input
+                                  value={slot.slot_value}
+                                  onChange={e => {
+                                    const newFeatures = [...editForm.evidence_features]
+                                    newFeatures[originalIdx].slot_value = e.target.value
+                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                  }}
+                                  className={colors.input}
+                                />
+                              ) : (
+                                <span className={`text-xs font-medium ${colors.text}`}>
+                                  {slot.slot_value}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <Label className="text-xs">置信度:</Label>
+                              {editing ? (
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max="1"
+                                  value={slot.confidence || 0}
+                                  onChange={e => {
+                                    const newFeatures = [...editForm.evidence_features]
+                                    newFeatures[originalIdx].confidence = parseFloat(e.target.value)
+                                    newFeatures[originalIdx].reasoning = "人工编辑"
+                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                  }}
+                                  className="text-xs h-6"
+                                />
+                              ) : (
+                                <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                              )}
+                            </div>
+                            <div>
+                              <Label className="text-xs">理由:</Label>
+                              {editing ? (
+                                <Textarea
+                                  value={slot.reasoning || ""}
+                                  onChange={e => {
+                                    const newFeatures = [...editForm.evidence_features]
+                                    newFeatures[originalIdx].reasoning = e.target.value
+                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                  }}
+                                  rows={2}
+                                  className="text-xs"
+                                />
+                              ) : (
+                                <span className="text-xs">{slot.reasoning}</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+
                     <div>
                       <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
                       <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>

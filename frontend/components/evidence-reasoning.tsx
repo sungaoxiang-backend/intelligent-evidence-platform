@@ -391,6 +391,8 @@ function EvidenceReasoningContent({
   setSelectedEvidence,
   selectedEvidence,
   onEvidenceReorder,
+  showOptionalFields,
+  setShowOptionalFields,
 }: {
   caseId: string | number
   selectedEvidenceIds: number[]
@@ -410,6 +412,8 @@ function EvidenceReasoningContent({
   setSelectedEvidence: (evidence: any) => void
   selectedEvidence: any
   onEvidenceReorder: (newOrder: any[]) => void
+  showOptionalFields: boolean
+  setShowOptionalFields: (show: boolean) => void
 }) {
   // 获取案件数据
   const { data: caseData, error: caseError } = useSWR(
@@ -816,18 +820,21 @@ function EvidenceReasoningContent({
               )}
               
               {((editing ? editForm.evidence_features : allSlots) || []).length > 0 ? (
-                (editing ? editForm.evidence_features : allSlots || []).map((slot: any, index: number) => {
-                  const isSelected = selectedSlot?.slot_name === slot.slot_name
-                  const colors = getFeatureColor(slot)
-                  
-                  return (
-                    <div key={index} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-1">
-                          <Label className="text-xs">词槽名:</Label>
-                          <span className="text-xs">{slot.slot_name}</span>
-                          {/* 校对状态图标 */}
-                          {slot.slot_proofread_at && (
+                <>
+                  {/* 必需特征 */}
+                  {((editing ? editForm.evidence_features : allSlots) || [])
+                    .filter((slot: any) => slot.slot_required !== false)
+                    .map((slot: any, index: number) => {
+                      const isSelected = selectedSlot?.slot_name === slot.slot_name
+                      const colors = getFeatureColor(slot)
+                      
+                      return (
+                        <div key={index} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
+                          <div className="flex items-center gap-1">
+                            <Label className="text-xs font-medium">词槽名:</Label>
+                            <span className="text-xs">{slot.slot_name}</span>
+                            {/* 校对状态图标 */}
+                            {slot.slot_proofread_at && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -911,15 +918,8 @@ function EvidenceReasoningContent({
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          )}
-                        </div>
-                        <div>
-                          <Label className="text-xs">必需:</Label>
-                          <span className={`text-xs font-medium ${slot.slot_required ? 'text-red-600' : 'text-gray-600'}`}>
-                            {slot.slot_required ? '是' : '否'}
-                          </span>
-                        </div>
-                      </div>
+                            )}
+                          </div>
                       <div>
                         <Label className="text-xs">词槽值:</Label>
                         {editing ? (
@@ -979,7 +979,108 @@ function EvidenceReasoningContent({
                       </div>
                     </div>
                   )
-                })
+                })}
+
+                  {/* 非必需特征展开按钮 */}
+                  {((editing ? editForm.evidence_features : allSlots) || []).filter((slot: any) => slot.slot_required === false).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowOptionalFields(!showOptionalFields)}
+                      className="w-full text-xs h-8 mt-2"
+                    >
+                      {showOptionalFields ? '收起' : '展开'} 非必需特征 
+                      ({((editing ? editForm.evidence_features : allSlots) || []).filter((slot: any) => slot.slot_required === false).length} 个)
+                      <svg 
+                        className={`ml-1 h-3 w-3 transition-transform duration-200 ${showOptionalFields ? 'rotate-180' : ''}`} 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </Button>
+                  )}
+
+                  {/* 非必需特征 */}
+                  {showOptionalFields && ((editing ? editForm.evidence_features : allSlots) || [])
+                    .filter((slot: any) => slot.slot_required === false)
+                    .map((slot: any, index: number) => {
+                      const isSelected = selectedSlot?.slot_name === slot.slot_name
+                      const colors = getFeatureColor(slot)
+                      
+                      return (
+                        <div key={`optional-${index}`} className={`p-2 rounded-md border space-y-1 ${colors.container} opacity-80`}>
+                          <div className="flex items-center gap-1">
+                            <Label className="text-xs font-medium text-muted-foreground">词槽名:</Label>
+                            <span className="text-xs text-muted-foreground">{slot.slot_name}</span>
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-auto">
+                              可选
+                            </Badge>
+                          </div>
+                          <div>
+                            <Label className="text-xs">词槽值:</Label>
+                            {editing ? (
+                              <Input
+                                value={slot.slot_value || ""}
+                                onChange={(e) => {
+                                  const newFeatures = [...(editForm.evidence_features || [])];
+                                  const originalIndex = (editing ? editForm.evidence_features : allSlots || []).findIndex((f: any) => f === slot);
+                                  newFeatures[originalIndex].slot_value = e.target.value;
+                                  setEditForm({ ...editForm, evidence_features: newFeatures });
+                                }}
+                                className={colors.input}
+                              />
+                            ) : (
+                              <span className={`text-xs font-medium ${colors.text}`}>
+                                {slot.slot_value || "未知"}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-xs">置信度:</Label>
+                            {editing ? (
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={slot.confidence || 0}
+                                onChange={(e) => {
+                                  const newFeatures = [...(editForm.evidence_features || [])];
+                                  const originalIndex = (editing ? editForm.evidence_features : allSlots || []).findIndex((f: any) => f === slot);
+                                  newFeatures[originalIndex].confidence = parseFloat(e.target.value);
+                                  newFeatures[originalIndex].reasoning = "人工编辑";
+                                  setEditForm({ ...editForm, evidence_features: newFeatures });
+                                }}
+                                className="text-xs h-6"
+                              />
+                            ) : (
+                              <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-xs">理由:</Label>
+                            {editing ? (
+                              <Textarea
+                                value={slot.reasoning || ""}
+                                onChange={(e) => {
+                                  const newFeatures = [...(editForm.evidence_features || [])];
+                                  const originalIndex = (editing ? editForm.evidence_features : allSlots || []).findIndex((f: any) => f === slot);
+                                  newFeatures[originalIndex].reasoning = e.target.value;
+                                  setEditForm({ ...editForm, evidence_features: newFeatures });
+                                }}
+                                rows={2}
+                                className="text-xs"
+                              />
+                            ) : (
+                              <span className="text-xs">{slot.reasoning || "无"}</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </>
               ) : (
                 <div className="h-full flex items-center justify-center text-muted-foreground py-8">
                   <div className="text-center">
@@ -1042,6 +1143,7 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
   const [reviewing, setReviewing] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
+  const [showOptionalFields, setShowOptionalFields] = useState(false)
   // WebSocket进度管理
   const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect } = useAutoProcessWebSocket()
 
@@ -1681,6 +1783,8 @@ export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number;
         setSelectedEvidence={setSelectedEvidence}
         selectedEvidence={selectedEvidence}
         onEvidenceReorder={handleEvidenceReorder}
+        showOptionalFields={showOptionalFields}
+        setShowOptionalFields={setShowOptionalFields}
       />
 
       {/* 批量审核弹窗 */}
