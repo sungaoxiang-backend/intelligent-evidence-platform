@@ -27,11 +27,11 @@ async def get_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
 
 async def create(db: AsyncSession, obj_in: UserCreate) -> User:
     """创建新用户"""
-    db_obj = User(
-        name=obj_in.name,
-        id_card=obj_in.id_card,
-        phone=obj_in.phone
-    )
+    # 使用model_dump获取所有字段，确保包含微信字段
+    create_data = obj_in.model_dump(exclude_unset=True)
+    
+    # 动态创建User对象，包含所有提供的字段
+    db_obj = User(**create_data)
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)

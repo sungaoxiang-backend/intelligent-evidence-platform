@@ -17,8 +17,12 @@ class CaseCreate(BaseModel):
     loan_amount: float
     case_type: Optional[CaseType] = None
     creditor_name: str
+    creditor_phone: Optional[str] = None
+    creditor_bank_account: Optional[str] = None
+    creditor_bank_address: Optional[str] = None
     creditor_type: Optional[PartyType] = None
     debtor_name: str
+    debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
     description: Optional[str] = None
 
@@ -30,8 +34,12 @@ class CaseUpdate(BaseModel):
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
     creditor_name: Optional[str] = None
+    creditor_phone: Optional[str] = None
+    creditor_bank_account: Optional[str] = None
+    creditor_bank_address: Optional[str] = None
     creditor_type: Optional[PartyType] = None
     debtor_name: Optional[str] = None
+    debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
 
 
@@ -42,11 +50,15 @@ class Case(BaseSchema):
     id: int
     user_id: int
     creditor_name: str
+    creditor_phone: Optional[str] = None
+    creditor_bank_account: Optional[str] = None
+    creditor_bank_address: Optional[str] = None
     loan_amount: Optional[float] = 0.0
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
     creditor_type: Optional[PartyType] = None
     debtor_name: str
+    debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
     created_at: datetime
     updated_at: datetime
@@ -72,8 +84,12 @@ class CaseRegistrationRequest(BaseModel):
     case_type: CaseType
     loan_amount: float
     creditor_name: str
+    creditor_phone: Optional[str] = None
+    creditor_bank_account: Optional[str] = None
+    creditor_bank_address: Optional[str] = None
     creditor_type: Optional[PartyType] = None
     debtor_name: str
+    debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
 
 

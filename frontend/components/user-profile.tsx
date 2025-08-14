@@ -155,6 +155,8 @@ export function UserProfile({ user, onUserUpdate }: UserProfileProps) {
                   </Badge>
                 </div>
               </div>
+
+
             </div>
 
             {/* 时间信息 */}

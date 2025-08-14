@@ -10,6 +10,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    wechat_nickname: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    wechat_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    wechat_avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     id_card: Mapped[Optional[str]] = mapped_column(String(18), unique=True, index=True, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True, nullable=True)
     

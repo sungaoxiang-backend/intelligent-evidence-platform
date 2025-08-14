@@ -40,16 +40,14 @@ export default function UserManagement() {
 
   const [addForm, setAddForm] = useState({
     name: "",
-    email: "",
-    phone: "",
-    id_card: "",
+    wechat_nickname: "",
+    wechat_number: "",
   });
 
   const [editForm, setEditForm] = useState({
     name: "",
-    email: "",
-    phone: "",
-    id_card: "",
+    wechat_nickname: "",
+    wechat_number: "",
   });
 
   // Use paginated SWR hook with sorting
@@ -82,9 +80,8 @@ export default function UserManagement() {
       setShowAddDialog(false);
       setAddForm({
         name: "",
-        email: "",
-        phone: "",
-        id_card: "",
+        wechat_nickname: "",
+        wechat_number: "",
       });
       mutate();
     } catch (error) {
@@ -127,9 +124,8 @@ export default function UserManagement() {
     setEditingUser(user);
     setEditForm({
       name: user.name,
-      email: user.email || "",
-      phone: user.phone || "",
-      id_card: user.id_card || "",
+      wechat_nickname: user.wechat_nickname || "",
+      wechat_number: user.wechat_number || "",
     });
     setShowEditDialog(true);
   };
@@ -151,9 +147,8 @@ export default function UserManagement() {
           <TableHeader>
             <TableRow>
               <TableHead>姓名</TableHead>
-              <TableHead>身份证号</TableHead>
-              <TableHead>手机号</TableHead>
-              <TableHead>邮箱</TableHead>
+              <TableHead>微信昵称</TableHead>
+              <TableHead>微信号</TableHead>
               <TableHead>
                 <SortableHeader
                   field="created_at"
@@ -179,9 +174,8 @@ export default function UserManagement() {
             {users.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell>{user.id_card || "-"}</TableCell>
-                <TableCell>{user.phone || "-"}</TableCell>
-                <TableCell>{user.email || "-"}</TableCell>
+                <TableCell>{user.wechat_nickname || "-"}</TableCell>
+                <TableCell>{user.wechat_number || "-"}</TableCell>
                 <TableCell className="text-sm text-gray-600">
                   {formatDateTime(user.created_at)}
                 </TableCell>
@@ -275,40 +269,32 @@ export default function UserManagement() {
                 className="col-span-3"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="id_card" className="text-right">
-                身份证号
+              <Label htmlFor="wechat_nickname" className="text-right">
+                微信昵称
               </Label>
               <Input
-                id="id_card"
-                value={addForm.id_card}
-                onChange={(e) => setAddForm({ ...addForm, id_card: e.target.value })}
+                id="wechat_nickname"
+                value={addForm.wechat_nickname}
+                onChange={(e) => setAddForm({ ...addForm, wechat_nickname: e.target.value })}
                 className="col-span-3"
+                placeholder="可选"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="phone" className="text-right">
-                手机号
+              <Label htmlFor="wechat_number" className="text-right">
+                微信号
               </Label>
               <Input
-                id="phone"
-                value={addForm.phone}
-                onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                id="wechat_number"
+                value={addForm.wechat_number}
+                onChange={(e) => setAddForm({ ...addForm, wechat_number: e.target.value })}
                 className="col-span-3"
+                placeholder="可选"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">
-                邮箱
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={addForm.email}
-                onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
+
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleAddUser}>
@@ -339,40 +325,32 @@ export default function UserManagement() {
                 className="col-span-3"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-id_card" className="text-right">
-                身份证号
+              <Label htmlFor="edit-wechat_nickname" className="text-right">
+                微信昵称
               </Label>
               <Input
-                id="edit-id_card"
-                value={editForm.id_card}
-                onChange={(e) => setEditForm({ ...editForm, id_card: e.target.value })}
+                id="edit-wechat_nickname"
+                value={editForm.wechat_nickname}
+                onChange={(e) => setEditForm({ ...editForm, wechat_nickname: e.target.value })}
                 className="col-span-3"
+                placeholder="可选"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-phone" className="text-right">
-                手机号
+              <Label htmlFor="edit-wechat_number" className="text-right">
+                微信号
               </Label>
               <Input
-                id="edit-phone"
-                value={editForm.phone}
-                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                id="edit-wechat_number"
+                value={editForm.wechat_number}
+                onChange={(e) => setEditForm({ ...editForm, wechat_number: e.target.value })}
                 className="col-span-3"
+                placeholder="可选"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-email" className="text-right">
-                邮箱
-              </Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
+
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleEditUser}>

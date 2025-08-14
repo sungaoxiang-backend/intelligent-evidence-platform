@@ -58,10 +58,14 @@ class Case(Base):
     loan_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     # 当事人信息
     creditor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
-    debtor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    creditor_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    creditor_bank_account: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    creditor_bank_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     creditor_type: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True
     )
+    debtor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    debtor_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     debtor_type: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True
     )

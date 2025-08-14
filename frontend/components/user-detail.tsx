@@ -24,7 +24,11 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editForm, setEditForm] = useState<Partial<UserType>>({})
+  const [editForm, setEditForm] = useState<Partial<UserType>>({
+    wechat_nickname: "",
+    wechat_number: "",
+    wechat_avatar: "",
+  })
 
   useEffect(() => {
     loadUserDetail()
@@ -47,7 +51,7 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
     if (!user) return
     setSaving(true)
     try {
-      const response = await userApi.updateUser(user.id, editForm)
+      const response = await userApi.updateUser(user.id.toString(), editForm)
       setUser(response.data)
       setEditing(false)
     } catch (error) {
@@ -62,7 +66,9 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
     setEditing(false)
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined) => {
+    if (!status) return "bg-blue-100 text-blue-800"
+    
     switch (status) {
       case "活跃":
         return "bg-green-100 text-green-800"
@@ -107,7 +113,7 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
             <h1 className="text-2xl font-bold text-foreground">{user.name}</h1>
             <div className="flex items-center space-x-3 mt-1">
               <Badge variant="outline">{user.type}</Badge>
-              <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
+              <Badge className={getStatusColor(user.status)}>{user.status || "未知"}</Badge>
               <span className="text-sm text-muted-foreground">用户编号: {user.id}</span>
             </div>
           </div>
@@ -183,32 +189,39 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
                   </div>
                 </div>
 
+
+
+                {/* 微信信息 */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="phone">联系电话</Label>
+                    <Label htmlFor="wechat_nickname">微信昵称</Label>
                     {editing ? (
                       <Input
-                        id="phone"
-                        value={editForm.phone || ""}
-                        onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                        id="wechat_nickname"
+                        value={editForm.wechat_nickname || ""}
+                        onChange={(e) => setEditForm({ ...editForm, wechat_nickname: e.target.value })}
+                        placeholder="请输入微信昵称"
                       />
                     ) : (
-                      <p className="text-sm font-medium mt-1">{user.phone}</p>
+                      <p className="text-sm font-medium mt-1">{user.wechat_nickname || "未设置"}</p>
                     )}
                   </div>
                   <div>
-                    <Label htmlFor="email">邮箱地址</Label>
+                    <Label htmlFor="wechat_number">微信号</Label>
                     {editing ? (
                       <Input
-                        id="email"
-                        value={editForm.email || ""}
-                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                        id="wechat_number"
+                        value={editForm.wechat_number || ""}
+                        onChange={(e) => setEditForm({ ...editForm, wechat_number: e.target.value })}
+                        placeholder="请输入微信号"
                       />
                     ) : (
-                      <p className="text-sm font-medium mt-1">{user.email}</p>
+                      <p className="text-sm font-medium mt-1">{user.wechat_number || "未设置"}</p>
                     )}
                   </div>
                 </div>
+
+
 
                 <div>
                   <Label htmlFor="address">联系地址</Label>
@@ -243,7 +256,7 @@ export function UserDetail({ userId, onBack }: UserDetailProps) {
                     </Select>
                   ) : (
                     <Badge className={getStatusColor(user.status)} variant="outline">
-                      {user.status}
+                      {user.status || "未知"}
                     </Badge>
                   )}
                 </div>

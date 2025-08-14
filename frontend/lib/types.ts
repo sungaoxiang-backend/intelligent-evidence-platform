@@ -76,6 +76,9 @@ export interface User {
   email?: string
   address?: string
   status?: "活跃" | "待联系" | "已结案"
+  wechat_nickname?: string
+  wechat_number?: string
+  wechat_avatar?: string
   caseCount?: number
   totalAmount?: string
   registerDate?: string

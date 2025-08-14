@@ -9,6 +9,9 @@ from datetime import datetime
 class UserBase(BaseModel):
     """用户基础模型"""
     name: Optional[str] = None
+    wechat_nickname: Optional[str] = None
+    wechat_number: Optional[str] = None
+    wechat_avatar: Optional[str] = None
     id_card: Optional[str] = None
     phone: Optional[str] = None
     
