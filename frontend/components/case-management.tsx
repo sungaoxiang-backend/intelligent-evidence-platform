@@ -53,8 +53,8 @@ import { SortableHeader, formatDateTime, type SortDirection } from "@/components
 import type { Case, User, CaseType, PartyType } from "@/lib/types";
 
 const caseTypeLabels = {
-  debt: "借款纠纷",
-  contract: "合同纠纷",
+  debt: "民间借贷纠纷",
+  contract: "买卖合同纠纷",
 };
 
 const partyTypeLabels = {
@@ -92,7 +92,10 @@ export default function CaseManagement() {
     case_type: null as null | CaseType,
     creditor_type: null as null | PartyType,
     debtor_type: null as null | PartyType,
-    description: "",
+    creditor_phone: "",
+    creditor_bank_account: "",
+    creditor_bank_address: "",
+    debtor_phone: "",
   });
 
   const [editForm, setEditForm] = useState({
@@ -103,7 +106,10 @@ export default function CaseManagement() {
     case_type: null as null | CaseType,
     creditor_type: null as null | PartyType,
     debtor_type: null as null | PartyType,
-    description: "",
+    creditor_phone: "",
+    creditor_bank_account: "",
+    creditor_bank_address: "",
+    debtor_phone: "",
   });
 
   // 表单验证状态
@@ -190,7 +196,7 @@ export default function CaseManagement() {
     }
 
     setAddFormErrors(errors);
-    return !Object.values(errors).some(error => error !== "");
+    return Object.values(errors).every(error => error === "");
   };
 
   const validateEditForm = () => {
@@ -215,7 +221,7 @@ export default function CaseManagement() {
     }
 
     setEditFormErrors(errors);
-    return !Object.values(errors).some(error => error !== "");
+    return Object.values(errors).every(error => error === "");
   };
 
   const handleAddCase = async () => {
@@ -234,7 +240,10 @@ export default function CaseManagement() {
         case_type: null,
         creditor_type: null,
         debtor_type: null,
-        description: "",
+        creditor_phone: "",
+        creditor_bank_account: "",
+        creditor_bank_address: "",
+        debtor_phone: "",
       });
       setAddFormErrors({
         user_id: "",
@@ -292,7 +301,10 @@ export default function CaseManagement() {
       case_type: caseItem.case_type as CaseType,
       creditor_type: caseItem.creditor_type as PartyType,
       debtor_type: caseItem.debtor_type as PartyType,
-      description: caseItem.description || "",
+      creditor_phone: caseItem.creditor_phone || "",
+      creditor_bank_account: caseItem.creditor_bank_account || "",
+      creditor_bank_address: caseItem.creditor_bank_address || "",
+      debtor_phone: caseItem.debtor_phone || "",
     });
     setShowEditDialog(true);
   };
@@ -666,6 +678,48 @@ export default function CaseManagement() {
               </Select>
             </div>
 
+            {/* 债权人电话 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="creditor_phone" className="text-right">
+                债权人电话
+              </Label>
+              <Input
+                id="creditor_phone"
+                value={addForm.creditor_phone || ""}
+                onChange={(e) => setAddForm({ ...addForm, creditor_phone: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入债权人电话"
+              />
+            </div>
+
+            {/* 债权人银行账户 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="creditor_bank_account" className="text-right">
+                债权人银行账户
+              </Label>
+              <Input
+                id="creditor_bank_account"
+                value={addForm.creditor_bank_account || ""}
+                onChange={(e) => setAddForm({ ...addForm, creditor_bank_account: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入银行账户"
+              />
+            </div>
+
+            {/* 债权人银行地址 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="creditor_bank_address" className="text-right">
+                债权人银行地址
+              </Label>
+              <Input
+                id="creditor_bank_address"
+                value={addForm.creditor_bank_address || ""}
+                onChange={(e) => setAddForm({ ...addForm, creditor_bank_address: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入银行地址"
+              />
+            </div>
+
             {/* 债务人类型 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="debtor_type" className="text-right">
@@ -686,6 +740,20 @@ export default function CaseManagement() {
               </Select>
             </div>
 
+            {/* 债务人电话 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="debtor_phone" className="text-right">
+                债务人电话
+              </Label>
+              <Input
+                id="debtor_phone"
+                value={addForm.debtor_phone || ""}
+                onChange={(e) => setAddForm({ ...addForm, debtor_phone: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入债务人电话"
+              />
+            </div>
+
             {/* 案件类型 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="case_type" className="text-right">
@@ -699,25 +767,13 @@ export default function CaseManagement() {
                   <SelectValue placeholder="选择案件类型" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="debt">借款纠纷</SelectItem>
-                  <SelectItem value="contract">合同纠纷</SelectItem>
+                  <SelectItem value="debt">民间借贷纠纷</SelectItem>
+                  <SelectItem value="contract">买卖合同纠纷</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* 描述 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-right">
-                描述
-              </Label>
-              <Textarea 
-                id="description" 
-                value={addForm.description} 
-                onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入案件描述"
-              />
-            </div>
+
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleAddCase}>
@@ -835,6 +891,48 @@ export default function CaseManagement() {
               </Select>
             </div>
 
+            {/* 债权人电话 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-creditor_phone" className="text-right">
+                债权人电话
+              </Label>
+              <Input
+                id="edit-creditor_phone"
+                value={editForm.creditor_phone || ""}
+                onChange={(e) => setEditForm({ ...editForm, creditor_phone: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入债权人电话"
+              />
+            </div>
+
+            {/* 债权人银行账户 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-creditor_bank_account" className="text-right">
+                债权人银行账户
+              </Label>
+              <Input
+                id="edit-creditor_bank_account"
+                value={editForm.creditor_bank_account || ""}
+                onChange={(e) => setEditForm({ ...editForm, creditor_bank_account: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入银行账户"
+              />
+            </div>
+
+            {/* 债权人银行地址 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-creditor_bank_address" className="text-right">
+                债权人银行地址
+              </Label>
+              <Input
+                id="edit-creditor_bank_address"
+                value={editForm.creditor_bank_address || ""}
+                onChange={(e) => setEditForm({ ...editForm, creditor_bank_address: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入银行地址"
+              />
+            </div>
+
             {/* 债务人类型 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-debtor_type" className="text-right">
@@ -854,6 +952,20 @@ export default function CaseManagement() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 债务人电话 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-debtor_phone" className="text-right">
+                债务人电话
+              </Label>
+              <Input
+                id="edit-debtor_phone"
+                value={editForm.debtor_phone || ""}
+                onChange={(e) => setEditForm({ ...editForm, debtor_phone: e.target.value })}
+                className="col-span-3"
+                placeholder="请输入债务人电话"
+              />
+            </div>
             {/* 案件类型 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-case_type" className="text-right">
@@ -867,25 +979,13 @@ export default function CaseManagement() {
                   <SelectValue placeholder="选择案件类型" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="debt">借款纠纷</SelectItem>
-                  <SelectItem value="contract">合同纠纷</SelectItem>
+                  <SelectItem value="debt">民间借贷纠纷</SelectItem>
+                  <SelectItem value="contract">买卖合同纠纷</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* 描述 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-description" className="text-right">
-                描述
-              </Label>
-              <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入案件描述"
-              />
-            </div>
+
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleEditCase}>

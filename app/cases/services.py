@@ -146,16 +146,12 @@ async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
 
 async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:
     """创建新案件"""
-    db_obj = CaseModel(
-        description=obj_in.description,
-        case_type=obj_in.case_type,
-        creditor_name=obj_in.creditor_name,
-        creditor_type=obj_in.creditor_type,
-        debtor_name=obj_in.debtor_name,
-        debtor_type=obj_in.debtor_type,
-        user_id=obj_in.user_id,
-        loan_amount=obj_in.loan_amount,
-    )
+    # 动态获取所有字段，排除未设置的字段
+    create_data = obj_in.model_dump(exclude_unset=True)
+    
+    # 创建案件对象
+    db_obj = CaseModel(**create_data)
+    
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)

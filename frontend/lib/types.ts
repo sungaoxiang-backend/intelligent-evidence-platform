@@ -24,8 +24,12 @@ export interface Case {
   user_id: number;
   case_type: CaseType | null;
   creditor_name: string;
+  creditor_phone?: string;
+  creditor_bank_account?: string;
+  creditor_bank_address?: string;
   creditor_type: PartyType | null;
   debtor_name: string;  // 从 string | null 改为 string
+  debtor_phone?: string;
   debtor_type: PartyType | null;
   loan_amount?: number;  // 新增贷款金额字段
   description: string | null;

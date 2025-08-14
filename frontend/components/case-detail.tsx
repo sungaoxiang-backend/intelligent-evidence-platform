@@ -303,6 +303,50 @@ export function CaseDetail({ caseId, onBack, onNavigate, onOpenGallery }: CaseDe
               )}
             </div>
           </div>
+
+          {/* 债权人联系信息 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="creditor_phone">债权人电话</Label>
+              {editing ? (
+                <Input
+                  id="creditor_phone"
+                  value={editForm.creditor_phone || ""}
+                  onChange={(e) => setEditForm({ ...editForm, creditor_phone: e.target.value })}
+                  placeholder="请输入债权人电话"
+                />
+              ) : (
+                <p className="text-sm font-medium mt-1">{case_.creditor_phone || "-"}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="creditor_bank_account">债权人银行账户</Label>
+              {editing ? (
+                <Input
+                  id="creditor_bank_account"
+                  value={editForm.creditor_bank_account || ""}
+                  onChange={(e) => setEditForm({ ...editForm, creditor_bank_account: e.target.value })}
+                  placeholder="请输入银行账户"
+                />
+              ) : (
+                <p className="text-sm font-medium mt-1">{case_.creditor_bank_account || "-"}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="creditor_bank_address">债权人银行地址</Label>
+            {editing ? (
+              <Input
+                id="creditor_bank_address"
+                value={editForm.creditor_bank_address || ""}
+                onChange={(e) => setEditForm({ ...editForm, creditor_bank_address: e.target.value })}
+                placeholder="请输入银行地址"
+              />
+            ) : (
+              <p className="text-sm font-medium mt-1">{case_.creditor_bank_address || "-"}</p>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="debtor_name">债务人</Label>
@@ -328,6 +372,21 @@ export function CaseDetail({ caseId, onBack, onNavigate, onOpenGallery }: CaseDe
                 <p className="text-sm font-medium mt-1">{case_.debtor_type || "-"}</p>
               )}
             </div>
+          </div>
+
+          {/* 债务人联系信息 */}
+          <div>
+            <Label htmlFor="debtor_phone">债务人电话</Label>
+            {editing ? (
+              <Input
+                id="debtor_phone"
+                value={editForm.debtor_phone || ""}
+                onChange={(e) => setEditForm({ ...editForm, debtor_phone: e.target.value })}
+                placeholder="请输入债务人电话"
+              />
+            ) : (
+              <p className="text-sm font-medium mt-1">{case_.debtor_phone || "-"}</p>
+            )}
           </div>
           <div>
             <Label htmlFor="description">案件描述</Label>
