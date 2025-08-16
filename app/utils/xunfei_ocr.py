@@ -67,18 +67,19 @@ class BusinessField(str, Enum):
     # 通用字段
     COMPANY_NAME = "公司名称"
     LEGAL_REPRESENTATIVE = "法定代表人"
-    ADDRESS = "住所地"
+    CORPORATE_ADDRESS = "住所地"  # 营业执照相关使用
     ESTABLISHMENT_DATE = "成立日期"
     OPERATING_PERIOD = "营业期限"
     UNIFIED_SOCIAL_CREDIT_CODE = "统一社会信用代码"
     COMPANY_TYPE = "公司类型"
     
-    # 身份证字段
+    # 身份证字段 - 与evidence_types.yaml配置保持一致
     NAME = "姓名"
     GENDER = "性别"
     NATION = "民族"
-    BIRTH_DATE = "出生日期"
-    ID_NUMBER = "身份证号"
+    BIRTH_DATE = "出生"  # 配置中是"出生"，不是"出生日期"
+    ID_NUMBER = "公民身份号码"  # 配置中是"公民身份号码"，不是"身份证号"
+    ID_ADDRESS = "住址"  # 配置中是"住址"，不是"住所地"
     
     # 增值税发票字段
     BUYER_NAME = "购买方名称"
@@ -153,7 +154,7 @@ class XunfeiOcrClient:
         cleaned = re.sub(r'\s+', ' ', cleaned)
         
         # 针对特定字段的特殊处理
-        if field_name in [BusinessField.ADDRESS, BusinessField.UNIFIED_SOCIAL_CREDIT_CODE]:
+        if field_name in [BusinessField.CORPORATE_ADDRESS, BusinessField.ID_ADDRESS, BusinessField.UNIFIED_SOCIAL_CREDIT_CODE]:
             # 地址和统一社会信用代码字段，移除空格
             cleaned = cleaned.replace(' ', '')
         
@@ -176,7 +177,7 @@ class XunfeiOcrClient:
             EvidenceType.COMPANY_BUSINESS_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
                 OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
-                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.ADDRESS,
+                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,
                 OCRFieldMapping.BL_CODE: BusinessField.UNIFIED_SOCIAL_CREDIT_CODE,
@@ -185,7 +186,7 @@ class XunfeiOcrClient:
             EvidenceType.INDIVIDUAL_BUSINESS_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
                 OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
-                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.ADDRESS,
+                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,
                 OCRFieldMapping.BL_CODE: BusinessField.UNIFIED_SOCIAL_CREDIT_CODE,
@@ -194,7 +195,7 @@ class XunfeiOcrClient:
             EvidenceType.COMPANY_GSXT_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
                 OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
-                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.ADDRESS,
+                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,
                 OCRFieldMapping.BL_CODE: BusinessField.UNIFIED_SOCIAL_CREDIT_CODE,
@@ -203,7 +204,7 @@ class XunfeiOcrClient:
             EvidenceType.INDIVIDUAL_GSXT_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
                 OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
-                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.ADDRESS,
+                OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,
                 OCRFieldMapping.BL_CODE: BusinessField.UNIFIED_SOCIAL_CREDIT_CODE,
@@ -214,7 +215,7 @@ class XunfeiOcrClient:
                 OCRFieldMapping.ID_GENDER: BusinessField.GENDER,
                 OCRFieldMapping.ID_NATION: BusinessField.NATION,
                 OCRFieldMapping.ID_BIRTH: BusinessField.BIRTH_DATE,
-                OCRFieldMapping.ID_ADDRESS: BusinessField.ADDRESS,
+                OCRFieldMapping.ID_ADDRESS: BusinessField.ID_ADDRESS,
                 OCRFieldMapping.ID_NUMBER: BusinessField.ID_NUMBER,
             },
             EvidenceType.VAT_INVOICE: {

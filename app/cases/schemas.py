@@ -3,7 +3,7 @@ from optparse import Option
 from tokenize import OP
 from typing import Optional, List, Callable, Awaitable, Any, Dict
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, computed_field, field_validator
 from app.core.schemas import BaseSchema
 from app.cases.models import CaseType, PartyType, CaseStatus
 from app.users.schemas import User
@@ -26,6 +26,14 @@ class CaseCreate(BaseModel):
     debtor_type: Optional[PartyType] = None
     description: Optional[str] = None
 
+    @field_validator('creditor_type', 'debtor_type', mode='before')
+    @classmethod
+    def validate_party_type(cls, v):
+        """将空字符串转换为null"""
+        if v == "":
+            return None
+        return v
+
 
 # 更新时可以修改的属性
 class CaseUpdate(BaseModel):
@@ -41,6 +49,14 @@ class CaseUpdate(BaseModel):
     debtor_name: Optional[str] = None
     debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
+
+    @field_validator('creditor_type', 'debtor_type', mode='before')
+    @classmethod
+    def validate_party_type(cls, v):
+        """将空字符串转换为null"""
+        if v == "":
+            return None
+        return v
 
 
 
@@ -91,6 +107,14 @@ class CaseRegistrationRequest(BaseModel):
     debtor_name: str
     debtor_phone: Optional[str] = None
     debtor_type: Optional[PartyType] = None
+
+    @field_validator('creditor_type', 'debtor_type', mode='before')
+    @classmethod
+    def validate_party_type(cls, v):
+        """将空字符串转换为null"""
+        if v == "":
+            return None
+        return v
 
 
 # 综合案件录入响应模型

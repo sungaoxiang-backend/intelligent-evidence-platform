@@ -1,7 +1,7 @@
 import asyncio
 import mimetypes
 import uuid
-from typing import Annotated, List, Optional, Callable, Awaitable
+from typing import Annotated, List, Optional, Callable, Awaitable, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status, WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -110,7 +110,6 @@ async def batch_create_evidences(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="案件不存在",
         )
-    logger.debug(f"案件存在: ID={case_id}, 名称={case.title}")
 
     try:
         # 批量创建证据
@@ -289,6 +288,7 @@ async def batch_create_evidences_with_classification(
         )
         
 from app.evidences.schemas import AutoProcessRequest, EvidenceEditRequest, EvidenceResponse
+from app.evidences.models import EvidenceStatus
 
 @router.post("/auto-process", response_model=ListResponse[EvidenceResponse])
 async def auto_process(
@@ -299,7 +299,6 @@ async def auto_process(
     evidence_ids: List[int] = Form(None),
     auto_classification: bool = Form(False),
     auto_feature_extraction: bool = Form(False),
-    send_progress: Callable[[dict], Awaitable[None]] = None,
     ):
     from app.evidences.services import auto_process
     from loguru import logger
@@ -325,7 +324,14 @@ async def auto_process(
     # 校验：不能只做特征提取，必须先分类
     if auto_feature_extraction and not auto_classification:
         raise HTTPException(status_code=400, detail="不能只做特征提取，必须先分类")
-    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction, send_progress=send_progress)
+    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction)
+    
+    # 由于 EvidenceResponse 现在继承了 BaseSchema，Pydantic 可以自动处理转换
+    # 只需要确保 case 关系被正确加载
+    for evidence in evidences:
+        if evidence.case_id and not evidence.case:
+            evidence.case = await case_service.get_by_id(db, evidence.case_id)
+    
     return ListResponse(data=evidences)
 
 

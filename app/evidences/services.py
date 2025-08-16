@@ -1,5 +1,5 @@
 import os
-from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable
+from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable, Any
 from datetime import datetime
 from fastapi import UploadFile
 from sqlalchemy import select, func
@@ -490,7 +490,7 @@ async def batch_create_with_classification(
     db: AsyncSession,
     case_id: int,
     files: List[UploadFile],
-    send_progress: Callable[[dict], Awaitable[None]] = None
+    send_progress: Any = None
 ) -> List[Evidence]:
     """批量创建证据并进行AI分类"""
     from loguru import logger
@@ -532,11 +532,11 @@ async def batch_create_with_classification(
 async def auto_process(
     db: AsyncSession,
     case_id: int,
-    files: List[UploadFile] = None,
-    evidence_ids: List[int] = None,
+    files: Optional[List[UploadFile]] = None,
+    evidence_ids: Optional[List[int]] = None,
     auto_classification: bool = False,
     auto_feature_extraction: bool = False,
-    send_progress: Callable[[dict], Awaitable[None]] = None
+    send_progress: Any = None
 )-> List[Evidence]:
     
     # 类型安全：确保 evidence_ids 为 int 列表

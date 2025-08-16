@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Tuple, List, Callable, Awaitable
+from typing import Optional, Tuple, List, Callable, Awaitable, Any
 from fastapi import UploadFile
 
 from sqlalchemy import select, func
@@ -323,7 +323,7 @@ async def get_association_evidence_feature_by_id(
 async def auto_process(
     db: AsyncSession, case_id: int, 
     evidence_ids: List[int], 
-    send_progress: Callable[[dict], Awaitable[None]] = None) -> Optional[List[AssociationEvidenceFeature]]:
+    send_progress: Any = None) -> Optional[List[AssociationEvidenceFeature]]:
     """自动处理案件"""
     
     evidence_ids = [int(eid) for eid in evidence_ids]

@@ -148,6 +148,8 @@ class EvidenceClassifier:
         """重新加载配置"""
         config_manager.reload_config()
         # 更新agent的session_state
+        if self.agent.session_state is None:
+            self.agent.session_state = {}
         self.agent.session_state.update({
             "evidence_type_descriptions": get_evidence_type_features_guide_v2(),
             "evidence_types": get_evidence_types_from_config(),

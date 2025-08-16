@@ -27,6 +27,13 @@ class EvidenceTypesConfig(BaseModel):
     class Config:
         extra = "allow"
 
+class EvidenceChainsConfig(BaseModel):
+    """证据链配置模型"""
+    metadata: Dict[str, Any]
+    evidence_chains: List[Dict[str, Any]]
+    class Config:
+        extra = "allow"
+
 class DynamicConfig(BaseModel):
     key: str
     value: Any
@@ -39,9 +46,11 @@ class ConfigManager:
     def __init__(self):
         self._business_config: Optional[BusinessConfig] = None
         self._evidence_types_config: Optional[EvidenceTypesConfig] = None
+        self._evidence_chains_config: Optional[EvidenceChainsConfig] = None
         self._config_cache: Dict[str, Any] = {}
         self._business_config_path = "app/core/business_config.yaml"
         self._evidence_types_path = "app/core/evidence_types.yaml"
+        self._evidence_chains_path = "app/core/evidence_chains.yaml"
     
     def load_business_config(self) -> BusinessConfig:
         """加载业务逻辑配置（YAML文件）"""
@@ -64,6 +73,19 @@ class ConfigManager:
             else:
                 raise FileNotFoundError(f"证据类型配置文件不存在: {self._evidence_types_path}")
         return self._evidence_types_config
+    
+    def load_evidence_chains_config(self) -> EvidenceChainsConfig:
+        """加载证据链配置（YAML文件）"""
+        if self._evidence_chains_config is None:
+            if os.path.exists(self._evidence_chains_path):
+                with open(self._evidence_chains_path, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f)
+                    if data is None:
+                        raise ValueError(f"证据链配置文件为空: {self._evidence_chains_path}")
+                    self._evidence_chains_config = EvidenceChainsConfig(**data)
+            else:
+                raise FileNotFoundError(f"证据链配置文件不存在: {self._evidence_chains_path}")
+        return self._evidence_chains_config
     
     async def get_dynamic_config(self, key: str, db: Optional[AsyncSession] = None) -> Optional[Any]:
         """获取动态配置（数据库）"""
@@ -284,6 +306,37 @@ class ConfigManager:
         business_config = self.load_business_config()
         return business_config.classification_thresholds
     
+    # 证据链相关方法
+    def get_all_evidence_chains(self) -> List[Dict[str, Any]]:
+        """获取所有证据链配置"""
+        chains_config = self.load_evidence_chains_config()
+        return chains_config.evidence_chains
+    
+    def get_evidence_chains_metadata(self) -> Dict[str, Any]:
+        """获取证据链配置的元数据"""
+        chains_config = self.load_evidence_chains_config()
+        return chains_config.metadata
+    
+    def get_evidence_chain_by_id(self, chain_id: str) -> Optional[Dict[str, Any]]:
+        """根据ID获取特定证据链配置"""
+        chains = self.get_all_evidence_chains()
+        for chain in chains:
+            if chain.get("chain_id") == chain_id:
+                return chain
+        return None
+    
+    def get_evidence_chains_by_case_type(self, case_type: str) -> List[Dict[str, Any]]:
+        """根据案件类型获取适用的证据链"""
+        chains = self.get_all_evidence_chains()
+        applicable_chains = []
+        
+        for chain in chains:
+            applicable_case_types = chain.get("applicable_case_types", [])
+            if case_type in applicable_case_types:
+                applicable_chains.append(chain)
+        
+        return applicable_chains
+    
     def reload_business_config(self):
         """重新加载业务配置（清除缓存）"""
         self._business_config = None
@@ -291,6 +344,10 @@ class ConfigManager:
     def reload_evidence_types_config(self):
         """重新加载证据类型配置（清除缓存）"""
         self._evidence_types_config = None
+    
+    def reload_evidence_chains_config(self):
+        """重新加载证据链配置（清除缓存）"""
+        self._evidence_chains_config = None
     
     def reload_dynamic_config(self):
         """重新加载动态配置（清除缓存）"""
@@ -300,7 +357,8 @@ class ConfigManager:
         """重新加载所有配置"""
         self.reload_business_config()
         self.reload_evidence_types_config()
+        self.reload_evidence_chains_config()
         self.reload_dynamic_config()
 
 # 全局配置管理器实例
-config_manager = ConfigManager() 
+config_manager = ConfigManager()

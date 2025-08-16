@@ -1,0 +1,89 @@
+metadata:
+  version: "1.0"
+  last_updated: "2025-08-15"
+
+evidence_chains:
+  - chain_id: "买卖合同纠纷证据链1"
+    applicable_case_types: ["contract"]
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        core_evidence_slot:
+          - "微信备注名"
+      - evidence_type: "微信支付转账电子凭证"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        core_evidence_slot: []
+      - evidence_type: "中华人民共和国居民户籍档案"
+        core_evidence_slot: []
+  - chain_id: "买卖合同纠纷证据链2"
+    applicable_case_types: ["contract"]
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        core_evidence_slot: []
+      - evidence_type: "中华人民共和国居民户籍档案"
+        core_evidence_slot: []
+  - chain_id: "民间借贷纠纷证据链1"
+    applicable_case_types: ["debt"]
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        core_evidence_slot:
+          - "微信备注名"
+      - evidence_type: "微信支付转账电子凭证"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        core_evidence_slot: []
+      - evidence_type: "中华人民共和国居民户籍档案"
+        core_evidence_slot: []
+      - evidence_type: "银行转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        core_evidence_slot:
+          - "转账金额"
+  - chain_id: "民间借贷纠纷证据链2"
+    applicable_case_types: ["debt"]
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        core_evidence_slot: []
+      - evidence_type: "中华人民共和国居民户籍档案"
+        core_evidence_slot: []
+      - evidence_type: "银行转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        core_evidence_slot:
+          - "转账金额"

@@ -1,4 +1,4 @@
-from typing import List, Callable, Awaitable
+from typing import List, Callable, Awaitable, Any
 from fastapi import UploadFile
 from agno.media import Image
 import json
@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 async def classify_evidence(
     files: List[UploadFile], 
-    send_progress: Callable[[dict], Awaitable[None]] = None
+    send_progress: Any = None
 ) -> EvidenceClassifiResults:
     """
     Uploads files to COS, then classifies them, sending progress updates if a callback is provided.
@@ -61,7 +61,7 @@ async def classify_evidence(
 
 async def classify_evidence_by_urls(
     urls: List[str],
-    send_progress: Callable[[dict], Awaitable[None]] = None,
+    send_progress: Any = None,
     db: AsyncSession = None
 ) -> EvidenceClassifiResults:
     async def no_op(data): pass
@@ -127,7 +127,7 @@ async def extract_evidence_features(
     urls: List[str],
     evidence_type: str,
     consider_correlations: bool = False,
-    send_progress: Callable[[dict], Awaitable[None]] = None,
+    send_progress: Any = None,
     db: AsyncSession = None
 ) -> EvidenceExtractionResults:
     """
@@ -221,7 +221,7 @@ async def extract_evidence_features_by_upload(
     files: List[UploadFile],
     evidence_type: str,
     consider_correlations: bool = False,
-    send_progress: Callable[[dict], Awaitable[None]] = None
+    send_progress: Any = None
 ) -> EvidenceExtractionResults:
     """
     上传文件并提取证据特征信息

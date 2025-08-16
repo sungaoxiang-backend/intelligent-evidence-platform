@@ -109,8 +109,12 @@ const isEvidenceReadyForReview = (evidence: any) => {
 
 const getFeatureColor = (slot: any) => {
   const slotRequired = slot.slot_required ?? true; // 默认为true
-  const slotValue = slot.slot_value || "";
-  const hasValue = slotValue !== "未知" && slotValue.trim() !== "";
+  const slotValue = slot.slot_value;
+  // 确保 slotValue 是字符串类型，并且不是"未知"或空字符串
+  const hasValue = slotValue && 
+    typeof slotValue === 'string' && 
+    slotValue !== "未知" && 
+    slotValue.trim() !== "";
   
   // 判断特征是否有效：有值且如果该特征字段需要校对且校对成功时，为有效
   let isValid = false;
@@ -1132,10 +1136,18 @@ function EvidenceReasoningContent({
   )
 }
 
-export function EvidenceReasoning({ caseId, onBack }: { caseId: string | number; onBack?: () => void }) {
+export function EvidenceReasoning({ 
+  caseId, 
+  onBack, 
+  initialSelectedGroup 
+}: { 
+  caseId: string | number; 
+  onBack?: () => void;
+  initialSelectedGroup?: string;
+}) {
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<number[]>([])
   const [selectedSlot, setSelectedSlot] = useState<any>(null)
-  const [selectedGroup, setSelectedGroup] = useState<string>('全部证据')
+  const [selectedGroup, setSelectedGroup] = useState<string>(initialSelectedGroup || '全部证据')
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)

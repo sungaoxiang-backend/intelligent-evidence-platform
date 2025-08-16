@@ -13,6 +13,10 @@ export const API_CONFIG = {
     STAFFS: "/staffs",
     STAFF_ME: "/staffs/me",
     STAFF_BY_ID: (id: number) => `/staffs/${id}`,
+
+    // 证据链相关
+    EVIDENCE_CHAIN_DASHBOARD: (caseId: number) => `/chain/${caseId}/dashboard`,
+    EVIDENCE_CHAIN_TEMPLATES: "/chain/templates",
   },
 
   // Token存储key

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Eye, X } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, X, CheckCircle } from "lucide-react";
 import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
 import { API_CONFIG } from "@/lib/config";
@@ -58,8 +58,8 @@ const caseTypeLabels = {
 };
 
 const partyTypeLabels = {
-    person: "个人",
-    company: "公司", 
+  person: "个人",
+  company: "公司",
   individual: "个体工商户",
 };
 
@@ -69,22 +69,8 @@ export default function CaseManagement() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
-    field: "created_at",
-    direction: "desc"
-  });
 
-  // Initialize user filter from URL params
-  useEffect(() => {
-    const userId = searchParams.get('user_id');
-    if (userId) {
-      setSelectedUserId(userId);
-    }
-  }, [searchParams]);
-
-  // 初始化表单状态
-  const [addForm, setAddForm] = useState({
+  const [editForm, setEditForm] = useState({
     user_id: 0,
     creditor_name: "",
     debtor_name: "",
@@ -98,7 +84,35 @@ export default function CaseManagement() {
     debtor_phone: "",
   });
 
-  const [editForm, setEditForm] = useState({
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  
+  // 从 localStorage 恢复排序状态，避免页面刷新后丢失
+  const getInitialSort = () => {
+    if (typeof window !== 'undefined') {
+      const savedSort = localStorage.getItem('case-management-sort');
+      if (savedSort) {
+        try {
+          return JSON.parse(savedSort);
+        } catch (e) {
+          console.warn('Failed to parse saved sort state:', e);
+        }
+      }
+    }
+    return { field: "created_at", direction: "desc" as SortDirection };
+  };
+  
+  const [sort, setSort] = useState<{ field: string; direction: SortDirection }>(getInitialSort);
+
+  // Initialize user filter from URL params
+  useEffect(() => {
+    const userId = searchParams.get('user_id');
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+  }, [searchParams]);
+
+  // 初始化表单状态
+  const [addForm, setAddForm] = useState({
     user_id: 0,
     creditor_name: "",
     debtor_name: "",
@@ -142,7 +156,7 @@ export default function CaseManagement() {
     "/cases",
     (params) => {
       // Add user_id filter and sorting parameters
-      const apiParams: any = { 
+      const apiParams: any = {
         ...params,
         sort_by: sort.field,
         sort_order: sort.direction || "desc" // 提供默认值，避免null
@@ -153,10 +167,23 @@ export default function CaseManagement() {
       return caseApi.getCases(apiParams);
     },
     [selectedUserId, sort.field, sort.direction], // Add sorting as dependencies
+    20, // initialPageSize
+    {
+      // 优化刷新策略：避免不必要的重新获取
+      revalidateOnFocus: false,      // 页面获得焦点时不重新验证
+      revalidateOnReconnect: false,  // 网络重连时不重新验证
+      revalidateIfStale: false,      // 数据过期时不自动重新验证
+      dedupingInterval: 30000,       // 30秒内重复请求会被去重
+    }
   );
 
   const handleSort = (field: string, direction: SortDirection) => {
-    setSort({ field, direction });
+    const newSort = { field, direction };
+    setSort(newSort);
+    // 保存排序状态到 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('case-management-sort', JSON.stringify(newSort));
+    }
   };
 
   // 移除客户端排序逻辑，使用服务端排序
@@ -169,7 +196,14 @@ export default function CaseManagement() {
     "/users",
     (params) => userApi.getUsers(params),
     [],
-    100
+    100,
+    {
+      // 用户列表不需要频繁刷新
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000, // 1分钟内重复请求会被去重
+    }
   );
 
   // 重置表单时也要修改
@@ -259,11 +293,11 @@ export default function CaseManagement() {
 
   const handleEditCase = async () => {
     if (!editingCase) return;
-    
+
     if (!validateEditForm()) {
       return;
     }
-    
+
     try {
       await caseApi.updateCase(editingCase.id, editForm);
       setShowEditDialog(false);
@@ -282,7 +316,7 @@ export default function CaseManagement() {
 
   const handleDeleteCase = async (id: number) => {
     if (!confirm("确定要删除这个案件吗？")) return;
-    
+
     try {
       await caseApi.deleteCase(id);
       mutate();
@@ -319,7 +353,7 @@ export default function CaseManagement() {
         name: `user_${Date.now()}`,
         email: `user_${Date.now()}@example.com`,
       });
-      
+
       setAddForm(prev => ({
         ...prev,
         user_id: Number(newUser.data.id)
@@ -351,6 +385,10 @@ export default function CaseManagement() {
     router.push(`/cases/${caseId}`);
   };
 
+  const handleViewEvidenceChain = (caseId: number) => {
+    router.push(`/cases/${caseId}/detail`);
+  };
+
   const handleUserFilterChange = (userId: string) => {
     setSelectedUserId(userId === "all" ? null : userId);
     setPage(1); // Reset to first page when filter changes
@@ -373,102 +411,111 @@ export default function CaseManagement() {
   // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => {
     const sortedCases = cases;
-    
+
     return (
-    <>
-      <div className="bg-white rounded-lg shadow">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>关联用户</TableHead>
-              <TableHead>债权人</TableHead>
-              <TableHead>债务人</TableHead>
-              <TableHead>欠款金额</TableHead>
-              <TableHead>
-                <SortableHeader
-                  field="created_at"
-                  currentSort={sort}
-                  onSort={handleSort}
-                >
-                  创建时间
-                </SortableHeader>
-              </TableHead>
-              <TableHead>
-                <SortableHeader
-                  field="updated_at"
-                  currentSort={sort}
-                  onSort={handleSort}
-                >
-                  更新时间
-                </SortableHeader>
-              </TableHead>
-              <TableHead>操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedCases.map((caseItem) => (
-              <TableRow key={caseItem.id}>
-                <TableCell>{caseItem.user?.name || "-"}</TableCell>
-                <TableCell className="font-medium">
-                  {caseItem.creditor_name}
-                  {caseItem.creditor_type && (
-                    <span className="text-sm text-gray-500 ml-1">
-                      ({partyTypeLabels[caseItem.creditor_type]})
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {caseItem.debtor_name || "-"}
-                  {caseItem.debtor_type && caseItem.debtor_name && (
-                    <span className="text-sm text-gray-500 ml-1">
-                      ({partyTypeLabels[caseItem.debtor_type]})
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
-                </TableCell>
-                <TableCell className="text-sm text-gray-600">
-                  {formatDateTime(caseItem.created_at)}
-                </TableCell>
-                <TableCell className="text-sm text-gray-600">
-                  {formatDateTime(caseItem.updated_at)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewCase(caseItem.id)}
-                      className="flex items-center text-blue-600 hover:text-blue-700"
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      查看证据
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditDialog(caseItem)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteCase(caseItem.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+      <>
+        <div className="bg-white rounded-lg shadow">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>关联用户</TableHead>
+                <TableHead>债权人</TableHead>
+                <TableHead>债务人</TableHead>
+                <TableHead>欠款金额</TableHead>
+                <TableHead>
+                  <SortableHeader
+                    field="created_at"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  >
+                    创建时间
+                  </SortableHeader>
+                </TableHead>
+                <TableHead>
+                  <SortableHeader
+                    field="updated_at"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  >
+                    更新时间
+                  </SortableHeader>
+                </TableHead>
+                <TableHead>操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
+            </TableHeader>
+            <TableBody>
+              {sortedCases.map((caseItem) => (
+                <TableRow key={caseItem.id}>
+                  <TableCell>{caseItem.user?.name || "-"}</TableCell>
+                  <TableCell className="font-medium">
+                    {caseItem.creditor_name}
+                    {caseItem.creditor_type && (
+                      <span className="text-sm text-gray-500 ml-1">
+                        ({partyTypeLabels[caseItem.creditor_type]})
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {caseItem.debtor_name || "-"}
+                    {caseItem.debtor_type && caseItem.debtor_name && (
+                      <span className="text-sm text-gray-500 ml-1">
+                        ({partyTypeLabels[caseItem.debtor_type]})
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600">
+                    {formatDateTime(caseItem.created_at)}
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600">
+                    {formatDateTime(caseItem.updated_at)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewCase(caseItem.id)}
+                        className="flex items-center text-blue-600 hover:text-blue-700"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        证据分析
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewEvidenceChain(caseItem.id)}
+                        className="flex items-center text-green-600 hover:text-green-700"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        案件详情
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditDialog(caseItem)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteCase(caseItem.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </>
+    );
   };
 
   return (
@@ -542,20 +589,20 @@ export default function CaseManagement() {
       {/* Add Case Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogHeader>
             <DialogTitle>新增案件</DialogTitle>
             <DialogDescription>
               创建一个新的案件记录
             </DialogDescription>
-            </DialogHeader>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
-                        {/* 关联用户 */}
+            {/* 关联用户 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="user" className="text-right">
                 关联用户 <span className="text-red-500">*</span>
               </Label>
               <div className="col-span-3 flex space-x-2">
-                <Select 
+                <Select
                   value={addForm.user_id.toString()}
                   onValueChange={handleUserChange}
                 >
@@ -589,9 +636,9 @@ export default function CaseManagement() {
               <Label htmlFor="creditor_name" className="text-right">
                 债权人 <span className="text-red-500">*</span>
               </Label>
-              <Input 
+              <Input
                 id="creditor_name"
-                value={addForm.creditor_name} 
+                value={addForm.creditor_name}
                 onChange={(e) => setAddForm({ ...addForm, creditor_name: e.target.value })}
                 onBlur={() => {
                   if (!addForm.creditor_name.trim()) {
@@ -663,7 +710,7 @@ export default function CaseManagement() {
               <Label htmlFor="creditor_type" className="text-right">
                 债权人类型
               </Label>
-              <Select 
+              <Select
                 value={addForm.creditor_type || ""}
                 onValueChange={(value: any) => setAddForm({ ...addForm, creditor_type: value })}
               >
@@ -725,7 +772,7 @@ export default function CaseManagement() {
               <Label htmlFor="debtor_type" className="text-right">
                 债务人类型
               </Label>
-              <Select 
+              <Select
                 value={addForm.debtor_type || ""}
                 onValueChange={(value: any) => setAddForm({ ...addForm, debtor_type: value })}
               >
@@ -759,8 +806,8 @@ export default function CaseManagement() {
               <Label htmlFor="case_type" className="text-right">
                 案件类型
               </Label>
-              <Select 
-                value={addForm.case_type || ""} 
+              <Select
+                value={addForm.case_type || ""}
                 onValueChange={(value: any) => setAddForm({ ...addForm, case_type: value })}
               >
                 <SelectTrigger className="col-span-3">
@@ -798,7 +845,7 @@ export default function CaseManagement() {
               <Label htmlFor="edit-user" className="text-right">
                 关联用户 <span className="text-red-500">*</span>
               </Label>
-              <Select 
+              <Select
                 value={editForm.user_id.toString()}
                 onValueChange={handleEditUserChange}
               >
@@ -876,7 +923,7 @@ export default function CaseManagement() {
               <Label htmlFor="edit-creditor_type" className="text-right">
                 债权人类型
               </Label>
-              <Select 
+              <Select
                 value={editForm.creditor_type || ""}
                 onValueChange={(value: any) => setEditForm({ ...editForm, creditor_type: value })}
               >
@@ -971,7 +1018,7 @@ export default function CaseManagement() {
               <Label htmlFor="edit-case_type" className="text-right">
                 案件类型
               </Label>
-              <Select 
+              <Select
                 value={editForm.case_type || ""}
                 onValueChange={(value: any) => setEditForm({ ...editForm, case_type: value })}
               >

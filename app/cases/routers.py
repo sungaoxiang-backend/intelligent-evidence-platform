@@ -177,7 +177,7 @@ async def auto_process(
             detail="案件不存在",
         )
 
-    result = await case_service.auto_process(db, request.case_id, request.evidence_ids, request.send_progress)
+    result = await case_service.auto_process(db, request.case_id, request.evidence_ids)
     return ListResponse(data=result)
 
 

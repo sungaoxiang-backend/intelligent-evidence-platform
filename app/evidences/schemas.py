@@ -5,6 +5,7 @@ from pydantic import BaseModel, model_validator, Field, computed_field
 from app.cases.schemas import Case
 from app.evidences.models import EvidenceStatus
 from app.agentic.agents.evidence_extractor_v2 import SlotExtraction
+from app.core.schemas import BaseSchema
 
     
     
@@ -34,13 +35,13 @@ class UploadFileResponse(BaseModel):
     file_extension: str = Field(..., description="证据文件类型")
     
 
-class EvidenceResponse(BaseModel):
+class EvidenceResponse(BaseSchema):
     id: int = Field(..., description="证据id")
     file_url: str = Field(..., description="证据文件url")
     file_name: str = Field(..., description="证据文件名称")
     file_size: int = Field(..., description="证据文件体积")
     file_extension: str = Field(..., description="证据文件类型")
-    evidence_status: EvidenceStatus = Field(EvidenceStatus.UPLOADED.value, description="证据状态")
+    evidence_status: EvidenceStatus = Field(default=EvidenceStatus.UPLOADED, description="证据状态")
     
     classification_category: Optional[str] = Field(None, description="证据分类类型")
     classification_confidence: Optional[float] = Field(None, description="证据分类置信度")

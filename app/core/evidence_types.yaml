@@ -93,6 +93,11 @@ evidence_types:
         slot_desc: "微信中设置的备注名称"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债务人或债权人姓名匹配"
+            case_fields: ["debtor_name", "creditor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
       - slot_name: "微信号"
         slot_desc: "微信账号ID"
         slot_value_type: "string"

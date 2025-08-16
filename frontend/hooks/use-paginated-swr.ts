@@ -11,7 +11,13 @@ export function usePaginatedSWR<T>(
   key: string, 
   fetcher: (params: FetchParams) => Promise<{ data: T[]; pagination?: any }>, 
   deps: any[] = [],
-  initialPageSize = 20
+  initialPageSize = 20,
+  options?: {
+    revalidateOnFocus?: boolean
+    revalidateOnReconnect?: boolean
+    revalidateIfStale?: boolean
+    dedupingInterval?: number
+  }
 ) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(initialPageSize)
@@ -19,7 +25,13 @@ export function usePaginatedSWR<T>(
   const swrKey = [key, page, pageSize, ...deps]
   const { data: response, error, isLoading, mutate } = useSWR(
     swrKey, 
-    () => fetcher({ page, pageSize, search: deps[0] || "" })
+    () => fetcher({ page, pageSize, search: deps[0] || "" }),
+    {
+      revalidateOnFocus: options?.revalidateOnFocus ?? true,
+      revalidateOnReconnect: options?.revalidateOnReconnect ?? true,
+      revalidateIfStale: options?.revalidateIfStale ?? true,
+      dedupingInterval: options?.dedupingInterval ?? 2000,
+    }
   )
   
   const data = response?.data || []

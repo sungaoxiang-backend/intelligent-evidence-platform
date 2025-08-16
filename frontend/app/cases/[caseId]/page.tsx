@@ -62,7 +62,7 @@ export default function CaseDetailPage() {
             // 更新 URL 参数
             const newUrl = new URL(window.location.href)
             newUrl.searchParams.set('tab', 'evidence')
-            router.replace(newUrl.pathname + newUrl.search)
+            router.push(newUrl.pathname + newUrl.search)
           }}
           className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${
             activeTab === 'evidence'
@@ -83,7 +83,7 @@ export default function CaseDetailPage() {
             // 更新 URL 参数
             const newUrl = new URL(window.location.href)
             newUrl.searchParams.set('tab', 'reasoning')
-            router.replace(newUrl.pathname + newUrl.search)
+            router.push(newUrl.pathname + newUrl.search)
           }}
           className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${
             activeTab === 'reasoning'
@@ -103,11 +103,13 @@ export default function CaseDetailPage() {
         <EvidenceGallery
           caseId={numericCaseId}
           onBack={() => router.push("/cases")}
+          initialSelectedEvidenceId={searchParams.get('evidence') ? parseInt(searchParams.get('evidence')!) : undefined}
         />
       ) : (
         <EvidenceReasoning
           caseId={numericCaseId}
           onBack={() => router.push("/cases")}
+          initialSelectedGroup={searchParams.get('group') || undefined}
         />
       )}
     </div>
