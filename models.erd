@@ -1,0 +1,2952 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dineug/erd-editor/main/json-schema/schema.json",
+  "version": "3.0.0",
+  "settings": {
+    "width": 2000,
+    "height": 2000,
+    "scrollTop": -489.7216,
+    "scrollLeft": -140,
+    "zoomLevel": 0.94,
+    "show": 431,
+    "database": 4,
+    "databaseName": "",
+    "canvasType": "ERD",
+    "language": 1,
+    "tableNameCase": 4,
+    "columnNameCase": 2,
+    "bracketType": 1,
+    "relationshipDataTypeSync": true,
+    "relationshipOptimization": false,
+    "columnOrder": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "maxWidthComment": -1,
+    "ignoreSaveSettings": 0
+  },
+  "doc": {
+    "tableIds": [
+      "kgxwU6k4WCs7sCFRpmDFN",
+      "s9dAtmIYnEKxfGmMLhu1D",
+      "2g9Wc61XipG6asx1yt-ms",
+      "93VflB1DJEX4ZU1tI2ORw",
+      "NR-Iq3B_DasO8WjNmWKhg",
+      "5sosD6ukj9WKr-E8RMOBH",
+      "D7aBrqbPUfsCMgpICQj7b",
+      "wegBKavc6AiOzDOczvK9j",
+      "jNYf2xyUQJmvNAzT8bv0v",
+      "8tiPCgtaJZ2a6LK0FNWDz"
+    ],
+    "relationshipIds": [
+      "LwydZO46Wqmkb1Wm_K1Me",
+      "7hhd0LkgJmaAlXsPT2wZJ",
+      "Q2YAnRu-n4AkQ_AY4rTJ-",
+      "Bs5Uvfno14UMQcDwjR44B",
+      "n7tzqUrFZn1sHvecYOhbA",
+      "9Syy3_bkAPYkGvqd0ilOi",
+      "pTBQ8IglbAS-tDnz9nHBs",
+      "zPL8JuhoesX-uz7r3g5CL",
+      "sp90XKdHf1gWbcGUIABWJ"
+    ],
+    "indexIds": [],
+    "memoIds": []
+  },
+  "collections": {
+    "tableEntities": {
+      "kgxwU6k4WCs7sCFRpmDFN": {
+        "id": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "User",
+        "comment": "用户表：业务专员正在服务的用户，拉新线索为（微信 或 电话，他们应该联合缺省）",
+        "columnIds": [
+          "5vaXdvxtqqOjPeumyMW1s",
+          "GYazp1DC67XPEDbYnQ8JI",
+          "lKH0yX6rLm-C7FP8Yvi3j",
+          "XOgnAoYto695FTFCiHggS",
+          "mCa9qmJrDn3lsO5cKxWjo"
+        ],
+        "seqColumnIds": [
+          "5vaXdvxtqqOjPeumyMW1s",
+          "GYazp1DC67XPEDbYnQ8JI",
+          "lKH0yX6rLm-C7FP8Yvi3j",
+          "XOgnAoYto695FTFCiHggS",
+          "mCa9qmJrDn3lsO5cKxWjo",
+          "FxrGu45oGo4P-ib_pnEtA",
+          "asVQMJAsw5B3q7yX2aK08"
+        ],
+        "ui": {
+          "x": 144.2271,
+          "y": 65.1241,
+          "zIndex": 2,
+          "widthName": 60,
+          "widthComment": 453,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755568492156,
+          "createAt": 1755495167672
+        }
+      },
+      "s9dAtmIYnEKxfGmMLhu1D": {
+        "id": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "Case",
+        "comment": "案件表：业务专员正在服务的用户的相关的案件",
+        "columnIds": [
+          "zTlUQ1U7X6TJLqJWnKxNx",
+          "Tc7sLWNG7lQk9ecs1LfAO",
+          "gKLfeN41Q7Q8qq2L8kih-",
+          "KDgojNikmgu4dD6xXVQpo",
+          "6h00ZTGEjlMGC2GlrNJF0"
+        ],
+        "seqColumnIds": [
+          "Vonf2bX4YAHDx5e0uL1nf",
+          "zTlUQ1U7X6TJLqJWnKxNx",
+          "Tc7sLWNG7lQk9ecs1LfAO",
+          "vKhpYkHwmxBr8-CxcO9QD",
+          "qgFXInxxRDuBDntEYhZvu",
+          "TD1K2_OGXKmW89HBbDrJq",
+          "5xJVO1r4SWbQ_C8HUVWzx",
+          "KmcZBhhV3r5XTQ7iNdia4",
+          "Hht71C5EIPXHq_czzYJ_K",
+          "gKLfeN41Q7Q8qq2L8kih-",
+          "KDgojNikmgu4dD6xXVQpo",
+          "6h00ZTGEjlMGC2GlrNJF0",
+          "eqcMvU3ebDBlTpP4H_0EL"
+        ],
+        "ui": {
+          "x": 1.1265,
+          "y": 422.8241,
+          "zIndex": 55,
+          "widthName": 60,
+          "widthComment": 254,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755570630751,
+          "createAt": 1755495546198
+        }
+      },
+      "2g9Wc61XipG6asx1yt-ms": {
+        "id": "2g9Wc61XipG6asx1yt-ms",
+        "name": "Party",
+        "comment": "当事人：可用于后续的案件当事人档案的当事人信息",
+        "columnIds": [
+          "GebfZ4KKUHk0t3R0A3g4h",
+          "dpR5Y7VMA1EWmlzPUS8N_",
+          "k63FFLd05Za_xb3CxMjOg",
+          "TjjdGgvXhf4MUWdC4uX4F",
+          "9XWQTPVk9OiqZJhgakQi0"
+        ],
+        "seqColumnIds": [
+          "GebfZ4KKUHk0t3R0A3g4h",
+          "dpR5Y7VMA1EWmlzPUS8N_",
+          "k63FFLd05Za_xb3CxMjOg",
+          "-oZTs1MBirH7qhb6Zvqti",
+          "TjjdGgvXhf4MUWdC4uX4F",
+          "9XWQTPVk9OiqZJhgakQi0"
+        ],
+        "ui": {
+          "x": 1437.0042,
+          "y": 454.2301,
+          "zIndex": 81,
+          "widthName": 60,
+          "widthComment": 278,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755506451877,
+          "createAt": 1755495978901
+        }
+      },
+      "93VflB1DJEX4ZU1tI2ORw": {
+        "id": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "CasePartyDocument",
+        "comment": "案件相关当事人档案表",
+        "columnIds": [
+          "go-x2tyRp9NLG3lzcIE2h",
+          "Zk4RRAv9m2w1Ww6mGkQTU",
+          "JgDBwWqrPgwgXxds_ct4Z",
+          "xmeozrFLoGv_H9QcvyZlE"
+        ],
+        "seqColumnIds": [
+          "go-x2tyRp9NLG3lzcIE2h",
+          "nm5obCGdJGMEpwuYCgLL3",
+          "Zk4RRAv9m2w1Ww6mGkQTU",
+          "JgDBwWqrPgwgXxds_ct4Z",
+          "xmeozrFLoGv_H9QcvyZlE",
+          "L9tV64Tg5SYasiWSeFrzT"
+        ],
+        "ui": {
+          "x": 730,
+          "y": 466.5,
+          "zIndex": 200,
+          "widthName": 118,
+          "widthComment": 122,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755505422575,
+          "createAt": 1755499217667
+        }
+      },
+      "NR-Iq3B_DasO8WjNmWKhg": {
+        "id": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "EvidenceTypeConf",
+        "comment": "证据分类配置表",
+        "columnIds": [
+          "xauydI5kOEkaxYVgjhhaB",
+          "tRTFnrtsZxRPxuoM1kdCN",
+          "ENTM-VVOEjTzvbrFQHHnA",
+          "Vu9A6K3MeRQOwN1W3OYkV",
+          "jjunv3D13cqv6B8oHyUDS",
+          "WW1U5HwbPe9SE7t8dVGOp"
+        ],
+        "seqColumnIds": [
+          "xauydI5kOEkaxYVgjhhaB",
+          "pDGW1dL3vo1zJLS6m_Vxh",
+          "tRTFnrtsZxRPxuoM1kdCN",
+          "ENTM-VVOEjTzvbrFQHHnA",
+          "7NKicYoaJ4E2t8V-UO1jC",
+          "Vu9A6K3MeRQOwN1W3OYkV",
+          "jjunv3D13cqv6B8oHyUDS",
+          "Fu525Qj715vQH_xeOOm8o",
+          "WW1U5HwbPe9SE7t8dVGOp"
+        ],
+        "ui": {
+          "x": 114.7307,
+          "y": 1150.1803,
+          "zIndex": 420,
+          "widthName": 107,
+          "widthComment": 86,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755586261846,
+          "createAt": 1755504140502
+        }
+      },
+      "5sosD6ukj9WKr-E8RMOBH": {
+        "id": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "Evidence",
+        "comment": "证据表：案件相关的证据",
+        "columnIds": [
+          "iXRqeFWG3gwbIZZZRnrAS",
+          "CwoBbsTL9OUCxAq13ImBq",
+          "K4V2o7IcycMPGtN8NIrDN",
+          "wWaesx-WHCmOq7cCFFsa_",
+          "24_WWCfo8JN8Uzl2qxx5f",
+          "68KeUiEtFKKwX_K9Ir3lP",
+          "fwztrGM0niGtsX4pZ3pFt"
+        ],
+        "seqColumnIds": [
+          "iXRqeFWG3gwbIZZZRnrAS",
+          "CwoBbsTL9OUCxAq13ImBq",
+          "K4V2o7IcycMPGtN8NIrDN",
+          "wWaesx-WHCmOq7cCFFsa_",
+          "24_WWCfo8JN8Uzl2qxx5f",
+          "68KeUiEtFKKwX_K9Ir3lP",
+          "KFrlAH-9A516ehupda_7y",
+          "AmQhkSwL4eI6DMFZv3phC",
+          "NN73lOoYwkKtxBeBF82kW",
+          "CpCTKa1k2NnPrdvsIlXh9",
+          "Ql5BDiFy1KJCyEoexcSI3",
+          "Wv2_67EcEWUOkRGC9sT-g",
+          "fwztrGM0niGtsX4pZ3pFt",
+          "69JnuAVr9crd61KCnq6yB"
+        ],
+        "ui": {
+          "x": 46.3119,
+          "y": 767.3727,
+          "zIndex": 427,
+          "widthName": 60,
+          "widthComment": 134,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755584944227,
+          "createAt": 1755504158877
+        }
+      },
+      "D7aBrqbPUfsCMgpICQj7b": {
+        "id": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "EvidenceFeatureConf",
+        "comment": "证据特征配置表",
+        "columnIds": [
+          "cOpU_1Yc37mehtxGen0F7",
+          "Zog5BJg0X6q6iygQ5sJMV",
+          "SPrQqPV3lHoo8kwdE1lKW",
+          "vF8oh2gZFih8J-YKJsLn8",
+          "kFsBHrSACcQPg0QvEdJLq",
+          "FsGuOe7Z4tsDmZ8DHmwBD",
+          "TsjsIJ6fCxCbULWB45_lH"
+        ],
+        "seqColumnIds": [
+          "cOpU_1Yc37mehtxGen0F7",
+          "Zog5BJg0X6q6iygQ5sJMV",
+          "XQB-c38D4MJb9BTmdBWCp",
+          "SPrQqPV3lHoo8kwdE1lKW",
+          "vF8oh2gZFih8J-YKJsLn8",
+          "kFsBHrSACcQPg0QvEdJLq",
+          "FsGuOe7Z4tsDmZ8DHmwBD",
+          "TsjsIJ6fCxCbULWB45_lH"
+        ],
+        "ui": {
+          "x": 60.6384,
+          "y": 1452.6035,
+          "zIndex": 755,
+          "widthName": 123,
+          "widthComment": 86,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755585934435,
+          "createAt": 1755511313776
+        }
+      },
+      "8xe1x8r5JYNXjLuPFwSe6": {
+        "id": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "EvidenceFeatureValidationConf",
+        "comment": "证据特征校验配置表",
+        "columnIds": [
+          "IDNaoL-g7zOS-YLehEPxM",
+          "ysHNkFW5zMhrlLWgT_O_U",
+          "2f7uWXzcC7paZEZeSwdqv",
+          "kTPI4Q1C0htQyyjnsdvpR",
+          "GpTBuQuJsV27zxtQ0mxZa"
+        ],
+        "seqColumnIds": [
+          "IDNaoL-g7zOS-YLehEPxM",
+          "ysHNkFW5zMhrlLWgT_O_U",
+          "2f7uWXzcC7paZEZeSwdqv",
+          "kTPI4Q1C0htQyyjnsdvpR",
+          "GpTBuQuJsV27zxtQ0mxZa"
+        ],
+        "ui": {
+          "x": 810.6379,
+          "y": 1450.5782,
+          "zIndex": 860,
+          "widthName": 178,
+          "widthComment": 110,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755512316671,
+          "createAt": 1755511880336
+        }
+      },
+      "eT_MIt_HaX925Jh9XMi1F": {
+        "id": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "EvidenceFeatureValidationConf",
+        "comment": "证据特征验证规则表",
+        "columnIds": [
+          "65MCE67J7A7f-dluR5xYw",
+          "tPQ-mBaNyMSs2ewqgPMUg",
+          "vNjYh7whLcIDXnBRNooQf",
+          "oYyc147WfzDBXk1zbDvTz",
+          "Xq0FZiUt57SnErTEhUrMA"
+        ],
+        "seqColumnIds": [
+          "65MCE67J7A7f-dluR5xYw",
+          "tPQ-mBaNyMSs2ewqgPMUg",
+          "vNjYh7whLcIDXnBRNooQf",
+          "oYyc147WfzDBXk1zbDvTz",
+          "Xq0FZiUt57SnErTEhUrMA"
+        ],
+        "ui": {
+          "x": 393.6161,
+          "y": 1564.7774,
+          "zIndex": 963,
+          "widthName": 178,
+          "widthComment": 110,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755585261832,
+          "createAt": 1755512595838
+        }
+      },
+      "wegBKavc6AiOzDOczvK9j": {
+        "id": "wegBKavc6AiOzDOczvK9j",
+        "name": "EvidenceFeature",
+        "comment": "证据特征表，用于存储agent标注的证据特征结果",
+        "columnIds": [
+          "zX8tB9-4KRcZpOXuqvjey",
+          "1RUw386bg0yjTs94WAZ0T",
+          "WawD1o1liWWREn45PHtr9",
+          "0ZIKxOeoXJgdTuixcCp12",
+          "_D39xs5gphj9oVnPfjArZ"
+        ],
+        "seqColumnIds": [
+          "zX8tB9-4KRcZpOXuqvjey",
+          "1RUw386bg0yjTs94WAZ0T",
+          "pVREj91BriLBeBfCBR5Y8",
+          "WawD1o1liWWREn45PHtr9",
+          "0ZIKxOeoXJgdTuixcCp12",
+          "_D39xs5gphj9oVnPfjArZ"
+        ],
+        "ui": {
+          "x": 821.2764,
+          "y": 711.2707,
+          "zIndex": 1034,
+          "widthName": 96,
+          "widthComment": 262,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755581293385,
+          "createAt": 1755569839419
+        }
+      },
+      "jNYf2xyUQJmvNAzT8bv0v": {
+        "id": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "EvidenceFeatureAssociation",
+        "comment": "证据特征和证据关联记录表",
+        "columnIds": [
+          "5FQ2OxmxwhL_vxTUNjkpW",
+          "v4vu134Jset4E1fZSOVu9",
+          "Yln_sTYIpsc2Edp48TT6P",
+          "VttsxU6RWlVDWSQe23FAY"
+        ],
+        "seqColumnIds": [
+          "5FQ2OxmxwhL_vxTUNjkpW",
+          "v4vu134Jset4E1fZSOVu9",
+          "Yln_sTYIpsc2Edp48TT6P",
+          "fiozpQ1TJje563E5LW0Y1",
+          "zXMQXYvVIskw9AYkNgZ3c",
+          "VttsxU6RWlVDWSQe23FAY"
+        ],
+        "ui": {
+          "x": 788.2978,
+          "y": 970.2887,
+          "zIndex": 1148,
+          "widthName": 161,
+          "widthComment": 146,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755581866896,
+          "createAt": 1755580732168
+        }
+      },
+      "8tiPCgtaJZ2a6LK0FNWDz": {
+        "id": "8tiPCgtaJZ2a6LK0FNWDz",
+        "name": "EvidenceChainConf",
+        "comment": "证据链配置表",
+        "columnIds": [
+          "F5QJjcczuPrQRo7qCDa_9",
+          "RGMFlAKmv3rZ2ToN88MM9",
+          "qxLWXcaIYEdh3bucPfmKh"
+        ],
+        "seqColumnIds": [
+          "F5QJjcczuPrQRo7qCDa_9",
+          "RGMFlAKmv3rZ2ToN88MM9",
+          "UYSWzesM0hQAChs6x-1xK",
+          "qxLWXcaIYEdh3bucPfmKh"
+        ],
+        "ui": {
+          "x": 777.6595,
+          "y": 1220.4992,
+          "zIndex": 1252,
+          "widthName": 113,
+          "widthComment": 74,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1755586368787,
+          "createAt": 1755583699868
+        }
+      }
+    },
+    "tableColumnEntities": {
+      "mCa9qmJrDn3lsO5cKxWjo": {
+        "id": "mCa9qmJrDn3lsO5cKxWjo",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "name",
+        "comment": "用户的真实姓名",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499604608,
+          "createAt": 1755495246407
+        }
+      },
+      "GYazp1DC67XPEDbYnQ8JI": {
+        "id": "GYazp1DC67XPEDbYnQ8JI",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "wechat_nickname",
+        "comment": "用户的微信昵称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 104,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499598533,
+          "createAt": 1755495293482
+        }
+      },
+      "lKH0yX6rLm-C7FP8Yvi3j": {
+        "id": "lKH0yX6rLm-C7FP8Yvi3j",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "wechat_id",
+        "comment": "用户的微信号",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499600711,
+          "createAt": 1755495366920
+        }
+      },
+      "XOgnAoYto695FTFCiHggS": {
+        "id": "XOgnAoYto695FTFCiHggS",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "phone",
+        "comment": "用户的手机号码",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499602328,
+          "createAt": 1755495403874
+        }
+      },
+      "vKhpYkHwmxBr8-CxcO9QD": {
+        "id": "vKhpYkHwmxBr8-CxcO9QD",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "creditor_id",
+        "comment": "债权人当事人ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 63,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497098617,
+          "createAt": 1755495877118
+        }
+      },
+      "qgFXInxxRDuBDntEYhZvu": {
+        "id": "qgFXInxxRDuBDntEYhZvu",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "debtor_id",
+        "comment": "债务人当事人ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497104476,
+          "createAt": 1755495956856
+        }
+      },
+      "5vaXdvxtqqOjPeumyMW1s": {
+        "id": "5vaXdvxtqqOjPeumyMW1s",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "id",
+        "comment": "用户唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755496180125,
+          "createAt": 1755496071505
+        }
+      },
+      "GebfZ4KKUHk0t3R0A3g4h": {
+        "id": "GebfZ4KKUHk0t3R0A3g4h",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "id",
+        "comment": "当事人唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499044625,
+          "createAt": 1755496124836
+        }
+      },
+      "-oZTs1MBirH7qhb6Zvqti": {
+        "id": "-oZTs1MBirH7qhb6Zvqti",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "party_role",
+        "comment": "当事人债务关系角色: creaditor/debtor",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 209,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499061968,
+          "createAt": 1755496162451
+        }
+      },
+      "TjjdGgvXhf4MUWdC4uX4F": {
+        "id": "TjjdGgvXhf4MUWdC4uX4F",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "party_type",
+        "comment": "当事人身份类型(natural/individual/company)",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 63,
+          "widthComment": 247,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499663028,
+          "createAt": 1755496435138
+        }
+      },
+      "FxrGu45oGo4P-ib_pnEtA": {
+        "id": "FxrGu45oGo4P-ib_pnEtA",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755496885229,
+          "createAt": 1755496885229
+        }
+      },
+      "5xJVO1r4SWbQ_C8HUVWzx": {
+        "id": "5xJVO1r4SWbQ_C8HUVWzx",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497122253,
+          "createAt": 1755497122253
+        }
+      },
+      "Vonf2bX4YAHDx5e0uL1nf": {
+        "id": "Vonf2bX4YAHDx5e0uL1nf",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "user_id",
+        "comment": "关联的用户ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497637183,
+          "createAt": 1755497606857
+        }
+      },
+      "TD1K2_OGXKmW89HBbDrJq": {
+        "id": "TD1K2_OGXKmW89HBbDrJq",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "id",
+        "comment": "用户唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497660579,
+          "createAt": 1755497660579
+        }
+      },
+      "KmcZBhhV3r5XTQ7iNdia4": {
+        "id": "KmcZBhhV3r5XTQ7iNdia4",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "id",
+        "comment": "用户唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497699976,
+          "createAt": 1755497699975
+        }
+      },
+      "asVQMJAsw5B3q7yX2aK08": {
+        "id": "asVQMJAsw5B3q7yX2aK08",
+        "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+        "name": "user_id",
+        "comment": "关联的用户ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497709422,
+          "createAt": 1755497709422
+        }
+      },
+      "Hht71C5EIPXHq_czzYJ_K": {
+        "id": "Hht71C5EIPXHq_czzYJ_K",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "id",
+        "comment": "用户唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497734977,
+          "createAt": 1755497734977
+        }
+      },
+      "Tc7sLWNG7lQk9ecs1LfAO": {
+        "id": "Tc7sLWNG7lQk9ecs1LfAO",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "user_id",
+        "comment": "关联的用户的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497809189,
+          "createAt": 1755497778396
+        }
+      },
+      "zTlUQ1U7X6TJLqJWnKxNx": {
+        "id": "zTlUQ1U7X6TJLqJWnKxNx",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "id",
+        "comment": "案件的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755497852763,
+          "createAt": 1755497798211
+        }
+      },
+      "9XWQTPVk9OiqZJhgakQi0": {
+        "id": "9XWQTPVk9OiqZJhgakQi0",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "identity_hash",
+        "comment": "当事人身份认证唯一hash",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 77,
+          "widthComment": 137,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499140584,
+          "createAt": 1755499019012
+        }
+      },
+      "go-x2tyRp9NLG3lzcIE2h": {
+        "id": "go-x2tyRp9NLG3lzcIE2h",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "id",
+        "comment": "案件当事人档案ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499468282,
+          "createAt": 1755499412827
+        }
+      },
+      "nm5obCGdJGMEpwuYCgLL3": {
+        "id": "nm5obCGdJGMEpwuYCgLL3",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "case_id",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499486941,
+          "createAt": 1755499474066
+        }
+      },
+      "Zk4RRAv9m2w1Ww6mGkQTU": {
+        "id": "Zk4RRAv9m2w1Ww6mGkQTU",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "case_id",
+        "comment": "关联案件的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499561054,
+          "createAt": 1755499531308
+        }
+      },
+      "xmeozrFLoGv_H9QcvyZlE": {
+        "id": "xmeozrFLoGv_H9QcvyZlE",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "party_role",
+        "comment": "当事人案件角色(creditor/debtor)",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 180,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499669687,
+          "createAt": 1755499582045
+        }
+      },
+      "L9tV64Tg5SYasiWSeFrzT": {
+        "id": "L9tV64Tg5SYasiWSeFrzT",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "party_id",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755499731713,
+          "createAt": 1755499725000
+        }
+      },
+      "JgDBwWqrPgwgXxds_ct4Z": {
+        "id": "JgDBwWqrPgwgXxds_ct4Z",
+        "tableId": "93VflB1DJEX4ZU1tI2ORw",
+        "name": "party_id",
+        "comment": "当事人唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755500089693,
+          "createAt": 1755500074325
+        }
+      },
+      "dpR5Y7VMA1EWmlzPUS8N_": {
+        "id": "dpR5Y7VMA1EWmlzPUS8N_",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "name",
+        "comment": "当事人姓名",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755503377156,
+          "createAt": 1755503338348
+        }
+      },
+      "k63FFLd05Za_xb3CxMjOg": {
+        "id": "k63FFLd05Za_xb3CxMjOg",
+        "tableId": "2g9Wc61XipG6asx1yt-ms",
+        "name": "identity_id",
+        "comment": "当事人身份证号码",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 61,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755503401486,
+          "createAt": 1755503386099
+        }
+      },
+      "6h00ZTGEjlMGC2GlrNJF0": {
+        "id": "6h00ZTGEjlMGC2GlrNJF0",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "case_type",
+        "comment": "案件的类型(debt/constract)",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 154,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755504787690,
+          "createAt": 1755504016722
+        }
+      },
+      "gKLfeN41Q7Q8qq2L8kih-": {
+        "id": "gKLfeN41Q7Q8qq2L8kih-",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "case_amount",
+        "comment": "案件的金额",
+        "dataType": "FLOAT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 78,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755504817246,
+          "createAt": 1755504754571
+        }
+      },
+      "KDgojNikmgu4dD6xXVQpo": {
+        "id": "KDgojNikmgu4dD6xXVQpo",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "case_amount_currency",
+        "comment": "案件金额货币类型，默认CNY",
+        "dataType": "VARCHAR",
+        "default": "CNY",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 134,
+          "widthComment": 159,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755504891311,
+          "createAt": 1755504840807
+        }
+      },
+      "iXRqeFWG3gwbIZZZRnrAS": {
+        "id": "iXRqeFWG3gwbIZZZRnrAS",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "id",
+        "comment": "证据的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755505008103,
+          "createAt": 1755504987790
+        }
+      },
+      "wWaesx-WHCmOq7cCFFsa_": {
+        "id": "wWaesx-WHCmOq7cCFFsa_",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_url",
+        "comment": "证据的资源标识符",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 74,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755505048415,
+          "createAt": 1755505016864
+        }
+      },
+      "24_WWCfo8JN8Uzl2qxx5f": {
+        "id": "24_WWCfo8JN8Uzl2qxx5f",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_file_name",
+        "comment": "证据的原始文件名称如：aaisdfajkj.png",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 115,
+          "widthComment": 212,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755568580820,
+          "createAt": 1755505077018
+        }
+      },
+      "KFrlAH-9A516ehupda_7y": {
+        "id": "KFrlAH-9A516ehupda_7y",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_name",
+        "comment": "证据的业务资源名: 微信聊天记录-释怀-1.png",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 91,
+          "widthComment": 243,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755505527208,
+          "createAt": 1755505113097
+        }
+      },
+      "xauydI5kOEkaxYVgjhhaB": {
+        "id": "xauydI5kOEkaxYVgjhhaB",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755505296929,
+          "createAt": 1755505278037
+        }
+      },
+      "ENTM-VVOEjTzvbrFQHHnA": {
+        "id": "ENTM-VVOEjTzvbrFQHHnA",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "conf_name",
+        "comment": "证据分类名称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 65,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585638081,
+          "createAt": 1755505300198
+        }
+      },
+      "jjunv3D13cqv6B8oHyUDS": {
+        "id": "jjunv3D13cqv6B8oHyUDS",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "conf_desc",
+        "comment": "证据分类描述",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 61,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585643726,
+          "createAt": 1755505332283
+        }
+      },
+      "7NKicYoaJ4E2t8V-UO1jC": {
+        "id": "7NKicYoaJ4E2t8V-UO1jC",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "id",
+        "comment": "证据的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755505393505,
+          "createAt": 1755505393505
+        }
+      },
+      "AmQhkSwL4eI6DMFZv3phC": {
+        "id": "AmQhkSwL4eI6DMFZv3phC",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "",
+        "comment": "",
+        "dataType": "INT",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506260811,
+          "createAt": 1755505475822
+        }
+      },
+      "NN73lOoYwkKtxBeBF82kW": {
+        "id": "NN73lOoYwkKtxBeBF82kW",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506074147,
+          "createAt": 1755506074146
+        }
+      },
+      "CpCTKa1k2NnPrdvsIlXh9": {
+        "id": "CpCTKa1k2NnPrdvsIlXh9",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506086480,
+          "createAt": 1755506086480
+        }
+      },
+      "Ql5BDiFy1KJCyEoexcSI3": {
+        "id": "Ql5BDiFy1KJCyEoexcSI3",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506094289,
+          "createAt": 1755506094289
+        }
+      },
+      "Wv2_67EcEWUOkRGC9sT-g": {
+        "id": "Wv2_67EcEWUOkRGC9sT-g",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506101979,
+          "createAt": 1755506101978
+        }
+      },
+      "K4V2o7IcycMPGtN8NIrDN": {
+        "id": "K4V2o7IcycMPGtN8NIrDN",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_type_conf_id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 2,
+          "widthName": 133,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755506275980,
+          "createAt": 1755506119851
+        }
+      },
+      "eqcMvU3ebDBlTpP4H_0EL": {
+        "id": "eqcMvU3ebDBlTpP4H_0EL",
+        "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+        "name": "id",
+        "comment": "证据的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511236152,
+          "createAt": 1755511236150
+        }
+      },
+      "CwoBbsTL9OUCxAq13ImBq": {
+        "id": "CwoBbsTL9OUCxAq13ImBq",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "case_id",
+        "comment": "关联案件的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511266159,
+          "createAt": 1755511244965
+        }
+      },
+      "cOpU_1Yc37mehtxGen0F7": {
+        "id": "cOpU_1Yc37mehtxGen0F7",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "id",
+        "comment": "证据特征配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511675330,
+          "createAt": 1755511345992
+        }
+      },
+      "XQB-c38D4MJb9BTmdBWCp": {
+        "id": "XQB-c38D4MJb9BTmdBWCp",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "conf_name",
+        "comment": "证据特征配置名称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 65,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511681360,
+          "createAt": 1755511399639
+        }
+      },
+      "Zog5BJg0X6q6iygQ5sJMV": {
+        "id": "Zog5BJg0X6q6iygQ5sJMV",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "evidence_type_conf_id",
+        "comment": "关联证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 133,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511497263,
+          "createAt": 1755511428315
+        }
+      },
+      "SPrQqPV3lHoo8kwdE1lKW": {
+        "id": "SPrQqPV3lHoo8kwdE1lKW",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "feature_name",
+        "comment": "证据特征名称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 80,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511687441,
+          "createAt": 1755511634402
+        }
+      },
+      "vF8oh2gZFih8J-YKJsLn8": {
+        "id": "vF8oh2gZFih8J-YKJsLn8",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "target_value_type",
+        "comment": "证据目标特征值类型（string/float.../custom)",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 105,
+          "widthComment": 245,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585876140,
+          "createAt": 1755511692266
+        }
+      },
+      "kFsBHrSACcQPg0QvEdJLq": {
+        "id": "kFsBHrSACcQPg0QvEdJLq",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "target_value_required",
+        "comment": "证据特征值是否必须",
+        "dataType": "BOOLEAN",
+        "default": "FALSE",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 127,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585891897,
+          "createAt": 1755511778665
+        }
+      },
+      "ysHNkFW5zMhrlLWgT_O_U": {
+        "id": "ysHNkFW5zMhrlLWgT_O_U",
+        "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "evidence_feature_conf_id",
+        "comment": "关联证据特征配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 149,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511962125,
+          "createAt": 1755511939617
+        }
+      },
+      "IDNaoL-g7zOS-YLehEPxM": {
+        "id": "IDNaoL-g7zOS-YLehEPxM",
+        "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "id",
+        "comment": "证据特征校验配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755511988506,
+          "createAt": 1755511968675
+        }
+      },
+      "2f7uWXzcC7paZEZeSwdqv": {
+        "id": "2f7uWXzcC7paZEZeSwdqv",
+        "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "target_instance_type",
+        "comment": "验证目标实例类型（案件）",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 122,
+          "widthComment": 146,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755512136401,
+          "createAt": 1755512007813
+        }
+      },
+      "kTPI4Q1C0htQyyjnsdvpR": {
+        "id": "kTPI4Q1C0htQyyjnsdvpR",
+        "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "target_instance_fields",
+        "comment": "验证目标实例字段验证信息",
+        "dataType": "JSON",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 128,
+          "widthComment": 146,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755512224469,
+          "createAt": 1755512137674
+        }
+      },
+      "TsjsIJ6fCxCbULWB45_lH": {
+        "id": "TsjsIJ6fCxCbULWB45_lH",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "validation_rules",
+        "comment": "证据校验规则",
+        "dataType": "JSON",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 91,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585432512,
+          "createAt": 1755512252264
+        }
+      },
+      "GpTBuQuJsV27zxtQ0mxZa": {
+        "id": "GpTBuQuJsV27zxtQ0mxZa",
+        "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+        "name": "",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755512316670,
+          "createAt": 1755512316670
+        }
+      },
+      "65MCE67J7A7f-dluR5xYw": {
+        "id": "65MCE67J7A7f-dluR5xYw",
+        "tableId": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "id",
+        "comment": "证据特征验证规则唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755567686911,
+          "createAt": 1755567512521
+        }
+      },
+      "tPQ-mBaNyMSs2ewqgPMUg": {
+        "id": "tPQ-mBaNyMSs2ewqgPMUg",
+        "tableId": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "evidence_feature_conf_id",
+        "comment": "关联证据特征配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 149,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755567621528,
+          "createAt": 1755567525180
+        }
+      },
+      "vNjYh7whLcIDXnBRNooQf": {
+        "id": "vNjYh7whLcIDXnBRNooQf",
+        "tableId": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "validation_with_model",
+        "comment": "关联验证的其他模型",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 128,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755567832324,
+          "createAt": 1755567624254
+        }
+      },
+      "oYyc147WfzDBXk1zbDvTz": {
+        "id": "oYyc147WfzDBXk1zbDvTz",
+        "tableId": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "validation_with_field",
+        "comment": "关联验证的其他模型的字段",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 118,
+          "widthComment": 146,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755567833017,
+          "createAt": 1755567712751
+        }
+      },
+      "Xq0FZiUt57SnErTEhUrMA": {
+        "id": "Xq0FZiUt57SnErTEhUrMA",
+        "tableId": "eT_MIt_HaX925Jh9XMi1F",
+        "name": "validation_strategy",
+        "comment": "关联验证策略（exact/fuzzy/regex）",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 110,
+          "widthComment": 198,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755567904256,
+          "createAt": 1755567787227
+        }
+      },
+      "68KeUiEtFKKwX_K9Ir3lP": {
+        "id": "68KeUiEtFKKwX_K9Ir3lP",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_file_suffix",
+        "comment": "证据的原始文件后缀如：png",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 115,
+          "widthComment": 156,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755568571157,
+          "createAt": 1755568514915
+        }
+      },
+      "fwztrGM0niGtsX4pZ3pFt": {
+        "id": "fwztrGM0niGtsX4pZ3pFt",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "evidence_name",
+        "comment": "证据分类后的名称如：微信聊天记录-释怀-1.png",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 91,
+          "widthComment": 260,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755568687750,
+          "createAt": 1755568639946
+        }
+      },
+      "69JnuAVr9crd61KCnq6yB": {
+        "id": "69JnuAVr9crd61KCnq6yB",
+        "tableId": "5sosD6ukj9WKr-E8RMOBH",
+        "name": "",
+        "comment": "",
+        "dataType": "",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755569526011,
+          "createAt": 1755569526011
+        }
+      },
+      "zX8tB9-4KRcZpOXuqvjey": {
+        "id": "zX8tB9-4KRcZpOXuqvjey",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "id",
+        "comment": "证据特征唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755569992769,
+          "createAt": 1755569958451
+        }
+      },
+      "1RUw386bg0yjTs94WAZ0T": {
+        "id": "1RUw386bg0yjTs94WAZ0T",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "feature_name",
+        "comment": "证据特征的名称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 80,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755573236856,
+          "createAt": 1755569999104
+        }
+      },
+      "pVREj91BriLBeBfCBR5Y8": {
+        "id": "pVREj91BriLBeBfCBR5Y8",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "id",
+        "comment": "证据的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 74,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755570069096,
+          "createAt": 1755570069096
+        }
+      },
+      "Vu9A6K3MeRQOwN1W3OYkV": {
+        "id": "Vu9A6K3MeRQOwN1W3OYkV",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "context_required",
+        "comment": "证据分类是否依赖上下分析",
+        "dataType": "BOOLEAN",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 99,
+          "widthComment": 146,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585652943,
+          "createAt": 1755570119065
+        }
+      },
+      "WawD1o1liWWREn45PHtr9": {
+        "id": "WawD1o1liWWREn45PHtr9",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "feature_value",
+        "comment": "证据特征的提取值",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 79,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755573253293,
+          "createAt": 1755573214853
+        }
+      },
+      "0ZIKxOeoXJgdTuixcCp12": {
+        "id": "0ZIKxOeoXJgdTuixcCp12",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "confidence",
+        "comment": "证据特征提取置信度",
+        "dataType": "FLOAT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 65,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755573318877,
+          "createAt": 1755573247679
+        }
+      },
+      "_D39xs5gphj9oVnPfjArZ": {
+        "id": "_D39xs5gphj9oVnPfjArZ",
+        "tableId": "wegBKavc6AiOzDOczvK9j",
+        "name": "reasoning",
+        "comment": "证据特征提取说明",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755573337946,
+          "createAt": 1755573298220
+        }
+      },
+      "5FQ2OxmxwhL_vxTUNjkpW": {
+        "id": "5FQ2OxmxwhL_vxTUNjkpW",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "id",
+        "comment": "证据特征关联记录唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755580839190,
+          "createAt": 1755580798740
+        }
+      },
+      "fiozpQ1TJje563E5LW0Y1": {
+        "id": "fiozpQ1TJje563E5LW0Y1",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "",
+        "comment": "证据特征ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755581456548,
+          "createAt": 1755580840689
+        }
+      },
+      "zXMQXYvVIskw9AYkNgZ3c": {
+        "id": "zXMQXYvVIskw9AYkNgZ3c",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "evidence_id",
+        "comment": "证据ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 70,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755580915615,
+          "createAt": 1755580903011
+        }
+      },
+      "VttsxU6RWlVDWSQe23FAY": {
+        "id": "VttsxU6RWlVDWSQe23FAY",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "association_type",
+        "comment": "证据和特征关联类型（independent/contextual)",
+        "dataType": "VARCHAR",
+        "default": "independent",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 98,
+          "widthComment": 260,
+          "widthDataType": 60,
+          "widthDefault": 73
+        },
+        "meta": {
+          "updateAt": 1755581025687,
+          "createAt": 1755580965551
+        }
+      },
+      "v4vu134Jset4E1fZSOVu9": {
+        "id": "v4vu134Jset4E1fZSOVu9",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "evidence_id",
+        "comment": "关联的证据的唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 70,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755581250795,
+          "createAt": 1755581156384
+        }
+      },
+      "Yln_sTYIpsc2Edp48TT6P": {
+        "id": "Yln_sTYIpsc2Edp48TT6P",
+        "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+        "name": "evidence_feature_id",
+        "comment": "证据特征唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 117,
+          "widthComment": 86,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755581457717,
+          "createAt": 1755581321989
+        }
+      },
+      "F5QJjcczuPrQRo7qCDa_9": {
+        "id": "F5QJjcczuPrQRo7qCDa_9",
+        "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+        "name": "id",
+        "comment": "证据链配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 1,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755583809561,
+          "createAt": 1755583788202
+        }
+      },
+      "FsGuOe7Z4tsDmZ8DHmwBD": {
+        "id": "FsGuOe7Z4tsDmZ8DHmwBD",
+        "tableId": "D7aBrqbPUfsCMgpICQj7b",
+        "name": "key_on_chain",
+        "comment": "证据特征值是否是证据链上关键特征",
+        "dataType": "BOOLEAN",
+        "default": "FALSE",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 78,
+          "widthComment": 194,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585920433,
+          "createAt": 1755583899867
+        }
+      },
+      "Fu525Qj715vQH_xeOOm8o": {
+        "id": "Fu525Qj715vQH_xeOOm8o",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "validation_rules",
+        "comment": "",
+        "dataType": "JSON",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 91,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755584868941,
+          "createAt": 1755584849566
+        }
+      },
+      "pDGW1dL3vo1zJLS6m_Vxh": {
+        "id": "pDGW1dL3vo1zJLS6m_Vxh",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "fit_case_type",
+        "comment": "证据分类适配的案由类型",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 79,
+          "widthComment": 134,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755585634708,
+          "createAt": 1755585573874
+        }
+      },
+      "RGMFlAKmv3rZ2ToN88MM9": {
+        "id": "RGMFlAKmv3rZ2ToN88MM9",
+        "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+        "name": "chain_name",
+        "comment": "证据链名称",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 70,
+          "widthComment": 62,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755586204672,
+          "createAt": 1755586072153
+        }
+      },
+      "WW1U5HwbPe9SE7t8dVGOp": {
+        "id": "WW1U5HwbPe9SE7t8dVGOp",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "id",
+        "comment": "证据链配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 98,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755586112702,
+          "createAt": 1755586112701
+        }
+      },
+      "UYSWzesM0hQAChs6x-1xK": {
+        "id": "UYSWzesM0hQAChs6x-1xK",
+        "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+        "name": "id",
+        "comment": "证据分类配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 110,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755586143587,
+          "createAt": 1755586143586
+        }
+      },
+      "tRTFnrtsZxRPxuoM1kdCN": {
+        "id": "tRTFnrtsZxRPxuoM1kdCN",
+        "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+        "name": "evidence_chain_id",
+        "comment": "关联证据链配置唯一ID",
+        "dataType": "INT",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 2,
+          "widthName": 107,
+          "widthComment": 122,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755586327541,
+          "createAt": 1755586150823
+        }
+      },
+      "qxLWXcaIYEdh3bucPfmKh": {
+        "id": "qxLWXcaIYEdh3bucPfmKh",
+        "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+        "name": "fit_case_type",
+        "comment": "证据链适用的案由类型",
+        "dataType": "VARCHAR",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 79,
+          "widthComment": 122,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1755586225062,
+          "createAt": 1755586206219
+        }
+      }
+    },
+    "relationshipEntities": {
+      "AE46pkNq2trsqnqzVr1FY": {
+        "id": "AE46pkNq2trsqnqzVr1FY",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+          "columnIds": [
+            "5vaXdvxtqqOjPeumyMW1s"
+          ],
+          "x": 380.3441,
+          "y": 656.6773000000001,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "TD1K2_OGXKmW89HBbDrJq"
+          ],
+          "x": 314.2967,
+          "y": 767.739,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755497660579,
+          "createAt": 1755497660579
+        }
+      },
+      "dVGdsv74Wc9j5k41b7jxT": {
+        "id": "dVGdsv74Wc9j5k41b7jxT",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+          "columnIds": [
+            "5vaXdvxtqqOjPeumyMW1s"
+          ],
+          "x": 380.3441,
+          "y": 656.6773000000001,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "KmcZBhhV3r5XTQ7iNdia4"
+          ],
+          "x": 314.2967,
+          "y": 767.739,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755497699976,
+          "createAt": 1755497699976
+        }
+      },
+      "UglrZ8TUbPzCrNnKBDKVi": {
+        "id": "UglrZ8TUbPzCrNnKBDKVi",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "Vonf2bX4YAHDx5e0uL1nf"
+          ],
+          "x": 314.2967,
+          "y": 767.739,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+          "columnIds": [
+            "asVQMJAsw5B3q7yX2aK08"
+          ],
+          "x": 380.3441,
+          "y": 680.6773000000001,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755497709422,
+          "createAt": 1755497709422
+        }
+      },
+      "bl8OKIEaBpB9S1LSMYsU9": {
+        "id": "bl8OKIEaBpB9S1LSMYsU9",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+          "columnIds": [
+            "5vaXdvxtqqOjPeumyMW1s"
+          ],
+          "x": 380.3441,
+          "y": 656.6773000000001,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "Hht71C5EIPXHq_czzYJ_K"
+          ],
+          "x": 317.2967,
+          "y": 770.739,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755497734977,
+          "createAt": 1755497734977
+        }
+      },
+      "LwydZO46Wqmkb1Wm_K1Me": {
+        "id": "LwydZO46Wqmkb1Wm_K1Me",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "kgxwU6k4WCs7sCFRpmDFN",
+          "columnIds": [
+            "5vaXdvxtqqOjPeumyMW1s"
+          ],
+          "x": 417.7271,
+          "y": 241.1241,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "Tc7sLWNG7lQk9ecs1LfAO"
+          ],
+          "x": 270.1265,
+          "y": 422.8241,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755497778396,
+          "createAt": 1755497778396
+        }
+      },
+      "7hhd0LkgJmaAlXsPT2wZJ": {
+        "id": "7hhd0LkgJmaAlXsPT2wZJ",
+        "identification": false,
+        "relationshipType": 16,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "zTlUQ1U7X6TJLqJWnKxNx"
+          ],
+          "x": 539.1265,
+          "y": 510.8241,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "93VflB1DJEX4ZU1tI2ORw",
+          "columnIds": [
+            "Zk4RRAv9m2w1Ww6mGkQTU"
+          ],
+          "x": 730,
+          "y": 542.5,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755500721657,
+          "createAt": 1755499531308
+        }
+      },
+      "Q2YAnRu-n4AkQ_AY4rTJ-": {
+        "id": "Q2YAnRu-n4AkQ_AY4rTJ-",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "2g9Wc61XipG6asx1yt-ms",
+          "columnIds": [
+            "GebfZ4KKUHk0t3R0A3g4h"
+          ],
+          "x": 1437.0042,
+          "y": 542.2301,
+          "direction": 1
+        },
+        "end": {
+          "tableId": "93VflB1DJEX4ZU1tI2ORw",
+          "columnIds": [
+            "JgDBwWqrPgwgXxds_ct4Z"
+          ],
+          "x": 1215,
+          "y": 542.5,
+          "direction": 2
+        },
+        "meta": {
+          "updateAt": 1755500074326,
+          "createAt": 1755500074326
+        }
+      },
+      "e015NYqQ6umDuEhZjl4Su": {
+        "id": "e015NYqQ6umDuEhZjl4Su",
+        "identification": false,
+        "relationshipType": 2,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "iXRqeFWG3gwbIZZZRnrAS"
+          ],
+          "x": 373.8333,
+          "y": 922.5002,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "7NKicYoaJ4E2t8V-UO1jC"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755505467051,
+          "createAt": 1755505393506
+        }
+      },
+      "gbwTwVUHoMDiJxhXDKE0b": {
+        "id": "gbwTwVUHoMDiJxhXDKE0b",
+        "identification": false,
+        "relationshipType": 2,
+        "startRelationshipType": 1,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "AmQhkSwL4eI6DMFZv3phC"
+          ],
+          "x": 373.8333,
+          "y": 945.5002,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506052641,
+          "createAt": 1755505475822
+        }
+      },
+      "LkVPLdoF8SdVvUnZbyVgD": {
+        "id": "LkVPLdoF8SdVvUnZbyVgD",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "NN73lOoYwkKtxBeBF82kW"
+          ],
+          "x": 373.8333,
+          "y": 969.5002,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506074147,
+          "createAt": 1755506074147
+        }
+      },
+      "bAXtX17se5bhqO0Biv_VY": {
+        "id": "bAXtX17se5bhqO0Biv_VY",
+        "identification": false,
+        "relationshipType": 2,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "CpCTKa1k2NnPrdvsIlXh9"
+          ],
+          "x": 373.8333,
+          "y": 993.5002,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506086480,
+          "createAt": 1755506086480
+        }
+      },
+      "6ttnK35t_0kxiLELtcSgR": {
+        "id": "6ttnK35t_0kxiLELtcSgR",
+        "identification": false,
+        "relationshipType": 8,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "Ql5BDiFy1KJCyEoexcSI3"
+          ],
+          "x": 373.8333,
+          "y": 1017.5002,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506094289,
+          "createAt": 1755506094289
+        }
+      },
+      "H4fcJhlDqhGYrhcbE5FxY": {
+        "id": "H4fcJhlDqhGYrhcbE5FxY",
+        "identification": false,
+        "relationshipType": 16,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 373.6667,
+          "y": 1055.5,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "Wv2_67EcEWUOkRGC9sT-g"
+          ],
+          "x": 373.8333,
+          "y": 1017.5002,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506101979,
+          "createAt": 1755506101979
+        }
+      },
+      "Bs5Uvfno14UMQcDwjR44B": {
+        "id": "Bs5Uvfno14UMQcDwjR44B",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 1,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 363.7307,
+          "y": 1150.1803,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "K4V2o7IcycMPGtN8NIrDN"
+          ],
+          "x": 365.3119,
+          "y": 991.3727,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755506201601,
+          "createAt": 1755506119852
+        }
+      },
+      "LlS5tJZx9i8LwxnY8aIVm": {
+        "id": "LlS5tJZx9i8LwxnY8aIVm",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "iXRqeFWG3gwbIZZZRnrAS"
+          ],
+          "x": 373.8333,
+          "y": 769.5002,
+          "direction": 4
+        },
+        "end": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "eqcMvU3ebDBlTpP4H_0EL"
+          ],
+          "x": 306.2967,
+          "y": 654.739,
+          "direction": 8
+        },
+        "meta": {
+          "updateAt": 1755511236152,
+          "createAt": 1755511236152
+        }
+      },
+      "n7tzqUrFZn1sHvecYOhbA": {
+        "id": "n7tzqUrFZn1sHvecYOhbA",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "s9dAtmIYnEKxfGmMLhu1D",
+          "columnIds": [
+            "zTlUQ1U7X6TJLqJWnKxNx"
+          ],
+          "x": 270.1265,
+          "y": 598.8241,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "CwoBbsTL9OUCxAq13ImBq"
+          ],
+          "x": 365.3119,
+          "y": 767.3727,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755511244965,
+          "createAt": 1755511244965
+        }
+      },
+      "9Syy3_bkAPYkGvqd0ilOi": {
+        "id": "9Syy3_bkAPYkGvqd0ilOi",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 363.7307,
+          "y": 1350.1803,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "D7aBrqbPUfsCMgpICQj7b",
+          "columnIds": [
+            "Zog5BJg0X6q6iygQ5sJMV"
+          ],
+          "x": 372.1384,
+          "y": 1452.6035,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755511428318,
+          "createAt": 1755511428318
+        }
+      },
+      "l1iSS9qTFwui8GUFdmfaB": {
+        "id": "l1iSS9qTFwui8GUFdmfaB",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "D7aBrqbPUfsCMgpICQj7b",
+          "columnIds": [
+            "cOpU_1Yc37mehtxGen0F7"
+          ],
+          "x": 635.17,
+          "y": 1538.0079,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "8xe1x8r5JYNXjLuPFwSe6",
+          "columnIds": [
+            "ysHNkFW5zMhrlLWgT_O_U"
+          ],
+          "x": 810.6379,
+          "y": 1538.5782,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755511939618,
+          "createAt": 1755511939618
+        }
+      },
+      "829ytul5me0iHpXGrVr1M": {
+        "id": "829ytul5me0iHpXGrVr1M",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 1,
+        "start": {
+          "tableId": "D7aBrqbPUfsCMgpICQj7b",
+          "columnIds": [
+            "cOpU_1Yc37mehtxGen0F7"
+          ],
+          "x": 810.3406,
+          "y": 1514.6039,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "eT_MIt_HaX925Jh9XMi1F",
+          "columnIds": [
+            "tPQ-mBaNyMSs2ewqgPMUg"
+          ],
+          "x": 936.1693,
+          "y": 1544.2668,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755567557637,
+          "createAt": 1755567525181
+        }
+      },
+      "B1T5efDEDVdGGcpujDgxk": {
+        "id": "B1T5efDEDVdGGcpujDgxk",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "iXRqeFWG3gwbIZZZRnrAS"
+          ],
+          "x": 684.3119,
+          "y": 891.3727,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "wegBKavc6AiOzDOczvK9j",
+          "columnIds": [
+            "pVREj91BriLBeBfCBR5Y8"
+          ],
+          "x": 822.3404,
+          "y": 823.1431,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755570069096,
+          "createAt": 1755570069096
+        }
+      },
+      "pTBQ8IglbAS-tDnz9nHBs": {
+        "id": "pTBQ8IglbAS-tDnz9nHBs",
+        "identification": false,
+        "relationshipType": 16,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "5sosD6ukj9WKr-E8RMOBH",
+          "columnIds": [
+            "iXRqeFWG3gwbIZZZRnrAS"
+          ],
+          "x": 684.3119,
+          "y": 879.3727,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+          "columnIds": [
+            "v4vu134Jset4E1fZSOVu9"
+          ],
+          "x": 788.2978,
+          "y": 1046.2887,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755581156384,
+          "createAt": 1755581156384
+        }
+      },
+      "zPL8JuhoesX-uz7r3g5CL": {
+        "id": "zPL8JuhoesX-uz7r3g5CL",
+        "identification": false,
+        "relationshipType": 16,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "wegBKavc6AiOzDOczvK9j",
+          "columnIds": [
+            "zX8tB9-4KRcZpOXuqvjey"
+          ],
+          "x": 1038.7764,
+          "y": 887.2707,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "jNYf2xyUQJmvNAzT8bv0v",
+          "columnIds": [
+            "Yln_sTYIpsc2Edp48TT6P"
+          ],
+          "x": 1105.7978,
+          "y": 970.2887,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1755581779684,
+          "createAt": 1755581321990
+        }
+      },
+      "-_zDqqDWb7Swe3APOHWFD": {
+        "id": "-_zDqqDWb7Swe3APOHWFD",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+          "columnIds": [
+            "F5QJjcczuPrQRo7qCDa_9"
+          ],
+          "x": 815.9575,
+          "y": 1272.4993,
+          "direction": 1
+        },
+        "end": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "WW1U5HwbPe9SE7t8dVGOp"
+          ],
+          "x": 608.9858,
+          "y": 1251.2441,
+          "direction": 2
+        },
+        "meta": {
+          "updateAt": 1755586112702,
+          "createAt": 1755586112702
+        }
+      },
+      "Ytwpson0kRGXU76HvB1QX": {
+        "id": "Ytwpson0kRGXU76HvB1QX",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "xauydI5kOEkaxYVgjhhaB"
+          ],
+          "x": 608.9858,
+          "y": 1251.2441,
+          "direction": 2
+        },
+        "end": {
+          "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+          "columnIds": [
+            "UYSWzesM0hQAChs6x-1xK"
+          ],
+          "x": 815.9575,
+          "y": 1284.4993,
+          "direction": 1
+        },
+        "meta": {
+          "updateAt": 1755586143587,
+          "createAt": 1755586143587
+        }
+      },
+      "sp90XKdHf1gWbcGUIABWJ": {
+        "id": "sp90XKdHf1gWbcGUIABWJ",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 1,
+        "start": {
+          "tableId": "8tiPCgtaJZ2a6LK0FNWDz",
+          "columnIds": [
+            "F5QJjcczuPrQRo7qCDa_9"
+          ],
+          "x": 777.6595,
+          "y": 1284.4992,
+          "direction": 1
+        },
+        "end": {
+          "tableId": "NR-Iq3B_DasO8WjNmWKhg",
+          "columnIds": [
+            "tRTFnrtsZxRPxuoM1kdCN"
+          ],
+          "x": 612.7307,
+          "y": 1250.1803,
+          "direction": 2
+        },
+        "meta": {
+          "updateAt": 1755586150823,
+          "createAt": 1755586150823
+        }
+      }
+    },
+    "indexEntities": {},
+    "indexColumnEntities": {},
+    "memoEntities": {}
+  }
+}

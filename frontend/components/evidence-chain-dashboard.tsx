@@ -170,6 +170,7 @@ interface EvidenceChainCardProps {
 
 function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProps) {
   const [expandedRequirements, setExpandedRequirements] = useState<Set<string>>(new Set())
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false)
 
   const toggleRequirement = (evidenceType: string) => {
     const newExpanded = new Set(expandedRequirements)
@@ -179,6 +180,10 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
       newExpanded.add(evidenceType)
     }
     setExpandedRequirements(newExpanded)
+  }
+
+  const toggleOverview = () => {
+    setIsOverviewExpanded(!isOverviewExpanded)
   }
 
   // 使用后端计算好的进度数据
@@ -283,34 +288,63 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                 <Target className="w-3 h-3 inline mr-1 text-blue-500" />
                 特征收集总览
               </span>
-              <span className="text-sm text-gray-600">
-                {chain.requirements.filter(r => r.core_slots_count > 0 || r.supplementary_slots_count > 0).length} 个分类
-              </span>
-            </div>
-            <div className="relative group">
-              <div className="w-full bg-gray-100 rounded-full h-2 border border-gray-200">
-                <div 
-                  className="h-2 rounded-full transition-all duration-300 bg-gradient-to-r from-blue-400 to-purple-500"
-                  style={{ width: `${chain.completion_percentage}%` }}
-                ></div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">
+                  {chain.requirements.filter(r => r.core_slots_count > 0 || r.supplementary_slots_count > 0).length} 个分类
+                </span>
+                {/* 展开/收起按钮 */}
+                {chain.completion_percentage < 100 && (
+                  <button
+                    onClick={toggleOverview}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                    title={isOverviewExpanded ? "收起详情" : "查看缺失特征详情"}
+                  >
+                    <span>{isOverviewExpanded ? "收起" : "详情"}</span>
+                    <svg 
+                      className={`w-3 h-3 transform transition-transform ${isOverviewExpanded ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
               </div>
-              
-              {/* Hover Tooltip - 显示缺失的特征详情 */}
-              {chain.completion_percentage < 100 && (
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 max-w-xs">
-                  <div className="flex items-center gap-1 mb-2">
-                    <Target className="w-3 h-3 text-blue-400" />
-                    <span className="font-medium">缺失的特征详情:</span>
-                  </div>
-                  
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2 border border-gray-200">
+              <div 
+                className="h-2 rounded-full transition-all duration-300 bg-gradient-to-r from-blue-400 to-purple-500"
+                style={{ width: `${chain.completion_percentage}%` }}
+              ></div>
+            </div>
+            
+            {/* 展开的特征详情内容 */}
+            {isOverviewExpanded && chain.completion_percentage < 100 && (
+              <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <Target className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium text-gray-700">缺失的特征详情</span>
+                </div>
+                
+                <div className="space-y-3">
                   {/* 核心特征缺失 */}
                   {chain.requirements
                     .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
                     .map(req => (
-                      <div key={`core-${req.evidence_type}`} className="mb-1">
-                        <div className="text-yellow-200 font-medium">🔴 {req.evidence_type}</div>
-                        <div className="text-gray-300 ml-2">
-                          核心特征: {req.core_slots_satisfied}/{req.core_slots_count}
+                      <div key={`core-${req.evidence_type}`} className="border-l-4 border-red-400 pl-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span className="text-sm font-medium text-red-700">{req.evidence_type}</span>
+                          <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">核心特征</span>
+                        </div>
+                        <div className="text-xs text-gray-600 ml-4">
+                          进度: {req.core_slots_satisfied}/{req.core_slots_count}
+                          {req.core_slots_count - req.core_slots_satisfied > 0 && (
+                            <span className="text-red-600 ml-2">
+                              (还需 {req.core_slots_count - req.core_slots_satisfied} 个)
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -319,18 +353,33 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                   {chain.requirements
                     .filter(req => req.supplementary_slots_count > 0 && req.supplementary_completion_percentage < 100)
                     .map(req => (
-                      <div key={`supp-${req.evidence_type}`} className="mb-1">
-                        <div className="text-blue-200 font-medium">🟡 {req.evidence_type}</div>
-                        <div className="text-gray-300 ml-2">
-                          补充特征: {req.supplementary_slots_satisfied}/{req.supplementary_slots_count}
+                      <div key={`supp-${req.evidence_type}`} className="border-l-4 border-yellow-400 pl-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                          <span className="text-sm font-medium text-yellow-700">{req.evidence_type}</span>
+                          <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded">补充特征</span>
+                        </div>
+                        <div className="text-xs text-gray-600 ml-4">
+                          进度: {req.supplementary_slots_satisfied}/{req.supplementary_slots_count}
+                          {req.supplementary_slots_count - req.supplementary_slots_satisfied > 0 && (
+                            <span className="text-yellow-600 ml-2">
+                              (还需 {req.supplementary_slots_count - req.supplementary_slots_satisfied} 个)
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
-                  
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
                 </div>
-              )}
-            </div>
+                
+                {/* 操作建议 */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="text-xs text-gray-500">
+                    💡 建议优先完善核心特征，这些是激活证据链的必要条件
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="text-xs text-gray-500 mt-1">
               {chain.completion_percentage === 100 
                 ? '🎯 所有特征收集完成，证据链完整！' 
