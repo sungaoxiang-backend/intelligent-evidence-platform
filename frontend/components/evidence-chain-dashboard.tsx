@@ -391,10 +391,48 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                         .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
                         .map(req => {
                           const missingCount = req.core_slots_count - req.core_slots_satisfied
+                          
+                          // 收集校对失败的特征信息
+                          const proofreadingFailures = req.slots
+                            .filter(slot => slot.slot_proofread_at && !slot.slot_is_consistent && slot.slot_expected_value)
+                            .map(slot => ({
+                              name: slot.slot_name,
+                              expected: slot.slot_expected_value
+                            }))
+                          
+                          // 收集缺失的特征信息（没有校对信息或校对通过但未满足的）
+                          const missingFeatures = req.slots
+                            .filter(slot => !slot.is_satisfied && (!slot.slot_proofread_at || slot.slot_is_consistent))
+                            .map(slot => slot.slot_name)
+                          
                           return (
-                            <div key={req.evidence_type} className="flex items-center gap-2 text-sm text-blue-700">
-                              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                              <span>{req.evidence_type}的还有{missingCount}个特征缺失或错误</span>
+                            <div key={req.evidence_type} className="space-y-1">
+                              <div className="flex items-center gap-2 text-sm text-blue-700">
+                                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                                <span>{req.evidence_type}</span>
+                              </div>
+                              
+                              {/* 校对失败详情 */}
+                              {proofreadingFailures.length > 0 && (
+                                <div className="ml-6 space-y-1">
+                                  {proofreadingFailures.map((failure, idx) => (
+                                    <div key={idx} className="text-xs text-gray-600">
+                                      • {failure.name}: 案件校对失败，期待值{failure.expected}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {/* 缺失特征详情 */}
+                              {missingFeatures.length > 0 && (
+                                <div className="ml-6 space-y-1">
+                                  {missingFeatures.map((featureName, idx) => (
+                                    <div key={idx} className="text-xs text-gray-600">
+                                      • {featureName}: 特征缺失
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -429,13 +467,13 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
-                {/* 进度圆环 - 水流波浪效果，进度始终确立 */}
+                {/* 进度圆环 - 基于核心证据分类完成情况 */}
                 <path
                   className="text-blue-500"
                   stroke="url(#waveGradient)"
                   strokeWidth="3"
                   fill="none"
-                  strokeDasharray={`${chain.completion_percentage * 1.131}, 100`}
+                  strokeDasharray={`${activationProgress * 1.131}, 100`}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   style={{
                     filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))'
@@ -463,10 +501,10 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                 </defs>
               </svg>
               
-              {/* 中心百分比文字 - 进度始终确立 */}
+              {/* 中心百分比文字 - 基于核心证据分类完成情况 */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-lg font-bold text-blue-600">
-                  {Math.round(chain.completion_percentage)}%
+                  {Math.round(activationProgress)}%
                 </span>
               </div>
               
@@ -652,39 +690,39 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
             </div>
           </div>
           
-          {/* 简化的进度展示 - 移除圆形进度条 */}
+          {/* 简化的进度展示 - 只统计核心特征 */}
           <div className="mt-2">
             <div className="flex items-center gap-4">
-              {/* 总体进度条 */}
+              {/* 核心特征进度条 - 只基于核心特征计算 */}
               <div className="flex-1">
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                   <div 
                     className={`h-1.5 rounded-full transition-all duration-300 ${
-                      overallProgress === 100 ? 'bg-green-500' : 
-                      overallProgress > 50 ? 'bg-yellow-500' : 'bg-red-500'
+                      requirement.core_completion_percentage === 100 ? 'bg-green-500' : 
+                      requirement.core_completion_percentage > 50 ? 'bg-yellow-500' : 'bg-red-500'
                     }`}
-                    style={{ width: `${overallProgress}%` }}
+                    style={{ width: `${requirement.core_completion_percentage}%` }}
                   ></div>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {Math.round(overallProgress)}% 完成
+                  {Math.round(requirement.core_completion_percentage)}% 完成
                 </div>
               </div>
               
-              {/* 统计信息 */}
+              {/* 统计信息 - 突出核心特征 */}
               <div className="text-xs text-gray-600 space-y-1 min-w-0">
-                {/* 只显示有核心特征的分类的核心特征信息 */}
+                {/* 核心特征信息 - 主要统计指标 */}
                 {requirement.core_slots_count > 0 && (
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-blue-600">核心:</span>
                     <span className="text-blue-700">{requirement.core_slots_satisfied}/{requirement.core_slots_count}</span>
                   </div>
                 )}
-                {/* 补充特征信息 */}
+                {/* 补充特征信息 - 仅供参考，不计入进度 */}
                 {requirement.supplementary_slots_count > 0 && (
                   <div className="flex items-center gap-1">
-                    <span className="text-gray-500">补充:</span>
-                    <span>{requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count}</span>
+                    <span className="text-gray-400">补充:</span>
+                    <span className="text-gray-500">{requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count}</span>
                   </div>
                 )}
                 {/* 对于没有核心特征的分类，显示特殊标识 */}
@@ -768,36 +806,48 @@ interface SlotItemProps {
 }
 
 function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = true }: SlotItemProps) {
+  const slotData = slot as any; // 类型断言以访问校对字段
+  
+
+  
   return (
-    <div className={`flex items-center gap-2 text-xs ${
-      isCore ? 'text-gray-900' : 'text-gray-600'
-    }`}>
-      {slot.is_satisfied ? (
-        <CheckCircle className={`w-3 h-3 ${
-          isCore ? 'text-green-600' : 'text-green-500'
-        }`} />
-      ) : (
-        <XCircle className={`w-3 h-3 ${
-          isCore ? 'text-red-600' : 'text-red-400'
-        }`} />
+    <div className={`space-y-1 ${isCore ? 'text-gray-900' : 'text-gray-600'}`}>
+      {/* 主要槽位信息 */}
+      <div className="flex items-center gap-2 text-xs">
+        {/* 统一的状态icon */}
+        {slotData.is_satisfied ? (
+          <CheckCircle className={`w-3 h-3 ${
+            isCore ? 'text-green-600' : 'text-green-500'
+          }`} />
+        ) : (
+          <XCircle className={`w-3 h-3 ${
+            isCore ? 'text-red-600' : 'text-red-400'
+          }`} />
+        )}
+        <span className={`${
+          slotData.is_satisfied 
+            ? (isCore ? 'text-green-800 font-medium' : 'text-green-700') 
+            : (isCore ? 'text-red-800 font-medium' : 'text-red-600')
+        }`}>
+           {slotData.slot_name}
+         </span>
+         {showSourceButton && slotData.is_satisfied && slotData.source_id && (
+           <button
+             onClick={() => onSlotClick(slot, requirement)}
+             className="ml-1 text-blue-600 hover:text-blue-800"
+             title={`查看来源: ${slotData.source_type === 'evidence' ? '证据' : '关联组'} ${slotData.source_id}`}
+           >
+             <ExternalLink className="w-3 h-3" />
+           </button>
+         )}
+      </div>
+      
+      {/* 校对信息显示 - 优化格式 */}
+      {slotData.slot_proofread_at && !slotData.slot_is_consistent && slotData.slot_expected_value && (
+        <span className="ml-2 text-xs text-gray-500">
+          案件校对失败: 期待值{slotData.slot_expected_value}
+        </span>
       )}
-      <span className={`${
-        slot.is_satisfied 
-          ? (isCore ? 'text-green-800 font-medium' : 'text-green-700') 
-          : (isCore ? 'text-red-800 font-medium' : 'text-red-600')
-      }`}>
-         {slot.slot_name}
-         {isCore && <span className="ml-1 text-orange-600">★</span>}
-       </span>
-       {showSourceButton && slot.is_satisfied && slot.source_id && (
-         <button
-           onClick={() => onSlotClick(slot, requirement)}
-           className="ml-1 text-blue-600 hover:text-blue-800"
-           title={`查看来源: ${slot.source_type === 'evidence' ? '证据' : '关联组'} ${slot.source_id}`}
-         >
-           <ExternalLink className="w-3 h-3" />
-         </button>
-       )}
-     </div>
-   )
- }
+    </div>
+  )
+}

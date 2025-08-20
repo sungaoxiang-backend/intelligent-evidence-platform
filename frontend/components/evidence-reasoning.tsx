@@ -110,24 +110,16 @@ const isEvidenceReadyForReview = (evidence: any) => {
 const getFeatureColor = (slot: any) => {
   const slotRequired = slot.slot_required ?? true; // 默认为true
   const slotValue = slot.slot_value;
-  // 确保 slotValue 是字符串类型，并且不是"未知"或空字符串
+  
+  // 检查是否有有效值，支持多种数据类型
   const hasValue = slotValue && 
-    typeof slotValue === 'string' && 
     slotValue !== "未知" && 
-    slotValue.trim() !== "";
+    slotValue !== "" && 
+    slotValue !== null && 
+    slotValue !== undefined;
   
-  // 判断特征是否有效：有值且如果该特征字段需要校对且校对成功时，为有效
-  let isValid = false;
-  
-  if (hasValue) {
-    if (slot.slot_proofread_at) {
-      // 如果有校对信息，必须校对成功才算有效
-      isValid = slot.slot_is_consistent;
-    } else {
-      // 如果没有校对信息，有值就算有效
-      isValid = true;
-    }
-  }
+  // 判断特征是否有效：有值即可
+  let isValid = hasValue;
   
   if (slotRequired) {
     // required = true
@@ -837,92 +829,6 @@ function EvidenceReasoningContent({
                           <div className="flex items-center gap-1">
                             <Label className="text-xs font-medium">词槽名:</Label>
                             <span className="text-xs">{slot.slot_name}</span>
-                            {/* 校对状态图标 */}
-                            {slot.slot_proofread_at && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="ml-2 relative group cursor-pointer">
-                                    {/* 毛玻璃矩形标签 */}
-                                    <div 
-                                      className={`
-                                        w-8 h-4 rounded-sm flex items-center justify-center
-                                        backdrop-blur-sm border border-white/30
-                                        transition-all duration-300 ease-out
-                                        animate-proofread-breathe group-hover:animate-none
-                                        group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
-                                        ${slot.slot_is_consistent 
-                                          ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
-                                          : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
-                                        }
-                                      `}
-                                      style={{
-                                        animation: 'proofreadBreathe 4s ease-in-out infinite',
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.animation = 'none';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
-                                      }}
-                                    >
-                                      {slot.slot_is_consistent ? (
-                                        <CheckCircle className="w-3 h-3 drop-shadow-sm" />
-                                      ) : (
-                                        <XCircle className="w-3 h-3 drop-shadow-sm" />
-                                      )}
-                                    </div>
-                                    
-                                    {/* 底部阴影 */}
-                                    <div 
-                                      className={`
-                                        absolute top-5 left-1/2 -translate-x-1/2 
-                                        w-5 h-1 rounded-full blur-sm opacity-30
-                                        transition-all duration-300
-                                        ${slot.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
-                                        group-hover:opacity-60 group-hover:w-6
-                                      `}
-                                    ></div>
-                                    
-                                    {/* 光晕效果 */}
-                                    <div className={`
-                                      absolute inset-0 rounded-sm opacity-0 
-                                      transition-all duration-300 blur-sm
-                                      group-hover:opacity-40 group-hover:scale-125
-                                      ${slot.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
-                                    `}></div>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent 
-                                  side="top" 
-                                  className={`max-w-xs p-3 shadow-lg border-2 ${
-                                    slot.slot_is_consistent 
-                                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
-                                      : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
-                                  }`}
-                                >
-                                  <div className="space-y-2">
-                                    <div className="font-semibold text-sm">
-                                      校对结果: {slot.slot_is_consistent ? '✅ 一致' : '❌ 不一致'}
-                                    </div>
-                                    {slot.slot_expected_value && (
-                                      <div className="text-xs">
-                                        <span className="font-medium">期待值:</span> {slot.slot_expected_value}
-                                      </div>
-                                    )}
-                                    {slot.slot_proofread_reasoning && (
-                                      <div className="text-xs">
-                                        <span className="font-medium">原因:</span> {slot.slot_proofread_reasoning}
-                                      </div>
-                                    )}
-                                    <div className="text-xs text-muted-foreground">
-                                      校对时间: {new Date(slot.slot_proofread_at).toLocaleString('zh-CN')}
-                                    </div>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            )}
                           </div>
                       <div>
                         <Label className="text-xs">词槽值:</Label>

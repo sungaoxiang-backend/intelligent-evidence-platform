@@ -88,6 +88,8 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                                 after_keys = set(enhanced_feature.keys())
                                 new_keys = after_keys - before_keys
                                 logger.debug(f"slot '{slot_name}' 添加了新键: {new_keys}")
+                                
+
                             else:
                                 logger.warning(f"slot '{slot_name}' 不是dict格式，无法添加校对信息")
                             break
@@ -101,6 +103,8 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                 if isinstance(feature, dict):
                     has_proofreading = any(key.startswith('slot_') and 'proofread' in key for key in feature.keys())
                     logger.debug(f"特征 {i} 包含校对字段: {has_proofreading}, 键: {list(feature.keys())}")
+                    
+
             
             evidence.evidence_features = enhanced_features
         else:

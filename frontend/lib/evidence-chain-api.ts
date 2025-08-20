@@ -11,6 +11,12 @@ export interface EvidenceSlotDetail {
   source_type: string
   source_id?: number | string | null
   confidence?: number | null
+  
+  // 校对相关字段
+  slot_proofread_at?: string | null
+  slot_is_consistent?: boolean | null
+  slot_expected_value?: string | null
+  slot_proofread_reasoning?: string | null
 }
 
 export interface EvidenceTypeRequirement {

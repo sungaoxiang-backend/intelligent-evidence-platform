@@ -246,7 +246,7 @@ class EvidenceChainService:
                     evidence_slot_groups[evidence.id] = {}
                     for feature in evidence.evidence_features:
                         slot_name = feature.get("slot_name")
-                        if slot_name in all_slots and self._is_slot_satisfied(feature):
+                        if slot_name in all_slots:
                             evidence_slot_groups[evidence.id][slot_name] = {
                                 "source_type": "evidence",
                                 "source_id": evidence.id,
@@ -263,7 +263,7 @@ class EvidenceChainService:
                         association_slot_groups[group_name] = {}
                     for feature in assoc_feature.evidence_features:
                         slot_name = feature.get("slot_name")
-                        if slot_name in all_slots and self._is_slot_satisfied(feature):
+                        if slot_name in all_slots:
                             association_slot_groups[group_name][slot_name] = {
                                 "source_type": "association_group",
                                 "source_id": group_name,
@@ -292,8 +292,13 @@ class EvidenceChainService:
             for slot_name in all_slots:
                 if slot_name in slot_data:
                     slot_info = slot_data[slot_name]
+                    feature_data = slot_info.get("feature_data", {})
+                    
+                    # 检查槽位是否真正满足条件（包括校对状态）
+                    is_satisfied = self._is_slot_satisfied(feature_data)
+                    
                     slot_satisfaction[slot_name] = (
-                        True, 
+                        is_satisfied, 
                         slot_info["source_type"], 
                         slot_info["source_id"], 
                         slot_info["confidence"]
@@ -307,13 +312,39 @@ class EvidenceChainService:
             is_satisfied, source_type, source_id, confidence = slot_satisfaction.get(slot, (False, None, None, None))
             is_core = slot in core_slots
             
+            # 获取校对信息
+            slot_proofread_at = None
+            slot_is_consistent = None
+            slot_expected_value = None
+            slot_proofread_reasoning = None
+            
+            # 从最佳源中获取校对信息
+            if best_source and slot in best_source["slot_data"]:
+                slot_info = best_source["slot_data"][slot]
+                feature_data = slot_info.get("feature_data", {})
+                slot_proofread_at = feature_data.get("slot_proofread_at")
+                slot_is_consistent = feature_data.get("slot_is_consistent")
+                slot_expected_value = feature_data.get("slot_expected_value")
+                slot_proofread_reasoning = feature_data.get("slot_proofread_reasoning")
+                
+                # 调试：检查校对信息是否正确提取
+                if slot == "债务人脱敏真名" or slot == "转账账户真名":
+                    print(f"字段 {slot} 校对信息: proofread_at={slot_proofread_at}, consistent={slot_is_consistent}, expected={slot_expected_value}")
+                    print(f"完整feature_data: {feature_data}")
+                
+
+            
             slot_detail = EvidenceSlotDetail(
                 slot_name=slot,
                 is_satisfied=is_satisfied,
                 is_core=is_core,
                 source_type=source_type or "none",
                 source_id=source_id,
-                confidence=confidence
+                confidence=confidence,
+                slot_proofread_at=slot_proofread_at,
+                slot_is_consistent=slot_is_consistent,
+                slot_expected_value=slot_expected_value,
+                slot_proofread_reasoning=slot_proofread_reasoning
             )
             
             if is_core:
@@ -330,8 +361,12 @@ class EvidenceChainService:
         supplementary_slots_count = len(non_core_slot_details)
         supplementary_slots_satisfied = sum(1 for slot in non_core_slot_details if slot.is_satisfied)
         
+        # 完成度计算：校对不通过的特征也会影响完成度
         core_completion_percentage = (core_slots_satisfied / core_slots_count * 100) if core_slots_count > 0 else 100.0
         supplementary_completion_percentage = (supplementary_slots_satisfied / supplementary_slots_count * 100) if supplementary_slots_count > 0 else 100.0
+        
+        # 调试：检查完成度计算
+        print(f"证据类型 {evidence_type} 完成度: 核心={core_slots_satisfied}/{core_slots_count} ({core_completion_percentage:.1f}%), 补充={supplementary_slots_satisfied}/{supplementary_slots_count} ({supplementary_completion_percentage:.1f}%)")
         
         # 确定状态（只基于核心槽位）
         core_satisfied_count = sum(1 for slot in core_slots if slot_satisfaction.get(slot, (False, None, None, None))[0])

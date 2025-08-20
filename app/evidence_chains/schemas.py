@@ -31,6 +31,12 @@ class EvidenceSlotDetail(BaseModel):
     source_type: str  # "evidence" | "association_group" | "none"
     source_id: Optional[Union[int, str]] = None  # 证据ID 或 slot_group_name
     confidence: Optional[float] = None
+    
+    # 校对相关字段
+    slot_proofread_at: Optional[str] = None  # 校对时间
+    slot_is_consistent: Optional[bool] = None  # 校对是否一致
+    slot_expected_value: Optional[str] = None  # 期待值
+    slot_proofread_reasoning: Optional[str] = None  # 校对原因
 
 
 class EvidenceTypeRequirement(BaseModel):
