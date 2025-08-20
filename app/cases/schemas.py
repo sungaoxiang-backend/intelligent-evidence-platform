@@ -14,16 +14,17 @@ from app.users.schemas import User
 class CaseCreate(BaseModel):
     """案件创建模型"""
     user_id: int
-    loan_amount: float
-    case_type: Optional[CaseType] = None
     creditor_name: str
+    debtor_name: str
+    loan_amount: float
+    case_type: CaseType
+    creditor_type: PartyType
+    debtor_type: PartyType
+
     creditor_phone: Optional[str] = None
     creditor_bank_account: Optional[str] = None
     creditor_bank_address: Optional[str] = None
-    creditor_type: Optional[PartyType] = None
-    debtor_name: str
     debtor_phone: Optional[str] = None
-    debtor_type: Optional[PartyType] = None
     description: Optional[str] = None
 
     @field_validator('creditor_type', 'debtor_type', mode='before')
@@ -66,16 +67,17 @@ class Case(BaseSchema):
     id: int
     user_id: int
     creditor_name: str
+    debtor_name: str
+    creditor_type: Optional[PartyType] = None
+    debtor_type: Optional[PartyType] = None
+    loan_amount: Optional[float] = 0.0
+
     creditor_phone: Optional[str] = None
     creditor_bank_account: Optional[str] = None
     creditor_bank_address: Optional[str] = None
-    loan_amount: Optional[float] = 0.0
     description: Optional[str] = None
     case_type: Optional[CaseType] = None
-    creditor_type: Optional[PartyType] = None
-    debtor_name: str
     debtor_phone: Optional[str] = None
-    debtor_type: Optional[PartyType] = None
     created_at: datetime
     updated_at: datetime
 

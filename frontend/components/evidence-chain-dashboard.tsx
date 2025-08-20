@@ -39,7 +39,7 @@ interface EvidenceChainDashboardProps {
   onRefresh?: () => void
 }
 
-export function EvidenceChainDashboard({ caseId }: EvidenceChainDashboardProps) {
+export function EvidenceChainDashboard({ caseId, onRefresh }: EvidenceChainDashboardProps) {
   const [dashboardData, setDashboardData] = useState<EvidenceChainDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,15 +68,16 @@ export function EvidenceChainDashboard({ caseId }: EvidenceChainDashboardProps) 
     fetchDashboardData()
   }, [caseId])
 
-  const handleSlotClick = (slot: any, requirement: EvidenceTypeRequirement) => {
-    if (!slot.is_satisfied || !slot.source_id) return
+  const handleSlotClick = (slot: unknown, requirement: EvidenceTypeRequirement) => {
+    const slotData = slot as { is_satisfied?: boolean; source_id?: number | string; source_type?: string }
+    if (!slotData.is_satisfied || !slotData.source_id) return
 
-    if (slot.source_type === "evidence") {
+    if (slotData.source_type === "evidence") {
       // 跳转到证据分析页面并选中指定证据
-      window.open(evidenceChainAPI.getEvidenceUrl(caseId, slot.source_id as number), "_blank")
-    } else if (slot.source_type === "association_group") {
+      window.open(evidenceChainAPI.getEvidenceUrl(caseId, slotData.source_id as number), "_blank")
+    } else if (slotData.source_type === "association_group") {
       // 跳转到关联证据分析页面并选中指定分组
-      window.open(evidenceChainAPI.getAssociationGroupUrl(caseId, slot.source_id as string), "_blank")
+      window.open(evidenceChainAPI.getAssociationGroupUrl(caseId, slotData.source_id as string), "_blank")
     }
   }
 
@@ -198,7 +199,7 @@ export function EvidenceChainDashboard({ caseId }: EvidenceChainDashboardProps) 
 interface EvidenceChainCardProps {
   chain: EvidenceChain
   caseId: number
-  onSlotClick: (slot: any, requirement: EvidenceTypeRequirement) => void
+  onSlotClick: (slot: unknown, requirement: EvidenceTypeRequirement) => void
 }
 
 function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProps) {
@@ -564,7 +565,7 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
 // 证据要求卡片组件
 interface EvidenceRequirementCardProps {
   requirement: EvidenceTypeRequirement
-  onSlotClick: (slot: any, requirement: EvidenceTypeRequirement) => void
+  onSlotClick: (slot: unknown, requirement: EvidenceTypeRequirement) => void
   isExpanded: boolean
   onToggle: () => void
 }
@@ -766,9 +767,9 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
 
 // 槽位项组件
 interface SlotItemProps {
-  slot: any
+  slot: unknown
   requirement: EvidenceTypeRequirement
-  onSlotClick: (slot: any, requirement: EvidenceTypeRequirement) => void
+  onSlotClick: (slot: unknown, requirement: EvidenceTypeRequirement) => void
   isCore: boolean
   showSourceButton?: boolean
 }

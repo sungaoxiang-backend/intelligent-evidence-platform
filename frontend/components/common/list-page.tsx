@@ -44,9 +44,9 @@ export function ListPage<T extends { id: number }>({
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
+          <h2 className="text-3xl font-bold tracking-tight whitespace-nowrap">{title}</h2>
           {subtitle && (
-            <p className="text-muted-foreground mt-2">{subtitle}</p>
+            <p className="text-muted-foreground mt-2 whitespace-nowrap">{subtitle}</p>
           )}
         </div>
         {headerActions}

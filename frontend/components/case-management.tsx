@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Eye, X, CheckCircle } from "lucide-react";
+import { Plus, X, CheckCircle } from "lucide-react";
 import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
 import { API_CONFIG } from "@/lib/config";
@@ -67,21 +67,19 @@ export default function CaseManagement() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editingCase, setEditingCase] = useState<Case | null>(null);
+  const [showUserDialog, setShowUserDialog] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [editForm, setEditForm] = useState({
-    user_id: 0,
-    creditor_name: "",
-    debtor_name: "",
-    loan_amount: 0,
-    case_type: null as null | CaseType,
-    creditor_type: null as null | PartyType,
-    debtor_type: null as null | PartyType,
-    creditor_phone: "",
-    creditor_bank_account: "",
-    creditor_bank_address: "",
-    debtor_phone: "",
+  const [userForm, setUserForm] = useState({
+    name: "",
+    wechat_nickname: "",
+    wechat_number: "",
+  });
+
+  const [userFormErrors, setUserFormErrors] = useState({
+    name: "",
+    wechat_nickname: "",
+    wechat_number: "",
   });
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -132,13 +130,9 @@ export default function CaseManagement() {
     creditor_name: "",
     debtor_name: "",
     loan_amount: "",
-  });
-
-  const [editFormErrors, setEditFormErrors] = useState({
-    user_id: "",
-    creditor_name: "",
-    debtor_name: "",
-    loan_amount: "",
+    creditor_type: "",
+    debtor_type: "",
+    case_type: "",
   });
 
   // Use paginated SWR hook with user filter and sorting
@@ -191,7 +185,8 @@ export default function CaseManagement() {
 
   // Fetch users for dropdown
   const {
-    data: users
+    data: users,
+    mutate: mutateUsers
   } = usePaginatedSWR<User>(
     "/users",
     (params) => userApi.getUsers(params),
@@ -214,6 +209,9 @@ export default function CaseManagement() {
       creditor_name: "",
       debtor_name: "",
       loan_amount: "",
+      creditor_type: "",
+      debtor_type: "",
+      case_type: "",
     };
 
     if (!addForm.user_id || addForm.user_id === 0) {
@@ -228,33 +226,17 @@ export default function CaseManagement() {
     if (!addForm.loan_amount || addForm.loan_amount <= 0) {
       errors.loan_amount = "请输入有效的欠款金额";
     }
+    if (!addForm.creditor_type) {
+      errors.creditor_type = "请选择债权人类型";
+    }
+    if (!addForm.debtor_type) {
+      errors.debtor_type = "请选择债务人类型";
+    }
+    if (!addForm.case_type) {
+      errors.case_type = "请选择案件类型";
+    }
 
     setAddFormErrors(errors);
-    return Object.values(errors).every(error => error === "");
-  };
-
-  const validateEditForm = () => {
-    const errors = {
-      user_id: "",
-      creditor_name: "",
-      debtor_name: "",
-      loan_amount: "",
-    };
-
-    if (!editForm.user_id || editForm.user_id === 0) {
-      errors.user_id = "请选择关联用户";
-    }
-    if (!editForm.creditor_name.trim()) {
-      errors.creditor_name = "请输入债权人姓名";
-    }
-    if (!editForm.debtor_name.trim()) {
-      errors.debtor_name = "请输入债务人姓名";
-    }
-    if (!editForm.loan_amount || editForm.loan_amount <= 0) {
-      errors.loan_amount = "请输入有效的欠款金额";
-    }
-
-    setEditFormErrors(errors);
     return Object.values(errors).every(error => error === "");
   };
 
@@ -284,80 +266,96 @@ export default function CaseManagement() {
         creditor_name: "",
         debtor_name: "",
         loan_amount: "",
+        creditor_type: "",
+        debtor_type: "",
+        case_type: "",
       });
-      mutate();
+      
+      // 重置排序为创建时间倒序，确保新案件显示在最前面
+      const newSort = { field: "created_at", direction: "desc" as SortDirection };
+      setSort(newSort);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('case-management-sort', JSON.stringify(newSort));
+      }
+      
+      // 显示刷新loading状态
+      setIsRefreshing(true);
+      
+      // 强制刷新案件列表数据
+      await mutate();
+      
+      // 隐藏刷新loading状态
+      setIsRefreshing(false);
+      
+      // 显示成功提示（可选）
+      console.log("案件创建成功，列表已刷新，排序已重置");
     } catch (error) {
       console.error("Failed to create case:", error);
     }
-  };
-
-  const handleEditCase = async () => {
-    if (!editingCase) return;
-
-    if (!validateEditForm()) {
-      return;
-    }
-
-    try {
-      await caseApi.updateCase(editingCase.id, editForm);
-      setShowEditDialog(false);
-      setEditingCase(null);
-      setEditFormErrors({
-        user_id: "",
-        creditor_name: "",
-        debtor_name: "",
-        loan_amount: "",
-      });
-      mutate();
-    } catch (error) {
-      console.error("Failed to update case:", error);
-    }
-  };
-
-  const handleDeleteCase = async (id: number) => {
-    if (!confirm("确定要删除这个案件吗？")) return;
-
-    try {
-      await caseApi.deleteCase(id);
-      mutate();
-    } catch (error) {
-      console.error("Failed to delete case:", error);
-    }
-  };
-
-  const openEditDialog = (caseItem: Case) => {
-    setEditingCase(caseItem);
-    setEditForm({
-      user_id: caseItem.user_id,
-      creditor_name: caseItem.creditor_name,
-      debtor_name: caseItem.debtor_name || "",
-      loan_amount: caseItem.loan_amount || 0,
-      case_type: caseItem.case_type as CaseType,
-      creditor_type: caseItem.creditor_type as PartyType,
-      debtor_type: caseItem.debtor_type as PartyType,
-      creditor_phone: caseItem.creditor_phone || "",
-      creditor_bank_account: caseItem.creditor_bank_account || "",
-      creditor_bank_address: caseItem.creditor_bank_address || "",
-      debtor_phone: caseItem.debtor_phone || "",
-    });
-    setShowEditDialog(true);
   };
 
   const openAddDialog = () => {
     setShowAddDialog(true);
   };
 
-  const handleCreateUser = async () => {
+  const handleCreateUser = () => {
+    setUserForm({
+      name: "",
+      wechat_nickname: "",
+      wechat_number: "",
+    });
+    setUserFormErrors({
+      name: "",
+      wechat_nickname: "",
+      wechat_number: "",
+    });
+    setShowUserDialog(true);
+  };
+
+  const validateUserForm = () => {
+    const errors = {
+      name: "",
+      wechat_nickname: "",
+      wechat_number: "",
+    };
+
+    if (!userForm.name.trim()) {
+      errors.name = "请输入用户姓名";
+    }
+
+    setUserFormErrors(errors);
+    return !errors.name;
+  };
+
+  const handleSubmitUser = async () => {
+    if (!validateUserForm()) {
+      return;
+    }
+
     try {
       const newUser = await userApi.createUser({
-        name: `user_${Date.now()}`,
-        email: `user_${Date.now()}@example.com`,
+        name: userForm.name,
+        wechat_nickname: userForm.wechat_nickname,
+        wechat_number: userForm.wechat_number,
       });
 
+      // 显示刷新loading状态
+      setIsRefreshing(true);
+      
+      // 刷新用户列表
+      await mutateUsers();
+
+      // 设置新创建的用户为选中用户
       setAddForm(prev => ({
         ...prev,
         user_id: Number(newUser.data.id)
       }));
+
+      // 隐藏刷新loading状态
+      setIsRefreshing(false);
+
+      // 关闭弹窗
+      setShowUserDialog(false);
     } catch (error) {
       console.error("Failed to create user:", error);
     }
@@ -366,15 +364,6 @@ export default function CaseManagement() {
   const handleUserChange = (userId: string) => {
     const selectedUser = users?.find(u => u.id === parseInt(userId));
     setAddForm(prev => ({
-      ...prev,
-      user_id: parseInt(userId),
-      creditor_name: selectedUser?.name || "",
-    }));
-  };
-
-  const handleEditUserChange = (userId: string) => {
-    const selectedUser = users?.find(u => u.id === parseInt(userId));
-    setEditForm(prev => ({
       ...prev,
       user_id: parseInt(userId),
       creditor_name: selectedUser?.name || "",
@@ -418,11 +407,14 @@ export default function CaseManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>关联用户</TableHead>
-                <TableHead>债权人</TableHead>
-                <TableHead>债务人</TableHead>
-                <TableHead>欠款金额</TableHead>
-                <TableHead>
+                <TableHead className="whitespace-nowrap">关联用户</TableHead>
+                <TableHead className="whitespace-nowrap">欠款金额</TableHead>
+                <TableHead className="whitespace-nowrap">案件类型</TableHead>
+                <TableHead className="whitespace-nowrap">债权人</TableHead>
+                <TableHead className="whitespace-nowrap">债权人类型</TableHead>
+                <TableHead className="whitespace-nowrap">债务人</TableHead>
+                <TableHead className="whitespace-nowrap">债务人类型</TableHead>
+                <TableHead className="whitespace-nowrap">
                   <SortableHeader
                     field="created_at"
                     currentSort={sort}
@@ -431,7 +423,7 @@ export default function CaseManagement() {
                     创建时间
                   </SortableHeader>
                 </TableHead>
-                <TableHead>
+                <TableHead className="whitespace-nowrap">
                   <SortableHeader
                     field="updated_at"
                     currentSort={sort}
@@ -440,72 +432,55 @@ export default function CaseManagement() {
                     更新时间
                   </SortableHeader>
                 </TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead className="whitespace-nowrap">快速查看</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedCases.map((caseItem) => (
                 <TableRow key={caseItem.id}>
-                  <TableCell>{caseItem.user?.name || "-"}</TableCell>
-                  <TableCell className="font-medium">
-                    {caseItem.creditor_name}
-                    {caseItem.creditor_type && (
-                      <span className="text-sm text-gray-500 ml-1">
-                        ({partyTypeLabels[caseItem.creditor_type]})
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {caseItem.debtor_name || "-"}
-                    {caseItem.debtor_type && caseItem.debtor_name && (
-                      <span className="text-sm text-gray-500 ml-1">
-                        ({partyTypeLabels[caseItem.debtor_type]})
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">{caseItem.user?.name || "-"}</TableCell>
+                  <TableCell className="whitespace-nowrap">
                     {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
                   </TableCell>
-                  <TableCell className="text-sm text-gray-600">
+                  <TableCell className="whitespace-nowrap">
+                    {caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
+                     caseItem.case_type === 'contract' ? '买卖合同纠纷' : '-'}
+                  </TableCell>
+                  <TableCell className="font-medium whitespace-nowrap">
+                    {caseItem.creditor_name}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {caseItem.creditor_type ? partyTypeLabels[caseItem.creditor_type] : "-"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {caseItem.debtor_name || "-"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {caseItem.debtor_type ? partyTypeLabels[caseItem.debtor_type] : "-"}
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600 whitespace-nowrap">
                     {formatDateTime(caseItem.created_at)}
                   </TableCell>
-                  <TableCell className="text-sm text-gray-600">
+                  <TableCell className="text-sm text-gray-600 whitespace-nowrap">
                     {formatDateTime(caseItem.updated_at)}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center space-x-1">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewCase(caseItem.id)}
-                        className="flex items-center text-blue-600 hover:text-blue-700"
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        证据分析
+                        证据
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewEvidenceChain(caseItem.id)}
-                        className="flex items-center text-green-600 hover:text-green-700"
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        案件详情
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(caseItem)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCase(caseItem.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
+                        详情
                       </Button>
                     </div>
                   </TableCell>
@@ -527,7 +502,7 @@ export default function CaseManagement() {
           <div className="flex items-center space-x-4">
             {/* User Filter */}
             <div className="flex items-center space-x-2">
-              <Label htmlFor="user-filter" className="text-sm font-medium">
+              <Label htmlFor="user-filter" className="text-sm font-medium whitespace-nowrap">
                 用户筛选:
               </Label>
               <Select
@@ -558,18 +533,18 @@ export default function CaseManagement() {
               )}
             </div>
             {selectedUserId && (
-              <Badge variant="secondary" className="text-sm">
+              <Badge variant="secondary" className="text-sm whitespace-nowrap">
                 筛选: {getSelectedUserName()}
               </Badge>
             )}
-            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap">
               <Plus className="mr-2 h-4 w-4" />
               新增案件
             </Button>
           </div>
         }
         data={cases}
-        loading={loading}
+        loading={loading || isRefreshing}
         error={error}
         page={page}
         pageSize={pageSize}
@@ -588,20 +563,23 @@ export default function CaseManagement() {
 
       {/* Add Case Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>新增案件</DialogTitle>
             <DialogDescription>
               创建一个新的案件记录
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {/* 关联用户 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="user" className="text-right">
-                关联用户 <span className="text-red-500">*</span>
-              </Label>
-              <div className="col-span-3 flex space-x-2">
+          <div className="grid gap-6 py-4">
+            {/* 关联用户 - 关键信息，放在最顶部 */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                <Label className="text-base font-medium text-gray-700">
+                  关联用户 <span className="text-red-500">*</span>
+                </Label>
+              </div>
+              <div className="flex space-x-3">
                 <Select
                   value={addForm.user_id.toString()}
                   onValueChange={handleUserChange}
@@ -622,205 +600,244 @@ export default function CaseManagement() {
                   variant="outline"
                   size="sm"
                   onClick={handleCreateUser}
+                  className="px-4"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-4 w-4 mr-1" />
+                  新建用户
                 </Button>
               </div>
-            </div>
-            {addFormErrors.user_id && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{addFormErrors.user_id}</div>
-            )}
-
-            {/* 债权人 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="creditor_name" className="text-right">
-                债权人 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="creditor_name"
-                value={addForm.creditor_name}
-                onChange={(e) => setAddForm({ ...addForm, creditor_name: e.target.value })}
-                onBlur={() => {
-                  if (!addForm.creditor_name.trim()) {
-                    setAddFormErrors(prev => ({ ...prev, creditor_name: "请输入债权人姓名" }));
-                  } else {
-                    setAddFormErrors(prev => ({ ...prev, creditor_name: "" }));
-                  }
-                }}
-                className={`col-span-3 ${addFormErrors.creditor_name ? 'border-red-500' : ''}`}
-                placeholder="请输入债权人姓名"
-              />
-            </div>
-            {addFormErrors.creditor_name && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{addFormErrors.creditor_name}</div>
-            )}
-
-            {/* 债务人 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="debtor_name" className="text-right">
-                债务人 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="debtor_name"
-                value={addForm.debtor_name}
-                onChange={(e) => setAddForm({ ...addForm, debtor_name: e.target.value })}
-                onBlur={() => {
-                  if (!addForm.debtor_name.trim()) {
-                    setAddFormErrors(prev => ({ ...prev, debtor_name: "请输入债务人姓名" }));
-                  } else {
-                    setAddFormErrors(prev => ({ ...prev, debtor_name: "" }));
-                  }
-                }}
-                className={`col-span-3 ${addFormErrors.debtor_name ? 'border-red-500' : ''}`}
-                placeholder="请输入债务人姓名"
-              />
-            </div>
-            {addFormErrors.debtor_name && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{addFormErrors.debtor_name}</div>
-            )}
-
-            {/* 欠款金额 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="loan_amount" className="text-right">
-                欠款金额 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="loan_amount"
-                type="number"
-                step="0.01"
-                placeholder="请输入欠款金额"
-                value={addForm.loan_amount || ""}
-                onChange={(e) => setAddForm({ ...addForm, loan_amount: e.target.value ? Number(e.target.value) : 0 })}
-                onBlur={() => {
-                  if (!addForm.loan_amount || addForm.loan_amount <= 0) {
-                    setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的欠款金额" }));
-                  } else {
-                    setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
-                  }
-                }}
-                className={`col-span-3 ${addFormErrors.loan_amount ? 'border-red-500' : ''}`}
-              />
-            </div>
-            {addFormErrors.loan_amount && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{addFormErrors.loan_amount}</div>
-            )}
-
-            {/* 债权人类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="creditor_type" className="text-right">
-                债权人类型
-              </Label>
-              <Select
-                value={addForm.creditor_type || ""}
-                onValueChange={(value: any) => setAddForm({ ...addForm, creditor_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择债权人类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="person">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="individual">个体工商户</SelectItem>
-                </SelectContent>
-              </Select>
+              {addFormErrors.user_id && (
+                <div className="text-red-500 text-sm">{addFormErrors.user_id}</div>
+              )}
             </div>
 
-            {/* 债权人电话 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="creditor_phone" className="text-right">
-                债权人电话
-              </Label>
-              <Input
-                id="creditor_phone"
-                value={addForm.creditor_phone || ""}
-                onChange={(e) => setAddForm({ ...addForm, creditor_phone: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入债权人电话"
-              />
+            {/* 基础案件信息区域 */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">基础案件信息</h3>
+              <div className="grid grid-cols-2 gap-6">
+                {/* 案件类型 */}
+                <div className="space-y-2">
+                  <Label htmlFor="case_type" className="text-sm font-medium">
+                    案件类型 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={addForm.case_type || ""}
+                    onValueChange={(value: any) => {
+                      setAddForm({ ...addForm, case_type: value });
+                      if (value) {
+                        setAddFormErrors(prev => ({ ...prev, case_type: "" }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className={`${addFormErrors.case_type ? 'border-red-500' : ''}`}>
+                      <SelectValue placeholder="选择案件类型" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="debt">民间借贷纠纷</SelectItem>
+                      <SelectItem value="contract">买卖合同纠纷</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {addFormErrors.case_type && (
+                    <div className="text-red-500 text-xs">{addFormErrors.case_type}</div>
+                  )}
+                </div>
+
+                {/* 欠款金额 */}
+                <div className="space-y-2">
+                  <Label htmlFor="loan_amount" className="text-sm font-medium">
+                    欠款金额 <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="loan_amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="请输入欠款金额"
+                    value={addForm.loan_amount || ""}
+                    onChange={(e) => setAddForm({ ...addForm, loan_amount: e.target.value ? Number(e.target.value) : 0 })}
+                    onBlur={() => {
+                      if (!addForm.loan_amount || addForm.loan_amount <= 0) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的欠款金额" }));
+                      } else {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                      }
+                    }}
+                    className={`${addFormErrors.loan_amount ? 'border-red-500' : ''}`}
+                  />
+                  {addFormErrors.loan_amount && (
+                    <div className="text-red-500 text-xs">{addFormErrors.loan_amount}</div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* 债权人银行账户 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="creditor_bank_account" className="text-right">
-                债权人银行账户
-              </Label>
-              <Input
-                id="creditor_bank_account"
-                value={addForm.creditor_bank_account || ""}
-                onChange={(e) => setAddForm({ ...addForm, creditor_bank_account: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入银行账户"
-              />
+            {/* 债权人和债务人信息区域 */}
+            <div className="grid grid-cols-2 gap-8">
+              {/* 左侧：债权人信息 */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-blue-600 border-b border-blue-200 pb-2">债权人信息</h3>
+                
+                {/* 债权人姓名 */}
+                <div className="space-y-2">
+                  <Label htmlFor="creditor_name" className="text-sm font-medium">
+                    债权人姓名 <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="creditor_name"
+                    value={addForm.creditor_name}
+                    onChange={(e) => setAddForm({ ...addForm, creditor_name: e.target.value })}
+                    onBlur={() => {
+                      if (!addForm.creditor_name.trim()) {
+                        setAddFormErrors(prev => ({ ...prev, creditor_name: "请输入债权人姓名" }));
+                      } else {
+                        setAddFormErrors(prev => ({ ...prev, creditor_name: "" }));
+                      }
+                    }}
+                    className={`${addFormErrors.creditor_name ? 'border-red-500' : ''}`}
+                    placeholder="请输入债权人姓名"
+                  />
+                  {addFormErrors.creditor_name && (
+                    <div className="text-red-500 text-xs">{addFormErrors.creditor_name}</div>
+                  )}
+                </div>
+
+                {/* 债权人类型 */}
+                <div className="space-y-2">
+                  <Label htmlFor="creditor_type" className="text-sm font-medium">
+                    债权人类型 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={addForm.creditor_type || ""}
+                    onValueChange={(value: any) => {
+                      setAddForm({ ...addForm, creditor_type: value });
+                      if (value) {
+                        setAddFormErrors(prev => ({ ...prev, creditor_type: "" }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className={`${addFormErrors.creditor_type ? 'border-red-500' : ''}`}>
+                      <SelectValue placeholder="选择债权人类型" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="person">个人</SelectItem>
+                      <SelectItem value="company">公司</SelectItem>
+                      <SelectItem value="individual">个体工商户</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {addFormErrors.creditor_type && (
+                    <div className="text-red-500 text-xs">{addFormErrors.creditor_type}</div>
+                  )}
+                </div>
+
+                {/* 债权人电话 */}
+                <div className="space-y-2">
+                  <Label htmlFor="creditor_phone" className="text-sm font-medium">
+                    债权人电话
+                  </Label>
+                  <Input
+                    id="creditor_phone"
+                    value={addForm.creditor_phone || ""}
+                    onChange={(e) => setAddForm({ ...addForm, creditor_phone: e.target.value })}
+                    placeholder="请输入债权人电话"
+                  />
+                </div>
+
+                {/* 债权人银行账户 */}
+                <div className="space-y-2">
+                  <Label htmlFor="creditor_bank_account" className="text-sm font-medium">
+                    债权人银行账户
+                  </Label>
+                  <Input
+                    id="creditor_bank_account"
+                    value={addForm.creditor_bank_account || ""}
+                    onChange={(e) => setAddForm({ ...addForm, creditor_bank_account: e.target.value })}
+                    placeholder="请输入银行账户"
+                  />
+                </div>
+
+                {/* 债权人银行地址 */}
+                <div className="space-y-2">
+                  <Label htmlFor="creditor_bank_address" className="text-sm font-medium">
+                    债权人银行地址
+                  </Label>
+                  <Input
+                    id="creditor_bank_address"
+                    value={addForm.creditor_bank_address || ""}
+                    onChange={(e) => setAddForm({ ...addForm, creditor_bank_address: e.target.value })}
+                    placeholder="请输入银行地址"
+                  />
+                </div>
+              </div>
+
+              {/* 右侧：债务人信息 */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-orange-600 border-b border-orange-200 pb-2">债务人信息</h3>
+                
+                {/* 债务人姓名 */}
+                <div className="space-y-2">
+                  <Label htmlFor="debtor_name" className="text-sm font-medium">
+                    债务人姓名 <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="debtor_name"
+                    value={addForm.debtor_name}
+                    onChange={(e) => setAddForm({ ...addForm, debtor_name: e.target.value })}
+                    onBlur={() => {
+                      if (!addForm.debtor_name.trim()) {
+                        setAddFormErrors(prev => ({ ...prev, debtor_name: "请输入债务人姓名" }));
+                      } else {
+                        setAddFormErrors(prev => ({ ...prev, debtor_name: "" }));
+                      }
+                    }}
+                    className={`${addFormErrors.debtor_name ? 'border-red-500' : ''}`}
+                    placeholder="请输入债务人姓名"
+                  />
+                  {addFormErrors.debtor_name && (
+                    <div className="text-red-500 text-xs">{addFormErrors.debtor_name}</div>
+                  )}
+                </div>
+
+                {/* 债务人类型 */}
+                <div className="space-y-2">
+                  <Label htmlFor="debtor_type" className="text-sm font-medium">
+                    债务人类型 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={addForm.debtor_type || ""}
+                    onValueChange={(value: any) => {
+                      setAddForm({ ...addForm, debtor_type: value });
+                      if (value) {
+                        setAddFormErrors(prev => ({ ...prev, debtor_type: "" }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className={`${addFormErrors.debtor_type ? 'border-red-500' : ''}`}>
+                      <SelectValue placeholder="选择债务人类型" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="person">个人</SelectItem>
+                      <SelectItem value="company">公司</SelectItem>
+                      <SelectItem value="individual">个体工商户</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {addFormErrors.debtor_type && (
+                    <div className="text-red-500 text-xs">{addFormErrors.debtor_type}</div>
+                  )}
+                </div>
+
+                {/* 债务人电话 */}
+                <div className="space-y-2">
+                  <Label htmlFor="debtor_phone" className="text-sm font-medium">
+                    债务人电话
+                  </Label>
+                  <Input
+                    id="debtor_phone"
+                    value={addForm.debtor_phone || ""}
+                    onChange={(e) => setAddForm({ ...addForm, debtor_phone: e.target.value })}
+                    placeholder="请输入债务人电话"
+                  />
+                </div>
+              </div>
             </div>
-
-            {/* 债权人银行地址 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="creditor_bank_address" className="text-right">
-                债权人银行地址
-              </Label>
-              <Input
-                id="creditor_bank_address"
-                value={addForm.creditor_bank_address || ""}
-                onChange={(e) => setAddForm({ ...addForm, creditor_bank_address: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入银行地址"
-              />
-            </div>
-
-            {/* 债务人类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="debtor_type" className="text-right">
-                债务人类型
-              </Label>
-              <Select
-                value={addForm.debtor_type || ""}
-                onValueChange={(value: any) => setAddForm({ ...addForm, debtor_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择债务人类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="person">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="individual">个体工商户</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 债务人电话 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="debtor_phone" className="text-right">
-                债务人电话
-              </Label>
-              <Input
-                id="debtor_phone"
-                value={addForm.debtor_phone || ""}
-                onChange={(e) => setAddForm({ ...addForm, debtor_phone: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入债务人电话"
-              />
-            </div>
-
-            {/* 案件类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="case_type" className="text-right">
-                案件类型
-              </Label>
-              <Select
-                value={addForm.case_type || ""}
-                onValueChange={(value: any) => setAddForm({ ...addForm, case_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择案件类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="debt">民间借贷纠纷</SelectItem>
-                  <SelectItem value="contract">买卖合同纠纷</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleAddCase}>
@@ -830,213 +847,74 @@ export default function CaseManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Case Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      {/* Create User Dialog */}
+      <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>编辑案件</DialogTitle>
+            <DialogTitle>新建用户</DialogTitle>
             <DialogDescription>
-              修改案件信息
+              创建一个新的用户账户
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* 关联用户 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-user" className="text-right">
-                关联用户 <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={editForm.user_id.toString()}
-                onValueChange={handleEditUserChange}
-              >
-                <SelectTrigger className={`col-span-3 ${editFormErrors.user_id ? 'border-red-500' : ''}`}>
-                  <SelectValue placeholder="选择用户" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(users || []).map((user) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      {user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {editFormErrors.user_id && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{editFormErrors.user_id}</div>
-            )}
-
-            {/* 债权人 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-creditor_name" className="text-right">
-                债权人 <span className="text-red-500">*</span>
+            {/* 用户姓名 */}
+            <div className="space-y-2">
+              <Label htmlFor="user-name" className="text-sm font-medium">
+                姓名 <span className="text-red-500">*</span>
               </Label>
               <Input
-                id="edit-creditor_name"
-                value={editForm.creditor_name}
-                onChange={(e) => setEditForm({ ...editForm, creditor_name: e.target.value })}
-                className={`col-span-3 ${editFormErrors.creditor_name ? 'border-red-500' : ''}`}
-                placeholder="请输入债权人姓名"
+                id="user-name"
+                value={userForm.name}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, name: e.target.value });
+                  if (e.target.value.trim()) {
+                    setUserFormErrors(prev => ({ ...prev, name: "" }));
+                  }
+                }}
+                className={`${userFormErrors.name ? 'border-red-500' : ''}`}
+                placeholder="请输入用户姓名"
               />
+              {userFormErrors.name && (
+                <div className="text-red-500 text-xs">{userFormErrors.name}</div>
+              )}
             </div>
-            {editFormErrors.creditor_name && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{editFormErrors.creditor_name}</div>
-            )}
 
-            {/* 债务人 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-debtor_name" className="text-right">
-                债务人 <span className="text-red-500">*</span>
+            {/* 微信昵称 */}
+            <div className="space-y-2">
+              <Label htmlFor="user-wechat-nickname" className="text-sm font-medium">
+                微信昵称
               </Label>
               <Input
-                id="edit-debtor_name"
-                value={editForm.debtor_name}
-                onChange={(e) => setEditForm({ ...editForm, debtor_name: e.target.value })}
-                className={`col-span-3 ${editFormErrors.debtor_name ? 'border-red-500' : ''}`}
-                placeholder="请输入债务人姓名"
-              />
-            </div>
-            {editFormErrors.debtor_name && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{editFormErrors.debtor_name}</div>
-            )}
-
-            {/* 欠款金额 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-loan_amount" className="text-right">
-                欠款金额 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="edit-loan_amount"
-                type="number"
-                step="0.01"
-                placeholder="请输入欠款金额"
-                value={editForm.loan_amount || ""}
-                onChange={(e) => setEditForm({ ...editForm, loan_amount: e.target.value ? Number(e.target.value) : 0 })}
-                className={`col-span-3 ${editFormErrors.loan_amount ? 'border-red-500' : ''}`}
-              />
-            </div>
-            {editFormErrors.loan_amount && (
-              <div className="text-red-500 text-xs mt-1 ml-4">{editFormErrors.loan_amount}</div>
-            )}
-
-            {/* 债权人类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-creditor_type" className="text-right">
-                债权人类型
-              </Label>
-              <Select
-                value={editForm.creditor_type || ""}
-                onValueChange={(value: any) => setEditForm({ ...editForm, creditor_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择债权人类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="person">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="individual">个体工商户</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 债权人电话 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-creditor_phone" className="text-right">
-                债权人电话
-              </Label>
-              <Input
-                id="edit-creditor_phone"
-                value={editForm.creditor_phone || ""}
-                onChange={(e) => setEditForm({ ...editForm, creditor_phone: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入债权人电话"
+                id="user-wechat-nickname"
+                value={userForm.wechat_nickname}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, wechat_nickname: e.target.value });
+                }}
+                placeholder="可选"
               />
             </div>
 
-            {/* 债权人银行账户 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-creditor_bank_account" className="text-right">
-                债权人银行账户
+            {/* 微信号 */}
+            <div className="space-y-2">
+              <Label htmlFor="user-wechat-number" className="text-sm font-medium">
+                微信号
               </Label>
               <Input
-                id="edit-creditor_bank_account"
-                value={editForm.creditor_bank_account || ""}
-                onChange={(e) => setEditForm({ ...editForm, creditor_bank_account: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入银行账户"
+                id="user-wechat-number"
+                value={userForm.wechat_number}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, wechat_number: e.target.value });
+                }}
+                placeholder="可选"
               />
             </div>
-
-            {/* 债权人银行地址 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-creditor_bank_address" className="text-right">
-                债权人银行地址
-              </Label>
-              <Input
-                id="edit-creditor_bank_address"
-                value={editForm.creditor_bank_address || ""}
-                onChange={(e) => setEditForm({ ...editForm, creditor_bank_address: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入银行地址"
-              />
-            </div>
-
-            {/* 债务人类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-debtor_type" className="text-right">
-                债务人类型
-              </Label>
-              <Select
-                value={editForm.debtor_type || ""}
-                onValueChange={(value: any) => setEditForm({ ...editForm, debtor_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择债务人类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="person">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="individual">个体工商户</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 债务人电话 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-debtor_phone" className="text-right">
-                债务人电话
-              </Label>
-              <Input
-                id="edit-debtor_phone"
-                value={editForm.debtor_phone || ""}
-                onChange={(e) => setEditForm({ ...editForm, debtor_phone: e.target.value })}
-                className="col-span-3"
-                placeholder="请输入债务人电话"
-              />
-            </div>
-            {/* 案件类型 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-case_type" className="text-right">
-                案件类型
-              </Label>
-              <Select
-                value={editForm.case_type || ""}
-                onValueChange={(value: any) => setEditForm({ ...editForm, case_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择案件类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="debt">民间借贷纠纷</SelectItem>
-                  <SelectItem value="contract">买卖合同纠纷</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-
           </div>
           <DialogFooter>
-            <Button type="submit" onClick={handleEditCase}>
-              保存修改
+            <Button variant="outline" onClick={() => setShowUserDialog(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSubmitUser}>
+              创建用户
             </Button>
           </DialogFooter>
         </DialogContent>
