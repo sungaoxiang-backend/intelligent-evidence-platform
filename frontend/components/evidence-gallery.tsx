@@ -88,11 +88,13 @@ const isEvidenceReadyForReview = (evidence: any) => {
 const getFeatureColor = (slot: any) => {
   const slotRequired = slot.slot_required ?? true; // 默认为true
   const slotValue = slot.slot_value;
-  // 确保 slotValue 是字符串类型，并且不是"未知"或空字符串
+  
+  // 检查是否有有效值，支持多种数据类型
   const hasValue = slotValue && 
-    typeof slotValue === 'string' && 
     slotValue !== "未知" && 
-    slotValue.trim() !== "";
+    slotValue !== "" && 
+    slotValue !== null && 
+    slotValue !== undefined;
   
   // 判断特征是否有效：有值且如果该特征字段需要校对且校对成功时，为有效
   let isValid = false;
@@ -738,277 +740,580 @@ function EvidenceGalleryContent({
                     )}
                   </div>
                   <div className="space-y-2">
-                    {/* 必需特征 */}
-                    {(editForm.evidence_features || [])
-                      .filter((slot: any) => slot.slot_required !== false)
-                      .map((slot: any, idx: number) => {
-                        const colors = getFeatureColor(slot)
-                        const originalIdx = editForm.evidence_features.findIndex((f: any) => f === slot)
-                        return (
-                          <div key={originalIdx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
-                            <div className="flex items-center gap-1">
-                              <Label className="text-xs font-medium">词槽名:</Label>
-                              <span className="text-xs">{slot.slot_name}</span>
-                              {/* 校对状态图标 - 毛玻璃悬浮球 */}
-                              {slot.slot_proofread_at && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="ml-2 relative group cursor-pointer">
-                                        {/* 毛玻璃矩形标签 */}
-                                        <div 
-                                          className={`
-                                            w-8 h-4 rounded-sm flex items-center justify-center
-                                            backdrop-blur-sm border border-white/30
-                                            transition-all duration-300 ease-out
-                                            group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
-                                            ${slot.slot_is_consistent 
-                                              ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
-                                              : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
-                                            }
-                                          `}
-                                          style={{
-                                            animation: 'proofreadBreathe 4s ease-in-out infinite'
-                                          }}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.animation = 'none';
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
-                                          }}
+                    {/* 直接使用 evidence_features 中的 required 信息进行分组 */}
+                    {(() => {
+                      const features = editForm.evidence_features || [];
+                      
+                      // 1. 找出所有分组的字段（required 是字符串的）
+                      const groupedFields = new Map<string, any[]>();
+                      const processedFields = new Set<string>();
+                      
+                      features.forEach(feature => {
+                        if (typeof feature.slot_required === 'string' && feature.slot_required !== 'true' && feature.slot_required !== 'false') {
+                          // 创建分组键，确保互相引用的字段在同一个组
+                          const groupKey = [feature.slot_name, feature.slot_required].sort().join('_');
+                          if (!groupedFields.has(groupKey)) {
+                            groupedFields.set(groupKey, []);
+                          }
+                          groupedFields.get(groupKey)!.push(feature);
+                          processedFields.add(feature.slot_name);
+                        }
+                      });
+                      
+                      // 2. 处理独立的必需字段（required 是 true 且不在分组中的）
+                      const independentFeatures = features.filter(feature => 
+                        feature.slot_required === true && !processedFields.has(feature.slot_name)
+                      );
+                      
+                      // 3. 处理可选字段（required 是 false 且不在分组中的）
+                      const optionalFeatures = features.filter(feature => 
+                        feature.slot_required === false && !processedFields.has(feature.slot_name)
+                      );
+                      
+                      return (
+                        <>
+                          {/* 分组特征 */}
+                          {Array.from(groupedFields.entries()).map(([groupKey, groupFeatures]) => {
+                            // 检查组内是否有字段有值（不是"未知"）
+                            const hasValidValue = groupFeatures.some((f: any) => {
+                              const value = f.slot_value;
+                              return value && value !== "未知" && value !== "" && value !== null && value !== undefined;
+                            });
+                            const colors = getFeatureColor(groupFeatures[0]); // 使用第一个字段的颜色
+                            
+                            return (
+                              <div key={groupKey} className={`p-3 rounded-md border space-y-3 ${
+                                hasValidValue 
+                                  ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-700" 
+                                  : "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-700"
+                              }`}>
+                                {/* 分组标题 */}
+                                <div className={`text-xs font-medium pb-2 border-b ${
+                                  hasValidValue 
+                                    ? "text-green-700 dark:text-green-300 border-green-200" 
+                                    : "text-red-700 dark:text-red-300 border-red-200"
+                                }`}>
+                                  任意一个特征必须
+                                </div>
+                                
+                                {/* 分组内的字段 */}
+                                <div className="space-y-3">
+                                  {groupFeatures.map((feature: any, featureIndex: number) => {
+                                    const originalIdx = features.findIndex((f: any) => f === feature);
+                                    
+                                    return (
+                                      <div key={feature.slot_name} className="space-y-2">
+                                        <div className="flex items-center gap-1">
+                                          <Label className="text-xs font-medium">词槽名:</Label>
+                                          <span className="text-xs">{feature.slot_name}</span>
+                                          {/* 校对状态图标 */}
+                                          {feature.slot_proofread_at && (
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="ml-2 relative group cursor-pointer">
+                                                    <div 
+                                                      className={`
+                                                        w-8 h-4 rounded-sm flex items-center justify-center
+                                                        backdrop-blur-sm border border-white/30
+                                                        transition-all duration-300 ease-out
+                                                        group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
+                                                        ${feature.slot_is_consistent 
+                                                          ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
+                                                          : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
+                                                        }
+                                                      `}
+                                                      style={{
+                                                        animation: 'proofreadBreathe 4s ease-in-out infinite'
+                                                      }}
+                                                      onMouseEnter={(e) => {
+                                                        e.currentTarget.style.animation = 'none';
+                                                      }}
+                                                      onMouseLeave={(e) => {
+                                                        e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
+                                                      }}
+                                                    >
+                                                      {feature.slot_is_consistent ? (
+                                                        <CheckCircle className="w-3 h-3 drop-shadow-sm" />
+                                                      ) : (
+                                                        <XCircle className="w-3 h-3 drop-shadow-sm" />
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent 
+                                                  side="top" 
+                                                  className={`max-w-xs p-3 shadow-lg border-2 ${
+                                                    feature.slot_is_consistent 
+                                                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
+                                                      : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                                                  }`}
+                                                >
+                                                  <div className="space-y-2">
+                                                    <div className={`font-semibold text-sm flex items-center gap-1 ${
+                                                      feature.slot_is_consistent ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                                    }`}>
+                                                      {feature.slot_is_consistent ? (
+                                                        <>
+                                                          <CheckCircle className="w-4 h-4" />
+                                                          校对匹配
+                                                        </>
+                                                      ) : (
+                                                        <>
+                                                          <XCircle className="w-4 h-4" />
+                                                          校对不匹配
+                                                        </>
+                                                      )}
+                                                    </div>
+                                                    {feature.slot_expected_value && (
+                                                      <div className="text-xs">
+                                                        <span className="font-medium text-muted-foreground">期待值:</span> 
+                                                        <span className="ml-1 font-medium text-blue-600 dark:text-blue-400">{feature.slot_expected_value}</span>
+                                                      </div>
+                                                    )}
+                                                    {feature.slot_proofread_reasoning && (
+                                                      <div className="text-xs p-2 bg-muted/50 rounded border-l-2 border-muted-foreground/20">
+                                                        {feature.slot_proofread_reasoning}
+                                                      </div>
+                                                    )}
+                                                    <div className="text-xs text-muted-foreground border-t pt-1 flex items-center gap-1">
+                                                      <span>🕒</span>
+                                                      {feature.slot_proofread_at ? new Date(feature.slot_proofread_at).toLocaleString() : ''}
+                                                    </div>
+                                                  </div>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <Label className="text-xs">词槽值:</Label>
+                                          {editing ? (
+                                            <Input
+                                              value={feature.slot_value}
+                                              onChange={e => {
+                                                const newFeatures = [...features]
+                                                newFeatures[originalIdx].slot_value = e.target.value
+                                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                              }}
+                                              className={colors.input}
+                                            />
+                                          ) : (
+                                            <span className={`text-xs font-medium ${colors.text}`}>
+                                              {String(feature.slot_value)}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <Label className="text-xs">置信度:</Label>
+                                          {editing ? (
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              max="1"
+                                              value={feature.confidence || 0}
+                                              onChange={e => {
+                                                const newFeatures = [...features]
+                                                newFeatures[originalIdx].confidence = parseFloat(e.target.value)
+                                                newFeatures[originalIdx].reasoning = "人工编辑"
+                                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                              }}
+                                              className="text-xs h-6"
+                                            />
+                                          ) : (
+                                            <span className="text-xs">{((feature.confidence || 0) * 100).toFixed(2)}%</span>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <Label className="text-xs">理由:</Label>
+                                          {editing ? (
+                                            <Textarea
+                                              value={feature.reasoning || ""}
+                                              onChange={e => {
+                                                const newFeatures = [...features]
+                                                newFeatures[originalIdx].reasoning = e.target.value
+                                                setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                              }}
+                                              rows={2}
+                                              className="text-xs"
+                                            />
+                                          ) : (
+                                            <span className="text-xs">{feature.reasoning}</span>
+                                          )}
+                                        </div>
+                                        
+                                        {/* 字段分隔线（除了最后一个字段） */}
+                                        {featureIndex < groupFeatures.length - 1 && (
+                                          <Separator className="my-3" />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          
+                          {/* 独立必需特征 */}
+                          {independentFeatures.map((feature, idx) => {
+                            const colors = getFeatureColor(feature)
+                            const originalIdx = features.findIndex((f: any) => f === feature)
+                            return (
+                              <div key={originalIdx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
+                                <div className="flex items-center gap-1">
+                                  <Label className="text-xs font-medium">词槽名:</Label>
+                                  <span className="text-xs">{feature.slot_name}</span>
+                                  {/* 校对状态图标 */}
+                                  {feature.slot_proofread_at && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="ml-2 relative group cursor-pointer">
+                                            <div 
+                                              className={`
+                                                w-8 h-4 rounded-sm flex items-center justify-center
+                                                backdrop-blur-sm border border-white/30
+                                                transition-all duration-300 ease-out
+                                                group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
+                                                ${feature.slot_is_consistent 
+                                                  ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
+                                                  : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
+                                                }
+                                              `}
+                                              style={{
+                                                animation: 'proofreadBreathe 4s ease-in-out infinite'
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.animation = 'none';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
+                                              }}
+                                            >
+                                              {feature.slot_is_consistent ? (
+                                                <CheckCircle className="w-3 h-3 drop-shadow-sm" />
+                                              ) : (
+                                                <XCircle className="w-3 h-3 drop-shadow-sm" />
+                                              )}
+                                            </div>
+                                            
+                                            {/* 底部阴影 */}
+                                            <div 
+                                              className={`
+                                                absolute top-5 left-1/2 -translate-x-1/2 
+                                                w-5 h-1 rounded-full blur-sm opacity-30
+                                                transition-all duration-300
+                                                ${feature.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
+                                                group-hover:opacity-60 group-hover:w-6
+                                              `}
+                                            ></div>
+                                            
+                                            {/* 光晕效果 */}
+                                            <div className={`
+                                              absolute inset-0 rounded-sm opacity-0 
+                                              transition-all duration-300 blur-sm
+                                              group-hover:opacity-40 group-hover:scale-125
+                                              ${feature.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
+                                            `}></div>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent 
+                                          side="top" 
+                                          className={`max-w-xs p-3 shadow-lg border-2 ${
+                                            feature.slot_is_consistent 
+                                              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
+                                              : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                                          }`}
                                         >
-                                          {slot.slot_is_consistent ? (
-                                            <CheckCircle className="w-3 h-3 drop-shadow-sm" />
-                                          ) : (
-                                            <XCircle className="w-3 h-3 drop-shadow-sm" />
-                                          )}
-                                        </div>
-                                        
-                                        {/* 底部阴影 - 与跳动联动 */}
-                                        <div 
-                                          className={`
-                                            absolute top-5 left-1/2 -translate-x-1/2 
-                                            w-5 h-1 rounded-full blur-sm opacity-30
-                                            transition-all duration-300
-                                            ${slot.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
-                                            group-hover:opacity-60 group-hover:w-6
-                                          `}
-                                        ></div>
-                                        
-                                        {/* 光晕效果 */}
-                                        <div className={`
-                                          absolute inset-0 rounded-sm opacity-0 
-                                          transition-all duration-300 blur-sm
-                                          group-hover:opacity-40 group-hover:scale-125
-                                          ${slot.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
-                                        `}></div>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent 
-                                      side="top" 
-                                      className={`max-w-xs p-3 shadow-lg border-2 ${
-                                        slot.slot_is_consistent 
-                                          ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
-                                          : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
-                                      }`}
-                                    >
-                                      <div className="space-y-2">
-                                        <div className={`font-semibold text-sm flex items-center gap-1 ${
-                                          slot.slot_is_consistent ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
-                                        }`}>
-                                          {slot.slot_is_consistent ? (
-                                            <>
-                                              <CheckCircle className="w-4 h-4" />
-                                              校对匹配
-                                            </>
-                                          ) : (
-                                            <>
-                                              <XCircle className="w-4 h-4" />
-                                              校对不匹配
-                                            </>
-                                          )}
-                                        </div>
-                                        {slot.slot_expected_value && (
-                                          <div className="text-xs">
-                                            <span className="font-medium text-muted-foreground">期待值:</span> 
-                                            <span className="ml-1 font-medium text-blue-600 dark:text-blue-400">{slot.slot_expected_value}</span>
+                                          <div className="space-y-2">
+                                            <div className={`font-semibold text-sm flex items-center gap-1 ${
+                                              feature.slot_is_consistent ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                            }`}>
+                                              {feature.slot_is_consistent ? (
+                                                <>
+                                                  <CheckCircle className="w-4 h-4" />
+                                                  校对匹配
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <XCircle className="w-4 h-4" />
+                                                  校对不匹配
+                                                </>
+                                              )}
+                                            </div>
+                                            {feature.slot_expected_value && (
+                                              <div className="text-xs">
+                                                <span className="font-medium text-muted-foreground">期待值:</span> 
+                                                <span className="ml-1 font-medium text-blue-600 dark:text-blue-400">{feature.slot_expected_value}</span>
+                                              </div>
+                                            )}
+                                            {feature.slot_proofread_reasoning && (
+                                              <div className="text-xs p-2 bg-muted/50 rounded border-l-2 border-muted-foreground/20">
+                                                {feature.slot_proofread_reasoning}
+                                              </div>
+                                            )}
+                                            <div className="text-xs text-muted-foreground border-t pt-1 flex items-center gap-1">
+                                              <span>🕒</span>
+                                              {feature.slot_proofread_at ? new Date(feature.slot_proofread_at).toLocaleString() : ''}
+                                            </div>
                                           </div>
-                                        )}
-                                        {slot.slot_proofread_reasoning && (
-                                          <div className="text-xs p-2 bg-muted/50 rounded border-l-2 border-muted-foreground/20">
-                                            {slot.slot_proofread_reasoning}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">词槽值:</Label>
+                                  {editing ? (
+                                    <Input
+                                      value={feature.slot_value}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].slot_value = e.target.value
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      className={colors.input}
+                                    />
+                                  ) : (
+                                    <span className={`text-xs font-medium ${colors.text}`}>
+                                      {String(feature.slot_value)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">置信度:</Label>
+                                  {editing ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="1"
+                                      value={feature.confidence || 0}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].confidence = parseFloat(e.target.value)
+                                        newFeatures[originalIdx].reasoning = "人工编辑"
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      className="text-xs h-6"
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{((feature.confidence || 0) * 100).toFixed(2)}%</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">理由:</Label>
+                                  {editing ? (
+                                    <Textarea
+                                      value={feature.reasoning || ""}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].reasoning = e.target.value
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      rows={2}
+                                      className="text-xs"
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{feature.reasoning}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                          
+                          {/* 非必需特征展开按钮 */}
+                          {optionalFeatures.length > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowOptionalFields(!showOptionalFields)}
+                              className="w-full text-xs h-8 mt-2"
+                            >
+                              {showOptionalFields ? '收起' : '展开'} 非必需特征 
+                              ({optionalFeatures.length} 个)
+                              <svg 
+                                className={`ml-1 h-3 w-3 transition-transform duration-200 ${showOptionalFields ? 'rotate-180' : ''}`} 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </Button>
+                          )}
+
+                          {/* 非必需特征 */}
+                          {showOptionalFields && optionalFeatures.map((feature, idx) => {
+                            const colors = getFeatureColor(feature)
+                            const originalIdx = features.findIndex((f: any) => f === feature)
+                            return (
+                              <div key={originalIdx} className={`p-2 rounded-md border space-y-1 ${colors.container}`}>
+                                <div className="flex items-center gap-1">
+                                  <Label className="text-xs font-medium">词槽名:</Label>
+                                  <span className="text-xs">{feature.slot_name}</span>
+                                  {/* 校对状态图标 */}
+                                  {feature.slot_proofread_at && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="ml-2 relative group cursor-pointer">
+                                            <div 
+                                              className={`
+                                                w-8 h-4 rounded-sm flex items-center justify-center
+                                                backdrop-blur-sm border border-white/30
+                                                transition-all duration-300 ease-out
+                                                group-hover:scale-110 group-hover:shadow-xl group-hover:-translate-y-1
+                                                ${feature.slot_is_consistent 
+                                                  ? 'bg-green-500/80 text-white shadow-md shadow-green-500/30 group-hover:bg-green-400/90 group-hover:shadow-green-500/40' 
+                                                  : 'bg-red-500/80 text-white shadow-md shadow-red-500/30 group-hover:bg-red-400/90 group-hover:shadow-red-500/40'
+                                                }
+                                              `}
+                                              style={{
+                                                animation: 'proofreadBreathe 4s ease-in-out infinite'
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.animation = 'none';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.animation = 'proofreadBreathe 4s ease-in-out infinite';
+                                              }}
+                                            >
+                                              {feature.slot_is_consistent ? (
+                                                <CheckCircle className="w-3 h-3 drop-shadow-sm" />
+                                              ) : (
+                                                <XCircle className="w-3 h-3 drop-shadow-sm" />
+                                              )}
+                                            </div>
+                                            
+                                            {/* 底部阴影 */}
+                                            <div 
+                                              className={`
+                                                absolute top-5 left-1/2 -translate-x-1/2 
+                                                w-5 h-1 rounded-full blur-sm opacity-30
+                                                transition-all duration-300
+                                                ${feature.slot_is_consistent ? 'bg-green-500' : 'bg-red-500'}
+                                                group-hover:opacity-60 group-hover:w-6
+                                              `}
+                                            ></div>
+                                            
+                                            {/* 光晕效果 */}
+                                            <div className={`
+                                              absolute inset-0 rounded-sm opacity-0 
+                                              transition-all duration-300 blur-sm
+                                              group-hover:opacity-40 group-hover:scale-125
+                                              ${feature.slot_is_consistent ? 'bg-green-400' : 'bg-red-400'}
+                                            `}></div>
                                           </div>
-                                        )}
-                                        <div className="text-xs text-muted-foreground border-t pt-1 flex items-center gap-1">
-                                          <span>🕒</span>
-                                          {slot.slot_proofread_at ? new Date(slot.slot_proofread_at).toLocaleString() : ''}
-                                        </div>
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                            </div>
-                            <div>
-                              <Label className="text-xs">词槽值:</Label>
-                              {editing ? (
-                                <Input
-                                  value={slot.slot_value}
-                                  onChange={e => {
-                                    const newFeatures = [...editForm.evidence_features]
-                                    newFeatures[originalIdx].slot_value = e.target.value
-                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                  }}
-                                  className={colors.input}
-                                />
-                              ) : (
-                                <span className={`text-xs font-medium ${colors.text}`}>
-                                  {slot.slot_value}
-                                </span>
-                              )}
-                            </div>
-                          <div>
-                            <Label className="text-xs">置信度:</Label>
-                            {editing ? (
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="1"
-                                value={slot.confidence || 0}
-                                onChange={e => {
-                                  const newFeatures = [...editForm.evidence_features]
-                                  newFeatures[originalIdx].confidence = parseFloat(e.target.value)
-                                  // 当用户编辑置信度时，自动将reasoning改为"人工编辑"
-                                  newFeatures[originalIdx].reasoning = "人工编辑"
-                                  setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                }}
-                                className="text-xs h-6"
-                              />
-                            ) : (
-                              <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
-                            )}
-                          </div>
-                          <div>
-                            <Label className="text-xs">理由:</Label>
-                            {editing ? (
-                              <Textarea
-                                value={slot.reasoning || ""}
-                                onChange={e => {
-                                  const newFeatures = [...editForm.evidence_features]
-                                  newFeatures[originalIdx].reasoning = e.target.value
-                                  setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                }}
-                                rows={2}
-                                className="text-xs"
-                              />
-                            ) : (
-                              <span className="text-xs">{slot.reasoning}</span>
-                            )}
-                          </div>
-                        </div>
-                      )})}
-
-                    {/* 非必需特征展开按钮 */}
-                    {(editForm.evidence_features || []).filter((slot: any) => slot.slot_required === false).length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowOptionalFields(!showOptionalFields)}
-                        className="w-full text-xs h-8 mt-2"
-                      >
-                        {showOptionalFields ? '收起' : '展开'} 非必需特征 
-                        ({(editForm.evidence_features || []).filter((slot: any) => slot.slot_required === false).length} 个)
-                        <svg 
-                          className={`ml-1 h-3 w-3 transition-transform duration-200 ${showOptionalFields ? 'rotate-180' : ''}`} 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </Button>
-                    )}
-
-                    {/* 非必需特征 */}
-                    {showOptionalFields && (editForm.evidence_features || [])
-                      .filter((slot: any) => slot.slot_required === false)
-                      .map((slot: any, idx: number) => {
-                        const colors = getFeatureColor(slot)
-                        const originalIdx = editForm.evidence_features.findIndex((f: any) => f === slot)
-                        return (
-                          <div key={`optional-${originalIdx}`} className={`p-2 rounded-md border space-y-1 ${colors.container} opacity-80`}>
-                            <div className="flex items-center gap-1">
-                              <Label className="text-xs font-medium text-muted-foreground">词槽名:</Label>
-                              <span className="text-xs text-muted-foreground">{slot.slot_name}</span>
-                              <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-auto">
-                                可选
-                              </Badge>
-                            </div>
-                            <div>
-                              <Label className="text-xs">词槽值:</Label>
-                              {editing ? (
-                                <Input
-                                  value={slot.slot_value}
-                                  onChange={e => {
-                                    const newFeatures = [...editForm.evidence_features]
-                                    newFeatures[originalIdx].slot_value = e.target.value
-                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                  }}
-                                  className={colors.input}
-                                />
-                              ) : (
-                                <span className={`text-xs font-medium ${colors.text}`}>
-                                  {slot.slot_value}
-                                </span>
-                              )}
-                            </div>
-                            <div>
-                              <Label className="text-xs">置信度:</Label>
-                              {editing ? (
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  max="1"
-                                  value={slot.confidence || 0}
-                                  onChange={e => {
-                                    const newFeatures = [...editForm.evidence_features]
-                                    newFeatures[originalIdx].confidence = parseFloat(e.target.value)
-                                    newFeatures[originalIdx].reasoning = "人工编辑"
-                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                  }}
-                                  className="text-xs h-6"
-                                />
-                              ) : (
-                                <span className="text-xs">{((slot.confidence || 0) * 100).toFixed(2)}%</span>
-                              )}
-                            </div>
-                            <div>
-                              <Label className="text-xs">理由:</Label>
-                              {editing ? (
-                                <Textarea
-                                  value={slot.reasoning || ""}
-                                  onChange={e => {
-                                    const newFeatures = [...editForm.evidence_features]
-                                    newFeatures[originalIdx].reasoning = e.target.value
-                                    setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
-                                  }}
-                                  rows={2}
-                                  className="text-xs"
-                                />
-                              ) : (
-                                <span className="text-xs">{slot.reasoning}</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-
-                    <div>
-                      <Label className="text-xs text-muted-foreground">特征提取时间:</Label>
-                      <div className="text-xs">{editForm.features_extracted_at ? new Date(editForm.features_extracted_at).toLocaleString() : "-"}</div>
-                    </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent 
+                                          side="top" 
+                                          className={`max-w-xs p-3 shadow-lg border-2 ${
+                                            feature.slot_is_consistent 
+                                              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50' 
+                                              : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                                          }`}
+                                        >
+                                          <div className="space-y-2">
+                                            <div className={`font-semibold text-sm flex items-center gap-1 ${
+                                              feature.slot_is_consistent ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                            }`}>
+                                              {feature.slot_is_consistent ? (
+                                                <>
+                                                  <CheckCircle className="w-4 h-4" />
+                                                  校对匹配
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <XCircle className="w-4 h-4" />
+                                                  校对不匹配
+                                                </>
+                                              )}
+                                            </div>
+                                            {feature.slot_expected_value && (
+                                              <div className="text-xs">
+                                                <span className="font-medium text-muted-foreground">期待值:</span> 
+                                                <span className="ml-1 font-medium text-blue-600 dark:text-blue-400">{feature.slot_expected_value}</span>
+                                              </div>
+                                            )}
+                                            {feature.slot_proofread_reasoning && (
+                                              <div className="text-xs p-2 bg-muted/50 rounded border-l-2 border-muted-foreground/20">
+                                                {feature.slot_proofread_reasoning}
+                                              </div>
+                                            )}
+                                            <div className="text-xs text-muted-foreground border-t pt-1 flex items-center gap-1">
+                                              <span>🕒</span>
+                                              {feature.slot_proofread_at ? new Date(feature.slot_proofread_at).toLocaleString() : ''}
+                                            </div>
+                                          </div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">词槽值:</Label>
+                                  {editing ? (
+                                    <Input
+                                      value={feature.slot_value}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].slot_value = e.target.value
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      className={colors.input}
+                                    />
+                                  ) : (
+                                    <span className={`text-xs font-medium ${colors.text}`}>
+                                      {String(feature.slot_value)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">置信度:</Label>
+                                  {editing ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="1"
+                                      value={feature.confidence || 0}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].confidence = parseFloat(e.target.value)
+                                        newFeatures[originalIdx].reasoning = "人工编辑"
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      className="text-xs h-6"
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{((feature.confidence || 0) * 100).toFixed(2)}%</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">理由:</Label>
+                                  {editing ? (
+                                    <Textarea
+                                      value={feature.reasoning || ""}
+                                      onChange={e => {
+                                        const newFeatures = [...features]
+                                        newFeatures[originalIdx].reasoning = e.target.value
+                                        setEditForm((f: any) => ({ ...f, evidence_features: newFeatures }))
+                                      }}
+                                      rows={2}
+                                      className="text-xs"
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{feature.reasoning}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
 

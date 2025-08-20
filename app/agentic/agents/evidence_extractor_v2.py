@@ -25,7 +25,7 @@ class SlotExtraction(BaseModel):
     slot_name: str  # 必须是extraction_slots中的slot_name
     slot_desc: str
     slot_value_type: str
-    slot_required: bool
+    slot_required: Any
     slot_value: Any
     confidence: float
     reasoning: str  # 提取理由，特别说明来自哪些图片

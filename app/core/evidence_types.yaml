@@ -409,7 +409,7 @@ evidence_types:
       - slot_name: "债务人签字名字"
         slot_desc: "债务人签字的名字"
         slot_value_type: "string"
-        slot_required: true
+        slot_required: "债务人盖章名字"
         proofread_with_case:
           - rule_name: "债务人姓名匹配"
             case_fields: ["debtor_name"]
@@ -418,7 +418,7 @@ evidence_types:
       - slot_name: "债务人盖章名字"
         slot_desc: "债务人盖章的名字"
         slot_value_type: "string"
-        slot_required: true
+        slot_required: "债务人签字名字"
         proofread_with_case:
           - rule_name: "债务人姓名匹配"
             case_fields: ["debtor_name"]

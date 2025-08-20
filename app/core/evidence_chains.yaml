@@ -11,8 +11,6 @@ evidence_chains:
           - "欠款合意"
           - "欠款金额"
       - evidence_type: "微信个人主页"
-        core_evidence_slot:
-          - "微信备注名"
       - evidence_type: "微信支付转账电子凭证"
         core_evidence_slot:
           - "付款方真名"
@@ -46,8 +44,6 @@ evidence_chains:
           - "欠款合意"
           - "欠款金额"
       - evidence_type: "微信个人主页"
-        core_evidence_slot:
-          - "微信备注名"
       - evidence_type: "微信支付转账电子凭证"
         core_evidence_slot:
           - "付款方真名"
