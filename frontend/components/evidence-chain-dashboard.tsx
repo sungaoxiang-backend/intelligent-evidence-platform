@@ -370,7 +370,7 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
               .length > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  {/* 友好的提示图标 */}
+                  {/* 提示图标 */}
                   <div className="flex-shrink-0 mt-0.5">
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
@@ -379,40 +379,33 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                     </div>
                   </div>
                   
-                  {/* 友好的提示内容 */}
+                  {/* 提示内容 */}
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-blue-900 mb-2">
-                      证据补充建议
-                    </div>
-                    <div className="text-sm text-blue-700 mb-3">
-                      为了完善证据链，建议您优先补充以下 {chain.requirements
-                        .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
-                        .length} 个证据类型：
+                    <div className="text-sm font-medium text-blue-900 mb-3">
+                      证据补充建议：
                     </div>
                     
-                    {/* 友好的证据列表 */}
-                    <div className="space-y-2">
+                    {/* 简洁的证据列表 */}
+                    <div className="space-y-2 mb-3">
                       {chain.requirements
                         .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
-                        .map(req => (
-                          <div key={req.evidence_type} className="flex items-center gap-2 text-sm">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                            <span className="text-blue-800 font-medium">{req.evidence_type}</span>
-                            <span className="text-blue-600">
-                              (当前 {req.core_slots_satisfied}/{req.core_slots_count} 个)
-                            </span>
-                          </div>
-                        ))}
+                        .map(req => {
+                          const missingCount = req.core_slots_count - req.core_slots_satisfied
+                          return (
+                            <div key={req.evidence_type} className="flex items-center gap-2 text-sm text-blue-700">
+                              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                              <span>{req.evidence_type}的还有{missingCount}个特征缺失或错误</span>
+                            </div>
+                          )
+                        })}
                     </div>
                     
-                    {/* 友好的操作建议 */}
-                    <div className="mt-3 pt-3 border-t border-blue-200">
-                      <div className="flex items-center gap-2 text-xs text-blue-600">
-                        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 2L12.09 8.26L20 9L12.09 9.74L10 16L7.91 9.74L0 9L7.91 8.26L10 2Z"/>
-                        </svg>
-                        补充这些证据后，证据链将更加完整可靠
-                      </div>
+                    {/* 操作建议 */}
+                    <div className="flex items-center gap-2 text-sm text-blue-600 font-medium">
+                      <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 2L12.09 8.26L20 9L12.09 9.74L10 16L7.91 9.74L0 9L7.91 8.26L10 2Z"/>
+                      </svg>
+                      请继续补充相关证据
                     </div>
                   </div>
                 </div>

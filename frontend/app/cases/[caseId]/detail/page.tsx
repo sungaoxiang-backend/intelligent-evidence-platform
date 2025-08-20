@@ -212,9 +212,27 @@ export default function CaseDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">案件详情</h1>
-          <p className="text-muted-foreground mt-1">
-            {caseData.creditor_name || '未设置债权人'} vs {caseData.debtor_name || '未设置债务人'}
-          </p>
+          <div className="mt-2 space-y-1">
+            <p className="text-muted-foreground text-lg">
+              {caseData.creditor_name || '未设置债权人'} vs {caseData.debtor_name || '未设置债务人'}
+            </p>
+            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+              <span>创建时间：{caseData.created_at ? new Date(caseData.created_at).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : '未设置'}</span>
+              <span>更新时间：{caseData.updated_at ? new Date(caseData.updated_at).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : '未设置'}</span>
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center gap-2">
@@ -304,18 +322,21 @@ export default function CaseDetailPage() {
         </div>
       </div>
 
-      {/* 案件详情卡片 - 更新样式 */}
+      {/* 案件详情卡片 - 优化布局和空间利用 */}
       <Card>
         <CardContent className="p-6">
-          {/* 案件基础信息 - 像新增案件时的表单布局 */}
-          <div className="space-y-8">
-            {/* 基础案件信息区域 */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">基础案件信息</h3>
-              <div className="grid grid-cols-2 gap-6">
+          {/* 案件基础信息 - 紧凑布局 */}
+          <div className="space-y-6">
+            {/* 基础案件信息区域 - 使用与债权人信息、债务人信息一致的网格布局 */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                基础案件信息
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 案件类型 */}
                 <div className="space-y-2">
-                  <Label htmlFor="case_type" className="text-sm font-medium">
+                  <Label htmlFor="case_type" className="text-sm font-medium text-gray-700">
                     案件类型 <span className="text-red-500">*</span>
                   </Label>
                   {editing ? (
@@ -332,7 +353,7 @@ export default function CaseDetailPage() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
+                    <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
                       {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
                        caseData.case_type === 'contract' ? '买卖合同纠纷' : '未设置'}
                     </div>
@@ -344,7 +365,7 @@ export default function CaseDetailPage() {
 
                 {/* 欠款金额 */}
                 <div className="space-y-2">
-                  <Label htmlFor="loan_amount" className="text-sm font-medium">
+                  <Label htmlFor="loan_amount" className="text-sm font-medium text-gray-700">
                     欠款金额 <span className="text-red-500">*</span>
                   </Label>
                   {editing ? (
@@ -358,7 +379,7 @@ export default function CaseDetailPage() {
                       className={formErrors.loan_amount ? "border-red-500" : ""}
                     />
                   ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
+                    <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
                       {caseData.loan_amount ? `¥${caseData.loan_amount.toLocaleString()}` : '未设置'}
                     </div>
                   )}
@@ -369,207 +390,201 @@ export default function CaseDetailPage() {
               </div>
             </div>
 
-            {/* 债权人和债务人信息区域 */}
-            <div className="grid grid-cols-2 gap-8">
+            {/* 债权人和债务人信息区域 - 紧凑的两列布局 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* 左侧：债权人信息 */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-blue-600 border-b border-blue-200 pb-2">债权人信息</h3>
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-blue-600 border-b border-blue-200 pb-2 flex items-center">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                  债权人信息
+                </h3>
                 
-                {/* 债权人姓名 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor" className="text-sm font-medium">
-                    债权人姓名 <span className="text-red-500">*</span>
-                  </Label>
-                  {editing ? (
-                    <Input
-                      id="creditor"
-                      value={editForm.creditor_name}
-                      onChange={(e) => setEditForm({ ...editForm, creditor_name: e.target.value })}
-                      placeholder="请输入债权人姓名"
-                      className={formErrors.creditor_name ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.creditor_name || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.creditor_name && (
-                    <div className="text-red-500 text-xs">{formErrors.creditor_name}</div>
-                  )}
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* 债权人姓名 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="creditor" className="text-sm font-medium text-gray-700">
+                      债权人姓名 <span className="text-red-500">*</span>
+                    </Label>
+                    {editing ? (
+                      <Input
+                        id="creditor"
+                        value={editForm.creditor_name}
+                        onChange={(e) => setEditForm({ ...editForm, creditor_name: e.target.value })}
+                        placeholder="请输入债权人姓名"
+                        className={formErrors.creditor_name ? "border-red-500" : ""}
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.creditor_name || '未设置'}
+                      </div>
+                    )}
+                    {formErrors.creditor_name && (
+                      <div className="text-red-500 text-xs">{formErrors.creditor_name}</div>
+                    )}
+                  </div>
 
-                {/* 债权人类型 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_type" className="text-sm font-medium">
-                    债权人类型 <span className="text-red-500">*</span>
-                  </Label>
-                  {editing ? (
-                    <Select
-                      value={editForm.creditor_type || ""}
-                      onValueChange={(value: string) => setEditForm({ ...editForm, creditor_type: value as PartyType })}
-                    >
-                      <SelectTrigger className={formErrors.creditor_type ? "border-red-500" : ""}>
-                        <SelectValue placeholder="选择债权人类型" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="person">个人</SelectItem>
-                        <SelectItem value="company">公司</SelectItem>
-                        <SelectItem value="individual">个体工商户</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.creditor_type === 'person' ? '个人' : 
-                       caseData.creditor_type === 'company' ? '公司' : 
-                       caseData.creditor_type === 'individual' ? '个体工商户' : '未设置'}
-                    </div>
-                  )}
-                  {formErrors.creditor_type && (
-                    <div className="text-red-500 text-xs">{formErrors.creditor_type}</div>
-                  )}
-                </div>
+                  {/* 债权人类型 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="creditor_type" className="text-sm font-medium text-gray-700">
+                      债权人类型 <span className="text-red-500">*</span>
+                    </Label>
+                    {editing ? (
+                      <Select
+                        value={editForm.creditor_type || ""}
+                        onValueChange={(value: string) => setEditForm({ ...editForm, creditor_type: value as PartyType })}
+                      >
+                        <SelectTrigger className={formErrors.creditor_type ? "border-red-500" : ""}>
+                          <SelectValue placeholder="选择债权人类型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="person">个人</SelectItem>
+                          <SelectItem value="company">公司</SelectItem>
+                          <SelectItem value="individual">个体工商户</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.creditor_type === 'person' ? '个人' : 
+                         caseData.creditor_type === 'company' ? '公司' : 
+                         caseData.creditor_type === 'individual' ? '个体工商户' : '未设置'}
+                      </div>
+                    )}
+                    {formErrors.creditor_type && (
+                      <div className="text-red-500 text-xs">{formErrors.creditor_type}</div>
+                    )}
+                  </div>
 
-                {/* 债权人电话 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_phone" className="text-sm font-medium">债权人电话</Label>
-                  {editing ? (
-                    <Input
-                      id="creditor_phone"
-                      value={editForm.creditor_phone}
-                      onChange={(e) => setEditForm({ ...editForm, creditor_phone: e.target.value })}
-                      placeholder="请输入债权人电话"
-                      className={formErrors.creditor_phone ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.creditor_phone || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.creditor_phone && (
-                    <div className="text-red-500 text-xs">{formErrors.creditor_phone}</div>
-                  )}
-                </div>
+                  {/* 债权人电话 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="creditor_phone" className="text-sm font-medium text-gray-700">债权人电话</Label>
+                    {editing ? (
+                      <Input
+                        id="creditor_phone"
+                        value={editForm.creditor_phone}
+                        onChange={(e) => setEditForm({ ...editForm, creditor_phone: e.target.value })}
+                        placeholder="请输入债权人电话"
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.creditor_phone || '未设置'}
+                      </div>
+                    )}
+                  </div>
 
-                {/* 债权人银行账户 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_bank_account" className="text-sm font-medium">债权人银行账户</Label>
-                  {editing ? (
-                    <Input
-                      id="creditor_bank_account"
-                      value={editForm.creditor_bank_account}
-                      onChange={(e) => setEditForm({ ...editForm, creditor_bank_account: e.target.value })}
-                      placeholder="请输入银行账户"
-                      className={formErrors.creditor_bank_account ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.creditor_bank_account || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.creditor_bank_account && (
-                    <div className="text-red-500 text-xs">{formErrors.creditor_bank_account}</div>
-                  )}
-                </div>
+                  {/* 债权人银行账户 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="creditor_bank_account" className="text-sm font-medium text-gray-700">银行账户</Label>
+                    {editing ? (
+                      <Input
+                        id="creditor_bank_account"
+                        value={editForm.creditor_bank_account}
+                        onChange={(e) => setEditForm({ ...editForm, creditor_bank_account: e.target.value })}
+                        placeholder="请输入银行账户"
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.creditor_bank_account || '未设置'}
+                      </div>
+                    )}
+                  </div>
 
-                {/* 债权人银行地址 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_bank_address" className="text-sm font-medium">债权人银行地址</Label>
-                  {editing ? (
-                    <Input
-                      id="creditor_bank_address"
-                      value={editForm.creditor_bank_address}
-                      onChange={(e) => setEditForm({ ...editForm, creditor_bank_address: e.target.value })}
-                      placeholder="请输入银行地址"
-                      className={formErrors.creditor_bank_address ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.creditor_bank_address || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.creditor_bank_address && (
-                    <div className="text-red-500 text-xs">{formErrors.creditor_bank_address}</div>
-                  )}
+                  {/* 债权人银行地址 - 跨两列 */}
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label htmlFor="creditor_bank_address" className="text-sm font-medium text-gray-700">银行地址</Label>
+                    {editing ? (
+                      <Input
+                        id="creditor_bank_address"
+                        value={editForm.creditor_bank_address}
+                        onChange={(e) => setEditForm({ ...editForm, creditor_bank_address: e.target.value })}
+                        placeholder="请输入银行地址"
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.creditor_bank_address || '未设置'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* 右侧：债务人信息 */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-orange-600 border-b border-orange-200 pb-2">债务人信息</h3>
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-orange-600 border-b border-orange-200 pb-2 flex items-center">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
+                  债务人信息
+                </h3>
                 
-                {/* 债务人姓名 */}
-                <div className="space-y-2">
-                  <Label htmlFor="debtor" className="text-sm font-medium">
-                    债务人姓名 <span className="text-red-500">*</span>
-                  </Label>
-                  {editing ? (
-                    <Input
-                      id="debtor"
-                      value={editForm.debtor_name}
-                      onChange={(e) => setEditForm({ ...editForm, debtor_name: e.target.value })}
-                      placeholder="请输入债务人姓名"
-                      className={formErrors.debtor_name ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.debtor_name || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.debtor_name && (
-                    <div className="text-red-500 text-xs">{formErrors.debtor_name}</div>
-                  )}
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* 债务人姓名 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="debtor" className="text-sm font-medium text-gray-700">
+                      债务人姓名 <span className="text-red-500">*</span>
+                    </Label>
+                    {editing ? (
+                      <Input
+                        id="debtor"
+                        value={editForm.debtor_name}
+                        onChange={(e) => setEditForm({ ...editForm, debtor_name: e.target.value })}
+                        placeholder="请输入债务人姓名"
+                        className={formErrors.debtor_name ? "border-red-500" : ""}
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.debtor_name || '未设置'}
+                      </div>
+                    )}
+                    {formErrors.debtor_name && (
+                      <div className="text-red-500 text-xs">{formErrors.debtor_name}</div>
+                    )}
+                  </div>
 
-                {/* 债务人类型 */}
-                <div className="space-y-2">
-                  <Label htmlFor="debtor_type" className="text-sm font-medium">
-                    债务人类型 <span className="text-red-500">*</span>
-                  </Label>
-                  {editing ? (
-                    <Select
-                      value={editForm.debtor_type || ""}
-                      onValueChange={(value: string) => setEditForm({ ...editForm, debtor_type: value as PartyType })}
-                    >
-                      <SelectTrigger className={formErrors.debtor_type ? "border-red-500" : ""}>
-                        <SelectValue placeholder="选择债务人类型" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="person">个人</SelectItem>
-                        <SelectItem value="company">公司</SelectItem>
-                        <SelectItem value="individual">个体工商户</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.debtor_type === 'person' ? '个人' : 
-                       caseData.debtor_type === 'company' ? '公司' : 
-                       caseData.debtor_type === 'individual' ? '个体工商户' : '未设置'}
-                    </div>
-                  )}
-                  {formErrors.debtor_type && (
-                    <div className="text-red-500 text-xs">{formErrors.debtor_type}</div>
-                  )}
-                </div>
+                  {/* 债务人类型 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="debtor_type" className="text-sm font-medium text-gray-700">
+                      债务人类型 <span className="text-red-500">*</span>
+                    </Label>
+                    {editing ? (
+                      <Select
+                        value={editForm.debtor_type || ""}
+                        onValueChange={(value: string) => setEditForm({ ...editForm, debtor_type: value as PartyType })}
+                      >
+                        <SelectTrigger className={formErrors.debtor_type ? "border-red-500" : ""}>
+                          <SelectValue placeholder="选择债务人类型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="person">个人</SelectItem>
+                          <SelectItem value="company">公司</SelectItem>
+                          <SelectItem value="individual">个体工商户</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.debtor_type === 'person' ? '个人' : 
+                         caseData.debtor_type === 'company' ? '公司' : 
+                         caseData.debtor_type === 'individual' ? '个体工商户' : '未设置'}
+                      </div>
+                    )}
+                    {formErrors.debtor_type && (
+                      <div className="text-red-500 text-xs">{formErrors.debtor_type}</div>
+                    )}
+                  </div>
 
-                {/* 债务人电话 */}
-                <div className="space-y-2">
-                  <Label htmlFor="debtor_phone" className="text-sm font-medium">债务人电话</Label>
-                  {editing ? (
-                    <Input
-                      id="debtor_phone"
-                      value={editForm.debtor_phone}
-                      onChange={(e) => setEditForm({ ...editForm, debtor_phone: e.target.value })}
-                      placeholder="请输入债务人电话"
-                      className={formErrors.debtor_phone ? "border-red-500" : ""}
-                    />
-                  ) : (
-                    <div className="p-3 bg-gray-50 rounded-md border">
-                      {caseData.debtor_phone || '未设置'}
-                    </div>
-                  )}
-                  {formErrors.debtor_phone && (
-                    <div className="text-red-500 text-xs">{formErrors.debtor_phone}</div>
-                  )}
+                  {/* 债务人电话 */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="debtor_phone" className="text-sm font-medium text-gray-700">债务人电话</Label>
+                    {editing ? (
+                      <Input
+                        id="debtor_phone"
+                        value={editForm.debtor_phone}
+                        onChange={(e) => setEditForm({ ...editForm, debtor_phone: e.target.value })}
+                        placeholder="请输入债务人电话"
+                      />
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 rounded-md border text-sm">
+                        {caseData.debtor_phone || '未设置'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
