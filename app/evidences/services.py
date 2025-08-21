@@ -25,34 +25,26 @@ from app.cases.models import Case
 
 async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSession) -> Evidence:
     """为证据添加校对信息"""
-    logger.info(f"开始为证据 {evidence.id} 添加校对信息")
     
     if not evidence.evidence_features:
-        logger.info(f"证据 {evidence.id} 没有evidence_features，跳过校对")
         return evidence
         
     if not evidence.case_id:
-        logger.info(f"证据 {evidence.id} 没有case_id，跳过校对")
         return evidence
         
     if not evidence.case:
         logger.warning(f"证据 {evidence.id} 的case数据未加载，跳过校对")
         return evidence
     
-    logger.info(f"证据 {evidence.id} 有 {len(evidence.evidence_features)} 个特征，关联案件 {evidence.case_id}")
-    
     try:
         # 执行校对
-        logger.info(f"开始调用校对器，证据ID: {evidence.id}, 案件ID: {evidence.case_id}")
         proofread_result = await evidence_proofreader.proofread_evidence_features(
             db=db,
             evidence=evidence,
             case=evidence.case  # 假设case已经通过joinedload加载
         )
-        logger.info(f"校对器调用完成，结果: {proofread_result is not None}")
         
         if proofread_result and proofread_result.proofread_results:
-            logger.info(f"校对结果包含 {len(proofread_result.proofread_results)} 个项目")
             # 为每个特征添加校对信息
             enhanced_features = []
             
@@ -60,13 +52,10 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                 # 转换为dict格式
                 if isinstance(feature, dict):
                     enhanced_feature = feature.copy()
-                    logger.debug(f"特征是dict格式: {feature.get('slot_name', 'unknown')}")
                 else:
                     # 如果不是dict，转换为dict
-                    logger.debug(f"特征不是dict格式，类型: {type(feature)}")
                     if hasattr(feature, 'model_dump'):
                         enhanced_feature = feature.model_dump()
-                        logger.debug(f"转换为dict: {enhanced_feature.get('slot_name', 'unknown')}")
                     else:
                         enhanced_feature = dict(feature) if hasattr(feature, '__dict__') else feature
                 
@@ -76,20 +65,13 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                     for proofread_item in proofread_result.proofread_results:
                         if proofread_item.field_name == slot_name:
                             # 添加校对信息到slot级别
-                            logger.info(f"为slot '{slot_name}' 添加校对信息: {proofread_item.is_consistent}")
                             if isinstance(enhanced_feature, dict):
-                                before_keys = set(enhanced_feature.keys())
                                 enhanced_feature.update({
                                     "slot_is_consistent": proofread_item.is_consistent,
                                     "slot_proofread_at": datetime.now().isoformat(),
                                     "slot_proofread_reasoning": proofread_item.proofread_reasoning,
                                     "slot_expected_value": proofread_item.expected_value
                                 })
-                                after_keys = set(enhanced_feature.keys())
-                                new_keys = after_keys - before_keys
-                                logger.debug(f"slot '{slot_name}' 添加了新键: {new_keys}")
-                                
-
                             else:
                                 logger.warning(f"slot '{slot_name}' 不是dict格式，无法添加校对信息")
                             break
@@ -97,15 +79,6 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                 enhanced_features.append(enhanced_feature)
             
             # 更新evidence的features（仅在内存中）
-            logger.info(f"成功为证据 {evidence.id} 添加校对信息，共处理 {len(enhanced_features)} 个特征")
-            # 调试：检查最终的特征结构
-            for i, feature in enumerate(enhanced_features[:2]):  # 只检查前2个
-                if isinstance(feature, dict):
-                    has_proofreading = any(key.startswith('slot_') and 'proofread' in key for key in feature.keys())
-                    logger.debug(f"特征 {i} 包含校对字段: {has_proofreading}, 键: {list(feature.keys())}")
-                    
-
-            
             evidence.evidence_features = enhanced_features
         else:
             logger.warning(f"证据 {evidence.id} 没有校对结果")
@@ -116,7 +89,6 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
         logger.error(f"错误详情: {traceback.format_exc()}")
         # 校对失败不影响返回，返回原始数据
     
-    logger.info(f"完成证据 {evidence.id} 的校对处理")
     return evidence
 
 
@@ -152,12 +124,9 @@ async def upload_file(
     """上传文件到COS"""
     from loguru import logger
     
-    logger.debug(f"开始上传文件: {filename}")
-    
     # 获取文件扩展名
     _, file_extension = os.path.splitext(filename)
     file_extension = file_extension.lower().lstrip(".")
-    logger.debug(f"文件扩展名: {file_extension}")
     
     # 根据文件扩展名确定存储文件夹
     if file_extension in ["pdf", "doc", "docx", "txt", "xls", "xlsx"]:
@@ -170,13 +139,11 @@ async def upload_file(
         folder = "videos"
     else:
         folder = "others"
-    logger.debug(f"存储文件夹: {folder}")
     
     # 获取文件大小
     file.seek(0, os.SEEK_END)
     file_size = file.tell()
     file.seek(0)
-    logger.debug(f"文件大小: {file_size} 字节")
     
     try:
         # 检查文件内容是否为空
@@ -187,9 +154,7 @@ async def upload_file(
             raise ValueError("文件内容为空")
         
         # 上传文件到COS
-        logger.debug(f"开始上传文件到COS: {filename}, disposition={disposition}")
         file_url = cos_service.upload_file(file, filename, folder, disposition)
-        logger.debug(f"文件上传成功: {filename}, URL: {file_url}")
         
         return UploadFileResponse(
             file_url=file_url,
@@ -245,9 +210,6 @@ async def get_multi_with_count(
     """获取多个证据，并返回总数，支持动态排序"""
     from loguru import logger
     
-    # 添加调试日志
-    logger.debug(f"Evidence sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
-    
     query = select(Evidence).options(joinedload(Evidence.case))
     if case_id is not None:
         query = query.where(Evidence.case_id == case_id)
@@ -274,18 +236,14 @@ async def get_multi_with_count(
         if sort_by in valid_sort_fields:
             sort_column = valid_sort_fields[sort_by]
             if sort_order and sort_order.lower() == 'desc':
-                logger.debug(f"Applying DESC sort on {sort_by}")
                 query = query.order_by(sort_column.desc())
             else:
-                logger.debug(f"Applying ASC sort on {sort_by}")
                 query = query.order_by(sort_column.asc())
         else:
             # 默认按创建时间倒序
-            logger.debug("Invalid sort field, using default DESC sort on created_at")
             query = query.order_by(Evidence.created_at.desc())
     else:
         # 默认按创建时间倒序
-        logger.debug("No sort field provided, using default DESC sort on created_at")
         query = query.order_by(Evidence.created_at.desc())
 
     # 获取数据
@@ -294,12 +252,10 @@ async def get_multi_with_count(
     data = result.scalars().all()
 
     # 为每个证据添加校对信息
-    logger.info(f"开始为 {len(data)} 个证据添加校对信息")
     enhanced_data = []
     for evidence in data:
         enhanced_evidence = await enhance_evidence_with_proofreading(evidence, db)
         enhanced_data.append(enhanced_evidence)
-    logger.info(f"完成所有证据的校对处理")
 
     return enhanced_data, total
 
@@ -350,16 +306,12 @@ async def batch_create(
     """
     from loguru import logger
     
-    logger.info(f"开始批量创建证据: 案件ID={case_id}, 文件数量={len(files)}")
     evidences = []
     
     for index, file in enumerate(files):
         try:
-            logger.debug(f"处理第{index+1}个文件: {file.filename}, 大小: {file.size if hasattr(file, 'size') else '未知'}")
-            
             # 上传单个文件
             file_data = await upload_file(file.file, file.filename)
-            logger.debug(f"文件上传成功: {file.filename}, URL: {file_data.file_url}")
             
             # 创建单个证据
             db_obj = Evidence(
@@ -372,7 +324,6 @@ async def batch_create(
             )
             db.add(db_obj)
             evidences.append(db_obj)
-            logger.debug(f"证据对象创建成功: {file.filename}")
         except Exception as e:
             # 如果上传失败，记录错误并继续处理下一个文件
             logger.error(f"文件处理失败: {file.filename}, 错误: {str(e)}")
@@ -384,7 +335,6 @@ async def batch_create(
         # 一次性提交所有证据
         try:
             await db.commit()
-            logger.info(f"成功提交{len(evidences)}个证据到数据库")
             
             # 刷新所有对象
             for evidence in evidences:
@@ -524,8 +474,6 @@ async def batch_create_with_classification(
         for evidence in evidences:
             await db.refresh(evidence)
             
-        logger.info(f"成功完成{len(evidences)}个证据的上传和分类")
-        
     except Exception as e:
         logger.error(f"分类失败，但证据已上传: {str(e)}")
         # 分类失败不影响证据上传，只是 is_classified 保持 False
@@ -611,7 +559,6 @@ async def auto_process(
                                 evidence.classification_reasoning = res.reasoning
                                 evidence.classified_at = datetime.now()
                                 evidence.evidence_status = EvidenceStatus.CLASSIFIED.value
-                                logger.info(f"有效分类结果: {evidence.file_name} -> {res.evidence_type} (置信度: {res.confidence})")
                             else:
                                 # 无效的分类结果，不更新状态
                                 logger.warning(f"无效分类结果: {evidence.file_name} -> evidence_type='{res.evidence_type}', confidence={res.confidence}")
@@ -774,11 +721,9 @@ async def auto_process(
         
     # 5. 发送完成状态
     if send_progress:
-        logger.info(f"发送完成状态: 成功处理 {len(evidences)} 个证据")
         await send_progress({"status": "completed", "message": f"成功处理 {len(evidences)} 个证据"})
     
     # 6. 返回证据列表
-    logger.info(f"auto_process函数完成，返回 {len(evidences)} 个证据")
     return evidences
 
         

@@ -18,7 +18,7 @@ class EvidenceFeatureItem(BaseModel):
     reasoning: str
     slot_desc: str
     slot_value_type: str
-    slot_required: bool
+    slot_required: Any
 
 
 class ProofreadRule(BaseModel):
@@ -79,20 +79,14 @@ class EvidenceProofreader:
         """
         # 检查证据是否有已提取的特征
         if not evidence.evidence_features or not evidence.classification_category:
-            logger.info(f"证据 {evidence.id} 没有可校对的特征，跳过校对")
             return None
-        
-        logger.info(f"开始校对证据 {evidence.id}，类型: {evidence.classification_category}")
         
         # 获取证据类型的提取词槽配置（包含proofread_with_case）
         extraction_slots = self.config_manager.get_extraction_slots_by_chinese_types([evidence.classification_category])
         evidence_type_slots = extraction_slots.get(evidence.classification_category, [])
         
         if not evidence_type_slots:
-            logger.info(f"证据类型 {evidence.classification_category} 没有提取词槽配置，跳过校对")
             return None
-        
-        logger.info(f"找到 {len(evidence_type_slots)} 个提取词槽配置")
         
         # 解析已提取的特征
         try:
@@ -124,10 +118,7 @@ class EvidenceProofreader:
                     proofread_tasks.append((slot_name, rules))
         
         if not proofread_tasks:
-            logger.info(f"证据类型 {evidence.classification_category} 没有有效的校对配置")
             return None
-        
-        logger.info(f"找到 {len(proofread_tasks)} 个校对任务")
         
         # 执行校对
         proofread_results = []
@@ -140,7 +131,6 @@ class EvidenceProofreader:
                     proofread_results.append(result)
         
         if not proofread_results:
-            logger.info(f"证据 {evidence.id} 没有产生校对结果")
             return None
         
         # 计算整体一致性评分（基于一致性比例）
