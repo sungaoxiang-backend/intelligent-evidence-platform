@@ -279,7 +279,7 @@ class EvidenceProofreader:
         expected_value = " 或 ".join(expected_values) if expected_values else None
         
         # 构建友好的推理说明
-        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'}"
+        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
         
         return ProofreadResult(
             field_name=slot_name,

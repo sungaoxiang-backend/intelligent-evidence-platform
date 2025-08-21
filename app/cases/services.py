@@ -89,6 +89,9 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                         expected_values.append(str(case_value))
                                 
                                 if expected_values:
+                                    # 获取匹配策略
+                                    match_strategy = rule.get("match_strategy", "exact")
+                                    
                                     # 简单的精确匹配逻辑
                                     is_consistent = False
                                     expected_value = " 或 ".join(expected_values)  # 多个期待值用"或"连接
@@ -98,13 +101,20 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                             is_consistent = True
                                             break
                                     
-                                    reasoning = f"实际提取: '{slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'}"
+                                    # 根据匹配策略生成场景说明
+                                    strategy_desc = {
+                                        "exact": "精确匹配",
+                                        "fuzzy": "模糊匹配",
+                                        "masked": "脱敏匹配"
+                                    }.get(match_strategy, "未知匹配")
+                                    
+                                    reasoning = f"实际提取: '{slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} ({strategy_desc})"
                                     
                                     enhanced_feature["slot_proofread_at"] = datetime.now().isoformat()
                                     enhanced_feature["slot_is_consistent"] = is_consistent
                                     enhanced_feature["slot_expected_value"] = expected_value
                                     enhanced_feature["slot_proofread_reasoning"] = reasoning
-                                    logger.info(f"特征 {slot_name} 校对完成: {is_consistent}")
+                                    logger.info(f"特征 {slot_name} 校对完成: {is_consistent} ({strategy_desc})")
                                     break  # 只处理第一个有效规则
                                 else:
                                     logger.info(f"特征 {slot_name} 的规则 {rule.get('rule_name')} 没有期待值")

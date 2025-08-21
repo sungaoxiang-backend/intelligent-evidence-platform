@@ -530,7 +530,14 @@ class EvidenceChainService:
         evidences: List[Evidence],
         association_features: List[AssociationEvidenceFeature]
     ) -> EvidenceTypeRequirement:
-        """处理"或"关系组，合并多个证据类型为一个要求"""
+        """处理"或"关系组，合并多个证据类型为一个要求
+        
+        关键逻辑：
+        1. 优先选择校对通过的证据类型
+        2. 其次选择无校对动作的证据类型
+        3. 最后选择校对失败的证据类型
+        4. 在相同校对状态下，选择完成度最高的
+        """
         
         # 合并所有核心槽位
         all_core_slots = set()
@@ -549,7 +556,7 @@ class EvidenceChainService:
         group_satisfied = any(req.status == EvidenceRequirementStatus.SATISFIED for req in individual_requirements)
         
         # 调试信息
-        print(f"DEBUG: 转账记录组状态判断:")
+        print(f"DEBUG: {or_group_name}组状态判断:")
         for req in individual_requirements:
             print(f"  - {req.evidence_type}: {req.status}")
         print(f"  - 组满足状态: {group_satisfied}")
@@ -580,7 +587,7 @@ class EvidenceChainService:
                 }
                 group_slots.append(group_slot)
                 
-                # 统计满足的槽位
+                # 统计满足的槽位（基于新的校对状态逻辑）
                 if slot.is_core:
                     if slot.is_satisfied:
                         core_slots_satisfied += 1
@@ -603,8 +610,12 @@ class EvidenceChainService:
         else:
             status = EvidenceRequirementStatus.MISSING
         
+        # 生成"或"关系的证据类型名称，而不是硬编码"组"后缀
+        evidence_type_names = [config["evidence_type"] for config in evidence_type_configs]
+        or_relationship_name = " 或 ".join(evidence_type_names)
+        
         return EvidenceTypeRequirement(
-            evidence_type=f"{or_group_name}组",  # 显示为"转账记录组"
+            evidence_type=or_relationship_name,  # 显示为"银行转账记录 或 微信转账记录"
             status=status,
             slots=group_slots,
             core_slots_count=core_slots_count,
@@ -653,6 +664,8 @@ class EvidenceChainService:
         满足条件：
         1. 槽位值不是"未知"且不为空
         2. 如果有校对信息，必须校对成功(slot_is_consistent=True)
+        
+        注意：校对失败的特征不被认为是满足的，但可能在证据选择时被优先考虑
         """
         slot_value = feature.get("slot_value", "")
         
@@ -679,36 +692,47 @@ class EvidenceChainService:
     ) -> Optional[Dict[str, Any]]:
         """选择最完整的证据实例或分组作为该证据类型的代表
         
-        选择策略：
-        1. 优先选择核心槽位完成度最高的源
-        2. 其次选择总体槽位完成度最高的源
-        3. 最后选择置信度最高的源
+        选择策略（按优先级排序）：
+        1. 优先选择校对通过的证据 (slot_is_consistent=True)
+        2. 其次选择无校对动作的证据 (slot_proofread_at=None)
+        3. 最后选择校对失败的证据 (slot_is_consistent=False)
+        4. 在相同校对状态下，优先选择核心槽位完成度最高的源
+        5. 在相同完成度下，优先选择最新的证据（基于时间戳）
         """
         best_source = None
         best_score = -1
+        best_proofread_status = -1  # -1: 无校对, 0: 校对失败, 1: 校对通过
         
         # 评估证据实例
         for evidence_id, slot_data in evidence_slot_groups.items():
-            score = self._calculate_source_score(slot_data, all_slots, core_slots)
-            if score > best_score:
+            score, proofread_status = self._calculate_source_score_with_proofread(slot_data, all_slots, core_slots)
+            
+            # 优先选择校对状态更好的证据
+            if proofread_status > best_proofread_status or (proofread_status == best_proofread_status and score > best_score):
                 best_score = score
+                best_proofread_status = proofread_status
                 best_source = {
                     "source_type": "evidence",
                     "source_id": evidence_id,
                     "slot_data": slot_data,
-                    "score": score
+                    "score": score,
+                    "proofread_status": proofread_status
                 }
         
         # 评估关联证据分组
         for group_name, slot_data in association_slot_groups.items():
-            score = self._calculate_source_score(slot_data, all_slots, core_slots)
-            if score > best_score:
+            score, proofread_status = self._calculate_source_score_with_proofread(slot_data, all_slots, core_slots)
+            
+            # 优先选择校对状态更好的证据
+            if proofread_status > best_proofread_status or (proofread_status == best_proofread_status and score > best_score):
                 best_score = score
+                best_proofread_status = proofread_status
                 best_source = {
                     "source_type": "association_group",
                     "source_id": group_name,
                     "slot_data": slot_data,
-                    "score": score
+                    "score": score,
+                    "proofread_status": proofread_status
                 }
         
         return best_source
@@ -719,12 +743,14 @@ class EvidenceChainService:
         all_slots: set,
         core_slots: List[str]
     ) -> float:
-        """计算源的评分
+        """计算源的评分（保持向后兼容）
         
         评分规则：
         1. 核心槽位完成度权重：70%
         2. 总体槽位完成度权重：20%
         3. 平均置信度权重：10%
+        
+        注意：此方法主要用于向后兼容，新的逻辑使用 _calculate_source_score_with_proofread
         """
         if not slot_data:
             return 0.0
@@ -747,3 +773,92 @@ class EvidenceChainService:
         score = (core_completion * 0.7) + (total_completion * 0.2) + (avg_confidence * 0.1)
         
         return score
+
+    def _calculate_source_score_with_proofread(
+        self,
+        slot_data: Dict[str, Dict[str, Any]],
+        all_slots: set,
+        core_slots: List[str]
+    ) -> tuple[float, int]:
+        """计算源的评分，并返回校对状态"""
+        if not slot_data:
+            return 0.0, -1 # 无校对
+        
+        # 计算核心槽位完成度
+        core_slots_count = len(core_slots)
+        core_slots_satisfied = sum(1 for slot in core_slots if slot in slot_data)
+        core_completion = (core_slots_satisfied / core_slots_count * 100) if core_slots_count > 0 else 100.0
+        
+        # 计算总体槽位完成度
+        total_slots_count = len(all_slots)
+        total_slots_satisfied = len(slot_data)
+        total_completion = (total_slots_satisfied / total_slots_count * 100) if total_slots_count > 0 else 100.0
+        
+        # 计算平均置信度
+        confidences = [slot_info.get("confidence", 0.0) for slot_info in slot_data.values()]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        # 加权计算总分
+        score = (core_completion * 0.7) + (total_completion * 0.2) + (avg_confidence * 0.1)
+        
+        # 使用新的校对状态选择逻辑
+        proofread_status = self._select_best_proofread_status(slot_data)
+        
+        return score, proofread_status
+    
+    def _select_best_proofread_status(self, slot_data: Dict[str, Dict[str, Any]]) -> int:
+        """选择最佳的校对状态
+        
+        返回值：
+        - 1: 校对通过 (slot_is_consistent=True)
+        - 0: 校对失败 (slot_is_consistent=False)  
+        - -1: 无校对动作 (slot_proofread_at=None)
+        
+        逻辑：优先选择校对通过的状态
+        """
+        if not slot_data:
+            return -1
+        
+        best_status = -1  # 默认无校对
+        
+        for slot_name in slot_data:
+            slot_info = slot_data[slot_name]
+            feature_data = slot_info.get("feature_data", {})
+            
+            slot_proofread_at = feature_data.get("slot_proofread_at")
+            if slot_proofread_at:  # 有校对动作
+                slot_is_consistent = feature_data.get("slot_is_consistent")
+                if slot_is_consistent is True:  # 校对通过 - 最高优先级
+                    return 1
+                elif slot_is_consistent is False:  # 校对失败
+                    best_status = max(best_status, 0)
+        
+        return best_status
+    
+    def _get_latest_evidence_timestamp(self, slot_data: Dict[str, Dict[str, Any]]) -> Optional[str]:
+        """获取证据的最新时间戳
+        
+        用于在多个校对通过的证据中选择最新的
+        """
+        if not slot_data:
+            return None
+        
+        latest_timestamp = None
+        
+        for slot_name in slot_data:
+            slot_info = slot_data[slot_name]
+            feature_data = slot_info.get("feature_data", {})
+            
+            # 获取校对时间戳
+            proofread_at = feature_data.get("slot_proofread_at")
+            if proofread_at:
+                if latest_timestamp is None or proofread_at > latest_timestamp:
+                    latest_timestamp = proofread_at
+            
+            # 获取证据创建时间戳（如果有的话）
+            created_at = feature_data.get("created_at")
+            if created_at:
+                if latest_timestamp is None or created_at > latest_timestamp:
+                    latest_timestamp = created_at
+        
+        return latest_timestamp
