@@ -55,13 +55,16 @@ evidence_chains:
         core_evidence_slot: []
       - evidence_type: "中华人民共和国居民户籍档案"
         core_evidence_slot: []
+      # 银行转账记录和微信转账记录是"或"关系，提供其中一个即可
       - evidence_type: "银行转账记录"
         core_evidence_slot:
           - "转账账户真名"
           - "转账金额"
+        or_group: "转账记录"
       - evidence_type: "微信转账记录"
         core_evidence_slot:
           - "转账金额"
+        or_group: "转账记录"
   - chain_id: "民间借贷纠纷证据链2"
     applicable_case_types: ["debt"]
     required_evidence_types:

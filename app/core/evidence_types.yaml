@@ -474,6 +474,45 @@ evidence_types:
         slot_value_type: "number"
         slot_required: true
 
+  wechat_transfer_record:
+    type: "微信转账记录"
+    description: "微信转账（订单界面截图）"
+    category: "交易记录类"
+    features:
+      decisive:
+        - "黄色钱袋子icon"
+        - "转账时间"
+        - "转账单号"
+      important:
+        - "支付成功"
+        - "零钱通"
+      common:
+        - "金额"
+    exclusions:
+      - "银行转账记录"
+      - "支付宝转账记录"
+      - "微信支付转账电子凭证"
+      - "微信转账页面"
+    extraction_slots:
+      - slot_name: "转账账户备注名"
+        slot_desc: "转账账户的备注名，通常显示为'扫二维码付款-给xxx'"
+        slot_value_type: "string"
+        slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
+            match_strategy: "exact"
+            match_condition: "any"
+      - slot_name: "转账金额"
+        slot_desc: "转账的金额数值,注意需要是正数"
+        slot_value_type: "number"
+        slot_required: true
+        proofread_with_case:
+          - rule_name: "金额匹配"
+            case_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
+
   # Official Documents
   vat_invoice:
     type: "增值税发票"

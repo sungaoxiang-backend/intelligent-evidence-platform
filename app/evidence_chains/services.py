@@ -100,12 +100,12 @@ class EvidenceChainService:
         return config_manager.get_evidence_chains_by_case_type(case_type_str)
     
     def _check_evidence_chain_status(
-        self, 
-        chain_config: Dict[str, Any], 
-        evidences: List[Evidence], 
+        self,
+        chain_config: Dict[str, Any],
+        evidences: List[Evidence],
         association_features: List[AssociationEvidenceFeature]
     ) -> EvidenceChain:
-        """检查单个证据链的状态"""
+        """检查单个证据链的状态，支持"或"关系"""
         chain_id = chain_config.get("chain_id")
         if not chain_id:
             raise ValueError("证据链配置缺少chain_id")
@@ -115,29 +115,70 @@ class EvidenceChainService:
         requirements = []
         satisfied_count = 0
         
+        # 处理"或"关系分组
+        or_groups = self._process_or_relationships(chain_config)
+        
         # 统计核心特征相关的数据
         core_requirements_count = 0  # 有核心特征要求的证据类型数量
         core_requirements_satisfied = 0  # 核心特征完备的证据类型数量
         
-        # 检查每个证据要求
+        # 处理"或"关系组，合并证据类型要求
+        requirements = []
+        satisfied_count = 0
+        core_requirements_count = 0
+        core_requirements_satisfied = 0
+        
+        # 第一遍：收集所有"或"关系组
+        or_groups_processed = set()
+        
+        # 处理"或"关系组，合并证据类型要求
+        requirements = []
+        satisfied_count = 0
+        core_requirements_count = 0
+        core_requirements_satisfied = 0
+        
+        # 第一遍：收集所有"或"关系组
+        or_groups_processed = set()
+        
         for evidence_type_config in required_evidence_types:
-            requirement = self._check_evidence_requirement_status(
-                evidence_type_config, evidences, association_features
-            )
-            requirements.append(requirement)
+            or_group = evidence_type_config.get("or_group")
             
-            if requirement.status == EvidenceRequirementStatus.SATISFIED:
-                satisfied_count += 1
-            
-            # 统计有核心特征要求的证据类型
-            # 基于配置中的 core_evidence_slot 来判断，而不是基于实际证据中的 core_slots_count
-            core_slots_config = evidence_type_config.get("core_evidence_slot", [])
-            # 如果配置中有核心槽位定义，则计入进度计算
-            if core_slots_config and len(core_slots_config) > 0:
+            if or_group and or_group not in or_groups_processed:
+                # 处理"或"关系组，合并为一个要求
+                or_group_processed = self._process_or_group_requirement(
+                    or_group, 
+                    [cfg for cfg in required_evidence_types if cfg.get("or_group") == or_group],
+                    evidences, 
+                    association_features
+                )
+                requirements.append(or_group_processed)
+                
+                # 统计
+                if or_group_processed.status == EvidenceRequirementStatus.SATISFIED:
+                    satisfied_count += 1
+                
                 core_requirements_count += 1
-                # 只有当该证据类型的所有核心特征都完成时，才算"核心特征完备"
-                if requirement.core_completion_percentage == 100.0:
+                # 对于"或"关系组，基于状态而不是完成度百分比
+                if or_group_processed.status == EvidenceRequirementStatus.SATISFIED:
                     core_requirements_satisfied += 1
+                
+                or_groups_processed.add(or_group)
+                
+            elif not or_group:
+                # 普通证据类型
+                requirement = self._check_evidence_requirement_status(
+                    evidence_type_config, evidences, association_features
+                )
+                requirements.append(requirement)
+                
+                if requirement.status == EvidenceRequirementStatus.SATISFIED:
+                    satisfied_count += 1
+                
+                core_slots_config = evidence_type_config.get("core_evidence_slot", [])
+                if core_slots_config and len(core_slots_config) > 0:
+                    core_requirements_count += 1
+                    if requirement.core_completion_percentage == 100.0:
+                        core_requirements_satisfied += 1
         
         # 计算完成度
         total_count = len(requirements)
@@ -189,6 +230,27 @@ class EvidenceChainService:
             core_requirements_satisfied=core_requirements_satisfied,
             requirements=requirements
         )
+    
+    def _process_or_relationships(self, chain_config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """处理"或"关系分组，合并槽位并判断满足状态"""
+        or_groups = {}
+        
+        # 第一遍：收集所有"或"关系组
+        for evidence_type_config in chain_config.get("required_evidence_types", []):
+            or_group = evidence_type_config.get("or_group")
+            if or_group:
+                if or_group not in or_groups:
+                    or_groups[or_group] = {
+                        "evidence_types": [],
+                        "core_slots": set(),  # 合并后的核心槽位
+                        "satisfied": False
+                    }
+                or_groups[or_group]["evidence_types"].append(evidence_type_config["evidence_type"])
+                # 合并核心槽位
+                core_slots = evidence_type_config.get("core_evidence_slot", [])
+                or_groups[or_group]["core_slots"].update(core_slots)
+        
+        return or_groups
     
     def _check_evidence_requirement_status(
         self,
@@ -305,11 +367,17 @@ class EvidenceChainService:
                     )
         
         # 构建槽位详情（按核心/非核心排序）
+        # 核心特征：在 evidence_chains.yaml 的 core_evidence_slot 中定义的特征
+        # 补充特征：不在 core_evidence_slot 中，但在 evidence_types.yaml 中定义的特征
+        
+        # 检查是否是"或"关系的一部分，如果是，需要特殊处理槽位合并
+        or_group = evidence_type_config.get("or_group")
         core_slot_details = []
         non_core_slot_details = []
         
         for slot in all_slots:
             is_satisfied, source_type, source_id, confidence = slot_satisfaction.get(slot, (False, None, None, None))
+            # 判断是否是核心特征：基于 evidence_chains.yaml 配置，不是 slot_required
             is_core = slot in core_slots
             
             # 获取校对信息
@@ -356,6 +424,10 @@ class EvidenceChainService:
         slot_details = core_slot_details + non_core_slot_details
         
         # 计算核心特征和补充特征的完成情况
+        # 注意：这里的"核心"和"补充"是基于 evidence_chains.yaml 中的 core_evidence_slot 配置
+        # 与 evidence_types.yaml 中的 slot_required 是不同的概念：
+        # - slot_required: 特征提取时是否必须
+        # - core_evidence_slot: 在证据链中是否为核心特征
         core_slots_count = len(core_slot_details)
         core_slots_satisfied = sum(1 for slot in core_slot_details if slot.is_satisfied)
         supplementary_slots_count = len(non_core_slot_details)
@@ -450,6 +522,115 @@ class EvidenceChainService:
         # 如果没有映射关系，使用严格的包含匹配（避免跨类型污染）
         # 只有当required_type是evidence_category的子字符串时才匹配
         return required_type_lower in evidence_category
+    
+    def _process_or_group_requirement(
+        self,
+        or_group_name: str,
+        evidence_type_configs: List[Dict[str, Any]],
+        evidences: List[Evidence],
+        association_features: List[AssociationEvidenceFeature]
+    ) -> EvidenceTypeRequirement:
+        """处理"或"关系组，合并多个证据类型为一个要求"""
+        
+        # 合并所有核心槽位
+        all_core_slots = set()
+        for config in evidence_type_configs:
+            all_core_slots.update(config.get("core_evidence_slot", []))
+        
+        # 检查每个证据类型的状态
+        individual_requirements = []
+        for config in evidence_type_configs:
+            req = self._check_evidence_requirement_status(
+                config, evidences, association_features
+            )
+            individual_requirements.append(req)
+        
+        # 判断整个"或"关系组是否满足（至少有一个满足）
+        group_satisfied = any(req.status == EvidenceRequirementStatus.SATISFIED for req in individual_requirements)
+        
+        # 调试信息
+        print(f"DEBUG: 转账记录组状态判断:")
+        for req in individual_requirements:
+            print(f"  - {req.evidence_type}: {req.status}")
+        print(f"  - 组满足状态: {group_satisfied}")
+        
+        # 创建组级别的槽位，保持分类的清晰性
+        group_slots = []
+        core_slots_satisfied = 0
+        supplementary_slots_satisfied = 0
+        
+        # 为每个证据类型创建子槽位，保持分类信息
+        for i, req in enumerate(individual_requirements):
+            evidence_type = req.evidence_type
+            for slot in req.slots:
+                # 创建组级别的槽位，包含分类信息
+                group_slot = {
+                    "slot_name": f"{evidence_type}: {slot.slot_name}",
+                    "is_satisfied": slot.is_satisfied,
+                    "is_core": slot.is_core,
+                    "source_type": slot.source_type,
+                    "source_id": slot.source_id,
+                    "confidence": slot.confidence,
+                    "slot_proofread_at": slot.slot_proofread_at,
+                    "slot_is_consistent": slot.slot_is_consistent,
+                    "slot_expected_value": slot.slot_expected_value,
+                    "slot_proofread_reasoning": slot.slot_proofread_reasoning,
+                    "evidence_type": evidence_type,  # 保留原始证据类型信息
+                    "original_slot_name": slot.slot_name  # 保留原始槽位名称
+                }
+                group_slots.append(group_slot)
+                
+                # 统计满足的槽位
+                if slot.is_core:
+                    if slot.is_satisfied:
+                        core_slots_satisfied += 1
+                else:
+                    if slot.is_satisfied:
+                        supplementary_slots_satisfied += 1
+        
+        # 计算完成度
+        core_slots_count = len([slot for slot in group_slots if slot["is_core"]])
+        supplementary_slots_count = len([slot for slot in group_slots if not slot["is_core"]])
+        
+        core_completion_percentage = (core_slots_satisfied / core_slots_count * 100) if core_slots_count > 0 else 100.0
+        supplementary_completion_percentage = (supplementary_slots_satisfied / supplementary_slots_count * 100) if supplementary_slots_count > 0 else 100.0
+        
+        # 确定状态
+        if group_satisfied:
+            status = EvidenceRequirementStatus.SATISFIED
+        elif any(req.status == EvidenceRequirementStatus.PARTIAL for req in individual_requirements):
+            status = EvidenceRequirementStatus.PARTIAL
+        else:
+            status = EvidenceRequirementStatus.MISSING
+        
+        return EvidenceTypeRequirement(
+            evidence_type=f"{or_group_name}组",  # 显示为"转账记录组"
+            status=status,
+            slots=group_slots,
+            core_slots_count=core_slots_count,
+            core_slots_satisfied=core_slots_satisfied,
+            supplementary_slots_count=supplementary_slots_count,
+            supplementary_slots_satisfied=supplementary_slots_satisfied,
+            core_completion_percentage=core_completion_percentage,
+            supplementary_completion_percentage=supplementary_completion_percentage
+        )
+    
+    def _get_slot_proofread_info(self, best_source: Dict[str, Any], slot_name: str) -> tuple:
+        """获取槽位的校对信息"""
+        slot_proofread_at = None
+        slot_is_consistent = None
+        slot_expected_value = None
+        slot_proofread_reasoning = None
+        
+        if best_source and slot_name in best_source["slot_data"]:
+            slot_info = best_source["slot_data"][slot_name]
+            feature_data = slot_info.get("feature_data", {})
+            slot_proofread_at = feature_data.get("slot_proofread_at")
+            slot_is_consistent = feature_data.get("slot_is_consistent")
+            slot_expected_value = feature_data.get("slot_expected_value")
+            slot_proofread_reasoning = feature_data.get("slot_proofread_reasoning")
+        
+        return slot_proofread_at, slot_is_consistent, slot_expected_value, slot_proofread_reasoning
     
     def _is_association_feature_matching_type(
         self, 

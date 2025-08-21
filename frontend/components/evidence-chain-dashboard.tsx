@@ -341,17 +341,17 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
           <div className="space-y-3">
             {/* 已完成分类 - 绿色标签 */}
             {chain.requirements
-              .filter(req => req.core_slots_count > 0 && req.core_completion_percentage === 100)
+              .filter(req => req.core_slots_count > 0 && (req.core_completion_percentage === 100 || req.status === "satisfied"))
               .length > 0 && (
               <div>
                 <div className="text-sm font-medium text-green-700 mb-2">
                   已完成 ({chain.requirements
-                    .filter(req => req.core_slots_count > 0 && req.core_completion_percentage === 100)
+                    .filter(req => req.core_slots_count > 0 && (req.core_completion_percentage === 100 || req.status === "satisfied"))
                     .length} 个)
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {chain.requirements
-                    .filter(req => req.core_slots_count > 0 && req.core_completion_percentage === 100)
+                    .filter(req => req.core_slots_count > 0 && (req.core_completion_percentage === 100 || req.status === "satisfied"))
                     .map(req => (
                       <span
                         key={req.evidence_type}
@@ -388,7 +388,7 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                     {/* 简洁的证据列表 */}
                     <div className="space-y-2 mb-3">
                       {chain.requirements
-                        .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
+                        .filter(req => req.core_slots_count > 0 && req.status !== "satisfied")
                         .map(req => {
                           const missingCount = req.core_slots_count - req.core_slots_satisfied
                           
@@ -602,6 +602,81 @@ interface EvidenceRequirementCardProps {
 }
 
 function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggle }: EvidenceRequirementCardProps) {
+  // 检测是否是组类型（通过evidence_type是否包含"组"字来判断）
+  const isGroupType = requirement.evidence_type.includes('组')
+  
+  // 补充特征展开状态管理
+  const [supplementaryExpanded, setSupplementaryExpanded] = useState(false)
+  
+  // 如果是组类型，解析子分类
+  const getSubCategories = () => {
+    if (!isGroupType) return []
+    
+    // 通过slots的slot_name来识别子分类
+    const subCategoryMap = new Map<string, any[]>()
+    
+    requirement.slots.forEach(slot => {
+      const slotData = slot as any
+      const slotName = slotData.slot_name
+      
+      // 解析子分类名称（如"微信转账记录:转账金额" -> "微信转账记录"）
+      const colonIndex = slotName.indexOf(':')
+      if (colonIndex > 0) {
+        const subCategoryName = slotName.substring(0, colonIndex)
+        if (!subCategoryMap.has(subCategoryName)) {
+          subCategoryMap.set(subCategoryName, [])
+        }
+        subCategoryMap.get(subCategoryName)!.push(slot)
+      }
+    })
+    
+    return Array.from(subCategoryMap.entries()).map(([name, slots]) => ({
+      name,
+      slots,
+      // 计算子分类的完成度
+      core_slots_count: slots.filter((s: any) => s.is_core).length,
+      core_slots_satisfied: slots.filter((s: any) => s.is_core && s.is_satisfied).length,
+      supplementary_slots_count: slots.filter((s: any) => !s.is_core).length,
+      supplementary_slots_satisfied: slots.filter((s: any) => !s.is_core && s.is_satisfied).length,
+      status: slots.every((s: any) => s.is_satisfied) ? "satisfied" : 
+              slots.some((s: any) => s.is_satisfied) ? "partial" : "missing"
+    }))
+  }
+
+  const subCategories = getSubCategories()
+
+  // 优化：组完成度计算逻辑
+  const getGroupCompletion = () => {
+    if (!isGroupType) return requirement.core_completion_percentage
+    
+    // 组内是否有分类完成？
+    const hasCompletedCategory = subCategories.some(sub => 
+      sub.core_slots_count > 0 && sub.core_slots_satisfied === sub.core_slots_count
+    )
+    
+    // 如果有分类完成，组就是100%完成
+    if (hasCompletedCategory) return 100
+    
+    // 否则按实际完成度计算
+    return requirement.core_completion_percentage
+  }
+
+  // 优化：组状态计算
+  const getGroupStatus = () => {
+    if (!isGroupType) return requirement.status
+    
+    const hasCompletedCategory = subCategories.some(sub => 
+      sub.core_slots_count > 0 && sub.core_slots_satisfied === sub.core_slots_count
+    )
+    
+    if (hasCompletedCategory) return "satisfied"
+    if (requirement.core_completion_percentage > 0) return "partial"
+    return "missing"
+  }
+
+  const groupCompletion = getGroupCompletion()
+  const groupStatus = getGroupStatus()
+
   // 调试信息：显示当前展开状态
   console.log(`证据类型 ${requirement.evidence_type} 展开状态:`, isExpanded)
 
@@ -647,12 +722,26 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
         className="flex items-start gap-3 cursor-pointer"
         onClick={onToggle}
       >
-        {getStatusIcon(requirement.status)}
+        {getStatusIcon(isGroupType ? groupStatus : requirement.status)}
         
         <div className="flex-1">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-2">
               <h4 className="font-medium text-sm">{requirement.evidence_type}</h4>
+              
+              {/* 组类型标识 */}
+              {isGroupType && (
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <span className="text-xs text-purple-600 font-medium">组</span>
+                  {/* 组完成状态标识 */}
+                  {groupStatus === "satisfied" && (
+                    <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                      ✅ 已完成
+                    </span>
+                  )}
+                </div>
+              )}
               
               {/* 核心特征标识 - 简化样式 */}
               {requirement.core_slots_count > 0 ? (
@@ -690,26 +779,26 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
             </div>
           </div>
           
-          {/* 简化的进度展示 - 只统计核心特征 */}
+          {/* 简化的进度展示 - 优化组完成度显示 */}
           <div className="mt-2">
             <div className="flex items-center gap-4">
-              {/* 核心特征进度条 - 只基于核心特征计算 */}
+              {/* 进度条 - 组类型使用优化后的完成度 */}
               <div className="flex-1">
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                   <div 
                     className={`h-1.5 rounded-full transition-all duration-300 ${
-                      requirement.core_completion_percentage === 100 ? 'bg-green-500' : 
-                      requirement.core_completion_percentage > 50 ? 'bg-yellow-500' : 'bg-red-500'
+                      (isGroupType ? groupCompletion : requirement.core_completion_percentage) === 100 ? 'bg-green-500' : 
+                      (isGroupType ? groupCompletion : requirement.core_completion_percentage) > 50 ? 'bg-yellow-500' : 'bg-red-500'
                     }`}
-                    style={{ width: `${requirement.core_completion_percentage}%` }}
+                    style={{ width: `${isGroupType ? groupCompletion : requirement.core_completion_percentage}%` }}
                   ></div>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {Math.round(requirement.core_completion_percentage)}% 完成
+                  {Math.round(isGroupType ? groupCompletion : requirement.core_completion_percentage)}% 完成
                 </div>
               </div>
               
-              {/* 统计信息 - 突出核心特征 */}
+              {/* 统计信息 - 优化组统计显示 */}
               <div className="text-xs text-gray-600 space-y-1 min-w-0">
                 {/* 核心特征信息 - 主要统计指标 */}
                 {requirement.core_slots_count > 0 && (
@@ -740,55 +829,233 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
       {/* 展开的详细内容 - 添加展开状态指示 */}
       {isExpanded && (
         <div className="mt-3 pt-3 border-t border-gray-200">
-          {/* 核心槽位 - 只显示有核心特征的分类 */}
-          {requirement.core_slots_count > 0 && (
-            <div className="mb-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-blue-600 mb-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>核心特征 ({requirement.core_slots_satisfied}/{requirement.core_slots_count})</span>
+          {isGroupType ? (
+            // 组类型：展示子分类卡片
+            <div className="space-y-4">
+              <div className="text-xs font-medium text-purple-600 mb-3 flex items-center gap-2">
+                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                <span>子分类 ({subCategories.length} 个)</span>
+                {/* 组完成说明 */}
+                {groupStatus === "satisfied" && (
+                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                    💡 组内已有分类完成，该组视为完成
+                  </span>
+                )}
               </div>
-              <div className="space-y-1">
-                {requirement.slots.filter(slot => slot.is_core).map((slot, slotIndex) => (
-                  <SlotItem
-                    key={slotIndex}
-                    slot={slot}
-                    requirement={requirement}
-                    onSlotClick={onSlotClick}
-                    isCore={true}
-                    showSourceButton={false}  // 不在特征级别显示按钮
-                  />
-                ))}
-              </div>
+              
+              {subCategories.map((subCategory, index) => {
+                const isSubCategoryCompleted = subCategory.core_slots_count > 0 && 
+                  subCategory.core_slots_satisfied === subCategory.core_slots_count
+                
+                return (
+                  <div key={index} className={`border rounded-lg p-3 transition-all duration-300 ${
+                    isSubCategoryCompleted 
+                      ? 'bg-green-50 border-green-200 shadow-sm' // 完成的分类：绿色主题，突出显示
+                      : 'bg-gray-50 border-gray-200 opacity-75' // 未完成的分类：灰色主题，弱化显示
+                  }`}>
+                    {/* 子分类标题 */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <h5 className={`font-medium text-sm ${
+                        isSubCategoryCompleted ? 'text-green-800' : 'text-gray-600'
+                      }`}>
+                        {subCategory.name}
+                      </h5>
+                      {getStatusIcon(subCategory.status)}
+                      {/* 完成状态标识 */}
+                      {isSubCategoryCompleted && (
+                        <span className="text-xs text-green-600 font-medium bg-green-100 px-2 py-0.5 rounded-full border border-green-200">
+                          ✅ 已完成
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* 子分类进度 */}
+                    <div className="mb-3">
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <div className={`w-full rounded-full h-1.5 ${
+                            isSubCategoryCompleted ? 'bg-green-200' : 'bg-gray-200'
+                          }`}>
+                            <div 
+                              className={`h-1.5 rounded-full transition-all duration-300 ${
+                                isSubCategoryCompleted ? 'bg-green-500' : 
+                                subCategory.core_slots_count > 0 
+                                  ? (subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100 > 50 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-red-500'
+                                  : 'bg-gray-400'
+                              }`}
+                              style={{ 
+                                width: `${subCategory.core_slots_count > 0 
+                                  ? (subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100 
+                                  : 0}%` 
+                              }}
+                            ></div>
+                          </div>
+                          <div className={`text-xs mt-1 ${
+                            isSubCategoryCompleted ? 'text-green-600' : 'text-gray-500'
+                          }`}>
+                            {subCategory.core_slots_count > 0 
+                              ? Math.round((subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100)
+                              : 0}% 完成
+                          </div>
+                        </div>
+                        
+                        <div className={`text-xs space-y-1 ${
+                          isSubCategoryCompleted ? 'text-green-600' : 'text-gray-500'
+                        }`}>
+                          {subCategory.core_slots_count > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">核心:</span>
+                              <span>{subCategory.core_slots_satisfied}/{subCategory.core_slots_count}</span>
+                            </div>
+                          )}
+                          {subCategory.supplementary_slots_count > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-400">补充:</span>
+                              <span className="text-gray-500">{subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 子分类特征列表 */}
+                    <div className="space-y-2">
+                      {/* 核心特征 */}
+                      {subCategory.core_slots_count > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-blue-600 mb-2 flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span>核心特征 ({subCategory.core_slots_satisfied}/{subCategory.core_slots_count})</span>
+                          </div>
+                          <div className="space-y-1">
+                            {subCategory.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
+                              <SlotItem
+                                key={slotIndex}
+                                slot={slot}
+                                requirement={requirement}
+                                onSlotClick={onSlotClick}
+                                isCore={true}
+                                showSourceButton={false}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 补充特征 - 默认折叠 */}
+                      {subCategory.supplementary_slots_count > 0 && (
+                        <div>
+                          <div 
+                            className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2 cursor-pointer hover:text-gray-700"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSupplementaryExpanded(!supplementaryExpanded)
+                            }}
+                          >
+                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                            <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
+                            <svg 
+                              className={`w-3 h-3 transform transition-transform ${supplementaryExpanded ? 'rotate-90' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                          {supplementaryExpanded && (
+                            <div className="space-y-1">
+                              {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
+                                <SlotItem
+                                  key={slotIndex}
+                                  slot={slot}
+                                  requirement={requirement}
+                                  onSlotClick={onSlotClick}
+                                  isCore={false}
+                                  showSourceButton={false}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          )}
-          
-          {/* 补充特征 - 只显示有补充特征的分类 */}
-          {requirement.supplementary_slots_count > 0 && (
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-2">
-                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                <span>补充特征 ({requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count})</span>
-              </div>
-              <div className="space-y-1">
-                {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
-                  <SlotItem
-                    key={slotIndex}
-                    slot={slot}
-                    requirement={requirement}
-                    onSlotClick={onSlotClick}
-                    isCore={false}
-                    showSourceButton={false}  // 不在特征级别显示按钮
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* 对于没有核心特征的分类，显示说明 */}
-          {requirement.core_slots_count === 0 && (
-            <div className="text-xs text-gray-500 italic">
-              此分类无需核心特征，仅作为辅助信息收集
-            </div>
+          ) : (
+            // 非组类型：原有的展示逻辑
+            <>
+              {/* 核心槽位 - 只显示有核心特征的分类 */}
+              {requirement.core_slots_count > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-blue-600 mb-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span>核心特征 ({requirement.core_slots_satisfied}/{requirement.core_slots_count})</span>
+                  </div>
+                  <div className="space-y-1">
+                    {requirement.slots.filter(slot => slot.is_core).map((slot, slotIndex) => (
+                      <SlotItem
+                        key={slotIndex}
+                        slot={slot}
+                        requirement={requirement}
+                        onSlotClick={onSlotClick}
+                        isCore={true}
+                        showSourceButton={false}  // 不在特征级别显示按钮
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 补充特征 - 默认折叠 */}
+              {requirement.supplementary_slots_count > 0 && (
+                <div>
+                  <div 
+                    className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2 cursor-pointer hover:text-gray-700"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSupplementaryExpanded(!supplementaryExpanded)
+                    }}
+                  >
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span>补充特征 ({requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count})</span>
+                    <svg 
+                      className={`w-3 h-3 transform transition-transform ${supplementaryExpanded ? 'rotate-90' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  {supplementaryExpanded && (
+                    <div className="space-y-1">
+                      {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
+                        <SlotItem
+                          key={slotIndex}
+                          slot={slot}
+                          requirement={requirement}
+                          onSlotClick={onSlotClick}
+                          isCore={false}
+                          showSourceButton={false}  // 不在特征级别显示按钮
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* 对于没有核心特征的分类，显示说明 */}
+              {requirement.core_slots_count === 0 && (
+                <div className="text-xs text-gray-500 italic">
+                  此分类无需核心特征，仅作为辅助信息收集
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -808,11 +1075,9 @@ interface SlotItemProps {
 function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = true }: SlotItemProps) {
   const slotData = slot as any; // 类型断言以访问校对字段
   
-
-  
   return (
-    <div className={`space-y-1 ${isCore ? 'text-gray-900' : 'text-gray-600'}`}>
-      {/* 主要槽位信息 */}
+    <div className={`flex items-center justify-between ${isCore ? 'text-gray-900' : 'text-gray-600'}`}>
+      {/* 左侧：特征信息 */}
       <div className="flex items-center gap-2 text-xs">
         {/* 统一的状态icon */}
         {slotData.is_satisfied ? (
@@ -842,11 +1107,20 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
          )}
       </div>
       
-      {/* 校对信息显示 - 优化格式 */}
+      {/* 右侧：校对信息提示 */}
       {slotData.slot_proofread_at && !slotData.slot_is_consistent && slotData.slot_expected_value && (
-        <span className="ml-2 text-xs text-gray-500">
-          案件校对失败: 期待值{slotData.slot_expected_value}
-        </span>
+        <div className="flex items-center gap-1">
+          {/* Tips标识 */}
+          <div className="w-4 h-4 bg-yellow-100 rounded-full flex items-center justify-center">
+            <svg className="w-2.5 h-2.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+          </div>
+          {/* 校对失败信息 */}
+          <span className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
+            校对失败: 期待值{slotData.slot_expected_value}
+          </span>
+        </div>
       )}
     </div>
   )
