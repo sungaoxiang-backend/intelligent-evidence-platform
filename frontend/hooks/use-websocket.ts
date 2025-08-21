@@ -139,19 +139,24 @@ export function useWebSocket() {
     }
   }, [disconnect])
 
+  const clearProgress = useCallback(() => {
+    setProgress(null)
+  }, [])
+
   return {
     isConnected,
     progress,
     error,
     connect,
     disconnect,
-    sendMessage
+    sendMessage,
+    clearProgress
   }
 }
 
 // 专门用于auto-process的hook
 export function useAutoProcessWebSocket() {
-  const { isConnected, progress, error, connect, disconnect, sendMessage } = useWebSocket()
+  const { isConnected, progress, error, connect, disconnect, sendMessage, clearProgress } = useWebSocket()
   const [isProcessing, setIsProcessing] = useState(false)
   const onCompleteRef = useRef<(() => void) | null>(null)
   
@@ -223,6 +228,7 @@ export function useAutoProcessWebSocket() {
     error,
     isProcessing,
     startAutoProcess,
-    disconnect
+    disconnect,
+    clearProgress
   }
 } 

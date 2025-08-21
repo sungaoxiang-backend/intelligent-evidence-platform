@@ -1078,7 +1078,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   // WebSocket进度管理
-  const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect } = useAutoProcessWebSocket()
+  const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect, clearProgress } = useAutoProcessWebSocket()
 
   // 获取案件信息
   const { data: caseData } = useSWR(
@@ -1178,7 +1178,12 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       setSelectedIds([])
       setIsCompleted(true)
       mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-      setTimeout(() => setIsCompleted(false), 3000)
+      // 3秒后重置完成状态和清空wsProgress
+      setTimeout(() => {
+        setIsCompleted(false)
+        // 彻底清空wsProgress状态，避免进度状态一直显示
+        clearProgress()
+      }, 3000)
     } else if (wsProgress?.status === 'error') {
       toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
       setSelectedIds([])
@@ -1188,7 +1193,17 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       setSelectedIds([])
       setIsCompleted(false)
     }
-  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, mutate]);
+  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, mutate, disconnect]);
+
+  // 当选择清空时，重置相关状态
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      // 如果没有选择，重置完成状态（除非正在处理中）
+      if (!isProcessing) {
+        setIsCompleted(false)
+      }
+    }
+  }, [selectedIds.length, isProcessing]);
 
   // 状态切换动画
   useEffect(() => {
@@ -1207,6 +1222,9 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   useEffect(() => {
     return () => {
       disconnect()
+      // 清理所有状态
+      setIsCompleted(false)
+      setSelectedIds([])
     }
   }, [disconnect])
 
@@ -1366,17 +1384,18 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">证据分析</h1>
-          <p className="text-muted-foreground mt-2">智能证据处理与分类</p>
+          <h1 className="text-3xl font-bold text-foreground">独立证据分析</h1>
+          <p className="text-muted-foreground mt-2">批量进行证据的分类和特征分析，特殊分类"微信聊天记录"需要进一步的联合特征分析</p>
         </div>
         <div className="flex gap-3 items-center ml-auto">
-          <Button 
+          {/* 审核证据按钮已注释 */}
+          {/* <Button 
             size="lg" 
             className="bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-lg" 
             onClick={() => setIsReviewDialogOpen(true)}
           >
             审核证据
-          </Button>
+          </Button> */}
           <Button size="lg" className="bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg" onClick={() => setIsUploadDialogOpen(true)}>
             上传证据
           </Button>
@@ -1542,20 +1561,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         {/* 标题和说明 */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">案件和证据概览</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              显示当前案件基本信息和独立证据分析处理流程状态统计
-            </p>
-          </div>
-          <div className="flex items-center space-x-6">
-            <div className="text-center">
-              <div className="text-xs text-muted-foreground">证据特征完整率</div>
-              <div className="text-lg font-bold text-orange-600 dark:text-orange-400">{featureCompleteRate}%</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xs text-muted-foreground">证据审核完备率</div>
-              <div className="text-lg font-bold text-green-600 dark:text-green-400">{evidenceCompleteRate}%</div>
-            </div>
+            <h3 className="text-lg font-semibold text-foreground">案件概览</h3>
           </div>
         </div>
         
@@ -1615,7 +1621,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         )}
         
         {/* 证据处理状态统计 */}
-        <div>
+        {/* <div>
           <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
             <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
             证据处理状态统计
@@ -1652,113 +1658,117 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
           </div>
           
 
-        </div>
+        </div> */}
       </div>
 
-      {/* 智能分析和批量删除按钮 */}
-      {(selectedIds.length > 0 || isProcessing || isCompleted) && (
-        <div className="mb-2 flex items-center gap-3">
-          {/* 批量删除按钮 */}
-          <Button
-            variant="destructive"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isProcessing}
-          >
-            批量删除
-          </Button>
+            {/* 智能分析和批量删除按钮 */}
+      <div className="mb-2 flex items-center gap-3">
+        {/* 批量删除按钮 */}
+        <Button
+          variant="destructive"
+          onClick={() => setIsDeleteDialogOpen(true)}
+          disabled={isProcessing || selectedIds.length === 0}
+        >
+          批量删除
+        </Button>
 
-          {/* 标准宽度的智能分析按钮 */}
-          <Button 
-            onClick={handleBatchAnalysis} 
-            disabled={isProcessing && !isCompleted} 
-            className={`relative overflow-hidden transition-all duration-300 ${
-              isCompleted
-                ? 'bg-green-500 text-white shadow-md' 
-                : isProcessing 
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-            }`}
-          >
-            <span className="relative z-10 flex items-center gap-2">
-              {isCompleted ? (
-                <>
-                  <span>100%</span>
-                  <span>✓</span>
-                  <span className="animate-sparkle">🎆</span>
-                </>
-              ) : isProcessing ? (
-                "分析中..."
-              ) : (
-                "智能分析"
-              )}
-            </span>
-            
-            {/* 水波动画进度条 */}
-            {(isProcessing || isCompleted) && (wsProgress || isCompleted) && (
-              <div className="absolute inset-0 overflow-hidden">
-                <div 
-                  className="absolute inset-0 bg-gradient-to-r from-white/20 via-white/40 to-white/20 animate-shimmer"
-                  style={{ 
-                    width: `${isCompleted ? 100 : (wsProgress?.progress || 0)}%`,
-                    transition: 'width 0.8s ease-out'
-                  }}
-                />
-                {/* 水波效果 */}
-                <div className="absolute inset-0">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" 
-                       style={{ animationDelay: '0s' }} />
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
-                       style={{ animationDelay: '0.5s' }} />
-                </div>
-              </div>
-            )}
-          </Button>
-          
-          {/* 状态文本 */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {selectedIds.length > 0 ? (
+        {/* 标准宽度的智能分析按钮 */}
+        <Button 
+          onClick={handleBatchAnalysis} 
+          disabled={isProcessing && !isCompleted || selectedIds.length === 0} 
+          className={`relative overflow-hidden transition-all duration-300 ${
+            isCompleted
+              ? 'bg-green-500 text-white shadow-md' 
+              : isProcessing 
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
+              : selectedIds.length === 0
+              ? 'bg-gray-400 text-white cursor-not-allowed'
+              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+          }`}
+        >
+          <span className="relative z-10 flex items-center gap-2">
+            {isCompleted ? (
               <>
-                <span>已选 {selectedIds.length} 项</span>
-                <span>•</span>
+                <span>100%</span>
+                <span>✓</span>
+                <span className="animate-sparkle">🎆</span>
               </>
-            ) : null}
-            <span className="flex items-center gap-1">
-              <Brain className="h-3 w-3" />
-              {isCompleted ? '分析完成' : isProcessing ? '自动分类 + 特征提取' : '自动分类 + 特征提取'}
-            </span>
-          </div>
+            ) : isProcessing ? (
+              "分析中..."
+            ) : selectedIds.length === 0 ? (
+              "请选择证据"
+            ) : (
+              "智能分析"
+            )}
+          </span>
           
-          {/* 进度状态显示 */}
-          {(wsProgress || isCompleted) && !isCompleted && (
-            <div className="flex items-center gap-2">
-              <div className="bg-muted/30 rounded-lg px-3 py-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-                  <div className="min-w-0">
-                    <div className={`text-xs font-medium text-foreground status-text ${statusAnimation ? 'flip-up' : ''}`}>
-                      {wsProgress?.status === 'classifying' ? '证据分类中' :
-                       wsProgress?.status === 'classified' ? '证据分类完成' :
-                       wsProgress?.status === 'extracting' ? '证据特征分析中' :
-                       wsProgress?.status === 'ocr_processing' ? 'OCR处理中' :
-                       wsProgress?.status === 'ocr_success' ? 'OCR处理成功' :
-                       wsProgress?.status === 'ocr_error' ? 'OCR处理失败' :
-                       wsProgress?.status === 'llm_processing' ? 'LLM处理中' :
-                       wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
-                       wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
-                      <span className="animate-bounce-dots">...</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* 进度百分比 */}
-              <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                {wsProgress?.progress ? Math.round(wsProgress.progress) : 0}%
+          {/* 水波动画进度条 */}
+          {(isProcessing || isCompleted) && wsProgress && (
+            <div className="absolute inset-0 overflow-hidden">
+              <div 
+                className="absolute inset-0 bg-gradient-to-r from-white/20 via-white/40 to-white/20 animate-shimmer"
+                style={{ 
+                  width: `${isCompleted ? 100 : (wsProgress?.progress || 0)}%`,
+                  transition: 'width 0.8s ease-out'
+                }}
+              />
+              {/* 水波效果 */}
+              <div className="absolute inset-0">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" 
+                     style={{ animationDelay: '0s' }} />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
+                     style={{ animationDelay: '0.5s' }} />
               </div>
             </div>
           )}
+        </Button>
+        
+        {/* 状态文本 */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {selectedIds.length > 0 ? (
+            <>
+              <span>已选 {selectedIds.length} 项</span>
+              <span>•</span>
+            </>
+          ) : (
+            <span className="text-orange-600 dark:text-orange-400">未选择证据</span>
+          )}
+          <span className="flex items-center gap-1">
+            <Brain className="h-3 w-3" />
+            {isCompleted ? '分析完成' : isProcessing ? '自动分类 + 特征提取' : '自动分类 + 特征提取'}
+          </span>
         </div>
-      )}
+        
+        {/* 进度状态显示 */}
+        {wsProgress && !isCompleted && (
+          <div className="flex items-center gap-2">
+            <div className="bg-muted/30 rounded-lg px-3 py-1.5">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+                <div className="min-w-0">
+                  <div className={`text-xs font-medium text-foreground status-text ${statusAnimation ? 'flip-up' : ''}`}>
+                    {wsProgress?.status === 'classifying' ? '证据分类中' :
+                     wsProgress?.status === 'classified' ? '证据分类完成' :
+                     wsProgress?.status === 'extracting' ? '证据特征分析中' :
+                     wsProgress?.status === 'ocr_processing' ? 'OCR处理中' :
+                     wsProgress?.status === 'ocr_success' ? 'OCR处理成功' :
+                     wsProgress?.status === 'ocr_error' ? 'OCR处理失败' :
+                     wsProgress?.status === 'llm_processing' ? 'LLM处理中' :
+                     wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
+                     wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
+                    <span className="animate-bounce-dots">...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* 进度百分比 */}
+            <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
+              {wsProgress?.progress ? Math.round(wsProgress.progress) : 0}%
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 删除确认弹窗 */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
