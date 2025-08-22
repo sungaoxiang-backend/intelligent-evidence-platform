@@ -12,10 +12,12 @@ evidence_chains:
           - "欠款金额"
       - evidence_type: "微信个人主页"
       - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
         core_evidence_slot:
           - "付款方真名"
           - "收款方真名"
       - evidence_type: "微信转账页面"
+        or_group: "转账身份"
         core_evidence_slot:
           - "债务人脱敏真名"
       - evidence_type: "身份证"
@@ -45,10 +47,12 @@ evidence_chains:
           - "欠款金额"
       - evidence_type: "微信个人主页"
       - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
         core_evidence_slot:
           - "付款方真名"
           - "收款方真名"
       - evidence_type: "微信转账页面"
+        or_group: "转账身份"
         core_evidence_slot:
           - "债务人脱敏真名"
       - evidence_type: "身份证"

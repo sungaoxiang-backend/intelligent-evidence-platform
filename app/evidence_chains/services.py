@@ -49,6 +49,7 @@ class EvidenceChainService:
         # 获取适用的证据链配置
         applicable_chains = self._get_applicable_chains_for_case(case)
         
+
         # 检查每个证据链的状态
         chains = []
         total_requirements = 0
@@ -131,18 +132,10 @@ class EvidenceChainService:
         # 第一遍：收集所有"或"关系组
         or_groups_processed = set()
         
-        # 处理"或"关系组，合并证据类型要求
-        requirements = []
-        satisfied_count = 0
-        core_requirements_count = 0
-        core_requirements_satisfied = 0
-        
-        # 第一遍：收集所有"或"关系组
-        or_groups_processed = set()
-        
         for evidence_type_config in required_evidence_types:
             or_group = evidence_type_config.get("or_group")
             
+
             if or_group and or_group not in or_groups_processed:
                 # 处理"或"关系组，合并为一个要求
                 or_group_processed = self._process_or_group_requirement(
@@ -555,12 +548,7 @@ class EvidenceChainService:
         # 判断整个"或"关系组是否满足（至少有一个满足）
         group_satisfied = any(req.status == EvidenceRequirementStatus.SATISFIED for req in individual_requirements)
         
-        # 调试信息
-        print(f"DEBUG: {or_group_name}组状态判断:")
-        for req in individual_requirements:
-            print(f"  - {req.evidence_type}: {req.status}")
-        print(f"  - 组满足状态: {group_satisfied}")
-        
+
         # 创建组级别的槽位，保持分类的清晰性
         group_slots = []
         core_slots_satisfied = 0
