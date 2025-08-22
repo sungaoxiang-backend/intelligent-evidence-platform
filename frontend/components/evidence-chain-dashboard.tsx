@@ -314,21 +314,13 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
                 
                 {/* 完成统计 */}
                 <div className="text-sm text-gray-600">
-                  已完成 {activatedCategories}/{totalCategories} 个核心分类
+                  已完成 {activatedCategories}/{totalCategories} 个核心证据
                 </div>
               </div>
             </div>
             
-            {/* 右侧：总体进度和展开按钮 */}
+            {/* 右侧展开按钮 */}
             <div className="flex items-center gap-4">
-              {/* 总体进度 */}
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">
-                  {Math.round(activationProgress)}%
-                </div>
-                <div className="text-xs text-gray-500">总体进度</div>
-              </div>
-              
               {/* 右侧展开按钮 - 垂直排列 */}
               <div className="flex flex-col gap-2">
                 {/* 查看核心证据按钮 */}
@@ -404,91 +396,9 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
             </div>
           </div>
           
-          {/* 已完成分类展示 */}
-          {completedCategories.length > 0 && (
-            <div className="mb-4">
-              <div className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                已完成 ({completedCategories.length} 个)
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {completedCategories.map(req => (
-                  <span
-                    key={req.evidence_type}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-green-100 text-green-800 border border-green-200"
-                  >
-                    {req.evidence_type}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+
           
-          {/* 证据补充建议 */}
-          {chain.requirements
-            .filter(req => req.core_slots_count > 0 && req.core_completion_percentage < 100)
-            .length > 0 && (
-            <div className="mb-4">
-              <div className="text-sm font-medium text-blue-700 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                证据补充建议
-              </div>
-              
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="space-y-2">
-                  {chain.requirements
-                    .filter(req => req.core_slots_count > 0 && req.status !== "satisfied")
-                    .map(req => {
-                      const proofreadingFailures = req.slots
-                        .filter(slot => slot.slot_proofread_at && !slot.slot_is_consistent && slot.slot_expected_value)
-                        .map(slot => ({
-                          name: slot.slot_name,
-                          reasoning: slot.slot_proofread_reasoning || '无校对推理信息'
-                        }))
-                      
-                      const missingFeatures = req.slots
-                        .filter(slot => !slot.is_satisfied && (!slot.slot_proofread_at || slot.slot_is_consistent))
-                        .map(slot => slot.slot_name)
-                      
-                      return (
-                        <div key={req.evidence_type} className="border-l-3 border-blue-300 pl-3">
-                          <div className="font-medium text-blue-900 text-sm mb-1">{req.evidence_type}</div>
-                          
-                          {proofreadingFailures.length > 0 && (
-                            <div className="space-y-1 mb-1">
-                              {proofreadingFailures.map((failure, idx) => (
-                                <div key={idx} className="text-xs text-gray-600 flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
-                                  {failure.name}: 案件校对失败，{failure.reasoning}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {missingFeatures.length > 0 && (
-                            <div className="space-y-1">
-                              {missingFeatures.map((featureName, idx) => (
-                                <div key={idx} className="text-xs text-gray-600 flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
-                                  {featureName}: 特征缺失
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                </div>
-                
-                <div className="mt-3 pt-2 border-t border-blue-100">
-                  <div className="flex items-center gap-2 text-xs text-blue-600 font-medium">
-                    <Star className="w-3 h-3" />
-                    请继续补充相关证据
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+
         </div>
         
         {/* 移除底部操作按钮区域 */}
@@ -660,7 +570,6 @@ interface EvidenceRequirementCardProps {
 
 function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggle }: EvidenceRequirementCardProps) {
   const isOrRelationshipType = requirement.evidence_type.includes(' 或 ')
-  const [supplementaryExpanded, setSupplementaryExpanded] = useState(false)
   
   const getSubCategories = () => {
     if (!isOrRelationshipType) return []
@@ -787,23 +696,7 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
               )}
             </div>
             
-            {/* 进度条 */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      (isOrRelationshipType ? orRelationshipCompletion : requirement.core_completion_percentage) === 100 ? 'bg-green-500' : 
-                      (isOrRelationshipType ? orRelationshipCompletion : requirement.core_completion_percentage) > 50 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${isOrRelationshipType ? orRelationshipCompletion : requirement.core_completion_percentage}%` }}
-                  ></div>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {Math.round(isOrRelationshipType ? orRelationshipCompletion : requirement.core_completion_percentage)}% 完成
-                </div>
-              </div>
-            </div>
+
           </div>
           
           {/* 展开/收起图标 */}
@@ -838,32 +731,7 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
                       {getStatusIcon(subCategory.status)}
                     </div>
                     
-                    <div className="mb-3">
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                        <div 
-                          className={`h-1.5 rounded-full transition-all duration-300 ${
-                            isSubCategoryCompleted ? 'bg-green-500' : 
-                            subCategory.core_slots_count > 0 
-                              ? (subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100 > 50 
-                                ? 'bg-yellow-500' 
-                                : 'bg-red-500'
-                              : 'bg-gray-400'
-                          }`}
-                          style={{ 
-                            width: `${subCategory.core_slots_count > 0 
-                              ? (subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100 
-                              : 0}%` 
-                          }}
-                        ></div>
-                      </div>
-                      <div className={`text-xs mt-1 ${
-                        isSubCategoryCompleted ? 'text-green-600' : 'text-gray-500'
-                      }`}>
-                        {subCategory.core_slots_count > 0 
-                          ? Math.round((subCategory.core_slots_satisfied / subCategory.core_slots_count) * 100)
-                          : 0}% 完成
-                      </div>
-                    </div>
+
                     
                     <div className="space-y-2">
                       {/* 核心特征 */}
@@ -891,31 +759,22 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
                       {/* 补充特征 */}
                       {subCategory.supplementary_slots_count > 0 && (
                         <div>
-                          <div 
-                            className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2 cursor-pointer hover:text-gray-700"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSupplementaryExpanded(!supplementaryExpanded)
-                            }}
-                          >
+                          <div className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2">
                             <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                             <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
-                            {supplementaryExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                           </div>
-                          {supplementaryExpanded && (
-                            <div className="space-y-1">
-                              {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
-                                <SlotItem
-                                  key={slotIndex}
-                                  slot={slot}
-                                  requirement={requirement}
-                                  onSlotClick={onSlotClick}
-                                  isCore={false}
-                                  showSourceButton={false}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          <div className="space-y-1">
+                            {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
+                              <SlotItem
+                                key={slotIndex}
+                                slot={slot}
+                                requirement={requirement}
+                                onSlotClick={onSlotClick}
+                                isCore={false}
+                                showSourceButton={false}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -951,31 +810,22 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
               {/* 补充特征 */}
               {requirement.supplementary_slots_count > 0 && (
                 <div>
-                  <div 
-                    className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2 cursor-pointer hover:text-gray-700"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSupplementaryExpanded(!supplementaryExpanded)
-                    }}
-                  >
+                  <div className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2">
                     <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                    <span>补充特征 ({requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count})</span>
-                    {supplementaryExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <span>补充特征 ({requirement.supplementary_slots_count})</span>
                   </div>
-                  {supplementaryExpanded && (
-                    <div className="space-y-2">
-                      {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
-                        <SlotItem
-                          key={slotIndex}
-                          slot={slot}
-                          requirement={requirement}
-                          onSlotClick={onSlotClick}
-                          isCore={false}
-                          showSourceButton={false}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
+                      <SlotItem
+                        key={slotIndex}
+                        slot={slot}
+                        requirement={requirement}
+                        onSlotClick={onSlotClick}
+                        isCore={false}
+                        showSourceButton={false}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
               

@@ -274,15 +274,19 @@ class EvidenceChainService:
         # 收集所有可能的槽位（只使用配置中定义的槽位，避免数据污染）
         all_slots = set()
         
-        # 只添加配置文件中定义的所有槽位
+        # 只添加配置文件中定义的且slot_required=true的槽位
         for slot_config in config_slots:
             slot_name = slot_config.get("slot_name")
-            if slot_name:
+            slot_required = slot_config.get("slot_required", True)  # 默认为True
+            if slot_name and slot_required:  # 只添加slot_required=true的槽位
                 all_slots.add(slot_name)
         
-        # 添加配置中的核心槽位（如果不在配置槽位中）
+        # 添加配置中的核心槽位（如果不在配置槽位中且slot_required=true）
         for core_slot in core_slots:
-            all_slots.add(core_slot)
+            # 检查核心槽位是否在配置中且slot_required=true
+            core_slot_config = next((slot for slot in config_slots if slot.get("slot_name") == core_slot), None)
+            if core_slot_config and core_slot_config.get("slot_required", True):
+                all_slots.add(core_slot)
         
         # 不再从实际证据和关联证据中收集槽位，只使用配置中定义的
         # 这样可以避免数据污染，确保每个证据类型只包含其配置中定义的槽位
@@ -433,8 +437,10 @@ class EvidenceChainService:
         # 调试：检查完成度计算
         print(f"证据类型 {evidence_type} 完成度: 核心={core_slots_satisfied}/{core_slots_count} ({core_completion_percentage:.1f}%), 补充={supplementary_slots_satisfied}/{supplementary_slots_count} ({supplementary_completion_percentage:.1f}%)")
         
-        # 确定状态（只基于核心槽位）
-        core_satisfied_count = sum(1 for slot in core_slots if slot_satisfaction.get(slot, (False, None, None, None))[0])
+        # 确定状态（只基于核心槽位，且slot_required=true）
+        # 过滤核心槽位，只保留slot_required=true的
+        filtered_core_slots = [slot for slot in core_slots if slot in all_slots]
+        core_satisfied_count = sum(1 for slot in filtered_core_slots if slot_satisfaction.get(slot, (False, None, None, None))[0])
         
         # 判断是否有匹配的证据（用于确定 MISSING 状态）
         has_matching_evidence = any(
@@ -446,7 +452,7 @@ class EvidenceChainService:
         
         if not has_matching_evidence:
             status = EvidenceRequirementStatus.MISSING
-        elif len(core_slots) == 0:  # 没有核心槽位的证据类型（如身份证）
+        elif len(filtered_core_slots) == 0:  # 没有核心槽位的证据类型（如身份证）
             # 对于没有核心槽位的证据类型，检查是否有任何槽位未满足
             all_satisfied = all(slot_satisfaction.get(slot, (False, None, None, None))[0] for slot in all_slots)
             if all_satisfied and len(all_slots) > 0:
@@ -455,7 +461,7 @@ class EvidenceChainService:
                 status = EvidenceRequirementStatus.PARTIAL
             else:
                 status = EvidenceRequirementStatus.MISSING
-        elif core_satisfied_count == len(core_slots):
+        elif core_satisfied_count == len(filtered_core_slots):
             status = EvidenceRequirementStatus.SATISFIED
         else:
             status = EvidenceRequirementStatus.PARTIAL
@@ -532,10 +538,27 @@ class EvidenceChainService:
         4. 在相同校对状态下，选择完成度最高的
         """
         
-        # 合并所有核心槽位
+        # 合并所有核心槽位（只保留slot_required=true的）
         all_core_slots = set()
         for config in evidence_type_configs:
-            all_core_slots.update(config.get("core_evidence_slot", []))
+            core_slots = config.get("core_evidence_slot", [])
+            # 获取该证据类型的配置，过滤slot_required=false的槽位
+            evidence_type = config.get("evidence_type")
+            if evidence_type:
+                try:
+                    from app.core.config_manager import config_manager
+                    evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
+                    if evidence_type_config_full and "extraction_slots" in evidence_type_config_full:
+                        config_slots = evidence_type_config_full["extraction_slots"]
+                        # 只添加slot_required=true的核心槽位
+                        for core_slot in core_slots:
+                            core_slot_config = next((slot for slot in config_slots if slot.get("slot_name") == core_slot), None)
+                            if core_slot_config and core_slot_config.get("slot_required", True):
+                                all_core_slots.add(core_slot)
+                except Exception as e:
+                    # 如果获取配置失败，记录日志但继续执行
+                    print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
+                    # 失败时，为了安全起见，不添加任何槽位
         
         # 检查每个证据类型的状态
         individual_requirements = []
