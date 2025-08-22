@@ -3,6 +3,7 @@
 import { useState, Suspense, useEffect, useRef } from "react"
 import useSWR, { mutate } from "swr"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -97,7 +98,7 @@ const getFeatureColor = (slot: any) => {
     slotValue !== undefined;
   
   // 判断特征是否有效：有值即可
-  let isValid = hasValue;
+  const isValid = hasValue;
   
   if (slotRequired) {
     // required = true
@@ -1076,6 +1077,9 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   const [statusAnimation, setStatusAnimation] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  
+  // 获取URL查询参数
+  const searchParams = useSearchParams()
 
   // WebSocket进度管理
   const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect, clearProgress } = useAutoProcessWebSocket()
@@ -1162,6 +1166,21 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
   // 自动选中第一个证据，但保持当前选中状态
   useEffect(() => {
     if (filteredEvidenceList.length > 0) {
+      // 检查URL参数中是否有指定的证据ID
+      const evidenceIdFromUrl = searchParams.get('evidence')
+      
+      if (evidenceIdFromUrl) {
+        const targetEvidence = filteredEvidenceList.find((e: any) => e.id === parseInt(evidenceIdFromUrl))
+        if (targetEvidence) {
+          setSelectedEvidence(targetEvidence)
+          // 如果URL中指定了证据，也自动选中它
+          if (!selectedIds.includes(targetEvidence.id)) {
+            setSelectedIds([targetEvidence.id])
+          }
+          return
+        }
+      }
+      
       // 如果当前没有选中的证据，或者当前选中的证据不在过滤后的列表中，则选中第一个
       if (!selectedEvidence || !filteredEvidenceList.find((e: any) => e.id === selectedEvidence.id)) {
         setSelectedEvidence(filteredEvidenceList[0]);
@@ -1169,7 +1188,7 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
     } else {
       setSelectedEvidence(null);
     }
-  }, [filteredEvidenceList, selectedEvidence]);
+  }, [filteredEvidenceList, selectedEvidence, searchParams, selectedIds]);
 
   // WebSocket进度监听
   useEffect(() => {

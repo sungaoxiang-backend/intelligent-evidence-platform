@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import useSWR, { mutate } from "swr"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -119,7 +120,7 @@ const getFeatureColor = (slot: any) => {
     slotValue !== undefined;
   
   // 判断特征是否有效：有值即可
-  let isValid = hasValue;
+  const isValid = hasValue;
   
   if (slotRequired) {
     // required = true
@@ -1067,6 +1068,9 @@ export function EvidenceReasoning({
 
   const [isCompleted, setIsCompleted] = useState(false)
   const { toast } = useToast()
+  
+  // 获取URL查询参数
+  const searchParams = useSearchParams()
 
 
 
@@ -1136,6 +1140,29 @@ export function EvidenceReasoning({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isPreviewOpen, selectedEvidence, filteredEvidenceList]);
+
+  // 处理URL参数 - 设置默认选中的分组和证据
+  useEffect(() => {
+    if (caseData) {
+      // 检查URL参数中是否有指定的分组
+      const groupFromUrl = searchParams.get('group')
+      
+      if (groupFromUrl) {
+        const decodedGroup = decodeURIComponent(groupFromUrl)
+        // 检查分组是否存在
+        const targetGroup = caseData.association_evidence_features?.find(
+          (f: any) => f.slot_group_name === decodedGroup
+        )
+        if (targetGroup) {
+          setSelectedGroup(decodedGroup)
+          // 如果分组存在，自动选中该分组下的所有证据
+          if (targetGroup.association_evidence_ids && targetGroup.association_evidence_ids.length > 0) {
+            setSelectedEvidenceIds(targetGroup.association_evidence_ids)
+          }
+        }
+      }
+    }
+  }, [caseData, searchParams])
 
   // 保持选中状态 - 当数据刷新时，保持当前选中的分组和特征
   useEffect(() => {

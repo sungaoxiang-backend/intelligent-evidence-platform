@@ -474,7 +474,7 @@ function SideDrawer({ isOpen, onClose, chain, drawerType, expandedRequirements, 
       
       {/* 侧边抽屉 */}
       <div 
-        className={`fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{
@@ -515,7 +515,7 @@ function SideDrawer({ isOpen, onClose, chain, drawerType, expandedRequirements, 
             maxHeight: 'calc(100vh - 120px)'
           }}
         >
-          <div className="p-6 pb-12">
+          <div className="p-8 pb-12">
             {filteredRequirements.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-gray-400 text-6xl mb-4">📭</div>
@@ -590,16 +590,40 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
       }
     })
     
-    return Array.from(subCategoryMap.entries()).map(([name, slots]) => ({
-      name,
-      slots,
-      core_slots_count: slots.filter((s: any) => s.is_core).length,
-      core_slots_satisfied: slots.filter((s: any) => s.is_core && s.is_satisfied).length,
-      supplementary_slots_count: slots.filter((s: any) => !s.is_core).length,
-      supplementary_slots_satisfied: slots.filter((s: any) => !s.is_core && s.is_satisfied).length,
-      status: slots.every((s: any) => s.is_satisfied) ? "satisfied" : 
-              slots.some((s: any) => s.is_satisfied) ? "partial" : "missing"
-    }))
+    return Array.from(subCategoryMap.entries()).map(([name, slots]) => {
+      const coreSlots = slots.filter((s: any) => s.is_core)
+      const coreSlotsCount = coreSlots.length
+      const coreSlotsSatisfied = coreSlots.filter((s: any) => s.is_satisfied).length
+      
+      // 子分类状态主要基于核心特征的完成情况
+      let status = "missing"
+      if (coreSlotsCount > 0) {
+        if (coreSlotsSatisfied === coreSlotsCount) {
+          status = "satisfied"  // 所有核心特征都完成
+        } else if (coreSlotsSatisfied > 0) {
+          status = "partial"    // 部分核心特征完成
+        } else {
+          status = "missing"    // 没有核心特征完成
+        }
+      } else {
+        // 如果没有核心特征，则基于所有特征的状态
+        if (slots.every((s: any) => s.is_satisfied)) {
+          status = "satisfied"
+        } else if (slots.some((s: any) => s.is_satisfied)) {
+          status = "partial"
+        }
+      }
+      
+      return {
+        name,
+        slots,
+        core_slots_count: coreSlotsCount,
+        core_slots_satisfied: coreSlotsSatisfied,
+        supplementary_slots_count: slots.filter((s: any) => !s.is_core).length,
+        supplementary_slots_satisfied: slots.filter((s: any) => !s.is_core && s.is_satisfied).length,
+        status
+      }
+    })
   }
 
   const subCategories = getSubCategories()
@@ -633,28 +657,17 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "satisfied":
-        return <CheckCircle className="w-4 h-4 text-green-500" />
+        return <CheckCircle className="w-6 h-6 text-green-500" />
       case "partial":
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />
+        return <AlertCircle className="w-6 h-6 text-yellow-500" />
       case "missing":
-        return <XCircle className="w-4 h-4 text-red-500" />
+        return <XCircle className="w-6 h-6 text-red-500" />
       default:
-        return <XCircle className="w-4 h-4 text-gray-400" />
+        return <XCircle className="w-6 h-6 text-gray-400" />
     }
   }
 
-  const hasJumpableSource = requirement.slots.some(slot => 
-    slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-  )
 
-  const getFirstJumpableSource = () => {
-    const jumpableSlot = requirement.slots.find(slot => 
-      slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-    )
-    if (jumpableSlot) {
-      onSlotClick(jumpableSlot, requirement)
-    }
-  }
 
   return (
     <div className={`bg-white border border-gray-200 rounded-lg transition-all duration-300 ${
@@ -668,25 +681,21 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              {getStatusIcon(isOrRelationshipType ? orRelationshipStatus : requirement.status)}
-              
               <h4 className="font-medium text-gray-900">{requirement.evidence_type}</h4>
               
-              {requirement.core_slots_count > 0 ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  核心
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  辅助
-                </span>
-              )}
-              
-              {hasJumpableSource && (
+              {/* 快捷跳转按钮 - 只在非分组情况下显示 */}
+              {!isOrRelationshipType && requirement.slots.some(slot => 
+                slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+              ) && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    getFirstJumpableSource()
+                    const jumpableSlot = requirement.slots.find(slot => 
+                      slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                    )
+                    if (jumpableSlot) {
+                      onSlotClick(jumpableSlot, requirement)
+                    }
                   }}
                   className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
                   title="查看关联证据"
@@ -695,88 +704,108 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
                 </button>
               )}
             </div>
-            
-
           </div>
           
-          {/* 展开/收起图标 */}
-          <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+          {/* 右侧状态区域 */}
+          <div className="flex items-center gap-3">
+            {/* 状态图标 - 调大尺寸 */}
+            <div className="flex-shrink-0">
+              {getStatusIcon(isOrRelationshipType ? orRelationshipStatus : requirement.status)}
+            </div>
+            
+            {/* 展开/收起图标 */}
+            <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            </div>
           </div>
         </div>
       </div>
       
       {/* 展开的详细内容 */}
       {isExpanded && (
-        <div className="border-t border-gray-100 p-4 bg-gray-50">
+        <div className="border-t border-gray-100 p-6 bg-gray-50">
           {isOrRelationshipType ? (
             // 或关系类型：展示子分类
             <div className="space-y-4">
               {subCategories.map((subCategory, index) => {
-                const isSubCategoryCompleted = subCategory.core_slots_count > 0 && 
-                  subCategory.core_slots_satisfied === subCategory.core_slots_count
-                
                 return (
-                  <div key={index} className={`border rounded-lg p-3 ${
-                    isSubCategoryCompleted 
-                      ? 'bg-green-50 border-green-200' 
-                      : 'bg-white border-gray-200'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <h5 className={`font-medium text-sm ${
-                        isSubCategoryCompleted ? 'text-green-800' : 'text-gray-600'
-                      }`}>
-                        {subCategory.name}
-                      </h5>
-                      {getStatusIcon(subCategory.status)}
+                  <div key={index} className="border rounded-lg p-4 bg-white border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(subCategory.status)}
+                        <h5 className="font-medium text-sm text-gray-600">
+                          {subCategory.name}
+                        </h5>
+                      </div>
+                      
+                      {/* 子分类的快捷跳转按钮 */}
+                      <div className="flex items-center gap-2">
+                      {subCategory.slots.some((slot: any) => 
+                        slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                      ) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const jumpableSlot = subCategory.slots.find((slot: any) => 
+                              slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                            )
+                            if (jumpableSlot) {
+                              onSlotClick(jumpableSlot, requirement)
+                            }
+                          }}
+                          className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
+                          title="查看关联证据"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
+                      </div>
                     </div>
                     
 
                     
                     <div className="space-y-2">
                       {/* 核心特征 */}
-                      {subCategory.core_slots_count > 0 && (
-                        <div>
-                          <div className="text-xs font-medium text-blue-600 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span>核心特征 ({subCategory.core_slots_satisfied}/{subCategory.core_slots_count})</span>
-                          </div>
-                          <div className="space-y-1">
-                            {subCategory.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
-                              <SlotItem
-                                key={slotIndex}
-                                slot={slot}
-                                requirement={requirement}
-                                onSlotClick={onSlotClick}
-                                isCore={true}
-                                showSourceButton={false}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                                                  {subCategory.core_slots_count > 0 && (
+                              <div>
+                                <div className="text-xs font-medium text-blue-600 mb-2">
+                                  <span>核心特征 ({subCategory.core_slots_satisfied}/{subCategory.core_slots_count})</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {subCategory.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
+                                    <SlotItem
+                                      key={slotIndex}
+                                      slot={slot}
+                                      requirement={requirement}
+                                      onSlotClick={onSlotClick}
+                                      isCore={true}
+                                      showSourceButton={false}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                       
                       {/* 补充特征 */}
-                      {subCategory.supplementary_slots_count > 0 && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
-                          </div>
-                          <div className="space-y-1">
-                            {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
-                              <SlotItem
-                                key={slotIndex}
-                                slot={slot}
-                                requirement={requirement}
-                                onSlotClick={onSlotClick}
-                                isCore={false}
-                                showSourceButton={false}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                                                  {subCategory.supplementary_slots_count > 0 && (
+                              <div>
+                                <div className="text-xs font-medium text-gray-500 mb-2">
+                                  <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
+                                    <SlotItem
+                                      key={slotIndex}
+                                      slot={slot}
+                                      requirement={requirement}
+                                      onSlotClick={onSlotClick}
+                                      isCore={false}
+                                      showSourceButton={false}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                     </div>
                   </div>
                 )
@@ -788,8 +817,7 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
               {/* 核心特征 */}
               {requirement.core_slots_count > 0 && (
                 <div className="mb-4">
-                  <div className="text-xs font-medium text-blue-600 mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <div className="text-xs font-medium text-blue-600 mb-2">
                     <span>核心特征 ({requirement.core_slots_satisfied}/{requirement.core_slots_count})</span>
                   </div>
                   <div className="space-y-2">
@@ -810,9 +838,8 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
               {/* 补充特征 */}
               {requirement.supplementary_slots_count > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                    <span>补充特征 ({requirement.supplementary_slots_count})</span>
+                  <div className="text-xs font-medium text-gray-500 mb-2">
+                    <span>补充特征 ({requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count})</span>
                   </div>
                   <div className="space-y-2">
                     {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
@@ -826,12 +853,6 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
                       />
                     ))}
                   </div>
-                </div>
-              )}
-              
-              {requirement.core_slots_count === 0 && (
-                <div className="text-xs text-gray-500 italic">
-                  此分类无需核心特征，仅作为辅助信息收集
                 </div>
               )}
             </>
@@ -852,7 +873,42 @@ interface SlotItemProps {
 }
 
 function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = true }: SlotItemProps) {
-  const slotData = slot as any;
+  const slotData = slot as {
+    slot_name: string;
+    is_satisfied: boolean;
+    source_id?: string;
+    source_type?: string;
+    slot_proofread_at?: string;
+    slot_is_consistent?: boolean;
+    slot_expected_value?: string;
+    slot_proofread_reasoning?: string;
+  };
+  
+  // 清理特征名称，去除重复的分类信息前缀
+  const cleanSlotName = (slotName: string, evidenceType: string): string => {
+    if (!slotName || !evidenceType) return slotName;
+    
+    // 处理"或"关系的证据类型
+    if (evidenceType.includes(' 或 ')) {
+      const types = evidenceType.split(' 或 ').map(t => t.trim());
+      for (const type of types) {
+        const prefix = type + ': ';
+        if (slotName.startsWith(prefix)) {
+          return slotName.substring(prefix.length);
+        }
+      }
+    } else {
+      // 处理单一证据类型
+      const prefix = evidenceType + ': ';
+      if (slotName.startsWith(prefix)) {
+        return slotName.substring(prefix.length);
+      }
+    }
+    
+    return slotName;
+  };
+  
+  const cleanedSlotName = cleanSlotName(slotData.slot_name, requirement.evidence_type);
   
   return (
     <div className={`flex items-center justify-between ${isCore ? 'text-gray-900' : 'text-gray-600'}`}>
@@ -871,7 +927,7 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
             ? (isCore ? 'text-green-800 font-medium' : 'text-green-700') 
             : (isCore ? 'text-red-800 font-medium' : 'text-red-600')
         }`}>
-           {slotData.slot_name}
+           {cleanedSlotName}
          </span>
          {showSourceButton && slotData.is_satisfied && slotData.source_id && (
            <button
@@ -886,13 +942,8 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
       
       {/* 校对信息提示 */}
       {slotData.slot_proofread_at && !slotData.slot_is_consistent && slotData.slot_expected_value && (
-        <div className="flex items-center gap-1">
-          <div className="w-4 h-4 bg-yellow-100 rounded-full flex items-center justify-center">
-            <svg className="w-2.5 h-2.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <span className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
+        <div className="flex items-center gap-2 min-w-0 flex-1 ml-4">
+          <span className="text-xs text-gray-500 break-words min-w-0">
             校对失败: {slotData.slot_proofread_reasoning || '无校对推理信息'}
           </span>
         </div>
