@@ -286,9 +286,9 @@ function EvidenceChainCard({ chain, caseId, onSlotClick }: EvidenceChainCardProp
         chainStatus.status === 'collecting' ? 'border-blue-300 bg-blue-50' :
         'border-gray-200 bg-white'
       }`}>
-        {/* 卡片头部 - 紧凑设计 */}
+        {/* 卡片头部 - 垂直居中布局 */}
         <div className="p-5">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
                 <h3 className="text-lg font-bold text-gray-900">{chain.chain_name}</h3>
