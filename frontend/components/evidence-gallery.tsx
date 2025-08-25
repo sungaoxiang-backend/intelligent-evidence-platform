@@ -65,6 +65,24 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// 获取证据类型支持的角色列表
+const getSupportedRolesForEvidenceType = (evidenceType: string): string[] => {
+  // 这里可以根据evidence_types.yaml的配置来返回支持的角色
+  // 暂时硬编码一些常见的证据类型，后续可以从配置文件或API获取
+  const evidenceTypeRoles: Record<string, string[]> = {
+    "微信个人主页": ["creditor", "debtor"],
+    "身份证": ["creditor", "debtor"],
+    "中华人民共和国居民户籍档案": ["creditor", "debtor"],
+    "公司营业执照": ["creditor", "debtor"],
+    "个体工商户营业执照": ["creditor", "debtor"],
+    "公司全国企业公示系统截图": ["creditor", "debtor"],
+    "个体工商户全国企业公示系统截图": ["creditor", "debtor"],
+    "经常居住地证明": ["creditor", "debtor"],
+  };
+  
+  return evidenceTypeRoles[evidenceType] || [];
+};
+
 // 检查证据是否真正可以审核（features_complete && 所有需要校对的slot都校对成功）
 const isEvidenceReadyForReview = (evidence: any) => {
   // 首先检查特征是否完整
@@ -248,42 +266,218 @@ function EvidenceGalleryContent({
 
   // 右侧数据标注区域
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState<any>({})
+  const [editForm, setEditForm] = useState<any>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [showOptionalFields, setShowOptionalFields] = useState(false)
 
   useEffect(() => {
     // 只有在非编辑状态下才同步数据，避免编辑时数据被重置
-    if (!editing) {
+    if (!editing && selectedEvidence) {
       setEditForm(selectedEvidence)
     }
   }, [selectedEvidence, editing])
 
-  // // 编辑保存逻辑
-  // const handleSave = async () => {
-  //   try {
-  //     // 只提交 schema 允许的字段
-  //     const payload: any = {
-  //       classification_category: editForm.classification_category,
-  //       classification_confidence: editForm.classification_confidence,
-  //       classification_reasoning: editForm.classification_reasoning,
-  //     };
-  //     if (Array.isArray(editForm.evidence_features)) {
-  //       payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
-  //         slot_value: slot.slot_value
-  //       }))
-  //     }
-  //     await evidenceApi.updateEvidence(editForm.id, payload)
-  //     setEditing(false)
-  //     // 刷新数据
-  //     await mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-  //     toast({ title: "保存成功" })
-  //   } catch (e: any) {
-  //     toast({ title: "保存失败", description: e?.message || '未知错误', variant: "destructive" })
-  //   }
-  // }
+  // 如果没有选中的证据或editForm，显示提示信息
+  if (!selectedEvidence || !editForm) {
+    return (
+      <div className="grid grid-cols-12 gap-4 items-start">
+        {/* 左栏：文件列表 */}
+        <Card className="col-span-3 card-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              全部分类
+              <Badge variant="secondary" className="text-xs">
+                {filteredEvidenceList.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {/* 分类筛选 */}
+            <div className="px-3 pb-3">
+              <ScrollArea className="h-28">
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      setActiveCategory('全部')
+                      setSelectedIds([]) // 清空选中的证据ID
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${activeCategory === '全部' ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">全部证据</span>
+                      <Badge variant="outline" className="text-xs">{filteredEvidenceList.length}</Badge>
+                    </div>
+                  </button>
+                  {groupKeys.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        setActiveCategory(cat)
+                        setSelectedIds([]) // 清空选中的证据ID
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors ${activeCategory === cat ? "bg-primary/10 text-primary border border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{cat || '其他'}</span>
+                        <Badge variant="outline" className="text-xs">{groupMap[cat].length}</Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+            <Separator />
+            {/* 文件列表 */}
+            <ScrollArea className="h-[calc(100%-160px)] custom-scrollbar">
+              <div className="p-3 space-y-2">
+                <div className="flex items-center mb-2">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={handleSelectAll}
+                    className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
+                  />
+                  <span className="ml-2 text-xs text-muted-foreground">全选</span>
+                </div>
+                {groupedEvidence.map((evidence: any) => {
+                  const checked = selectedIds.includes(evidence.id)
+                  return (
+                    <div
+                      key={evidence.id}
+                      onClick={() => setSelectedEvidence(evidence)}
+                      className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 border flex items-start ${
+                        selectedEvidence?.id === evidence.id
+                          ? "bg-primary/10 border-primary/30 shadow-sm"
+                          : evidence.evidence_status === "checked"
+                          ? "hover:bg-green-50/50 border-green-200/30 hover:border-green-300/50 bg-green-50/30"
+                          : evidence.evidence_status === "features_extracted"
+                          ? "hover:bg-blue-50/50 border-blue-200/30 hover:border-blue-300/50 bg-blue-50/30"
+                          : "hover:bg-muted/50 border-transparent hover:border-border"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleSelectOne(evidence.id, e.target.checked)
+                        }}
+                        className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
+                      />
+                      <div className="flex-shrink-0">
+                        {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
+                          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
+                            <Video className="h-5 w-5 text-purple-600" />
+                          </div>
+                        ) : evidence.file_url ? (
+                          <img
+                            src={evidence.file_url}
+                            alt={evidence.file_name || ''}
+                            className="w-10 h-10 object-cover rounded-md"
+                            onError={(e) => {
+                              // 图片加载失败时，替换为占位符
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `
+                                  <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+                                    <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                  </div>
+                                `;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
+                            <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 ml-2 overflow-hidden">
+                        <div className="group relative">
+                          <h4 className="font-medium text-sm text-foreground break-words leading-tight" title={evidence.file_name || ''}>
+                            {evidence.file_name || ''}
+                          </h4>
+                          <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 bg-popover text-popover-foreground p-2 rounded-md shadow-lg border max-w-[200px] text-xs whitespace-normal">
+                            {evidence.file_name || ''}
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-1.5 mt-1 flex-wrap">
+                          <Badge className={getStatusColor(evidence.evidence_status)} variant="outline">
+                            {getStatusText(evidence.evidence_status)}
+                          </Badge>
+                          {evidence.isKey && (
+                            <Badge variant="destructive" className="text-xs">
+                              关键
+                            </Badge>
+                          )}
+                          {/* 特征提取完整度指示器 */}
+                          {evidence.evidence_features && evidence.evidence_features.length > 0 && (
+                            <Badge 
+                              className={`${evidence.features_complete ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"} text-xs font-medium`}
+                              variant="outline"
+                            >
+                              {evidence.features_complete ? "特征完整" : "特征不完整"}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 break-words leading-tight" title={(evidence.format ?? "") + " • " + (evidence.size ?? "")}>
+                          {(evidence.format ?? "") + " • " + (evidence.size ?? "")}
+                        </p>
+                        {/* 显示分类信息 */}
+                        {(evidence.classification_category || evidence.evidence_type) && (
+                          <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 break-words leading-tight" title={evidence.classification_category || evidence.evidence_type || '其他'}>
+                            {evidence.classification_category || evidence.evidence_type || '其他'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
-  if (!editForm) return null;
+        {/* 中栏：文件预览 */}
+        <Card className="col-span-6 card-shadow sticky top-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">文件预览</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-[calc(100vh-280px)]">
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Eye className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-base">请从左侧选择一个文件进行预览</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 右栏：数据标注 */}
+        <Card className="col-span-3 card-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">数据标注</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-base">请选择一个文件查看详情</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-12 gap-4 items-start">
@@ -629,6 +823,63 @@ function EvidenceGalleryContent({
                         {selectedEvidence.classification_category || selectedEvidence.evidence_type || '未分类'}
                       </span>
                     </div>
+                    
+                    {/* 证据角色选择 */}
+                    {(() => {
+                      // 检查当前证据类型是否配置了supported_roles
+                      const evidenceType = selectedEvidence.classification_category || selectedEvidence.evidence_type;
+                      const supportedRoles = getSupportedRolesForEvidenceType(evidenceType);
+                      
+                      // 添加调试信息
+                      console.log('Evidence Role Debug:', {
+                        evidenceType,
+                        supportedRoles,
+                        selectedEvidenceEvidenceRole: selectedEvidence.evidence_role,
+                        editFormEvidenceRole: editForm.evidence_role,
+                        editing
+                      });
+                      
+                      if (supportedRoles && supportedRoles.length > 0) {
+                        return (
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-muted-foreground shrink-0">证据角色:</span>
+                            {editing ? (
+                              <select
+                                value={editForm.evidence_role || ''}
+                                onChange={e => setEditForm((f: any) => ({ ...f, evidence_role: e.target.value }))}
+                                className="text-xs border rounded px-2 py-1 bg-background"
+                              >
+                                <option value="">请选择角色</option>
+                                {supportedRoles.map((role: string) => (
+                                  <option key={role} value={role}>
+                                    {role === 'creditor' ? '债权人' : role === 'debtor' ? '债务人' : role}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="font-medium text-right">
+                                {editForm.evidence_role ? 
+                                  (editForm.evidence_role === 'creditor' ? '债权人' : 
+                                   editForm.evidence_role === 'debtor' ? '债务人' : 
+                                   editForm.evidence_role) : 
+                                  '未指定'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+                      
+                      // 如果没有支持的角色，也显示字段但标记为不支持
+                      return (
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-muted-foreground shrink-0">证据角色:</span>
+                          <span className="font-medium text-right text-muted-foreground">
+                            此证据类型不支持角色选择
+                          </span>
+                        </div>
+                      );
+                    })()}
+                    
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">文件名:</span>
                       <span className="font-medium text-right break-words max-w-[120px]" title={selectedEvidence.file_name}>{selectedEvidence.file_name}</span>
@@ -739,7 +990,7 @@ function EvidenceGalleryContent({
                       const groupedFields = new Map<string, any[]>();
                       const processedFields = new Set<string>();
                       
-                      features.forEach(feature => {
+                      features.forEach((feature: any) => {
                         if (typeof feature.slot_required === 'string' && feature.slot_required !== 'true' && feature.slot_required !== 'false') {
                           // 创建分组键，确保互相引用的字段在同一个组
                           const groupKey = [feature.slot_name, feature.slot_required].sort().join('_');
@@ -752,12 +1003,12 @@ function EvidenceGalleryContent({
                       });
                       
                       // 2. 处理独立的必需字段（required 是 true 且不在分组中的）
-                      const independentFeatures = features.filter(feature => 
+                      const independentFeatures = features.filter((feature: any) => 
                         feature.slot_required === true && !processedFields.has(feature.slot_name)
                       );
                       
                       // 3. 处理可选字段（required 是 false 且不在分组中的）
-                      const optionalFeatures = features.filter(feature => 
+                      const optionalFeatures = features.filter((feature: any) => 
                         feature.slot_required === false && !processedFields.has(feature.slot_name)
                       );
                       
@@ -868,7 +1119,7 @@ function EvidenceGalleryContent({
                           })}
                           
                           {/* 独立必需特征 */}
-                          {independentFeatures.map((feature, idx) => {
+                          {independentFeatures.map((feature: any, idx: number) => {
                             const colors = getFeatureColor(feature)
                             const originalIdx = features.findIndex((f: any) => f === feature)
                             return (
@@ -959,7 +1210,7 @@ function EvidenceGalleryContent({
                           )}
 
                           {/* 非必需特征 */}
-                          {showOptionalFields && optionalFeatures.map((feature, idx) => {
+                          {showOptionalFields && optionalFeatures.map((feature: any, idx: number) => {
                             const colors = getFeatureColor(feature)
                             const originalIdx = features.findIndex((f: any) => f === feature)
                             return (
@@ -1299,6 +1550,12 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
         classification_confidence: editForm.classification_confidence,
         classification_reasoning: editForm.classification_reasoning,
       };
+      
+      // 添加证据角色字段
+      if (editForm.evidence_role !== undefined) {
+        payload.evidence_role = editForm.evidence_role;
+      }
+      
       if (Array.isArray(editForm.evidence_features)) {
         payload.evidence_features = editForm.evidence_features.map((slot: any) => ({
           slot_name: slot.slot_name,

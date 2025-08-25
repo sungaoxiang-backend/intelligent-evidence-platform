@@ -15,6 +15,10 @@ class EvidenceStatus(str, Enum):
     FEATURES_EXTRACTED = "features_extracted"  # 特征已提取
     CHECKED = "checked"        # 已审核
     
+class EvidenceRole(str, Enum):
+    """证据角色"""
+    CREDITOR = "creditor"
+    DEBTOR = "debtor"
 
 class Evidence(Base):
     """证据模型"""    
@@ -25,6 +29,7 @@ class Evidence(Base):
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
     evidence_status: Mapped[str] = mapped_column(String(20), default=EvidenceStatus.UPLOADED)
     validation_status: Mapped[str] = mapped_column(String(20), default=VaildationStatus.PENDING)
+    evidence_role: Mapped[str] = mapped_column(String(20), nullable=True, default=None)
     
     # 分类元数据
     classification_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

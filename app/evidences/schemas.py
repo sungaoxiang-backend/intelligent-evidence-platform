@@ -3,10 +3,9 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 from pydantic import BaseModel, model_validator, Field, computed_field
 from app.cases.schemas import Case
-from app.evidences.models import EvidenceStatus
+from app.evidences.models import EvidenceStatus, EvidenceRole
 from app.agentic.agents.evidence_extractor_v2 import SlotExtraction
 from app.core.schemas import BaseSchema
-
     
     
 class AutoProcessRequest(BaseModel):
@@ -16,6 +15,7 @@ class AutoProcessRequest(BaseModel):
     
 
 class EvidenceEditRequest(BaseModel):
+    evidence_role: Optional[EvidenceRole] = Field(None, description="证据角色")
     classification_category: Optional[str] = Field(None, description="证据分类类型")
     classification_reasoning: Optional[str] = Field(None, description="证据分类推理过程")    
     evidence_features: Optional[List[SlotExtraction]] = Field(None, description="证据提取特征列表")
@@ -42,6 +42,7 @@ class EvidenceResponse(BaseSchema):
     file_size: int = Field(..., description="证据文件体积")
     file_extension: str = Field(..., description="证据文件类型")
     evidence_status: EvidenceStatus = Field(default=EvidenceStatus.UPLOADED, description="证据状态")
+    evidence_role: Optional[str] = Field(None, description="证据角色，可选值：creditor（债权人）、debtor（债务人）")
     
     classification_category: Optional[str] = Field(None, description="证据分类类型")
     classification_confidence: Optional[float] = Field(None, description="证据分类置信度")

@@ -71,6 +71,9 @@ evidence_types:
     type: "微信个人主页"
     description: "微信个人主页的完整截图"
     category: "通讯聊天类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "微信个人主页"
@@ -94,10 +97,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债务人或债权人姓名匹配"
-            case_fields: ["debtor_name", "creditor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "微信号"
         slot_desc: "微信账号ID"
         slot_value_type: "string"
@@ -575,6 +584,9 @@ evidence_types:
     type: "身份证"
     description: "中华人民共和国居民身份证"
     category: "个人身份证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "中华人民共和国居民身份证"
@@ -602,10 +614,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "性别"
         slot_desc: "身份证上的性别"
         slot_value_type: "string"
@@ -631,6 +649,9 @@ evidence_types:
     type: "中华人民共和国居民户籍档案"
     description: "中华人民共和国居民户籍档案"
     category: "个人身份证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "居民户口簿"
@@ -654,10 +675,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "性别"
         slot_desc: "户口簿上的性别"
         slot_value_type: "string"
@@ -684,6 +711,9 @@ evidence_types:
     type: "公司营业执照"
     description: "公司或企业的官方营业执照"
     category: "经营资质证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "营业执照"
@@ -706,10 +736,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -718,6 +754,17 @@ evidence_types:
         slot_desc: "法定代表人姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "公司类型"
         slot_desc: "公司的类型"
         slot_value_type: "string"
@@ -731,6 +778,9 @@ evidence_types:
     type: "个体工商户营业执照"
     description: "个体工商户的官方营业执照"
     category: "经营资质证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "个体工商户营业执照"
@@ -753,10 +803,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -769,6 +825,17 @@ evidence_types:
         slot_desc: "经营者的姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "住所地"
         slot_desc: "住所地"
         slot_value_type: "string"
@@ -778,6 +845,9 @@ evidence_types:
     type: "公司全国企业公示系统截图"
     description: "国家企业信用信息公示系统（GSXT）网站上关于公司的信息页面截图"
     category: "经营资质证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "国家企业信用信息公示系统"
@@ -799,10 +869,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -811,6 +887,17 @@ evidence_types:
         slot_desc: "法定代表人姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "公司类型"
         slot_desc: "公司的类型"
         slot_value_type: "string"
@@ -824,6 +911,9 @@ evidence_types:
     type: "个体工商户全国企业公示系统截图"
     description: "国家企业信用信息公示系统（GSXT）网站上关于个体工商户的信息页面截图"
     category: "经营资质证明类"
+    supported_roles:
+      - "creditor"
+      - "debtor"
     features:
       decisive:
         - "国家企业信用信息公示系统"
@@ -844,10 +934,16 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人或债务人姓名匹配"
-            case_fields: ["creditor_name", "debtor_name"]
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
             match_strategy: "exact"
-            match_condition: "any"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "统一社会信用代码"
         slot_desc: "统一社会信用代码"
         slot_value_type: "string"
@@ -860,6 +956,17 @@ evidence_types:
         slot_desc: "经营者的姓名"
         slot_value_type: "string"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "债权人真名精确匹配"
+            role: "creditor"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
+          - rule_name: "债务人真名精确匹配"
+            role: "debtor"
+            case_fields: ["debtor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "住所地"
         slot_desc: "住所地"
         slot_value_type: "string"
