@@ -1,17 +1,19 @@
 # 简化版证据链服务 - 纯粹的状态检查器（异步版本）
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.evidence_chains.schemas import (
     EvidenceChainDashboard, EvidenceChain, EvidenceTypeRequirement, EvidenceSlotDetail,
-    EvidenceChainStatus, EvidenceRequirementStatus, EvidenceChainFeasibilityStatus
+    EvidenceChainStatus, EvidenceRequirementStatus, EvidenceChainFeasibilityStatus,
+    RoleBasedRequirement, RoleGroupRequirement, OrGroupRequirement
 )
 from app.cases.models import Case
 from app.evidences.models import Evidence
 from app.cases.models import AssociationEvidenceFeature
 from app.core.config_manager import config_manager
+from app.agentic.agents.evidence_proofreader import EvidenceProofreader
 
 
 class EvidenceChainService:
@@ -40,6 +42,9 @@ class EvidenceChainService:
             enhanced_evidences.append(enhanced_evidence)
         
         evidences = enhanced_evidences
+        
+        # 设置当前证据列表，供角色检查方法使用
+        self._current_evidences = evidences
         
         association_features_result = await self.db.execute(
             select(AssociationEvidenceFeature).where(AssociationEvidenceFeature.case_id == case_id)
@@ -150,10 +155,12 @@ class EvidenceChainService:
                 if or_group_processed.status == EvidenceRequirementStatus.SATISFIED:
                     satisfied_count += 1
                 
-                core_requirements_count += 1
-                # 对于"或"关系组，基于状态而不是完成度百分比
-                if or_group_processed.status == EvidenceRequirementStatus.SATISFIED:
-                    core_requirements_satisfied += 1
+                # 只有有核心特征要求时才计入核心证据类型数量
+                if or_group_processed.core_slots_count > 0:
+                    core_requirements_count += 1
+                    # 对于"或"关系组，基于状态而不是完成度百分比
+                    if or_group_processed.status == EvidenceRequirementStatus.SATISFIED:
+                        core_requirements_satisfied += 1
                 
                 or_groups_processed.add(or_group)
                 
@@ -250,7 +257,7 @@ class EvidenceChainService:
         evidence_type_config: Dict[str, Any],
         evidences: List[Evidence],
         association_features: List[AssociationEvidenceFeature]
-    ) -> EvidenceTypeRequirement:
+    ) -> Union[EvidenceTypeRequirement, RoleGroupRequirement]:
         """检查单个证据要求的状态"""
         evidence_type = evidence_type_config.get("evidence_type")
         if not evidence_type:
@@ -258,6 +265,25 @@ class EvidenceChainService:
         
         core_slots = evidence_type_config.get("core_evidence_slot", [])
         
+        # 检查该证据类型是否配置了supported_roles
+        has_supported_roles = False
+        supported_roles = []
+        try:
+            from app.core.config_manager import config_manager
+            evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
+            if evidence_type_config_full and "supported_roles" in evidence_type_config_full:
+                supported_roles = evidence_type_config_full["supported_roles"]
+                has_supported_roles = len(supported_roles) > 0
+        except Exception as e:
+            print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
+        
+        # 如果配置了supported_roles，需要为每个角色创建单独的槽位组
+        if has_supported_roles:
+            return self._process_role_based_evidence_requirement(
+                evidence_type, core_slots, supported_roles, evidences, association_features
+            )
+        
+        # 原有的处理逻辑（没有supported_roles的情况）
         slot_details = []
         
         # 从配置文件获取该证据类型的所有槽位
@@ -394,7 +420,8 @@ class EvidenceChainService:
                 
                 # 调试：检查校对信息是否正确提取
                 if slot == "债务人脱敏真名" or slot == "转账账户真名":
-                    print(f"字段 {slot} 校对信息: proofread_at={slot_proofread_at}, consistent={slot_is_consistent}, expected={slot_expected_value}")
+                    evidence_role = getattr(evidence, 'evidence_role', 'unknown') if best_source["source_type"] == "evidence" else "association_group"
+                    print(f"字段 {slot} 校对信息: proofread_at={slot_proofread_at}, consistent={slot_is_consistent}, expected={slot_expected_value}, role={evidence_role}")
                     print(f"完整feature_data: {feature_data}")
                 
 
@@ -528,111 +555,513 @@ class EvidenceChainService:
         evidence_type_configs: List[Dict[str, Any]],
         evidences: List[Evidence],
         association_features: List[AssociationEvidenceFeature]
-    ) -> EvidenceTypeRequirement:
-        """处理"或"关系组，合并多个证据类型为一个要求
+    ) -> OrGroupRequirement:
+        """处理"或"关系组，构建正确的嵌套结构
         
-        关键逻辑：
-        1. 优先选择校对通过的证据类型
-        2. 其次选择无校对动作的证据类型
-        3. 最后选择校对失败的证据类型
-        4. 在相同校对状态下，选择完成度最高的
+        新的设计：
+        1. 外层：or_group（身份证 或 户籍档案）
+        2. 内层：每个证据类型内部是role_group（债权人 和 债务人）
+        3. 每个role_group内部是具体的角色要求
         """
+        print(f"处理or_group: {or_group_name}，构建嵌套结构")
         
-        # 合并所有核心槽位（只保留slot_required=true的）
-        all_core_slots = set()
+        sub_groups = []
+        total_core_slots = 0
+        total_core_satisfied = 0
+        total_supplementary_slots = 0
+        total_supplementary_satisfied = 0
+        
+        # 处理每个证据类型
         for config in evidence_type_configs:
-            core_slots = config.get("core_evidence_slot", [])
-            # 获取该证据类型的配置，过滤slot_required=false的槽位
             evidence_type = config.get("evidence_type")
             if evidence_type:
+                # 检查是否有角色要求
+                has_role_requirements = False
                 try:
                     from app.core.config_manager import config_manager
                     evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
-                    if evidence_type_config_full and "extraction_slots" in evidence_type_config_full:
-                        config_slots = evidence_type_config_full["extraction_slots"]
-                        # 只添加slot_required=true的核心槽位
-                        for core_slot in core_slots:
-                            core_slot_config = next((slot for slot in config_slots if slot.get("slot_name") == core_slot), None)
-                            if core_slot_config and core_slot_config.get("slot_required", True):
-                                all_core_slots.add(core_slot)
+                    if evidence_type_config_full and "supported_roles" in evidence_type_config_full:
+                        supported_roles = evidence_type_config_full["supported_roles"]
+                        has_role_requirements = len(supported_roles) > 0
                 except Exception as e:
-                    # 如果获取配置失败，记录日志但继续执行
-                    print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
-                    # 失败时，为了安全起见，不添加任何槽位
-        
-        # 检查每个证据类型的状态
-        individual_requirements = []
-        for config in evidence_type_configs:
-            req = self._check_evidence_requirement_status(
-                config, evidences, association_features
-            )
-            individual_requirements.append(req)
-        
-        # 判断整个"或"关系组是否满足（至少有一个满足）
-        group_satisfied = any(req.status == EvidenceRequirementStatus.SATISFIED for req in individual_requirements)
-        
-
-        # 创建组级别的槽位，保持分类的清晰性
-        group_slots = []
-        core_slots_satisfied = 0
-        supplementary_slots_satisfied = 0
-        
-        # 为每个证据类型创建子槽位，保持分类信息
-        for i, req in enumerate(individual_requirements):
-            evidence_type = req.evidence_type
-            for slot in req.slots:
-                # 创建组级别的槽位，包含分类信息
-                group_slot = {
-                    "slot_name": f"{evidence_type}: {slot.slot_name}",
-                    "is_satisfied": slot.is_satisfied,
-                    "is_core": slot.is_core,
-                    "source_type": slot.source_type,
-                    "source_id": slot.source_id,
-                    "confidence": slot.confidence,
-                    "slot_proofread_at": slot.slot_proofread_at,
-                    "slot_is_consistent": slot.slot_is_consistent,
-                    "slot_expected_value": slot.slot_expected_value,
-                    "slot_proofread_reasoning": slot.slot_proofread_reasoning,
-                    "evidence_type": evidence_type,  # 保留原始证据类型信息
-                    "original_slot_name": slot.slot_name  # 保留原始槽位名称
-                }
-                group_slots.append(group_slot)
+                    print(f"检查证据类型 {evidence_type} 的角色要求失败: {e}")
                 
-                # 统计满足的槽位（基于新的校对状态逻辑）
-                if slot.is_core:
-                    if slot.is_satisfied:
-                        core_slots_satisfied += 1
+                if has_role_requirements:
+                    # 有角色要求：创建role_group
+                    role_group = self._create_role_group_requirement(
+                        evidence_type, supported_roles, evidences, association_features
+                    )
+                    sub_groups.append(role_group)
+                    
+                    # 统计总数
+                    total_core_slots += role_group.core_slots_count
+                    total_core_satisfied += role_group.core_slots_satisfied
+                    total_supplementary_slots += role_group.supplementary_slots_count
+                    total_supplementary_satisfied += role_group.supplementary_slots_satisfied
                 else:
-                    if slot.is_satisfied:
-                        supplementary_slots_satisfied += 1
+                    # 没有角色要求：创建普通证据类型要求
+                    requirement = self._check_evidence_requirement_status(
+                        config, evidences, association_features
+                    )
+                    sub_groups.append(requirement)
+                    
+                    # 统计总数
+                    total_core_slots += requirement.core_slots_count
+                    total_core_satisfied += requirement.core_slots_satisfied
+                    total_supplementary_slots += requirement.supplementary_slots_count
+                    total_supplementary_satisfied += requirement.supplementary_slots_satisfied
         
-        # 计算完成度
-        core_slots_count = len([slot for slot in group_slots if slot["is_core"]])
-        supplementary_slots_count = len([slot for slot in group_slots if not slot["is_core"]])
+        # 计算完成度百分比
+        core_completion_percentage = (total_core_satisfied / total_core_slots * 100) if total_core_slots > 0 else 100.0
+        supplementary_completion_percentage = (total_supplementary_satisfied / total_supplementary_slots * 100) if total_supplementary_slots > 0 else 100.0
         
-        core_completion_percentage = (core_slots_satisfied / core_slots_count * 100) if core_slots_count > 0 else 100.0
-        supplementary_completion_percentage = (supplementary_slots_satisfied / supplementary_slots_count * 100) if supplementary_slots_count > 0 else 100.0
-        
-        # 确定状态
-        if group_satisfied:
+        # 确定状态：or_group逻辑（满足其一即可）
+        if any(group.status == EvidenceRequirementStatus.SATISFIED for group in sub_groups):
             status = EvidenceRequirementStatus.SATISFIED
-        elif any(req.status == EvidenceRequirementStatus.PARTIAL for req in individual_requirements):
+        elif any(group.status == EvidenceRequirementStatus.PARTIAL for group in sub_groups):
             status = EvidenceRequirementStatus.PARTIAL
         else:
             status = EvidenceRequirementStatus.MISSING
         
-        # 生成"或"关系的证据类型名称，而不是硬编码"组"后缀
-        evidence_type_names = [config["evidence_type"] for config in evidence_type_configs]
-        or_relationship_name = " 或 ".join(evidence_type_names)
+        # 生成组合名称
+        evidence_type_names = [config.get("evidence_type", "") for config in evidence_type_configs if config.get("evidence_type")]
+        combined_name = " 或 ".join(evidence_type_names)
         
-        return EvidenceTypeRequirement(
-            evidence_type=or_relationship_name,  # 显示为"银行转账记录 或 微信转账记录"
+        return OrGroupRequirement(
+            evidence_type=combined_name,
+            type="or_group",
+            sub_groups=sub_groups,
             status=status,
-            slots=group_slots,
-            core_slots_count=core_slots_count,
-            core_slots_satisfied=core_slots_satisfied,
-            supplementary_slots_count=supplementary_slots_count,
-            supplementary_slots_satisfied=supplementary_slots_satisfied,
+            core_slots_count=total_core_slots,
+            core_slots_satisfied=total_core_satisfied,
+            supplementary_slots_count=total_supplementary_slots,
+            supplementary_slots_satisfied=total_supplementary_satisfied,
+            core_completion_percentage=core_completion_percentage,
+            supplementary_completion_percentage=supplementary_completion_percentage
+        )
+    
+    def _create_role_group_requirement(
+        self,
+        evidence_type: str,
+        supported_roles: List[str],
+        evidences: List[Evidence],
+        association_features: List[AssociationEvidenceFeature]
+    ) -> RoleGroupRequirement:
+        """创建角色组要求"""
+        print(f"创建角色组要求: {evidence_type}，角色: {supported_roles}")
+        
+        sub_requirements = []
+        total_core_slots = 0
+        total_core_satisfied = 0
+        total_supplementary_slots = 0
+        total_supplementary_satisfied = 0
+        
+        # 为每个角色创建要求
+        for role in supported_roles:
+            role_requirement = self._create_role_based_requirement(
+                evidence_type, role, evidences, association_features
+            )
+            sub_requirements.append(role_requirement)
+            
+            # 统计总数
+            total_core_slots += role_requirement.core_slots_count
+            total_core_satisfied += role_requirement.core_slots_satisfied
+            total_supplementary_slots += role_requirement.supplementary_slots_count
+            total_supplementary_satisfied += role_requirement.supplementary_slots_satisfied
+        
+        # 计算完成度百分比
+        core_completion_percentage = (total_core_satisfied / total_core_slots * 100) if total_core_slots > 0 else 100.0
+        supplementary_completion_percentage = (total_supplementary_satisfied / total_supplementary_slots * 100) if total_supplementary_slots > 0 else 100.0
+        
+        # 确定状态：role_group逻辑（所有角色都需要满足）
+        if all(req.status == EvidenceRequirementStatus.SATISFIED for req in sub_requirements):
+            status = EvidenceRequirementStatus.SATISFIED
+        elif any(req.status == EvidenceRequirementStatus.PARTIAL for req in sub_requirements):
+            status = EvidenceRequirementStatus.PARTIAL
+        else:
+            status = EvidenceRequirementStatus.MISSING
+        
+        return RoleGroupRequirement(
+            evidence_type=evidence_type,
+            type="role_group",
+            roles=supported_roles,
+            status=status,
+            sub_requirements=sub_requirements,
+            core_slots_count=total_core_slots,
+            core_slots_satisfied=total_core_satisfied,
+            supplementary_slots_count=total_supplementary_slots,
+            supplementary_slots_satisfied=total_supplementary_satisfied,
+            core_completion_percentage=core_completion_percentage,
+            supplementary_completion_percentage=supplementary_completion_percentage
+        )
+    
+    def _create_role_based_requirement(
+        self,
+        evidence_type: str,
+        role: str,
+        evidences: List[Evidence],
+        association_features: List[AssociationEvidenceFeature]
+    ) -> RoleBasedRequirement:
+        """创建基于角色的证据要求"""
+        print(f"创建基于角色的要求: {evidence_type} ({role})")
+        
+        # 角色名称映射
+        role_name_mapping = {
+            "creditor": "债权人",
+            "debtor": "债务人"
+        }
+        role_name_cn = role_name_mapping.get(role, role)
+        
+        # 构建证据类型名称
+        evidence_type_with_role = f"{evidence_type} ({role_name_cn})"
+        
+        # 获取该证据类型的配置
+        try:
+            from app.core.config_manager import config_manager
+            evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
+            if evidence_type_config_full and "extraction_slots" in evidence_type_config_full:
+                extraction_slots = evidence_type_config_full["extraction_slots"]
+                
+                # 查找该角色的证据
+                role_evidences = [e for e in evidences if self._is_evidence_matching_type(e, str(evidence_type)) and getattr(e, 'evidence_role', None) == role]
+                print(f"找到角色 {role} 的证据数量: {len(role_evidences)}")
+                
+                # 创建槽位详情
+                slots = []
+                core_slots_count = 0
+                core_slots_satisfied = 0
+                supplementary_slots_count = 0
+                supplementary_slots_satisfied = 0
+                
+                if role_evidences:
+                    # 有证据：选择最好的证据来填充槽位信息
+                    all_slots_set = set(slot.get("slot_name", "") for slot in extraction_slots)
+                    best_evidence = self._select_best_evidence_for_role(role_evidences, all_slots_set, [])
+                    
+                    if best_evidence:
+                        for slot_config in extraction_slots:
+                            slot_name = slot_config.get("slot_name", "")
+                            if slot_name:
+                                # 从最佳证据中获取槽位信息
+                                slot_info = self._get_slot_info_from_evidence(best_evidence, slot_name)
+                                
+                                slot_detail = EvidenceSlotDetail(
+                                    slot_name=slot_name,
+                                    is_satisfied=slot_info["is_satisfied"],
+                                    is_core=False,  # 身份证和户籍档案没有核心特征
+                                    source_type="evidence",
+                                    source_id=best_evidence.id,
+                                    confidence=slot_info["confidence"],
+                                    slot_proofread_at=slot_info["slot_proofread_at"],
+                                    slot_is_consistent=slot_info["slot_is_consistent"],
+                                    slot_expected_value=slot_info["slot_expected_value"],
+                                    slot_proofread_reasoning=slot_info["slot_proofread_reasoning"]
+                                )
+                                
+                                slots.append(slot_detail)
+                                
+                                # 统计满足的槽位
+                                if slot_detail.is_satisfied:
+                                    supplementary_slots_satisfied += 1
+                                supplementary_slots_count += 1
+                else:
+                    # 没有证据：创建空的槽位
+                    for slot_config in extraction_slots:
+                        slot_name = slot_config.get("slot_name", "")
+                        if slot_name:
+                            slot_detail = EvidenceSlotDetail(
+                                slot_name=slot_name,
+                                is_satisfied=False,
+                                is_core=False,
+                                source_type="none",
+                                source_id=None,
+                                confidence=None,
+                                slot_proofread_at=None,
+                                slot_is_consistent=None,
+                                slot_expected_value=None,
+                                slot_proofread_reasoning=None
+                            )
+                            
+                            slots.append(slot_detail)
+                            supplementary_slots_count += 1
+                
+                # 计算完成度百分比
+                supplementary_completion_percentage = (supplementary_slots_satisfied / supplementary_slots_count * 100) if supplementary_slots_count > 0 else 100.0
+                
+                # 确定状态
+                if supplementary_slots_satisfied == supplementary_slots_count and supplementary_slots_count > 0:
+                    status = EvidenceRequirementStatus.SATISFIED
+                elif supplementary_slots_satisfied > 0:
+                    status = EvidenceRequirementStatus.PARTIAL
+                else:
+                    status = EvidenceRequirementStatus.MISSING
+                
+                return RoleBasedRequirement(
+                    evidence_type=evidence_type_with_role,
+                    role=role,
+                    status=status,
+                    slots=slots,
+                    core_slots_count=core_slots_count,
+                    core_slots_satisfied=core_slots_satisfied,
+                    supplementary_slots_count=supplementary_slots_count,
+                    supplementary_slots_satisfied=supplementary_slots_satisfied,
+                    core_completion_percentage=100.0 if core_slots_count == 0 else 0.0,
+                    supplementary_completion_percentage=supplementary_completion_percentage
+                )
+        except Exception as e:
+            print(f"创建基于角色的要求失败: {e}")
+        
+        # 如果出错，返回空的角色要求
+        return RoleBasedRequirement(
+            evidence_type=evidence_type_with_role,
+            role=role,
+            status=EvidenceRequirementStatus.MISSING,
+            slots=[],
+            core_slots_count=0,
+            core_slots_satisfied=0,
+            supplementary_slots_count=0,
+            supplementary_slots_satisfied=0,
+            core_completion_percentage=100.0,
+            supplementary_completion_percentage=100.0
+        )
+    
+    def _process_role_based_evidence_requirement(
+        self,
+        evidence_type: str,
+        core_slots: List[str],
+        supported_roles: List[str],
+        evidences: List[Evidence],
+        association_features: List[AssociationEvidenceFeature]
+    ) -> RoleGroupRequirement:
+        """处理基于角色的证据要求，返回RoleGroupRequirement结构"""
+        
+        # 从配置文件获取该证据类型的所有槽位
+        config_slots = []
+        try:
+            from app.core.config_manager import config_manager
+            evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
+            if evidence_type_config_full and "extraction_slots" in evidence_type_config_full:
+                config_slots = evidence_type_config_full["extraction_slots"]
+        except Exception as e:
+            print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
+        
+        # 收集所有可能的槽位
+        all_slots = set()
+        for slot_config in config_slots:
+            slot_name = slot_config.get("slot_name")
+            slot_required = slot_config.get("slot_required", True)
+            if slot_name and slot_required:
+                all_slots.add(slot_name)
+        
+        # 添加配置中的核心槽位
+        for core_slot in core_slots:
+            core_slot_config = next((slot for slot in config_slots if slot.get("slot_name") == core_slot), None)
+            if core_slot_config and core_slot_config.get("slot_required", True):
+                all_slots.add(core_slot)
+        
+        # 为每个角色创建要求
+        sub_requirements = []
+        total_core_slots = 0
+        total_core_satisfied = 0
+        total_supplementary_slots = 0
+        total_supplementary_satisfied = 0
+        
+        # 角色名称映射
+        role_name_mapping = {
+            "creditor": "债权人",
+            "debtor": "债务人"
+        }
+        
+        for role in supported_roles:
+            # 查找该角色的证据
+            role_evidences = [e for e in evidences if self._is_evidence_matching_type(e, str(evidence_type)) and getattr(e, 'evidence_role', None) == role]
+            
+            if role_evidences:
+                # 选择该角色中最好的证据
+                best_evidence = self._select_best_evidence_for_role(role_evidences, all_slots, core_slots)
+                
+                if best_evidence:
+                    # 为该角色的每个槽位创建详情
+                    role_slots = []
+                    role_core_slots_satisfied = 0
+                    role_supplementary_slots_satisfied = 0
+                    
+                    for slot_name in all_slots:
+                        is_core = slot_name in core_slots
+                        
+                        # 从最佳证据中获取槽位信息
+                        slot_info = self._get_slot_info_from_evidence(best_evidence, slot_name)
+                        
+                        # 创建槽位详情，包含中文角色信息
+                        slot_detail = EvidenceSlotDetail(
+                            slot_name=f"{slot_name}",
+                            is_satisfied=slot_info["is_satisfied"],
+                            is_core=is_core,
+                            source_type="evidence",
+                            source_id=best_evidence.id,
+                            confidence=slot_info["confidence"],
+                            slot_proofread_at=slot_info["slot_proofread_at"],
+                            slot_is_consistent=slot_info["slot_is_consistent"],
+                            slot_expected_value=slot_info["slot_expected_value"],
+                            slot_proofread_reasoning=slot_info["slot_proofread_reasoning"]
+                        )
+                        
+                        role_slots.append(slot_detail)
+                        
+                        # 统计满足的槽位
+                        if is_core and slot_info["is_satisfied"]:
+                            role_core_slots_satisfied += 1
+                        elif not is_core and slot_info["is_satisfied"]:
+                            role_supplementary_slots_satisfied += 1
+                    
+                    # 计算该角色的完成度
+                    role_core_slots_count = len([slot for slot in role_slots if slot.is_core])
+                    role_supplementary_slots_count = len([slot for slot in role_slots if not slot.is_core])
+                    
+                    role_core_completion_percentage = (role_core_slots_satisfied / role_core_slots_count * 100) if role_core_slots_count > 0 else 100.0
+                    role_supplementary_completion_percentage = (role_supplementary_slots_satisfied / role_supplementary_slots_count * 100) if role_supplementary_slots_count > 0 else 100.0
+                    
+                    # 确定该角色的状态
+                    if role_core_slots_count > 0:
+                        if role_core_slots_satisfied == role_core_slots_count:
+                            role_status = EvidenceRequirementStatus.SATISFIED
+                        elif role_core_slots_satisfied > 0:
+                            role_status = EvidenceRequirementStatus.PARTIAL
+                        else:
+                            role_status = EvidenceRequirementStatus.MISSING
+                    else:
+                        if role_supplementary_slots_satisfied == role_supplementary_slots_count and role_supplementary_slots_count > 0:
+                            role_status = EvidenceRequirementStatus.SATISFIED
+                        elif role_supplementary_slots_satisfied > 0:
+                            role_status = EvidenceRequirementStatus.PARTIAL
+                        else:
+                            role_status = EvidenceRequirementStatus.MISSING
+                    
+                    # 创建该角色的要求
+                    role_requirement = RoleBasedRequirement(
+                        evidence_type=evidence_type,  # 移除重复的角色说明
+                        role=role,
+                        status=role_status,
+                        slots=role_slots,
+                        core_slots_count=role_core_slots_count,
+                        core_slots_satisfied=role_core_slots_satisfied,
+                        supplementary_slots_count=role_supplementary_slots_count,
+                        supplementary_slots_satisfied=role_supplementary_slots_satisfied,
+                        core_completion_percentage=role_core_completion_percentage,
+                        supplementary_completion_percentage=role_supplementary_completion_percentage
+                    )
+                    
+                    sub_requirements.append(role_requirement)
+                    
+                    # 统计总数
+                    total_core_slots += role_core_slots_count
+                    total_core_satisfied += role_core_slots_satisfied
+                    total_supplementary_slots += role_supplementary_slots_count
+                    total_supplementary_satisfied += role_supplementary_slots_satisfied
+                    
+                else:
+                    # 如果没有找到最佳证据，创建空的角色要求
+                    role_slots = []
+                    for slot_name in all_slots:
+                        is_core = slot_name in core_slots
+                        slot_detail = EvidenceSlotDetail(
+                            slot_name=f"{slot_name}",
+                            is_satisfied=False,
+                            is_core=is_core,
+                            source_type="none",
+                            source_id=None,
+                            confidence=None,
+                            slot_proofread_at=None,
+                            slot_is_consistent=None,
+                            slot_expected_value=None,
+                            slot_proofread_reasoning=None
+                        )
+                        role_slots.append(slot_detail)
+                    
+                    role_core_slots_count = len([slot for slot in role_slots if slot.is_core])
+                    role_supplementary_slots_count = len([slot for slot in role_slots if not slot.is_core])
+                    
+                    role_requirement = RoleBasedRequirement(
+                        evidence_type=evidence_type,
+                        role=role,
+                        status=EvidenceRequirementStatus.MISSING,
+                        slots=role_slots,
+                        core_slots_count=role_core_slots_count,
+                        core_slots_satisfied=0,
+                        supplementary_slots_count=role_supplementary_slots_count,
+                        supplementary_slots_satisfied=0,
+                        core_completion_percentage=100.0 if role_core_slots_count == 0 else 0.0,
+                        supplementary_completion_percentage=100.0 if role_supplementary_slots_count == 0 else 0.0
+                    )
+                    
+                    sub_requirements.append(role_requirement)
+                    
+                    # 统计总数
+                    total_core_slots += role_core_slots_count
+                    total_supplementary_slots += role_supplementary_slots_count
+            else:
+                # 如果没有该角色的证据，创建空的角色要求
+                role_slots = []
+                for slot_name in all_slots:
+                    is_core = slot_name in core_slots
+                    slot_detail = EvidenceSlotDetail(
+                        slot_name=f"{slot_name}",
+                        is_satisfied=False,
+                        is_core=is_core,
+                        source_type="none",
+                        source_id=None,
+                        confidence=None,
+                        slot_proofread_at=None,
+                        slot_is_consistent=None,
+                        slot_expected_value=None,
+                        slot_proofread_reasoning=None
+                    )
+                    role_slots.append(slot_detail)
+                
+                role_core_slots_count = len([slot for slot in role_slots if slot.is_core])
+                role_supplementary_slots_count = len([slot for slot in role_slots if not slot.is_core])
+                
+                role_requirement = RoleBasedRequirement(
+                    evidence_type=evidence_type,
+                    role=role,
+                    status=EvidenceRequirementStatus.MISSING,
+                    slots=role_slots,
+                    core_slots_count=role_core_slots_count,
+                    core_slots_satisfied=0,
+                    supplementary_slots_count=role_supplementary_slots_count,
+                    supplementary_slots_satisfied=0,
+                    core_completion_percentage=100.0 if role_core_slots_count == 0 else 0.0,
+                    supplementary_completion_percentage=100.0 if role_supplementary_slots_count == 0 else 0.0
+                )
+                
+                sub_requirements.append(role_requirement)
+                
+                # 统计总数
+                total_core_slots += role_core_slots_count
+                total_supplementary_slots += role_supplementary_slots_count
+        
+        # 计算完成度百分比
+        core_completion_percentage = (total_core_satisfied / total_core_slots * 100) if total_core_slots > 0 else 100.0
+        supplementary_completion_percentage = (total_supplementary_satisfied / total_supplementary_slots * 100) if total_supplementary_slots > 0 else 100.0
+        
+        # 确定状态：role_group逻辑（所有角色都需要满足）
+        if all(req.status == EvidenceRequirementStatus.SATISFIED for req in sub_requirements):
+            status = EvidenceRequirementStatus.SATISFIED
+        elif any(req.status == EvidenceRequirementStatus.PARTIAL for req in sub_requirements):
+            status = EvidenceRequirementStatus.PARTIAL
+        else:
+            status = EvidenceRequirementStatus.MISSING
+        
+        return RoleGroupRequirement(
+            evidence_type=evidence_type,
+            type="role_group",
+            roles=supported_roles,
+            status=status,
+            sub_requirements=sub_requirements,
+            core_slots_count=total_core_slots,
+            core_slots_satisfied=total_core_satisfied,
+            supplementary_slots_count=total_supplementary_slots,
+            supplementary_slots_satisfied=total_supplementary_satisfied,
             core_completion_percentage=core_completion_percentage,
             supplementary_completion_percentage=supplementary_completion_percentage
         )
@@ -707,43 +1136,73 @@ class EvidenceChainService:
         1. 优先选择校对通过的证据 (slot_is_consistent=True)
         2. 其次选择无校对动作的证据 (slot_proofread_at=None)
         3. 最后选择校对失败的证据 (slot_is_consistent=False)
-        4. 在相同校对状态下，优先选择核心槽位完成度最高的源
-        5. 在相同完成度下，优先选择最新的证据（基于时间戳）
+        4. 在相同校对状态下，优先选择角色匹配的证据（如果配置了supported_roles）
+        5. 在相同角色匹配状态下，优先选择核心槽位完成度最高的源
+        6. 在相同完成度下，优先选择最新的证据（基于时间戳）
         """
         best_source = None
         best_score = -1
         best_proofread_status = -1  # -1: 无校对, 0: 校对失败, 1: 校对通过
+        best_role_match = False  # 是否角色匹配
         
         # 评估证据实例
         for evidence_id, slot_data in evidence_slot_groups.items():
             score, proofread_status = self._calculate_source_score_with_proofread(slot_data, all_slots, core_slots)
             
-            # 优先选择校对状态更好的证据
-            if proofread_status > best_proofread_status or (proofread_status == best_proofread_status and score > best_score):
+            # 检查角色匹配（如果证据有角色信息）
+            role_match = self._check_evidence_role_match(evidence_id, slot_data)
+            
+            # 优先选择校对状态更好的证据，在相同校对状态下优先选择角色匹配的
+            should_update = False
+            if proofread_status > best_proofread_status:
+                should_update = True
+            elif proofread_status == best_proofread_status:
+                if role_match and not best_role_match:
+                    should_update = True
+                elif role_match == best_role_match and score > best_score:
+                    should_update = True
+            
+            if should_update:
                 best_score = score
                 best_proofread_status = proofread_status
+                best_role_match = role_match
                 best_source = {
                     "source_type": "evidence",
                     "source_id": evidence_id,
                     "slot_data": slot_data,
                     "score": score,
-                    "proofread_status": proofread_status
+                    "proofread_status": proofread_status,
+                    "role_match": role_match
                 }
         
         # 评估关联证据分组
         for group_name, slot_data in association_slot_groups.items():
             score, proofread_status = self._calculate_source_score_with_proofread(slot_data, all_slots, core_slots)
             
-            # 优先选择校对状态更好的证据
-            if proofread_status > best_proofread_status or (proofread_status == best_proofread_status and score > best_score):
+            # 关联证据分组通常没有角色信息，默认为False
+            role_match = False
+            
+            # 优先选择校对状态更好的证据，在相同校对状态下优先选择角色匹配的
+            should_update = False
+            if proofread_status > best_proofread_status:
+                should_update = True
+            elif proofread_status == best_proofread_status:
+                if role_match and not best_role_match:
+                    should_update = True
+                elif role_match == best_role_match and score > best_score:
+                    should_update = True
+            
+            if should_update:
                 best_score = score
                 best_proofread_status = proofread_status
+                best_role_match = role_match
                 best_source = {
                     "source_type": "association_group",
                     "source_id": group_name,
                     "slot_data": slot_data,
                     "score": score,
-                    "proofread_status": proofread_status
+                    "proofread_status": proofread_status,
+                    "role_match": role_match
                 }
         
         return best_source
@@ -873,3 +1332,123 @@ class EvidenceChainService:
                     latest_timestamp = created_at
         
         return latest_timestamp
+
+    def _check_evidence_role_match(self, evidence_id: int, slot_data: Dict[str, Dict[str, Any]]) -> bool:
+        """检查证据角色是否匹配配置要求
+        
+        Args:
+            evidence_id: 证据ID
+            slot_data: 槽位数据
+            
+        Returns:
+            是否角色匹配
+        """
+        # 从evidences列表中查找对应的证据对象
+        for evidence in getattr(self, '_current_evidences', []):
+            if evidence.id == evidence_id:
+                # 检查证据是否有角色信息
+                if hasattr(evidence, 'evidence_role') and evidence.evidence_role:
+                    # 检查该证据类型是否配置了supported_roles
+                    evidence_type = evidence.classification_category
+                    if evidence_type:
+                        try:
+                            from app.core.config_manager import config_manager
+                            evidence_type_config = config_manager.get_evidence_type_by_type_name(str(evidence_type))
+                            if evidence_type_config and "supported_roles" in evidence_type_config:
+                                supported_roles = evidence_type_config["supported_roles"]
+                                return evidence.evidence_role in supported_roles
+                        except Exception as e:
+                            # 如果获取配置失败，记录日志但继续执行
+                            print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
+                break
+        
+        # 如果没有角色信息或配置中没有supported_roles，返回False
+        return False
+
+    def _select_best_evidence_for_role(self, role_evidences: List[Evidence], all_slots: set, core_slots: List[str]) -> Optional[Evidence]:
+        """为特定角色选择最佳证据"""
+        if not role_evidences:
+            return None
+        
+        best_evidence = None
+        best_score = -1
+        
+        for evidence in role_evidences:
+            if not evidence.evidence_features:
+                continue
+            
+            # 计算证据的评分
+            score = self._calculate_evidence_score(evidence, all_slots, core_slots)
+            
+            if score > best_score:
+                best_score = score
+                best_evidence = evidence
+        
+        return best_evidence
+    
+    def _calculate_evidence_score(self, evidence: Evidence, all_slots: set, core_slots: List[str]) -> float:
+        """计算单个证据的评分"""
+        if not evidence.evidence_features:
+            return 0.0
+        
+        # 计算核心槽位完成度
+        core_slots_count = len(core_slots)
+        core_slots_satisfied = 0
+        
+        # 计算总体槽位完成度
+        total_slots_count = len(all_slots)
+        total_slots_satisfied = 0
+        
+        # 计算平均置信度
+        confidences = []
+        
+        for feature in evidence.evidence_features:
+            slot_name = feature.get("slot_name")
+            if slot_name in all_slots:
+                total_slots_satisfied += 1
+                if slot_name in core_slots:
+                    core_slots_satisfied += 1
+                
+                confidence = feature.get("confidence", 0.0)
+                if confidence is not None:
+                    confidences.append(confidence)
+        
+        # 计算完成度百分比
+        core_completion = (core_slots_satisfied / core_slots_count * 100) if core_slots_count > 0 else 100.0
+        total_completion = (total_slots_satisfied / total_slots_count * 100) if total_slots_count > 0 else 100.0
+        
+        # 计算平均置信度
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        # 加权计算总分
+        score = (core_completion * 0.7) + (total_completion * 0.2) + (avg_confidence * 0.1)
+        
+        return score
+    
+    def _get_slot_info_from_evidence(self, evidence: Evidence, slot_name: str) -> Dict[str, Any]:
+        """从证据中获取指定槽位的信息"""
+        slot_info = {
+            "is_satisfied": False,
+            "confidence": 0.0,
+            "slot_proofread_at": None,
+            "slot_is_consistent": None,
+            "slot_expected_value": None,
+            "slot_proofread_reasoning": None
+        }
+        
+        if not evidence.evidence_features:
+            return slot_info
+        
+        # 查找对应的特征
+        for feature in evidence.evidence_features:
+            if feature.get("slot_name") == slot_name:
+                # 检查槽位是否满足条件
+                slot_info["is_satisfied"] = self._is_slot_satisfied(feature)
+                slot_info["confidence"] = feature.get("confidence", 0.0)
+                slot_info["slot_proofread_at"] = feature.get("slot_proofread_at")
+                slot_info["slot_is_consistent"] = feature.get("slot_is_consistent")
+                slot_info["slot_expected_value"] = feature.get("slot_expected_value")
+                slot_info["slot_proofread_reasoning"] = feature.get("slot_proofread_reasoning")
+                break
+        
+        return slot_info

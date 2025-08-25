@@ -4,6 +4,65 @@ import { useState, useEffect } from "react"
 import { CheckCircle, AlertCircle, XCircle, ExternalLink, Star, Zap, ChevronDown, ChevronRight, X, Eye, Settings, ArrowRight, ChevronsRight } from "lucide-react"
 import { evidenceChainAPI, type EvidenceChainDashboardData, type EvidenceChain, type EvidenceTypeRequirement } from "@/lib/evidence-chain-api"
 
+// 新增类型定义
+interface RoleBasedRequirement {
+  evidence_type: string
+  role: string
+  status: "missing" | "partial" | "satisfied"
+  slots: any[]
+  core_slots_count: number
+  core_slots_satisfied: number
+  supplementary_slots_count: number
+  supplementary_slots_satisfied: number
+  core_completion_percentage: number
+  supplementary_completion_percentage: number
+}
+
+interface RoleGroupRequirement {
+  evidence_type: string
+  type: "role_group"
+  roles: string[]
+  status: "missing" | "partial" | "satisfied"
+  sub_requirements: RoleBasedRequirement[]
+  core_slots_count: number
+  core_slots_satisfied: number
+  supplementary_slots_count: number
+  supplementary_slots_satisfied: number
+  core_completion_percentage: number
+  supplementary_completion_percentage: number
+}
+
+interface OrGroupRequirement {
+  evidence_type: string
+  type: "or_group"
+  sub_groups: (RoleGroupRequirement | EvidenceTypeRequirement)[]
+  status: "missing" | "partial" | "satisfied"
+  core_slots_count: number
+  core_slots_satisfied: number
+  supplementary_slots_count: number
+  supplementary_slots_satisfied: number
+  core_completion_percentage: number
+  supplementary_completion_percentage: number
+}
+
+// 子分类类型
+type SubCategory = {
+  name: string
+  slots: any[]
+  core_slots_count: number
+  core_slots_satisfied: number
+  supplementary_slots_count: number
+  supplementary_slots_satisfied: number
+  status: "missing" | "partial" | "satisfied"
+  role?: string
+  type?: string
+  roles?: string[]
+  sub_requirements?: RoleBasedRequirement[]
+}
+
+// 联合类型
+type EvidenceRequirement = EvidenceTypeRequirement | RoleGroupRequirement | OrGroupRequirement
+
 // 添加滚动条样式
 const scrollbarStyles = `
   .custom-scrollbar::-webkit-scrollbar {
@@ -562,112 +621,207 @@ function SideDrawer({ isOpen, onClose, chain, drawerType, expandedRequirements, 
 
 // 证据要求卡片组件 - 简化设计
 interface EvidenceRequirementCardProps {
-  requirement: EvidenceTypeRequirement
+  requirement: EvidenceRequirement
   onSlotClick: (slot: unknown, requirement: EvidenceTypeRequirement) => void
   isExpanded: boolean
   onToggle: () => void
 }
 
 function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggle }: EvidenceRequirementCardProps) {
-  const isOrRelationshipType = requirement.evidence_type.includes(' 或 ')
+  // 类型守卫函数
+  const isRoleGroupType = (req: EvidenceRequirement): req is RoleGroupRequirement => {
+    return 'type' in req && req.type === 'role_group'
+  }
   
-  const getSubCategories = () => {
-    if (!isOrRelationshipType) return []
-    
-    const subCategoryMap = new Map<string, any[]>()
-    
-    requirement.slots.forEach(slot => {
-      const slotData = slot as any
-      const slotName = slotData.slot_name
-      
-      const colonIndex = slotName.indexOf(':')
-      if (colonIndex > 0) {
-        const subCategoryName = slotName.substring(0, colonIndex)
-        if (!subCategoryMap.has(subCategoryName)) {
-          subCategoryMap.set(subCategoryName, [])
-        }
-        subCategoryMap.get(subCategoryName)!.push(slot)
-      }
-    })
-    
-    return Array.from(subCategoryMap.entries()).map(([name, slots]) => {
-      const coreSlots = slots.filter((s: any) => s.is_core)
-      const coreSlotsCount = coreSlots.length
-      const coreSlotsSatisfied = coreSlots.filter((s: any) => s.is_satisfied).length
-      
-      // 子分类状态主要基于核心特征的完成情况
-      let status = "missing"
-      if (coreSlotsCount > 0) {
-        if (coreSlotsSatisfied === coreSlotsCount) {
-          status = "satisfied"  // 所有核心特征都完成
-        } else if (coreSlotsSatisfied > 0) {
-          status = "partial"    // 部分核心特征完成
-        } else {
-          status = "missing"    // 没有核心特征完成
-        }
-      } else {
-        // 如果没有核心特征，则基于所有特征的状态
-        if (slots.every((s: any) => s.is_satisfied)) {
-          status = "satisfied"
-        } else if (slots.some((s: any) => s.is_satisfied)) {
-          status = "partial"
-        }
-      }
-      
+  const isOrGroupType = (req: EvidenceRequirement): req is OrGroupRequirement => {
+    return 'type' in req && req.type === 'or_group'
+  }
+  
+  const isEvidenceTypeRequirement = (req: EvidenceRequirement): req is EvidenceTypeRequirement => {
+    return !('type' in req) || (req.type !== 'role_group' && req.type !== 'or_group')
+  }
+
+  // 根据类型获取相应的数据
+  const getRequirementData = () => {
+    if (isRoleGroupType(requirement)) {
       return {
-        name,
-        slots,
-        core_slots_count: coreSlotsCount,
-        core_slots_satisfied: coreSlotsSatisfied,
-        supplementary_slots_count: slots.filter((s: any) => !s.is_core).length,
-        supplementary_slots_satisfied: slots.filter((s: any) => !s.is_core && s.is_satisfied).length,
-        status
+        evidence_type: requirement.evidence_type,
+        status: requirement.status,
+        core_slots_count: requirement.core_slots_count,
+        core_slots_satisfied: requirement.core_slots_satisfied,
+        supplementary_slots_count: requirement.supplementary_slots_count,
+        supplementary_slots_satisfied: requirement.supplementary_slots_satisfied,
+        core_completion_percentage: requirement.core_completion_percentage,
+        supplementary_completion_percentage: requirement.supplementary_completion_percentage,
+        slots: requirement.sub_requirements.flatMap(req => req.slots)
       }
-    })
+    } else if (isOrGroupType(requirement)) {
+      return {
+        evidence_type: requirement.evidence_type,
+        status: requirement.status,
+        core_slots_count: requirement.core_slots_count,
+        core_slots_satisfied: requirement.core_slots_satisfied,
+        supplementary_slots_count: requirement.supplementary_slots_count,
+        supplementary_slots_satisfied: requirement.supplementary_slots_satisfied,
+        core_completion_percentage: requirement.core_completion_percentage,
+        supplementary_completion_percentage: requirement.supplementary_completion_percentage,
+        slots: requirement.sub_groups.flatMap(group => 
+          isRoleGroupType(group) 
+            ? group.sub_requirements.flatMap(req => req.slots)
+            : group.slots
+        )
+      }
+    } else {
+      // EvidenceTypeRequirement
+      return {
+        evidence_type: requirement.evidence_type,
+        status: requirement.status,
+        core_slots_count: requirement.core_slots_count,
+        core_slots_satisfied: requirement.core_slots_satisfied,
+        supplementary_slots_count: requirement.supplementary_slots_count,
+        supplementary_slots_satisfied: requirement.supplementary_slots_satisfied,
+        core_completion_percentage: requirement.core_completion_percentage,
+        supplementary_completion_percentage: requirement.supplementary_completion_percentage,
+        slots: requirement.slots
+      }
+    }
+  }
+
+  const requirementData = getRequirementData()
+  
+  // 检查是否是"或"关系类型
+  const isOrRelationshipType = requirementData.evidence_type.includes(' 或 ')
+  
+  // 检查是否是角色组类型
+  const isRoleGroupTypeCheck = isRoleGroupType(requirement)
+  
+  const getSubCategories = (): SubCategory[] => {
+    if (!isOrRelationshipType && !isRoleGroupTypeCheck) return []
+    
+    if (isRoleGroupType(requirement)) {
+      // 角色组：直接返回sub_requirements
+      return requirement.sub_requirements.map(req => ({
+        name: req.evidence_type,
+        slots: req.slots,
+        core_slots_count: req.core_slots_count,
+        core_slots_satisfied: req.core_slots_satisfied,
+        supplementary_slots_count: req.supplementary_slots_count,
+        supplementary_slots_satisfied: req.supplementary_slots_satisfied,
+        status: req.status,
+        role: req.role
+      }))
+    } else if (isOrGroupType(requirement)) {
+      // 或组：处理sub_groups，保持evidence_type分组层
+      return requirement.sub_groups.map(group => {
+        if (isRoleGroupType(group)) {
+          // 如果sub_group是role_group，保持分组结构
+          return {
+            name: group.evidence_type,
+            type: 'role_group',
+            roles: group.roles,
+            status: group.status,
+            sub_requirements: group.sub_requirements,
+            core_slots_count: group.core_slots_count,
+            core_slots_satisfied: group.core_slots_satisfied,
+            supplementary_slots_count: group.supplementary_slots_count,
+            supplementary_slots_satisfied: group.supplementary_slots_satisfied,
+            slots: group.sub_requirements.flatMap(req => req.slots)
+          }
+        } else {
+          // 普通EvidenceTypeRequirement
+          return {
+            name: group.evidence_type,
+            type: 'evidence',
+            slots: group.slots,
+            core_slots_count: group.core_slots_count,
+            core_slots_satisfied: group.core_slots_satisfied,
+            supplementary_slots_count: group.supplementary_slots_count,
+            supplementary_slots_satisfied: group.supplementary_slots_satisfied,
+            status: group.status
+          }
+        }
+      })
+    }
+    
+    return []
   }
 
   const subCategories = getSubCategories()
 
-  const getOrRelationshipCompletion = () => {
-    if (!isOrRelationshipType) return requirement.core_completion_percentage
+  const getGroupCompletion = () => {
+    if (isOrGroupType(requirement)) {
+      // or_group逻辑：组内其一完整，则组完整
+      const hasCompletedCategory = requirement.sub_groups.some(group => {
+        if (isRoleGroupType(group)) {
+          return group.core_slots_count > 0 && group.core_slots_satisfied === group.core_slots_count
+        } else {
+          return group.core_slots_count > 0 && group.core_slots_satisfied === group.core_slots_count
+        }
+      })
+      
+      if (hasCompletedCategory) return 100
+      return requirement.core_completion_percentage
+    } else if (isRoleGroupType(requirement)) {
+      // role_group逻辑：组内全部完整，则组完整
+      const allCategoriesCompleted = requirement.sub_requirements.every(req => 
+        req.core_slots_count > 0 && req.core_slots_satisfied === req.core_slots_count
+      )
+      
+      if (allCategoriesCompleted) return 100
+      return requirement.core_completion_percentage
+    }
     
-    const hasCompletedCategory = subCategories.some(sub => 
-      sub.core_slots_count > 0 && sub.core_slots_satisfied === sub.core_slots_count
-    )
-    
-    if (hasCompletedCategory) return 100
-    return requirement.core_completion_percentage
+    return requirementData.core_completion_percentage
   }
 
-  const getOrRelationshipStatus = () => {
-    if (!isOrRelationshipType) return requirement.status
+  const getGroupStatus = () => {
+    if (isOrGroupType(requirement)) {
+      // or_group逻辑：直接使用后端返回的状态，因为后端已经正确计算了or_group的逻辑
+      return requirement.status
+    } else if (isRoleGroupType(requirement)) {
+      // role_group逻辑：直接使用后端返回的状态
+      return requirement.status
+    }
     
-    const hasCompletedCategory = subCategories.some(sub => 
-      sub.core_slots_count > 0 && sub.core_slots_satisfied === sub.core_slots_count
-    )
-    
-    if (hasCompletedCategory) return "satisfied"
-    if (requirement.core_completion_percentage > 0) return "partial"
-    return "missing"
+    return requirementData.status
   }
 
-  const orRelationshipCompletion = getOrRelationshipCompletion()
-  const orRelationshipStatus = getOrRelationshipStatus()
+  const groupCompletion = getGroupCompletion()
+  const groupStatus = getGroupStatus()
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "satisfied":
-        return <CheckCircle className="w-6 h-6 text-green-500" />
+        return (
+          <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center border border-green-200">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          </div>
+        )
       case "partial":
-        return <AlertCircle className="w-6 h-6 text-yellow-500" />
+        return (
+          <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center border border-yellow-200">
+            <AlertCircle className="w-5 h-5 text-yellow-600" />
+          </div>
+        )
       case "missing":
-        return <XCircle className="w-6 h-6 text-red-500" />
+        return (
+          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center border border-red-200">
+            <XCircle className="w-5 h-5 text-red-600" />
+          </div>
+        )
       default:
-        return <XCircle className="w-6 h-6 text-gray-400" />
+        return (
+          <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+            <XCircle className="w-5 h-5 text-gray-500" />
+          </div>
+        )
     }
   }
 
-
+  // 格式化证据类型名称
+  const formatEvidenceTypeName = (name: string) => {
+    return name
+  }
 
   return (
     <div className={`bg-white border border-gray-200 rounded-lg transition-all duration-300 ${
@@ -681,36 +835,48 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h4 className="font-medium text-gray-900">{requirement.evidence_type}</h4>
-              
-              {/* 快捷跳转按钮 - 只在非分组情况下显示 */}
-              {!isOrRelationshipType && requirement.slots.some(slot => 
-                slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-              ) && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const jumpableSlot = requirement.slots.find(slot => 
-                      slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-                    )
-                    if (jumpableSlot) {
-                      onSlotClick(jumpableSlot, requirement)
-                    }
-                  }}
-                  className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
-                  title="查看关联证据"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-              )}
+              <h4 className="font-medium text-gray-900">{formatEvidenceTypeName(requirementData.evidence_type)}</h4>
             </div>
           </div>
           
           {/* 右侧状态区域 */}
           <div className="flex items-center gap-3">
+            {/* 快捷跳转按钮 - 统一放在右上角，增大尺寸 */}
+            {!isOrRelationshipType && !isRoleGroupTypeCheck && requirementData.slots.some(slot => 
+              slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+            ) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const jumpableSlot = requirementData.slots.find(slot => 
+                    slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                  )
+                  if (jumpableSlot) {
+                    // 创建一个临时的EvidenceTypeRequirement用于onSlotClick
+                    const tempRequirement: EvidenceTypeRequirement = {
+                      evidence_type: requirementData.evidence_type,
+                      status: requirementData.status,
+                      slots: requirementData.slots,
+                      core_slots_count: requirementData.core_slots_count,
+                      core_slots_satisfied: requirementData.core_slots_satisfied,
+                      supplementary_slots_count: requirementData.supplementary_slots_count,
+                      supplementary_slots_satisfied: requirementData.supplementary_slots_satisfied,
+                      core_completion_percentage: requirementData.core_completion_percentage,
+                      supplementary_completion_percentage: requirementData.supplementary_completion_percentage
+                    }
+                    onSlotClick(jumpableSlot, tempRequirement)
+                  }
+                }}
+                className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 hover:border-blue-300"
+                title="查看关联证据"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            )}
+            
             {/* 状态图标 - 调大尺寸 */}
             <div className="flex-shrink-0">
-              {getStatusIcon(isOrRelationshipType ? orRelationshipStatus : requirement.status)}
+              {getStatusIcon(isOrRelationshipType || isRoleGroupTypeCheck ? groupStatus : requirementData.status)}
             </div>
             
             {/* 展开/收起图标 */}
@@ -724,89 +890,268 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
       {/* 展开的详细内容 */}
       {isExpanded && (
         <div className="border-t border-gray-100 p-6 bg-gray-50">
-          {isOrRelationshipType ? (
-            // 或关系类型：展示子分类
-            <div className="space-y-4">
+          {isOrRelationshipType || isRoleGroupTypeCheck ? (
+            // 或关系类型或角色组类型：展示子分类 - 优化间距和层次
+            <div className="space-y-6">
               {subCategories.map((subCategory, index) => {
+                // 检查是否是role_group类型
+                const isSubCategoryRoleGroup = subCategory.type === 'role_group'
+                
                 return (
-                  <div key={index} className="border rounded-lg p-4 bg-white border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(subCategory.status)}
-                        <h5 className="font-medium text-sm text-gray-600">
-                          {subCategory.name}
+                  <div key={index} className="border rounded-lg p-5 bg-white border-gray-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <h5 className="font-medium text-gray-700">
+                          {/* 简化名称，移除重复的角色说明 */}
+                          {subCategory.name.replace(/\([^)]+\)/, '').trim()}
                         </h5>
+                        {/* 如果是role_group，显示角色信息 - 优化显示 */}
+                        {isSubCategoryRoleGroup && subCategory.roles && (
+                          <div className="flex items-center gap-2">
+                            {/* 移除冗余的角色描述，卡片内已经足够清晰 */}
+                          </div>
+                        )}
                       </div>
                       
-                      {/* 子分类的快捷跳转按钮 */}
-                      <div className="flex items-center gap-2">
-                      {subCategory.slots.some((slot: any) => 
-                        slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-                      ) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const jumpableSlot = subCategory.slots.find((slot: any) => 
-                              slot.is_satisfied && slot.source_id && slot.source_type !== "none"
-                            )
-                            if (jumpableSlot) {
-                              onSlotClick(jumpableSlot, requirement)
-                            }
-                          }}
-                          className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
-                          title="查看关联证据"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </button>
-                      )}
+                      {/* 右侧操作区域 - 状态图标和快捷跳转按钮 */}
+                      <div className="flex items-center gap-3">
+                        {/* 状态图标 - 统一放在右上角，带背景 */}
+                        <div className="flex-shrink-0">
+                          {getStatusIcon(subCategory.status)}
+                        </div>
+                        
+                        {/* 快捷跳转按钮 - 统一放在右上角，增大尺寸 */}
+                        {!isSubCategoryRoleGroup && subCategory.slots.some((slot: any) => 
+                          slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                        ) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const jumpableSlot = subCategory.slots.find((slot: any) => 
+                                slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                              )
+                              if (jumpableSlot) {
+                                // 创建一个临时的EvidenceTypeRequirement用于onSlotClick
+                                const tempRequirement: EvidenceTypeRequirement = {
+                                  evidence_type: subCategory.name,
+                                  status: subCategory.status,
+                                  slots: subCategory.slots,
+                                  core_slots_count: subCategory.core_slots_count || 0,
+                                  core_slots_satisfied: subCategory.core_slots_satisfied || 0,
+                                  supplementary_slots_count: subCategory.supplementary_slots_count || 0,
+                                  supplementary_slots_satisfied: subCategory.supplementary_slots_satisfied || 0,
+                                  core_completion_percentage: 0,
+                                  supplementary_completion_percentage: 0
+                                }
+                                onSlotClick(jumpableSlot, tempRequirement)
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 hover:border-blue-300"
+                            title="查看关联证据"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     
-
-                    
-                    <div className="space-y-2">
-                      {/* 核心特征 */}
-                                                  {subCategory.core_slots_count > 0 && (
-                              <div>
-                                <div className="text-xs font-medium text-blue-600 mb-2">
-                                  <span>核心特征 ({subCategory.core_slots_satisfied}/{subCategory.core_slots_count})</span>
-                                </div>
-                                <div className="space-y-1">
-                                  {subCategory.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
-                                    <SlotItem
-                                      key={slotIndex}
-                                      slot={slot}
-                                      requirement={requirement}
-                                      onSlotClick={onSlotClick}
-                                      isCore={true}
-                                      showSourceButton={false}
-                                    />
-                                  ))}
-                                </div>
+                    {isSubCategoryRoleGroup && subCategory.sub_requirements ? (
+                      // 如果是role_group，显示角色要求 - 优化样式和标签
+                      <div className="space-y-6">
+                        {subCategory.sub_requirements.map((roleReq, roleIndex) => (
+                          <div key={roleIndex} className="border border-blue-100 rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-medium text-gray-800">
+                                  {/* 简化名称，移除重复的角色说明 */}
+                                  {roleReq.evidence_type.replace(/\([^)]+\)/, '').trim()}
+                                </span>
+                                {/* 角色标识 - 使用中文，更简洁，移除重复 */}
+                                <span className={`text-xs px-3 py-1.5 rounded-full font-medium shadow-sm ${
+                                  roleReq.role === 'creditor'
+                                    ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                                    : 'bg-green-100 text-green-700 border border-green-200'
+                                }`}>
+                                  {roleReq.role === 'creditor' ? '债权人' : '债务人'}
+                                </span>
                               </div>
-                            )}
-                      
-                      {/* 补充特征 */}
-                                                  {subCategory.supplementary_slots_count > 0 && (
-                              <div>
-                                <div className="text-xs font-medium text-gray-500 mb-2">
-                                  <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
+                              
+                              {/* 右侧操作区域 - 状态图标和快捷跳转按钮 */}
+                              <div className="flex items-center gap-3">
+                                {/* 状态图标 - 统一放在右上角，带背景 */}
+                                <div className="flex-shrink-0">
+                                  {getStatusIcon(roleReq.status)}
                                 </div>
-                                <div className="space-y-1">
-                                  {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
-                                    <SlotItem
-                                      key={slotIndex}
-                                      slot={slot}
-                                      requirement={requirement}
-                                      onSlotClick={onSlotClick}
-                                      isCore={false}
-                                      showSourceButton={false}
-                                    />
-                                  ))}
-                                </div>
+                                
+                                {/* 快捷跳转按钮 - 统一放在右上角，增大尺寸 */}
+                                {roleReq.slots.some((slot: any) => 
+                                  slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                                ) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const jumpableSlot = roleReq.slots.find((slot: any) => 
+                                        slot.is_satisfied && slot.source_id && slot.source_type !== "none"
+                                      )
+                                      if (jumpableSlot) {
+                                        // 创建一个临时的EvidenceTypeRequirement用于onSlotClick
+                                        const tempRequirement: EvidenceTypeRequirement = {
+                                          evidence_type: roleReq.evidence_type,
+                                          status: roleReq.status,
+                                          slots: roleReq.slots,
+                                          core_slots_count: roleReq.core_slots_count,
+                                          core_slots_satisfied: roleReq.core_slots_satisfied,
+                                          supplementary_slots_count: roleReq.supplementary_slots_count,
+                                          supplementary_slots_satisfied: roleReq.supplementary_slots_satisfied,
+                                          core_completion_percentage: roleReq.core_completion_percentage,
+                                          supplementary_completion_percentage: roleReq.supplementary_completion_percentage
+                                        }
+                                        onSlotClick(jumpableSlot, tempRequirement)
+                                      }
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 hover:border-blue-300"
+                                    title="查看关联证据"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
-                            )}
-                    </div>
+                            </div>
+                            
+                            <div className="space-y-4">
+                              {/* 核心特征 */}
+                              {roleReq.core_slots_count > 0 && (
+                                <div>
+                                  <div className="text-xs font-medium text-blue-600 mb-3 flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                                    <span>核心特征 ({roleReq.core_slots_satisfied}/{roleReq.core_slots_count})</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {roleReq.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
+                                      <SlotItem
+                                        key={slotIndex}
+                                        slot={slot}
+                                        requirement={{
+                                          evidence_type: roleReq.evidence_type,
+                                          status: roleReq.status,
+                                          slots: roleReq.slots,
+                                          core_slots_count: roleReq.core_slots_count,
+                                          core_slots_satisfied: roleReq.core_slots_satisfied,
+                                          supplementary_slots_count: roleReq.supplementary_slots_count,
+                                          supplementary_slots_satisfied: roleReq.supplementary_slots_satisfied,
+                                          core_completion_percentage: roleReq.core_completion_percentage,
+                                          supplementary_completion_percentage: roleReq.supplementary_completion_percentage
+                                        }}
+                                        onSlotClick={onSlotClick}
+                                        isCore={true}
+                                        showSourceButton={false}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* 补充特征 */}
+                              {roleReq.supplementary_slots_count > 0 && (
+                                <div>
+                                  <div className="text-xs font-medium text-gray-600 mb-3 flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                                    <span>补充特征 ({roleReq.supplementary_slots_satisfied}/{roleReq.supplementary_slots_count})</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {roleReq.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
+                                      <SlotItem
+                                        key={slotIndex}
+                                        slot={slot}
+                                        requirement={{
+                                          evidence_type: roleReq.evidence_type,
+                                          status: roleReq.status,
+                                          slots: roleReq.slots,
+                                          core_slots_count: roleReq.core_slots_count,
+                                          core_slots_satisfied: roleReq.core_slots_satisfied,
+                                          supplementary_slots_count: roleReq.supplementary_slots_count,
+                                          supplementary_slots_satisfied: roleReq.supplementary_slots_satisfied,
+                                          core_completion_percentage: roleReq.core_completion_percentage,
+                                          supplementary_completion_percentage: roleReq.supplementary_completion_percentage
+                                        }}
+                                        onSlotClick={onSlotClick}
+                                        isCore={false}
+                                        showSourceButton={false}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      // 普通evidence_type，直接显示槽位
+                      <div className="space-y-2">
+                        {/* 核心特征 */}
+                        {subCategory.core_slots_count > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-blue-600 mb-2">
+                              <span>核心特征 ({subCategory.core_slots_satisfied}/{subCategory.core_slots_count})</span>
+                            </div>
+                            <div className="space-y-1">
+                              {subCategory.slots.filter((slot: any) => slot.is_core).map((slot: any, slotIndex: number) => (
+                                <SlotItem
+                                  key={slotIndex}
+                                  slot={slot}
+                                  requirement={{
+                                    evidence_type: subCategory.name,
+                                    status: subCategory.status,
+                                    slots: subCategory.slots,
+                                    core_slots_count: subCategory.core_slots_count || 0,
+                                    core_slots_satisfied: subCategory.core_slots_satisfied || 0,
+                                    supplementary_slots_count: subCategory.supplementary_slots_count || 0,
+                                    supplementary_slots_satisfied: subCategory.supplementary_slots_satisfied || 0,
+                                    core_completion_percentage: 0,
+                                    supplementary_completion_percentage: 0
+                                  }}
+                                  onSlotClick={onSlotClick}
+                                  isCore={true}
+                                  showSourceButton={false}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 补充特征 */}
+                        {subCategory.supplementary_slots_count > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-2">
+                              <span>补充特征 ({subCategory.supplementary_slots_satisfied}/{subCategory.supplementary_slots_count})</span>
+                            </div>
+                            <div className="space-y-1">
+                              {subCategory.slots.filter((slot: any) => !slot.is_core).map((slot: any, slotIndex: number) => (
+                                <SlotItem
+                                  key={slotIndex}
+                                  slot={slot}
+                                  requirement={{
+                                    evidence_type: subCategory.name,
+                                    status: subCategory.status,
+                                    slots: subCategory.slots,
+                                    core_slots_count: subCategory.core_slots_count || 0,
+                                    core_slots_satisfied: subCategory.core_slots_satisfied || 0,
+                                    supplementary_slots_count: subCategory.supplementary_slots_count || 0,
+                                    supplementary_slots_satisfied: subCategory.supplementary_slots_satisfied || 0,
+                                    core_completion_percentage: 0,
+                                    supplementary_completion_percentage: 0
+                                  }}
+                                  onSlotClick={onSlotClick}
+                                  isCore={false}
+                                  showSourceButton={false}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -815,17 +1160,27 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
             // 非"或"关系类型
             <>
               {/* 核心特征 */}
-              {requirement.core_slots_count > 0 && (
+              {requirementData.core_slots_count > 0 && (
                 <div className="mb-4">
                   <div className="text-xs font-medium text-blue-600 mb-2">
-                    <span>核心特征 ({requirement.core_slots_satisfied}/{requirement.core_slots_count})</span>
+                    <span>核心特征 ({requirementData.core_slots_satisfied}/{requirementData.core_slots_count})</span>
                   </div>
                   <div className="space-y-2">
-                    {requirement.slots.filter(slot => slot.is_core).map((slot, slotIndex) => (
+                    {requirementData.slots.filter(slot => slot.is_core).map((slot, slotIndex) => (
                       <SlotItem
                         key={slotIndex}
                         slot={slot}
-                        requirement={requirement}
+                        requirement={{
+                          evidence_type: requirementData.evidence_type,
+                          status: requirementData.status,
+                          slots: requirementData.slots,
+                          core_slots_count: requirementData.core_slots_count,
+                          core_slots_satisfied: requirementData.core_slots_satisfied,
+                          supplementary_slots_count: requirementData.supplementary_slots_count,
+                          supplementary_slots_satisfied: requirementData.supplementary_slots_satisfied,
+                          core_completion_percentage: requirementData.core_completion_percentage,
+                          supplementary_completion_percentage: requirementData.supplementary_completion_percentage
+                        }}
                         onSlotClick={onSlotClick}
                         isCore={true}
                         showSourceButton={false}
@@ -836,17 +1191,27 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
               )}
               
               {/* 补充特征 */}
-              {requirement.supplementary_slots_count > 0 && (
+              {requirementData.supplementary_slots_count > 0 && (
                 <div>
                   <div className="text-xs font-medium text-gray-500 mb-2">
-                    <span>补充特征 ({requirement.supplementary_slots_satisfied}/{requirement.supplementary_slots_count})</span>
+                    <span>补充特征 ({requirementData.supplementary_slots_satisfied}/{requirementData.supplementary_slots_count})</span>
                   </div>
                   <div className="space-y-2">
-                    {requirement.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
+                    {requirementData.slots.filter(slot => !slot.is_core).map((slot, slotIndex) => (
                       <SlotItem
                         key={slotIndex}
                         slot={slot}
-                        requirement={requirement}
+                        requirement={{
+                          evidence_type: requirementData.evidence_type,
+                          status: requirementData.status,
+                          slots: requirementData.slots,
+                          core_slots_count: requirementData.core_slots_count,
+                          core_slots_satisfied: requirementData.core_slots_satisfied,
+                          supplementary_slots_count: requirementData.supplementary_slots_count,
+                          supplementary_slots_satisfied: requirementData.supplementary_slots_satisfied,
+                          core_completion_percentage: requirementData.core_completion_percentage,
+                          supplementary_completion_percentage: requirementData.supplementary_completion_percentage
+                        }}
                         onSlotClick={onSlotClick}
                         isCore={false}
                         showSourceButton={false}
@@ -884,7 +1249,7 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
     slot_proofread_reasoning?: string;
   };
   
-  // 清理特征名称，去除重复的分类信息前缀
+  // 清理特征名称，去除重复的分类信息前缀 - 优化清理逻辑
   const cleanSlotName = (slotName: string, evidenceType: string): string => {
     if (!slotName || !evidenceType) return slotName;
     
@@ -897,12 +1262,23 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
           return slotName.substring(prefix.length);
         }
       }
-    } else {
-      // 处理单一证据类型
-      const prefix = evidenceType + ': ';
-      if (slotName.startsWith(prefix)) {
-        return slotName.substring(prefix.length);
+    }
+    
+    // 处理角色组的证据类型（如"微信个人主页 (creditor) 和 微信个人主页 (debtor)"）
+    if (evidenceType.includes(' 和 ')) {
+      const types = evidenceType.split(' 和 ').map(t => t.trim());
+      for (const type of types) {
+        const prefix = type + ': ';
+        if (slotName.startsWith(prefix)) {
+          return slotName.substring(prefix.length);
+        }
       }
+    }
+    
+    // 处理单一证据类型
+    const prefix = evidenceType + ': ';
+    if (slotName.startsWith(prefix)) {
+      return slotName.substring(prefix.length);
     }
     
     return slotName;
@@ -911,18 +1287,22 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
   const cleanedSlotName = cleanSlotName(slotData.slot_name, requirement.evidence_type);
   
   return (
-    <div className={`flex items-center justify-between ${isCore ? 'text-gray-900' : 'text-gray-600'}`}>
-      <div className="flex items-center gap-2 text-sm">
+    <div className={`flex items-center justify-between p-2 rounded-md transition-colors ${
+      isCore 
+        ? 'bg-blue-50 border border-blue-100' 
+        : 'bg-gray-50 border border-gray-100'
+    } ${slotData.is_satisfied ? 'hover:bg-opacity-80' : 'hover:bg-opacity-60'}`}>
+      <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
         {slotData.is_satisfied ? (
-          <CheckCircle className={`w-4 h-4 ${
+          <CheckCircle className={`w-4 h-4 flex-shrink-0 ${
             isCore ? 'text-green-600' : 'text-green-500'
           }`} />
         ) : (
-          <XCircle className={`w-4 h-4 ${
+          <XCircle className={`w-4 h-4 flex-shrink-0 ${
             isCore ? 'text-red-600' : 'text-red-400'
           }`} />
         )}
-        <span className={`${
+        <span className={`truncate ${
           slotData.is_satisfied 
             ? (isCore ? 'text-green-800 font-medium' : 'text-green-700') 
             : (isCore ? 'text-red-800 font-medium' : 'text-red-600')
@@ -932,7 +1312,7 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
          {showSourceButton && slotData.is_satisfied && slotData.source_id && (
            <button
              onClick={() => onSlotClick(slot, requirement)}
-             className="ml-1 text-blue-600 hover:text-blue-800"
+             className="ml-2 text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-100 flex-shrink-0"
              title={`查看来源: ${slotData.source_type === 'evidence' ? '证据' : '关联组'} ${slotData.source_id}`}
            >
              <ExternalLink className="w-3 h-3" />
@@ -940,10 +1320,10 @@ function SlotItem({ slot, requirement, onSlotClick, isCore, showSourceButton = t
          )}
       </div>
       
-      {/* 校对信息提示 */}
+      {/* 校对信息提示 - 优化显示 */}
       {slotData.slot_proofread_at && !slotData.slot_is_consistent && slotData.slot_expected_value && (
         <div className="flex items-center gap-2 min-w-0 flex-1 ml-4">
-          <span className="text-xs text-gray-500 break-words min-w-0">
+          <span className="text-xs text-gray-500 break-words min-w-0 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
             校对失败: {slotData.slot_proofread_reasoning || '无校对推理信息'}
           </span>
         </div>

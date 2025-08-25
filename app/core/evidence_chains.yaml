@@ -22,8 +22,11 @@ evidence_chains:
           - "债务人脱敏真名"
       - evidence_type: "身份证"
         core_evidence_slot: []
+        or_group: "居民身份"
       - evidence_type: "中华人民共和国居民户籍档案"
         core_evidence_slot: []
+        or_group: "居民身份"
+
   - chain_id: "买卖合同纠纷证据链2"
     applicable_case_types: ["contract"]
     required_evidence_types:
@@ -36,8 +39,36 @@ evidence_chains:
           - "欠款合意"
       - evidence_type: "身份证"
         core_evidence_slot: []
+        or_group: "居民身份"
+
       - evidence_type: "中华人民共和国居民户籍档案"
         core_evidence_slot: []
+        or_group: "居民身份"
+
+  - chain_id: "买卖合同纠纷证据链3"
+    applicable_case_types: ["contract"]
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+      - evidence_type: "银行转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+        or_group: "转账记录"
+      - evidence_type: "微信转账记录"
+        core_evidence_slot:
+          - "转账金额"
+        or_group: "转账记录"
+      - evidence_type: "身份证"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        core_evidence_slot: []
+        or_group: "居民身份"
+
   - chain_id: "民间借贷纠纷证据链1"
     applicable_case_types: ["debt"]
     required_evidence_types:

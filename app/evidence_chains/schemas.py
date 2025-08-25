@@ -1,14 +1,84 @@
 # 优化版证据链响应模型
 
-from typing import List, Optional, Union
-from pydantic import BaseModel
 from enum import Enum
+from typing import List, Optional, Union
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 class EvidenceRequirementStatus(str, Enum):
-    """证据要求状态"""
-    MISSING = "missing"      # 缺失
-    PARTIAL = "partial"      # 部分满足
-    SATISFIED = "satisfied"  # 完全满足
+    SATISFIED = "satisfied"
+    PARTIAL = "partial"
+    MISSING = "missing"
+
+class EvidenceSlotDetail(BaseModel):
+    slot_name: str
+    is_satisfied: bool
+    is_core: bool
+    source_type: str  # "evidence", "association_group", "none"
+    source_id: Optional[Union[int, str]]  # 整数：证据ID，字符串：关联特征组名称
+    confidence: Optional[float]
+    slot_proofread_at: Optional[datetime]
+    slot_is_consistent: Optional[bool]
+    slot_expected_value: Optional[str]
+    slot_proofread_reasoning: Optional[str]
+
+class EvidenceTypeRequirement(BaseModel):
+    evidence_type: str
+    status: EvidenceRequirementStatus
+    slots: List[EvidenceSlotDetail]
+    core_slots_count: int
+    core_slots_satisfied: int
+    supplementary_slots_count: int
+    supplementary_slots_satisfied: int
+    core_completion_percentage: float
+    supplementary_completion_percentage: float
+
+class RoleBasedRequirement(BaseModel):
+    """角色相关的证据要求"""
+    evidence_type: str  # 如 "身份证 (债权人)"
+    role: str  # "creditor" 或 "debtor"
+    status: EvidenceRequirementStatus
+    slots: List[EvidenceSlotDetail]
+    core_slots_count: int
+    core_slots_satisfied: int
+    supplementary_slots_count: int
+    supplementary_slots_satisfied: int
+    core_completion_percentage: float
+    supplementary_completion_percentage: float
+
+class RoleGroupRequirement(BaseModel):
+    """角色组要求 - 多个角色都需要满足"""
+    evidence_type: str  # 如 "身份证"
+    type: str = "role_group"
+    roles: List[str]  # ["creditor", "debtor"]
+    status: EvidenceRequirementStatus
+    sub_requirements: List[RoleBasedRequirement]
+    core_slots_count: int
+    core_slots_satisfied: int
+    supplementary_slots_count: int
+    supplementary_slots_satisfied: int
+    core_completion_percentage: float
+    supplementary_completion_percentage: float
+
+class OrGroupRequirement(BaseModel):
+    """或组要求 - 满足其中一个即可"""
+    evidence_type: str  # 如 "身份证 或 中华人民共和国居民户籍档案"
+    type: str = "or_group"
+    sub_groups: List[Union[RoleGroupRequirement, EvidenceTypeRequirement]]
+    status: EvidenceRequirementStatus
+    core_slots_count: int
+    core_slots_satisfied: int
+    supplementary_slots_count: int
+    supplementary_slots_satisfied: int
+    core_completion_percentage: float
+    supplementary_completion_percentage: float
+
+# 联合类型，支持所有可能的证据要求类型
+EvidenceRequirement = Union[
+    EvidenceTypeRequirement, 
+    RoleGroupRequirement, 
+    OrGroupRequirement
+]
 
 class EvidenceChainStatus(str, Enum):
     """证据链状态"""
@@ -21,39 +91,6 @@ class EvidenceChainFeasibilityStatus(str, Enum):
     INCOMPLETE = "incomplete"    # 不可行（核心特征不完备）
     FEASIBLE = "feasible"        # 可行（核心特征完备，但补充特征不完备）
     ACTIVATED = "activated"      # 已激活（核心特征和补充特征都完备）
-
-class EvidenceSlotDetail(BaseModel):
-    """证据槽位详情"""
-    slot_name: str
-    is_satisfied: bool
-    is_core: bool  # 是否为核心证据槽位
-    # 证据来源：可能是单个证据ID，也可能是关联证据组名称
-    source_type: str  # "evidence" | "association_group" | "none"
-    source_id: Optional[Union[int, str]] = None  # 证据ID 或 slot_group_name
-    confidence: Optional[float] = None
-    
-    # 校对相关字段
-    slot_proofread_at: Optional[str] = None  # 校对时间
-    slot_is_consistent: Optional[bool] = None  # 校对是否一致
-    slot_expected_value: Optional[str] = None  # 期待值
-    slot_proofread_reasoning: Optional[str] = None  # 校对原因
-
-
-class EvidenceTypeRequirement(BaseModel):
-    """证据类型要求"""
-    evidence_type: str
-    status: EvidenceRequirementStatus
-    # 直接展示槽位详情，包含完整的来源信息
-    slots: List[EvidenceSlotDetail]
-    
-    # 新增字段：核心特征和补充特征的完成情况
-    core_slots_count: int = 0
-    core_slots_satisfied: int = 0
-    supplementary_slots_count: int = 0
-    supplementary_slots_satisfied: int = 0
-    core_completion_percentage: float = 0.0
-    supplementary_completion_percentage: float = 0.0
-
 
 class EvidenceChain(BaseModel):
     """证据链"""
@@ -73,7 +110,7 @@ class EvidenceChain(BaseModel):
     core_requirements_count: int  # 有核心特征要求的证据类型数量
     core_requirements_satisfied: int  # 核心特征完备的证据类型数量
     
-    requirements: List[EvidenceTypeRequirement]
+    requirements: List[EvidenceRequirement]
 
 
 class EvidenceChainDashboard(BaseModel):

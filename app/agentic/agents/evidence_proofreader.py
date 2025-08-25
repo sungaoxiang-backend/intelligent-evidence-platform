@@ -29,6 +29,7 @@ class ProofreadRule(BaseModel):
     match_condition: str = "any"  # 匹配条件：any, all
     tolerance_percent: Optional[float] = None  # 数值容差百分比
     tolerance_absolute: Optional[float] = None  # 数值绝对容差
+    role: Optional[str] = None  # 证据角色：creditor, debtor等，用于精确匹配
 
 
 class ProofreadResult(BaseModel):
@@ -109,7 +110,14 @@ class EvidenceProofreader:
                 rules = []
                 for rule_data in proofread_config:
                     try:
-                        rules.append(ProofreadRule(**rule_data))
+                        rule = ProofreadRule(**rule_data)
+                        # 检查规则是否适用于当前证据（基于角色）
+                        if rule.role and hasattr(evidence, 'evidence_role') and evidence.evidence_role:
+                            if rule.role == evidence.evidence_role:
+                                rules.append(rule)
+                        elif not rule.role:
+                            # 没有指定角色的规则适用于所有证据
+                            rules.append(rule)
                     except Exception as e:
                         logger.error(f"解析字段 {slot_name} 的校对规则失败: {e}")
                         continue
@@ -123,12 +131,14 @@ class EvidenceProofreader:
         # 执行校对
         proofread_results = []
         for slot_name, rules in proofread_tasks:
+            # 对于每个槽位，只应用第一个适用的规则（避免重复校对）
             for rule in rules:
                 result = await self._apply_proofread_rule(
                     slot_name, rule, evidence_features, case, evidence
                 )
                 if result:
                     proofread_results.append(result)
+                    break  # 找到第一个适用的规则后停止
         
         if not proofread_results:
             return None
@@ -210,6 +220,12 @@ class EvidenceProofreader:
         Returns:
             校对结果，如果规则不适用则返回None
         """
+        # 检查角色匹配（如果规则指定了角色）
+        if rule.role and hasattr(evidence, 'evidence_role') and evidence.evidence_role:
+            if rule.role != evidence.evidence_role:
+                logger.debug(f"证据角色 {evidence.evidence_role} 与规则角色 {rule.role} 不匹配，跳过校对规则")
+                return None
+        
         # 查找对应的特征字段
         target_feature = None
         for feature in evidence_features:
@@ -268,8 +284,13 @@ class EvidenceProofreader:
         expected_values = [case_value_str for _, case_value_str, _ in matches]
         expected_value = " 或 ".join(expected_values) if expected_values else None
         
-        # 构建友好的推理说明
-        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
+        # 构建友好的推理说明，包含角色信息（如果适用）
+        role_name_mapping = {
+            "creditor": "债权人",
+            "debtor": "债务人"
+        }
+        role_info = f"[{role_name_mapping.get(rule.role, rule.role)}] " if rule.role else ""
+        reasoning = f"{role_info}实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
         
         return ProofreadResult(
             field_name=slot_name,
@@ -306,8 +327,13 @@ class EvidenceProofreader:
         expected_values = [case_value_str for _, case_value_str, _ in matches]
         expected_value = " 或 ".join(expected_values) if expected_values else None
         
-        # 构建友好的推理说明
-        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (脱敏匹配)"
+        # 构建友好的推理说明，包含角色信息（如果适用）
+        role_name_mapping = {
+            "creditor": "债权人",
+            "debtor": "债务人"
+        }
+        role_info = f"[{role_name_mapping.get(rule.role, rule.role)}] " if rule.role else ""
+        reasoning = f"{role_info}实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (脱敏匹配)"
         
         return ProofreadResult(
             field_name=slot_name,
