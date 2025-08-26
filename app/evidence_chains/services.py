@@ -103,7 +103,43 @@ class EvidenceChainService:
             return []
         
         case_type_str = case.case_type.value if hasattr(case.case_type, 'value') else str(case.case_type)
-        return config_manager.get_evidence_chains_by_case_type(case_type_str)
+        
+        # 获取所有匹配案件类型的证据链
+        all_chains = config_manager.get_evidence_chains_by_case_type(case_type_str)
+        
+        # 如果没有设置债权人和债务人类型，返回所有匹配案件类型的证据链
+        if not case.creditor_type or not case.debtor_type:
+            return all_chains
+        
+        # 将数据库枚举值映射到YAML配置中的中文值
+        type_mapping = {
+            'person': '个人',
+            'company': '公司', 
+            'individual': '个体工商户'
+        }
+        
+        creditor_type_chinese = type_mapping.get(case.creditor_type, case.creditor_type)
+        debtor_type_chinese = type_mapping.get(case.debtor_type, case.debtor_type)
+        
+        # 筛选匹配债权人和债务人类型的证据链
+        applicable_chains = []
+        for chain in all_chains:
+            chain_creditor_type = chain.get('applicable_creditor_type')
+            chain_debtor_type = chain.get('applicable_debtor_type')
+            
+            # 检查债权人和债务人类型是否匹配
+            if (chain_creditor_type == creditor_type_chinese and 
+                chain_debtor_type == debtor_type_chinese):
+                applicable_chains.append(chain)
+        
+        # 添加日志记录，方便调试
+        from loguru import logger
+        logger.info(f"案件 {case.id} 筛选证据链: case_type={case_type_str}, "
+                   f"creditor_type={case.creditor_type}->{creditor_type_chinese}, "
+                   f"debtor_type={case.debtor_type}->{debtor_type_chinese}, "
+                   f"总证据链数={len(all_chains)}, 适用证据链数={len(applicable_chains)}")
+        
+        return applicable_chains
     
     def _check_evidence_chain_status(
         self,
@@ -265,25 +301,17 @@ class EvidenceChainService:
         
         core_slots = evidence_type_config.get("core_evidence_slot", [])
         
-        # 检查该证据类型是否配置了supported_roles
-        has_supported_roles = False
-        supported_roles = []
-        try:
-            from app.core.config_manager import config_manager
-            evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
-            if evidence_type_config_full and "supported_roles" in evidence_type_config_full:
-                supported_roles = evidence_type_config_full["supported_roles"]
-                has_supported_roles = len(supported_roles) > 0
-        except Exception as e:
-            print(f"获取证据类型 {evidence_type} 的配置失败: {e}")
+        # 检查该证据类型是否在evidence_chains.yaml中配置了role_group
+        role_group = evidence_type_config.get("role_group", [])
+        has_role_group = len(role_group) > 0
         
-        # 如果配置了supported_roles，需要为每个角色创建单独的槽位组
-        if has_supported_roles:
+        # 如果配置了role_group，需要为每个角色创建单独的要求
+        if has_role_group:
             return self._process_role_based_evidence_requirement(
-                evidence_type, core_slots, supported_roles, evidences, association_features
+                evidence_type, core_slots, role_group, evidences, association_features
             )
         
-        # 原有的处理逻辑（没有supported_roles的情况）
+        # 原有的处理逻辑（没有role_group的情况）
         slot_details = []
         
         # 从配置文件获取该证据类型的所有槽位
@@ -575,29 +603,22 @@ class EvidenceChainService:
         for config in evidence_type_configs:
             evidence_type = config.get("evidence_type")
             if evidence_type:
-                # 检查是否有角色要求
-                has_role_requirements = False
-                try:
-                    from app.core.config_manager import config_manager
-                    evidence_type_config_full = config_manager.get_evidence_type_by_type_name(str(evidence_type))
-                    if evidence_type_config_full and "supported_roles" in evidence_type_config_full:
-                        supported_roles = evidence_type_config_full["supported_roles"]
-                        has_role_requirements = len(supported_roles) > 0
-                except Exception as e:
-                    print(f"检查证据类型 {evidence_type} 的角色要求失败: {e}")
+                # 检查是否有角色要求 - 使用evidence_chains.yaml中的role_group配置
+                role_group = config.get("role_group", [])
+                has_role_requirements = len(role_group) > 0
                 
                 if has_role_requirements:
                     # 有角色要求：创建role_group
-                    role_group = self._create_role_group_requirement(
-                        evidence_type, supported_roles, evidences, association_features
+                    role_group_requirement = self._create_role_group_requirement(
+                        evidence_type, role_group, evidences, association_features
                     )
-                    sub_groups.append(role_group)
+                    sub_groups.append(role_group_requirement)
                     
                     # 统计总数
-                    total_core_slots += role_group.core_slots_count
-                    total_core_satisfied += role_group.core_slots_satisfied
-                    total_supplementary_slots += role_group.supplementary_slots_count
-                    total_supplementary_satisfied += role_group.supplementary_slots_satisfied
+                    total_core_slots += role_group_requirement.core_slots_count
+                    total_core_satisfied += role_group_requirement.core_slots_satisfied
+                    total_supplementary_slots += role_group_requirement.supplementary_slots_count
+                    total_supplementary_satisfied += role_group_requirement.supplementary_slots_satisfied
                 else:
                     # 没有角色要求：创建普通证据类型要求
                     requirement = self._check_evidence_requirement_status(

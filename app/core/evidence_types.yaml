@@ -41,12 +41,12 @@ evidence_types:
       - "短信聊天记录"
       - "其他聊天应用"
     extraction_slots:
-      - slot_name: "债务人微信备注名"
+      - slot_name: "微信备注名"
         slot_desc: "微信聊天界面顶部用户备注名称，可能来自左上角（pc端），也可能来自顶部（手机端），也可能不存在（这时候你需要尝试从上下文推断，比如确定头像的连续性）"
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债务人真名"
+          - rule_name: "债务人真名校对"
             case_fields: ["debtor_name"]
             match_strategy: "exact"
             match_condition: "all"
@@ -58,6 +58,11 @@ evidence_types:
         slot_desc: "欠款涉及的金额数值"
         slot_value_type: "number"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "欠款金额校对"
+            case_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "约定还款日期"
         slot_desc: "约定的还款日期"
         slot_value_type: "date"
@@ -68,9 +73,9 @@ evidence_types:
         slot_required: false
   
   wechat_homepage:
-    type: "微信个人主页"
+    type: "微信主页截图"
     description: "微信个人主页的完整截图"
-    category: "通讯聊天类"
+    category: "个人身份证明类"
     supported_roles:
       - "creditor"
       - "debtor"
@@ -320,14 +325,29 @@ evidence_types:
         slot_desc: "债权人的真实姓名"
         slot_value_type: "string"
         slot_required: false
+        proofread_with_case:
+          - rule_name: "债权人姓名匹配"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债权人签字名字"
         slot_desc: "债权人签字的名字"
         slot_value_type: "string"
         slot_required: false
+        proofread_with_case:
+          - rule_name: "债权人姓名匹配"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债权人盖章名字"
         slot_desc: "债权人盖章的名字"
         slot_value_type: "string"
         slot_required: false
+        proofread_with_case:
+          - rule_name: "债权人姓名匹配"
+            case_fields: ["creditor_name"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "债务人真名"
         slot_desc: "债务人的真实姓名"
         slot_value_type: "string"
@@ -340,7 +360,7 @@ evidence_types:
       - slot_name: "债务人签字名字"
         slot_desc: "债务人签字的名字"
         slot_value_type: "string"
-        slot_required: true
+        slot_required: "债务人盖章名字"
         proofread_with_case:
           - rule_name: "债务人姓名匹配"
             case_fields: ["debtor_name"]
@@ -349,7 +369,7 @@ evidence_types:
       - slot_name: "债务人盖章名字"
         slot_desc: "债务人盖章的名字"
         slot_value_type: "string"
-        slot_required: true
+        slot_required: "债务人签字名字"
         proofread_with_case:
           - rule_name: "债务人姓名匹配"
             case_fields: ["debtor_name"]
@@ -474,14 +494,19 @@ evidence_types:
         slot_value_type: "string"
         slot_required: true
         proofread_with_case:
-          - rule_name: "债权人姓名匹配"
-            case_fields: ["creditor_name"]
+          - rule_name: "债权人或债务人姓名匹配"
+            case_fields: ["creditor_name", "debtor_name"]
             match_strategy: "exact"
-            match_condition: "all"
+            match_condition: "any"
       - slot_name: "转账金额"
         slot_desc: "转账的金额数值"
         slot_value_type: "number"
         slot_required: true
+        proofread_with_case:
+          - rule_name: "欠款金额匹配"
+            case_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
 
   wechat_transfer_record:
     type: "微信转账记录"
@@ -517,7 +542,7 @@ evidence_types:
         slot_value_type: "number"
         slot_required: true
         proofread_with_case:
-          - rule_name: "金额匹配"
+          - rule_name: "欠款金额匹配"
             case_fields: ["loan_amount"]
             match_strategy: "exact"
             match_condition: "all"

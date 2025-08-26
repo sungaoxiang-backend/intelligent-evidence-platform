@@ -1,16 +1,21 @@
 metadata:
   version: "1.0"
-  last_updated: "2025-08-15"
+  last_updated: "2025-08-26"
 
 evidence_chains:
   - chain_id: "买卖合同纠纷证据链1"
     applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个人"
     required_evidence_types:
       - evidence_type: "微信聊天记录"
         core_evidence_slot:
           - "欠款合意"
           - "欠款金额"
       - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
       - evidence_type: "微信支付转账电子凭证"
         or_group: "转账身份"
         core_evidence_slot:
@@ -21,14 +26,22 @@ evidence_chains:
         core_evidence_slot:
           - "债务人脱敏真名"
       - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
         or_group: "居民身份"
       - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
         or_group: "居民身份"
 
   - chain_id: "买卖合同纠纷证据链2"
     applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个人"
     required_evidence_types:
       - evidence_type: "货款欠条"
         core_evidence_slot:
@@ -38,45 +51,32 @@ evidence_chains:
           - "欠款金额"
           - "欠款合意"
       - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
         or_group: "居民身份"
 
       - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
         or_group: "居民身份"
 
   - chain_id: "买卖合同纠纷证据链3"
     applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "公司"
     required_evidence_types:
       - evidence_type: "微信聊天记录"
         core_evidence_slot:
           - "欠款合意"
           - "欠款金额"
       - evidence_type: "微信个人主页"
-      - evidence_type: "银行转账记录"
-        core_evidence_slot:
-          - "转账账户真名"
-          - "转账金额"
-        or_group: "转账记录"
-      - evidence_type: "微信转账记录"
-        core_evidence_slot:
-          - "转账金额"
-        or_group: "转账记录"
-      - evidence_type: "身份证"
-        core_evidence_slot: []
-        or_group: "居民身份"
-      - evidence_type: "中华人民共和国居民户籍档案"
-        core_evidence_slot: []
-        or_group: "居民身份"
-
-  - chain_id: "民间借贷纠纷证据链1"
-    applicable_case_types: ["debt"]
-    required_evidence_types:
-      - evidence_type: "微信聊天记录"
-        core_evidence_slot:
-          - "欠款合意"
-          - "欠款金额"
-      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
       - evidence_type: "微信支付转账电子凭证"
         or_group: "转账身份"
         core_evidence_slot:
@@ -87,9 +87,769 @@ evidence_chains:
         core_evidence_slot:
           - "债务人脱敏真名"
       - evidence_type: "身份证"
+        role_group:
+          - "creditor"
         core_evidence_slot: []
+        or_group: "居民身份"
       - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
         core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链4"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链5"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链6"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链7"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链8"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链9"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链10"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链11"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链12"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链13"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链14"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链15"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链16"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "买卖合同纠纷证据链17"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "买卖合同纠纷证据链18"
+    applicable_case_types: ["contract"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "货款欠条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链1"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
       # 银行转账记录和微信转账记录是"或"关系，提供其中一个即可
       - evidence_type: "银行转账记录"
         core_evidence_slot:
@@ -100,8 +860,11 @@ evidence_chains:
         core_evidence_slot:
           - "转账金额"
         or_group: "转账记录"
+
   - chain_id: "民间借贷纠纷证据链2"
     applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个人"
     required_evidence_types:
       - evidence_type: "借款借条"
         core_evidence_slot:
@@ -111,9 +874,17 @@ evidence_chains:
           - "欠款金额"
           - "欠款合意"
       - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
+        or_group: "居民身份"
       - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
         core_evidence_slot: []
+        or_group: "居民身份"
       - evidence_type: "银行转账记录"
         core_evidence_slot:
           - "转账账户真名"
@@ -121,3 +892,906 @@ evidence_chains:
       - evidence_type: "微信转账记录"
         core_evidence_slot:
           - "转账金额"
+
+  - chain_id: "民间借贷纠纷证据链3"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链4"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链5"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链6"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个人"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链7"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链8"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链9"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链10"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链11"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链12"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "公司"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链13"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链14"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个人"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链15"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链16"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "公司"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "公司营业执照"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+      - evidence_type: "公司全国企业公示系统截图"
+        role_group:
+          - "debtor"
+        core_evidence_slot:
+          - "公司名称"
+          - "法定代表人"
+        or_group: "企业身份"
+
+  - chain_id: "民间借贷纠纷证据链17"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "微信聊天记录"
+        core_evidence_slot:
+          - "欠款合意"
+          - "欠款金额"
+      - evidence_type: "微信个人主页"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "债务人真名"
+      - evidence_type: "微信支付转账电子凭证"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "付款方真名"
+          - "收款方真名"
+      - evidence_type: "微信转账页面"
+        or_group: "转账身份"
+        core_evidence_slot:
+          - "债务人脱敏真名"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+
+  - chain_id: "民间借贷纠纷证据链18"
+    applicable_case_types: ["debt"]
+    applicable_creditor_type: "个体工商户"
+    applicable_debtor_type: "个体工商户"
+    required_evidence_types:
+      - evidence_type: "借款借条"
+        core_evidence_slot:
+          - "债务人真名"
+          - "债务人签字名字"
+          - "债务人盖章名字"
+          - "欠款金额"
+          - "欠款合意"
+      - evidence_type: "银行转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账账户真名"
+          - "转账金额"
+      - evidence_type: "微信转账记录"
+        or_group: "转账记录"
+        core_evidence_slot:
+          - "转账金额"
+      - evidence_type: "身份证"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "中华人民共和国居民户籍档案"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
+      - evidence_type: "个体工商户营业执照"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        role_group:
+          - "creditor"
+          - "debtor"
+        core_evidence_slot:
+          - "经营名称"
+          - "经营者姓名"
+        or_group: "个体工商户身份"
