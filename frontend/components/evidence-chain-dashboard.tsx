@@ -699,7 +699,7 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
     if (!isOrRelationshipType && !isRoleGroupTypeCheck) return []
     
     if (isRoleGroupType(requirement)) {
-      // 角色组：直接返回sub_requirements
+      // 角色组：直接返回sub_requirements，并设置正确的类型和子要求
       return requirement.sub_requirements.map(req => ({
         name: req.evidence_type,
         slots: req.slots,
@@ -708,7 +708,9 @@ function EvidenceRequirementCard({ requirement, onSlotClick, isExpanded, onToggl
         supplementary_slots_count: req.supplementary_slots_count,
         supplementary_slots_satisfied: req.supplementary_slots_satisfied,
         status: req.status,
-        role: req.role
+        role: req.role,
+        type: 'role_group',
+        sub_requirements: [req] // 将当前角色要求作为子要求
       }))
     } else if (isOrGroupType(requirement)) {
       // 或组：处理sub_groups，保持evidence_type分组层
