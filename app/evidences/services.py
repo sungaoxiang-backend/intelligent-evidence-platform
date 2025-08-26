@@ -82,18 +82,18 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                 incomplete_slots.append(slot_name)
                 logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
     
-    # 如果所有有校对信息的槽位都有完整的校对信息，且没有不完整的槽位，则使用现有信息
-    if existing_proofread_info and not incomplete_slots:
-        has_complete_proofread = True
-        logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
-        logger.info(f"现有校对信息: {existing_proofread_info}")
-        return evidence
-    else:
-        logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
-        if incomplete_slots:
-            logger.info(f"不完整的槽位: {incomplete_slots}")
+    # # 如果所有有校对信息的槽位都有完整的校对信息，且没有不完整的槽位，则使用现有信息
+    # if existing_proofread_info and not incomplete_slots:
+    #     has_complete_proofread = True
+    #     logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
+    #     logger.info(f"现有校对信息: {existing_proofread_info}")
+    #     return evidence
+    # else:
+    #     logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
+    #     if incomplete_slots:
+    #         logger.info(f"不完整的槽位: {incomplete_slots}")
     
-    logger.info(f"证据 {evidence.id} 开始执行校对")
+    # logger.info(f"证据 {evidence.id} 开始执行校对")
     
     try:
         # 执行校对
