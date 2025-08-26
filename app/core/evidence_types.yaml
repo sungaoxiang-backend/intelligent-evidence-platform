@@ -73,7 +73,7 @@ evidence_types:
         slot_required: false
   
   wechat_homepage:
-    type: "微信主页截图"
+    type: "微信个人主页"
     description: "微信个人主页的完整截图"
     category: "个人身份证明类"
     supported_roles:

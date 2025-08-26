@@ -126,7 +126,9 @@ class EvidenceFeaturesExtractor:
         # 只加载需要的证据类型配置
         extraction_guide = config_manager.get_extraction_slots_by_chinese_types(chinese_types)
         
-        # 更新session_state中的extraction_guide
+        # 确保session_state存在并更新extraction_guide
+        if self.agent.session_state is None:
+            self.agent.session_state = {}
         self.agent.session_state["extraction_guide"] = extraction_guide
         
         # 构建消息
@@ -144,7 +146,9 @@ class EvidenceFeaturesExtractor:
     def reload_config(self):
         """重新加载配置"""
         config_manager.reload_config()
-        # 清空session_state中的extraction_guide，让下次运行时重新加载
+        # 确保session_state存在并清空extraction_guide
+        if self.agent.session_state is None:
+            self.agent.session_state = {}
         self.agent.session_state["extraction_guide"] = {}
 
 

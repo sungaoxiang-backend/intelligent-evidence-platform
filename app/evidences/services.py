@@ -36,6 +36,65 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
         logger.warning(f"证据 {evidence.id} 的case数据未加载，跳过校对")
         return evidence
     
+    # 智能检查证据是否已经有完整有效的校对信息
+    has_complete_proofread = False
+    existing_proofread_info = []
+    incomplete_slots = []
+    
+    for feature in evidence.evidence_features:
+        if isinstance(feature, dict):
+            slot_name = feature.get("slot_name")
+            slot_proofread_at = feature.get("slot_proofread_at")
+            slot_is_consistent = feature.get("slot_is_consistent")
+            slot_expected_value = feature.get("slot_expected_value")
+            slot_proofread_reasoning = feature.get("slot_proofread_reasoning")
+            
+            if slot_proofread_at:
+                # 检查校对信息是否完整
+                if all(v is not None for v in [slot_is_consistent, slot_expected_value, slot_proofread_reasoning]):
+                    existing_proofread_info.append({
+                        "slot_name": slot_name,
+                        "proofread_at": slot_proofread_at,
+                        "is_consistent": slot_is_consistent,
+                        "expected_value": slot_expected_value,
+                        "reasoning": slot_proofread_reasoning
+                    })
+                else:
+                    incomplete_slots.append(slot_name)
+                    logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
+        elif hasattr(feature, 'slot_proofread_at') and getattr(feature, 'slot_proofread_at'):
+            # 处理非dict格式的特征
+            slot_name = getattr(feature, 'slot_name', 'unknown')
+            slot_proofread_at = getattr(feature, 'slot_proofread_at')
+            slot_is_consistent = getattr(feature, 'slot_is_consistent', None)
+            slot_expected_value = getattr(feature, 'slot_expected_value', None)
+            slot_proofread_reasoning = getattr(feature, 'slot_proofread_reasoning', None)
+            
+            if all(v is not None for v in [slot_is_consistent, slot_expected_value, slot_proofread_reasoning]):
+                existing_proofread_info.append({
+                    "slot_name": slot_name,
+                    "proofread_at": slot_proofread_at,
+                    "is_consistent": slot_is_consistent,
+                    "expected_value": slot_expected_value,
+                    "reasoning": slot_proofread_reasoning
+                })
+            else:
+                incomplete_slots.append(slot_name)
+                logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
+    
+    # 如果所有有校对信息的槽位都有完整的校对信息，且没有不完整的槽位，则使用现有信息
+    if existing_proofread_info and not incomplete_slots:
+        has_complete_proofread = True
+        logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
+        logger.info(f"现有校对信息: {existing_proofread_info}")
+        return evidence
+    else:
+        logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
+        if incomplete_slots:
+            logger.info(f"不完整的槽位: {incomplete_slots}")
+    
+    logger.info(f"证据 {evidence.id} 开始执行校对")
+    
     try:
         # 执行校对
         proofread_result = await evidence_proofreader.proofread_evidence_features(
@@ -45,6 +104,7 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
         )
         
         if proofread_result and proofread_result.proofread_results:
+            logger.info(f"证据 {evidence.id} 校对完成，结果数量: {len(proofread_result.proofread_results)}")
             # 为每个特征添加校对信息
             enhanced_features = []
             
@@ -72,6 +132,7 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                                     "slot_proofread_reasoning": proofread_item.proofread_reasoning,
                                     "slot_expected_value": proofread_item.expected_value
                                 })
+                                logger.info(f"为槽位 {slot_name} 添加校对信息: consistent={proofread_item.is_consistent}, expected={proofread_item.expected_value}")
                             else:
                                 logger.warning(f"slot '{slot_name}' 不是dict格式，无法添加校对信息")
                             break
@@ -716,9 +777,145 @@ async def auto_process(
                 await send_progress({"status": "error", "message": f"证据特征分析失败: {str(e)}"})
             raise
 
-    # 4. 证据特征校对已移除 - 改为动态计算
-    # 校对结果将在获取证据时实时计算，确保始终反映最新的特征和案件数据
-        
+    # 标注证据的角色类型
+    if auto_feature_extraction and evidences:
+        try:
+            if send_progress:
+                await send_progress({"status": "role_annotation", "message": "开始证据角色自动标注"})
+            
+            # 获取案件信息
+            case_query = await db.execute(select(Case).where(Case.id == case_id))
+            case = case_query.scalars().first()
+            if not case:
+                logger.error(f"未找到案件信息: case_id={case_id}")
+                return evidences
+            
+            # 导入配置管理器
+            from app.core.config_manager import config_manager
+            
+            # 遍历所有证据，进行角色标注
+            for evidence in evidences:
+                # 只有已分类且有特征提取结果的证据才进行角色标注
+                if (evidence.evidence_status == EvidenceStatus.FEATURES_EXTRACTED.value and 
+                    evidence.classification_category and 
+                    evidence.evidence_features):
+                    
+                    # 获取证据类型配置
+                    evidence_type_config = config_manager.get_evidence_type_by_type_name(evidence.classification_category)
+                    if not evidence_type_config:
+                        logger.warning(f"未找到证据类型配置: {evidence.classification_category}")
+                        continue
+                    
+                    # 检查是否有proofread_with_case配置
+                    extraction_slots = evidence_type_config.get("extraction_slots", [])
+                    if not extraction_slots:
+                        continue
+                    
+                    # 遍历每个词槽配置，检查是否有proofread_with_case
+                    for slot_config in extraction_slots:
+                        proofread_rules = slot_config.get("proofread_with_case", [])
+                        if not proofread_rules:
+                            continue
+                        
+                        slot_name = slot_config.get("slot_name")
+                        if not slot_name:
+                            continue
+                        
+                        # 从证据特征中查找对应的词槽值
+                        slot_value = None
+                        for feature in evidence.evidence_features:
+                            if isinstance(feature, dict) and feature.get("slot_name") == slot_name:
+                                slot_value = feature.get("slot_value")
+                                break
+                        
+                        if not slot_value or slot_value == "未知":
+                            continue
+                        
+                        # 执行校对规则
+                        for rule in proofread_rules:
+                            rule_name = rule.get("rule_name", "")
+                            case_fields = rule.get("case_fields", [])
+                            match_strategy = rule.get("match_strategy", "exact")
+                            match_condition = rule.get("match_condition", "all")
+                            
+                            if not case_fields:
+                                continue
+                            
+                            # 执行匹配逻辑
+                            match_results = []
+                            for case_field in case_fields:
+                                case_value = getattr(case, case_field, None)
+                                if case_value is None:
+                                    continue
+                                
+                                # 根据匹配策略执行匹配
+                                if match_strategy == "exact":
+                                    is_match = str(slot_value).strip() == str(case_value).strip()
+                                elif match_strategy == "contains":
+                                    is_match = str(case_value).strip() in str(slot_value).strip()
+                                elif match_strategy == "startswith":
+                                    is_match = str(slot_value).strip().startswith(str(case_value).strip())
+                                elif match_strategy == "endswith":
+                                    is_match = str(slot_value).strip().endswith(str(case_value).strip())
+                                else:
+                                    # 默认使用精确匹配
+                                    is_match = str(slot_value).strip() == str(case_value).strip()
+                                
+                                match_results.append(is_match)
+                            
+                            # 根据匹配条件判断是否匹配成功
+                            match_success = False
+                            if match_condition == "all" and match_results:
+                                match_success = all(match_results)
+                            elif match_condition == "any" and match_results:
+                                match_success = any(match_results)
+                            elif match_condition == "majority" and match_results:
+                                match_success = sum(match_results) > len(match_results) / 2
+                            
+                            # 如果匹配成功，确定证据角色
+                            if match_success:
+                                # 根据规则名称或字段名推断角色
+                                evidence_role = None
+                                if "债权人" in rule_name or "creditor" in str(case_fields).lower():
+                                    evidence_role = "creditor"
+                                elif "债务人" in rule_name or "debtor" in str(case_fields).lower():
+                                    evidence_role = "debtor"
+                                else:
+                                    # 根据case_fields推断角色
+                                    if "creditor_name" in case_fields:
+                                        evidence_role = "creditor"
+                                    elif "debtor_name" in case_fields:
+                                        evidence_role = "debtor"
+                                
+                                if evidence_role:
+                                    # 更新证据角色
+                                    evidence.evidence_role = evidence_role
+                                    db.add(evidence)
+                                    logger.info(f"证据角色标注成功: {evidence.file_name} -> {evidence_role} (规则: {rule_name})")
+                                    break
+                            
+                            # 如果已经找到匹配的角色，跳出内层循环
+                            if evidence.evidence_role:
+                                break
+                        
+                        # 如果已经找到匹配的角色，跳出词槽循环
+                        if evidence.evidence_role:
+                            break
+            
+            # 提交所有更新
+            await db.commit()
+            for evidence in evidences:
+                await db.refresh(evidence)
+            
+            if send_progress:
+                await send_progress({"status": "role_annotated", "message": "证据角色标注完成"})
+                
+        except Exception as e:
+            logger.error(f"证据角色标注失败: {str(e)}")
+            if send_progress:
+                await send_progress({"status": "error", "message": f"证据角色标注失败: {str(e)}"})
+            # 不抛出异常，继续执行后续逻辑
+
     # 5. 发送完成状态
     if send_progress:
         await send_progress({"status": "completed", "message": f"成功处理 {len(evidences)} 个证据"})

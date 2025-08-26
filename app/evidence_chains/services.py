@@ -1387,12 +1387,21 @@ class EvidenceChainService:
         return False
 
     def _select_best_evidence_for_role(self, role_evidences: List[Evidence], all_slots: set, core_slots: List[str]) -> Optional[Evidence]:
-        """为特定角色选择最佳证据"""
+        """为特定角色选择最佳证据
+        
+        选择策略（按优先级排序）：
+        1. 优先选择校对通过的证据 (slot_is_consistent=True)
+        2. 其次选择无校对动作的证据 (slot_proofread_at=None)
+        3. 最后选择校对失败的证据 (slot_is_consistent=False)
+        4. 在相同校对状态下，优先选择槽位完成度最高的证据
+        5. 在相同完成度下，优先选择置信度最高的证据
+        """
         if not role_evidences:
             return None
         
         best_evidence = None
         best_score = -1
+        best_proofread_status = -1  # -1: 无校对, 0: 校对失败, 1: 校对通过
         
         for evidence in role_evidences:
             if not evidence.evidence_features:
@@ -1401,8 +1410,19 @@ class EvidenceChainService:
             # 计算证据的评分
             score = self._calculate_evidence_score(evidence, all_slots, core_slots)
             
-            if score > best_score:
+            # 计算校对状态
+            proofread_status = self._calculate_evidence_proofread_status(evidence)
+            
+            # 优先选择校对状态更好的证据，在相同校对状态下优先选择评分更高的
+            should_update = False
+            if proofread_status > best_proofread_status:
+                should_update = True
+            elif proofread_status == best_proofread_status and score > best_score:
+                should_update = True
+            
+            if should_update:
                 best_score = score
+                best_proofread_status = proofread_status
                 best_evidence = evidence
         
         return best_evidence
@@ -1445,6 +1465,32 @@ class EvidenceChainService:
         score = (core_completion * 0.7) + (total_completion * 0.2) + (avg_confidence * 0.1)
         
         return score
+    
+    def _calculate_evidence_proofread_status(self, evidence: Evidence) -> int:
+        """计算证据的校对状态
+        
+        返回值：
+        - 1: 校对通过 (slot_is_consistent=True)
+        - 0: 校对失败 (slot_is_consistent=False)  
+        - -1: 无校对动作 (slot_proofread_at=None)
+        
+        逻辑：优先选择校对通过的状态
+        """
+        if not evidence.evidence_features:
+            return -1
+        
+        best_status = -1  # 默认无校对
+        
+        for feature in evidence.evidence_features:
+            slot_proofread_at = feature.get("slot_proofread_at")
+            if slot_proofread_at:  # 有校对动作
+                slot_is_consistent = feature.get("slot_is_consistent")
+                if slot_is_consistent is True:  # 校对通过 - 最高优先级
+                    return 1
+                elif slot_is_consistent is False:  # 校对失败
+                    best_status = max(best_status, 0)
+        
+        return best_status
     
     def _get_slot_info_from_evidence(self, evidence: Evidence, slot_name: str) -> Dict[str, Any]:
         """从证据中获取指定槽位的信息"""

@@ -16,6 +16,7 @@ evidence_chains:
         role_group:
           - "creditor"
           - "debtor"
+        core_evidence_slot: []
       - evidence_type: "微信支付转账电子凭证"
         or_group: "转账身份"
         core_evidence_slot:
