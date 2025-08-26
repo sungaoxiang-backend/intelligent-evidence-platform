@@ -167,8 +167,6 @@ class EvidenceChainService:
         # 处理"或"关系组，合并证据类型要求
         requirements = []
         satisfied_count = 0
-        core_requirements_count = 0
-        core_requirements_satisfied = 0
         
         # 第一遍：收集所有"或"关系组
         or_groups_processed = set()
@@ -210,11 +208,22 @@ class EvidenceChainService:
                 if requirement.status == EvidenceRequirementStatus.SATISFIED:
                     satisfied_count += 1
                 
-                core_slots_config = evidence_type_config.get("core_evidence_slot", [])
-                if core_slots_config and len(core_slots_config) > 0:
-                    core_requirements_count += 1
-                    if requirement.core_completion_percentage == 100.0:
-                        core_requirements_satisfied += 1
+                # 检查是否有核心特征要求
+                # 对于配置了role_group的证据类型，需要检查其实际的核心槽位数量
+                from app.evidence_chains.schemas import RoleGroupRequirement
+                if isinstance(requirement, RoleGroupRequirement):
+                    # role_group类型：基于实际的核心槽位数量
+                    if requirement.core_slots_count > 0:
+                        core_requirements_count += 1
+                        if requirement.status == EvidenceRequirementStatus.SATISFIED:
+                            core_requirements_satisfied += 1
+                else:
+                    # 普通证据类型：基于配置中的core_evidence_slot
+                    core_slots_config = evidence_type_config.get("core_evidence_slot", [])
+                    if core_slots_config and len(core_slots_config) > 0:
+                        core_requirements_count += 1
+                        if requirement.core_completion_percentage == 100.0:
+                            core_requirements_satisfied += 1
         
         # 计算完成度
         total_count = len(requirements)
