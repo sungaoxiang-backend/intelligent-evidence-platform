@@ -486,6 +486,7 @@ export default function CaseManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead className="whitespace-nowrap">关联用户</TableHead>
+                <TableHead className="whitespace-nowrap">快速查看</TableHead>
                 <TableHead className="whitespace-nowrap">欠款金额</TableHead>
                 <TableHead className="whitespace-nowrap">案件类型</TableHead>
                 <TableHead className="whitespace-nowrap">债权人</TableHead>
@@ -510,13 +511,32 @@ export default function CaseManagement() {
                     更新时间
                   </SortableHeader>
                 </TableHead>
-                <TableHead className="whitespace-nowrap">快速查看</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedCases.map((caseItem) => (
                 <TableRow key={caseItem.id}>
                   <TableCell className="whitespace-nowrap">{caseItem.user?.name || "-"}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center space-x-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewCase(caseItem.id)}
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                      >
+                        证据
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewEvidenceChain(caseItem.id)}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                      >
+                        详情
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
                   </TableCell>
@@ -541,26 +561,6 @@ export default function CaseManagement() {
                   </TableCell>
                   <TableCell className="text-sm text-gray-600 whitespace-nowrap">
                     {formatDateTime(caseItem.updated_at)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <div className="flex items-center space-x-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewCase(caseItem.id)}
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
-                      >
-                        证据
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewEvidenceChain(caseItem.id)}
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
-                      >
-                        详情
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
               ))}
