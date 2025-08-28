@@ -18,7 +18,7 @@ from app.users.schemas import User as UserSchema
 from loguru import logger
 from app.evidences.services import batch_create
 from app.evidences.models import Evidence
-from app.agentic.agents.association_features_extractor import AssociationFeaturesExtractor, AssociationFeaturesExtractionResults
+from app.agentic.agents.association_features_extractor_v2 import AssociationFeaturesExtractor, AssociationFeaturesExtractionResults
 from app.agentic.agents.evidence_proofreader import EvidenceProofreader
 
 # 创建校对器实例
@@ -429,6 +429,48 @@ async def auto_process(
             })
         return []
     
+    # 预先查询所有相同case_id的记录，避免在循环中重复查询
+    logger.info(f"预先查询case_id={case_id}的所有记录")
+    all_features_query = await db.execute(
+        select(AssociationEvidenceFeature).where(
+            AssociationEvidenceFeature.case_id == case_id
+        )
+    )
+    all_features = all_features_query.scalars().all()
+    logger.info(f"当前case_id={case_id}的所有记录: {[(f.id, f.slot_group_name) for f in all_features]}")
+    
+    # 使用更宽松的字符串匹配，处理各种格式差异
+    def normalize_string(s: str) -> str:
+        """标准化字符串，处理各种格式差异"""
+        import unicodedata
+        
+        # 1. Unicode标准化 (NFKC: 兼容性分解 + 组合)
+        s = unicodedata.normalize('NFKC', s)
+        
+        # 2. 移除所有空白字符（包括空格、制表符、换行符等）
+        s = ''.join(s.split())
+        
+        # 3. 统一常见的中英文标点符号
+        replacements = {
+            # 括号类
+            '（': '(', '）': ')', '【': '[', '】': ']', '｛': '{', '｝': '}',
+            # 数学符号
+            '＋': '+', '－': '-', '×': '*', '÷': '/', '＝': '=', '≠': '!=',
+            # 标点符号
+            '：': ':', '；': ';', '，': ',', '。': '.', '！': '!', '？': '?',
+            '、': ',', '…': '...', '—': '-', '–': '-',
+            # 引号类
+            '"': '"', '"': '"', ''': "'", ''': "'", '『': '"', '』': '"',
+            # 其他常见符号
+            '～': '~', '＠': '@', '＃': '#', '＄': '$', '％': '%', '＆': '&',
+            '＊': '*', '＼': '\\', '｜': '|', '／': '/'
+        }
+        
+        for old, new in replacements.items():
+            s = s.replace(old, new)
+        
+        return s
+    
     association_evidence_features = []
     for res in results:
         slot_group_name = res.slot_group_name
@@ -473,62 +515,12 @@ async def auto_process(
             processed_evidence_features.append(processed_slot)
         
         # 检查是否已存在相同的case_id和slot_group_name记录
-        # 添加调试日志
         logger.info(f"检查重复记录: case_id={case_id}, slot_group_name='{slot_group_name}'")
-        
-        # 先查询所有相同case_id的记录，看看是否有重复
-        all_features = await db.execute(
-            select(AssociationEvidenceFeature).where(
-                AssociationEvidenceFeature.case_id == case_id
-            )
-        )
-        all_features = all_features.scalars().all()
-        logger.info(f"当前case_id={case_id}的所有记录: {[(f.id, f.slot_group_name) for f in all_features]}")
-        
-        # 使用更宽松的字符串匹配，处理各种格式差异
-        def normalize_string(s: str) -> str:
-            """标准化字符串，处理各种格式差异"""
-            import unicodedata
-            
-            # 1. Unicode标准化 (NFKC: 兼容性分解 + 组合)
-            s = unicodedata.normalize('NFKC', s)
-            
-            # 2. 移除所有空白字符（包括空格、制表符、换行符等）
-            s = ''.join(s.split())
-            
-            # 3. 统一常见的中英文标点符号
-            replacements = {
-                # 括号类
-                '（': '(', '）': ')', '【': '[', '】': ']', '｛': '{', '｝': '}',
-                # 数学符号
-                '＋': '+', '－': '-', '×': '*', '÷': '/', '＝': '=', '≠': '!=',
-                # 标点符号
-                '：': ':', '；': ';', '，': ',', '。': '.', '！': '!', '？': '?',
-                '、': ',', '…': '...', '—': '-', '–': '-',
-                # 引号类
-                '"': '"', '"': '"', ''': "'", ''': "'", '『': '"', '』': '"',
-                # 其他常见符号
-                '～': '~', '＠': '@', '＃': '#', '＄': '$', '％': '%', '＆': '&',
-                '＊': '*', '＼': '\\', '｜': '|', '／': '/'
-            }
-            
-            for old, new in replacements.items():
-                s = s.replace(old, new)
-            
-            return s
         
         normalized_slot_group_name = normalize_string(slot_group_name)
         logger.info(f"标准化后的名称: '{slot_group_name}' -> '{normalized_slot_group_name}'")
         
-        # 查询所有相同case_id的记录，进行模糊匹配
-        all_features = await db.execute(
-            select(AssociationEvidenceFeature).where(
-                AssociationEvidenceFeature.case_id == case_id
-            )
-        )
-        all_features = all_features.scalars().all()
-        
-        # 在现有记录中查找标准化后匹配的记录
+        # 在预先查询的记录中查找标准化后匹配的记录
         existing_feature = None
         for feature in all_features:
             normalized_existing = normalize_string(feature.slot_group_name)
