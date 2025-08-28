@@ -124,6 +124,9 @@ export default function CaseManagement() {
     debtor_phone: "",
   });
 
+  // 临时存储输入的金额字符串，用于显示
+  const [loanAmountInput, setLoanAmountInput] = useState("");
+
   // 表单验证状态
   const [addFormErrors, setAddFormErrors] = useState({
     user_id: "",
@@ -201,6 +204,13 @@ export default function CaseManagement() {
     }
   );
 
+  // 初始化时设置金额输入值
+  useEffect(() => {
+    if (addForm.loan_amount > 0) {
+      setLoanAmountInput(addForm.loan_amount.toString());
+    }
+  }, [addForm.loan_amount]);
+
   // 重置表单时也要修改
   // 验证函数
   const validateAddForm = () => {
@@ -261,6 +271,7 @@ export default function CaseManagement() {
         creditor_bank_address: "",
         debtor_phone: "",
       });
+      setLoanAmountInput("");
       setAddFormErrors({
         user_id: "",
         creditor_name: "",
@@ -649,19 +660,40 @@ export default function CaseManagement() {
                   </Label>
                   <Input
                     id="loan_amount"
-                    type="number"
-                    step="0.01"
+                    type="text"
                     placeholder="请输入欠款金额"
-                    value={addForm.loan_amount || ""}
-                    onChange={(e) => setAddForm({ ...addForm, loan_amount: e.target.value ? Number(e.target.value) : 0 })}
-                    onBlur={() => {
-                      if (!addForm.loan_amount || addForm.loan_amount <= 0) {
-                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的欠款金额" }));
-                      } else {
-                        setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
-                      }
+                    value={loanAmountInput}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // 允许输入任何内容，包括小数点
+                      setLoanAmountInput(value);
+                      // 清除错误状态
+                      setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
                     }}
-                    className={`${addFormErrors.loan_amount ? 'border-red-500' : ''}`}
+                    onBlur={() => {
+                      const value = loanAmountInput;
+                      if (!value || value.trim() === "") {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入欠款金额" }));
+                        return;
+                      }
+                      
+                      // 验证是否为有效数字格式
+                      if (!/^\d+(\.\d{1,2})?$/.test(value)) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的金额格式（最多两位小数）" }));
+                        return;
+                      }
+                      
+                      const numValue = parseFloat(value);
+                      if (numValue <= 0) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的欠款金额" }));
+                        return;
+                      }
+                      
+                      // 验证通过，更新表单数据
+                      setAddForm(prev => ({ ...prev, loan_amount: numValue }));
+                      setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                    }}
+                    className={`${addFormErrors.loan_amount ? 'border-red-500' : ''} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
                   {addFormErrors.loan_amount && (
                     <div className="text-red-500 text-xs">{addFormErrors.loan_amount}</div>
