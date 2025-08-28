@@ -23,6 +23,44 @@ from app.agentic.agents.evidence_proofreader import evidence_proofreader
 from app.cases.models import Case
 
 
+def _normalize_numeric_value(value: Any) -> Any:
+    """标准化数字类型值，去除尾随零
+    
+    处理尾随零问题，如：
+    - 1000.00 -> 1000
+    - 1000.50 -> 1000.5
+    - 1000.35 -> 1000.35
+    
+    Args:
+        value: 原始值
+        
+    Returns:
+        标准化后的值
+    """
+    if value is None:
+        return value
+    
+    # 转换为字符串
+    str_value = str(value).strip()
+    
+    # 尝试解析为数字
+    try:
+        # 如果是整数
+        if '.' not in str_value:
+            return int(str_value)
+        
+        # 如果是浮点数，去除尾随零
+        float_value = float(str_value)
+        if float_value.is_integer():
+            return int(float_value)
+        else:
+            # 去除尾随零，但保留有效的小数位
+            return float_value
+    except (ValueError, TypeError):
+        # 如果无法解析为数字，返回原值
+        return value
+
+
 async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSession) -> Evidence:
     """为证据添加校对信息"""
     
@@ -850,7 +888,10 @@ async def auto_process(
                                 
                                 # 根据匹配策略执行匹配
                                 if match_strategy == "exact":
-                                    is_match = str(slot_value).strip() == str(case_value).strip()
+                                    # 对于数字类型特征，先进行标准化处理，去除尾随零
+                                    normalized_slot_value = _normalize_numeric_value(slot_value)
+                                    normalized_case_value = _normalize_numeric_value(case_value)
+                                    is_match = str(normalized_slot_value).strip() == str(normalized_case_value).strip()
                                 elif match_strategy == "contains":
                                     is_match = str(case_value).strip() in str(slot_value).strip()
                                 elif match_strategy == "startswith":
@@ -859,7 +900,10 @@ async def auto_process(
                                     is_match = str(slot_value).strip().endswith(str(case_value).strip())
                                 else:
                                     # 默认使用精确匹配
-                                    is_match = str(slot_value).strip() == str(case_value).strip()
+                                    # 对于数字类型特征，先进行标准化处理，去除尾随零
+                                    normalized_slot_value = _normalize_numeric_value(slot_value)
+                                    normalized_case_value = _normalize_numeric_value(case_value)
+                                    is_match = str(normalized_slot_value).strip() == str(normalized_case_value).strip()
                                 
                                 match_results.append(is_match)
                             

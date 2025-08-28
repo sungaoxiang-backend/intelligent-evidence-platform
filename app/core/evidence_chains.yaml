@@ -851,6 +851,8 @@ evidence_chains:
         role_group:
           - "creditor"
           - "debtor"
+        core_evidence_slot: []
+        or_group: "居民身份"
       # 银行转账记录和微信转账记录是"或"关系，提供其中一个即可
       - evidence_type: "银行转账记录"
         core_evidence_slot:

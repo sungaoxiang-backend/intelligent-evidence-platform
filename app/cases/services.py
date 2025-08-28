@@ -24,6 +24,43 @@ from app.agentic.agents.evidence_proofreader import EvidenceProofreader
 # 创建校对器实例
 evidence_proofreader = EvidenceProofreader()
 
+def _normalize_numeric_value(value: Any) -> Any:
+    """标准化数字类型值，去除尾随零
+    
+    处理尾随零问题，如：
+    - 1000.00 -> 1000
+    - 1000.50 -> 1000.5
+    - 1000.35 -> 1000.35
+    
+    Args:
+        value: 原始值
+        
+    Returns:
+        标准化后的值
+    """
+    if value is None:
+        return value
+    
+    # 转换为字符串
+    str_value = str(value).strip()
+    
+    # 尝试解析为数字
+    try:
+        # 如果是整数
+        if '.' not in str_value:
+            return int(str_value)
+        
+        # 如果是浮点数，去除尾随零
+        float_value = float(str_value)
+        if float_value.is_integer():
+            return int(float_value)
+        else:
+            # 去除尾随零，但保留有效的小数位
+            return float_value
+    except (ValueError, TypeError):
+        # 如果无法解析为数字，返回原值
+        return value
+
 async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
     """为案件的关联特征组添加校对信息"""
     logger.info(f"开始为案件 {case.id} 添加校对信息")
@@ -94,10 +131,20 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                     
                                     # 简单的精确匹配逻辑
                                     is_consistent = False
-                                    expected_value = " 或 ".join(expected_values)  # 多个期待值用"或"连接
                                     
+                                    # 对于数字类型特征，进行标准化处理，去除尾随零
+                                    normalized_expected_values = []
                                     for expected in expected_values:
-                                        if str(slot_value).strip() == expected.strip():
+                                        normalized_value = _normalize_numeric_value(expected)
+                                        normalized_expected_values.append(str(normalized_value))
+                                    
+                                    expected_value = " 或 ".join(normalized_expected_values)  # 多个期待值用"或"连接
+                                    
+                                    # 使用标准化后的值进行比较
+                                    for expected in expected_values:
+                                        normalized_expected = _normalize_numeric_value(expected)
+                                        normalized_slot_value = _normalize_numeric_value(slot_value)
+                                        if str(normalized_slot_value).strip() == str(normalized_expected).strip():
                                             is_consistent = True
                                             break
                                     

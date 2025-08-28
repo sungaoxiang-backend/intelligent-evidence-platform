@@ -61,6 +61,43 @@ class EvidenceProofreader:
     def __init__(self):
         self.config_manager = config_manager
     
+    def _normalize_numeric_value(self, value: Any) -> Any:
+        """标准化数字类型值，去除尾随零
+        
+        处理尾随零问题，如：
+        - 1000.00 -> 1000
+        - 1000.50 -> 1000.5
+        - 1000.35 -> 1000.35
+        
+        Args:
+            value: 原始值
+            
+        Returns:
+            标准化后的值
+        """
+        if value is None:
+            return value
+        
+        # 转换为字符串
+        str_value = str(value).strip()
+        
+        # 尝试解析为数字
+        try:
+            # 如果是整数
+            if '.' not in str_value:
+                return int(str_value)
+            
+            # 如果是浮点数，去除尾随零
+            float_value = float(str_value)
+            if float_value.is_integer():
+                return int(float_value)
+            else:
+                # 去除尾随零，但保留有效的小数位
+                return float_value
+        except (ValueError, TypeError):
+            # 如果无法解析为数字，返回原值
+            return value
+    
     async def proofread_evidence_features(
         self,
         db: AsyncSession,
@@ -271,7 +308,12 @@ class EvidenceProofreader:
         matches = []
         for case_field, case_value in case_reference_values:
             case_value_str = str(case_value).strip()
-            is_match = case_value_str.lower() == feature_value_str.lower()
+            # 对于数字类型特征，进行标准化处理，去除尾随零
+            normalized_case_value = self._normalize_numeric_value(case_value_str)
+            normalized_feature_value = self._normalize_numeric_value(feature_value_str)
+            
+            # 使用标准化后的值进行比较
+            is_match = str(normalized_case_value).lower() == str(normalized_feature_value).lower()
             matches.append((case_field, case_value_str, is_match))
         
         # 根据match_condition判断整体匹配结果
@@ -281,8 +323,13 @@ class EvidenceProofreader:
             is_consistent = all(match[2] for match in matches)
         
         # 期待值：显示所有可能的正确答案
-        expected_values = [case_value_str for _, case_value_str, _ in matches]
-        expected_value = " 或 ".join(expected_values) if expected_values else None
+        # 对于数字类型特征，进行标准化处理，去除尾随零
+        normalized_expected_values = []
+        for _, case_value_str, _ in matches:
+            normalized_value = self._normalize_numeric_value(case_value_str)
+            normalized_expected_values.append(str(normalized_value))
+        
+        expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
         
         # 构建友好的推理说明，包含角色信息（如果适用）
         role_name_mapping = {
@@ -324,8 +371,13 @@ class EvidenceProofreader:
             is_consistent = all(match[2] for match in matches)
         
         # 期待值：显示所有可能的正确答案
-        expected_values = [case_value_str for _, case_value_str, _ in matches]
-        expected_value = " 或 ".join(expected_values) if expected_values else None
+        # 对于数字类型特征，进行标准化处理，去除尾随零
+        normalized_expected_values = []
+        for _, case_value_str, _ in matches:
+            normalized_value = self._normalize_numeric_value(case_value_str)
+            normalized_expected_values.append(str(normalized_value))
+        
+        expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
         
         # 构建友好的推理说明，包含角色信息（如果适用）
         role_name_mapping = {
