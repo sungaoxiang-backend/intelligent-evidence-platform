@@ -47,6 +47,14 @@ function getAuthHeader(): Record<string, string> {
 function buildApiUrl(path: string): string {
   return API_CONFIG.BASE_URL + path
 }
+
+// 格式化金额，去除尾随零
+function formatAmount(amount: number): string {
+  if (Number.isInteger(amount)) {
+    return amount.toString();
+  }
+  return amount.toFixed(2).replace(/\.?0+$/, '');
+}
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
 import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
@@ -124,9 +132,13 @@ export default function CaseManagement() {
     debtor_phone: "",
   });
 
-  // 临时存储输入的金额字符串，用于显示
+    // 临时存储输入的金额字符串，用于显示
   const [loanAmountInput, setLoanAmountInput] = useState("");
-
+  
+  // 用户筛选相关状态
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  
   // 表单验证状态
   const [addFormErrors, setAddFormErrors] = useState({
     user_id: "",
@@ -211,6 +223,44 @@ export default function CaseManagement() {
     }
   }, [addForm.loan_amount]);
 
+  // 用户筛选逻辑
+  const filteredUsers = users?.filter(user => {
+    if (!userSearchTerm.trim()) return true;
+    const searchLower = userSearchTerm.toLowerCase();
+    return (
+      user.name?.toLowerCase().includes(searchLower) ||
+      user.wechat_nickname?.toLowerCase().includes(searchLower) ||
+      user.wechat_number?.toLowerCase().includes(searchLower) ||
+      user.id.toString().includes(searchLower)
+    );
+  }) || [];
+
+  // 处理用户选择
+  const handleUserSelect = (user: User) => {
+    setAddForm(prev => ({
+      ...prev,
+      user_id: user.id,
+      creditor_name: user.name || ""
+    }));
+    setUserSearchTerm(user.name || "");
+    setShowUserDropdown(false);
+    setAddFormErrors(prev => ({ ...prev, user_id: "" }));
+  };
+
+  // 点击外部关闭下拉列表
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserDropdown) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
+
   // 重置表单时也要修改
   // 验证函数
   const validateAddForm = () => {
@@ -226,6 +276,8 @@ export default function CaseManagement() {
 
     if (!addForm.user_id || addForm.user_id === 0) {
       errors.user_id = "请选择关联用户";
+    } else if (!userSearchTerm.trim()) {
+      errors.user_id = "请选择关联用户";
     }
     if (!addForm.creditor_name.trim()) {
       errors.creditor_name = "请输入债权人姓名";
@@ -233,9 +285,16 @@ export default function CaseManagement() {
     if (!addForm.debtor_name.trim()) {
       errors.debtor_name = "请输入债务人姓名";
     }
-    if (!addForm.loan_amount || addForm.loan_amount <= 0) {
-      errors.loan_amount = "请输入有效的欠款金额";
+    
+    // 验证金额格式
+    if (!loanAmountInput || loanAmountInput.trim() === "") {
+      errors.loan_amount = "请输入欠款金额";
+    } else if (!/^\d+(\.\d{1,2})?$/.test(loanAmountInput)) {
+      errors.loan_amount = "请输入有效的金额格式（最多两位小数）";
+    } else if (parseFloat(loanAmountInput) <= 0) {
+      errors.loan_amount = "金额必须大于0";
     }
+    
     if (!addForm.creditor_type) {
       errors.creditor_type = "请选择债权人类型";
     }
@@ -272,6 +331,8 @@ export default function CaseManagement() {
         debtor_phone: "",
       });
       setLoanAmountInput("");
+      setUserSearchTerm("");
+      setShowUserDropdown(false);
       setAddFormErrors({
         user_id: "",
         creditor_name: "",
@@ -307,6 +368,12 @@ export default function CaseManagement() {
 
   const openAddDialog = () => {
     setShowAddDialog(true);
+    // 确保弹窗打开时没有输入框获得焦点
+    setTimeout(() => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }, 0);
   };
 
   const handleCreateUser = () => {
@@ -573,8 +640,15 @@ export default function CaseManagement() {
       />
 
       {/* Add Case Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <Dialog 
+        open={showAddDialog} 
+        onOpenChange={setShowAddDialog}
+        modal={true}
+      >
+        <DialogContent 
+          className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>新增案件</DialogTitle>
             <DialogDescription>
@@ -591,21 +665,51 @@ export default function CaseManagement() {
                 </Label>
               </div>
               <div className="flex space-x-3">
-                <Select
-                  value={addForm.user_id.toString()}
-                  onValueChange={handleUserChange}
-                >
-                  <SelectTrigger className={`flex-1 ${addFormErrors.user_id ? 'border-red-500' : ''}`}>
-                    <SelectValue placeholder="选择用户" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(users || []).map((user) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder="搜索或选择用户"
+                    value={userSearchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setUserSearchTerm(value);
+                      // 保持下拉列表展开，根据输入内容进行筛选
+                      setShowUserDropdown(true);
+                      if (value.trim()) {
+                        setAddFormErrors(prev => ({ ...prev, user_id: "" }));
+                      }
+                    }}
+                    onFocus={() => {
+                      // 聚焦时展开下拉列表，显示所有用户
+                      setShowUserDropdown(true);
+                    }}
+                    className={`${addFormErrors.user_id ? 'border-red-500' : ''}`}
+                  />
+                  
+                  {/* 用户下拉列表 */}
+                  {showUserDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {filteredUsers.length > 0 ? (
+                        filteredUsers.map((user) => (
+                          <div
+                            key={user.id}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => handleUserSelect(user)}
+                          >
+                            <div className="font-medium">{user.name || '未命名用户'}</div>
+                            <div className="text-sm text-gray-500">
+                              {user.wechat_nickname && `微信: ${user.wechat_nickname}`}
+                              {user.wechat_number && ` (${user.wechat_number})`}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {userSearchTerm.trim() ? '未找到匹配的用户' : '开始输入搜索用户...'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -619,6 +723,16 @@ export default function CaseManagement() {
               </div>
               {addFormErrors.user_id && (
                 <div className="text-red-500 text-sm">{addFormErrors.user_id}</div>
+              )}
+              
+              {/* 显示当前选中的用户信息 */}
+              {addForm.user_id > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <div className="text-sm text-blue-800">
+                    <span className="font-medium">已选择用户：</span>
+                    {userSearchTerm}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -667,8 +781,19 @@ export default function CaseManagement() {
                       const value = e.target.value;
                       // 允许输入任何内容，包括小数点
                       setLoanAmountInput(value);
-                      // 清除错误状态
-                      setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                      
+                      // 实时验证
+                      if (value === "" || value === ".") {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入欠款金额" }));
+                      } else if (!/^\d+(\.\d*)?$/.test(value)) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的金额格式" }));
+                      } else if (value.includes(".") && value.split(".")[1]?.length > 2) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "最多支持两位小数" }));
+                      } else if (parseFloat(value) <= 0) {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "金额必须大于0" }));
+                      } else {
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                      }
                     }}
                     onBlur={() => {
                       const value = loanAmountInput;
@@ -689,9 +814,11 @@ export default function CaseManagement() {
                         return;
                       }
                       
-                      // 验证通过，更新表单数据
-                      setAddForm(prev => ({ ...prev, loan_amount: numValue }));
-                      setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                                              // 验证通过，自动格式化并更新表单数据
+                        const formattedValue = formatAmount(numValue);
+                        setLoanAmountInput(formattedValue);
+                        setAddForm(prev => ({ ...prev, loan_amount: numValue }));
+                        setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
                     }}
                     className={`${addFormErrors.loan_amount ? 'border-red-500' : ''} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />

@@ -14,6 +14,14 @@ import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
 import type { CaseType, PartyType } from "@/lib/types"
 
+// 格式化金额，去除尾随零
+function formatAmount(amount: number): string {
+  if (Number.isInteger(amount)) {
+    return amount.toString();
+  }
+  return amount.toFixed(2).replace(/\.?0+$/, '');
+}
+
 // 案件数据获取函数
 const caseFetcher = async ([key, caseId]: [string, string]) => {
   const result = await caseApi.getCaseById(parseInt(caseId))
@@ -74,8 +82,12 @@ export default function CaseDetailPage() {
     }
 
     // 验证欠款金额
-    if (!editForm.loan_amount || parseFloat(editForm.loan_amount) <= 0) {
-      errors.loan_amount = "请输入有效的欠款金额"
+    if (!loanAmountInput || loanAmountInput.trim() === "") {
+      errors.loan_amount = "请输入欠款金额";
+    } else if (!/^\d+(\.\d{1,2})?$/.test(loanAmountInput)) {
+      errors.loan_amount = "请输入有效的金额格式（最多两位小数）";
+    } else if (parseFloat(loanAmountInput) <= 0) {
+      errors.loan_amount = "金额必须大于0";
     }
 
     // 验证案件类型
@@ -384,8 +396,19 @@ export default function CaseDetailPage() {
                         const value = e.target.value;
                         // 允许输入任何内容，包括小数点
                         setLoanAmountInput(value);
-                        // 清除错误状态
-                        setFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                        
+                        // 实时验证
+                        if (value === "" || value === ".") {
+                          setFormErrors(prev => ({ ...prev, loan_amount: "请输入欠款金额" }));
+                        } else if (!/^\d+(\.\d*)?$/.test(value)) {
+                          setFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的金额格式" }));
+                        } else if (value.includes(".") && value.split(".")[1]?.length > 2) {
+                          setFormErrors(prev => ({ ...prev, loan_amount: "最多支持两位小数" }));
+                        } else if (parseFloat(value) <= 0) {
+                          setFormErrors(prev => ({ ...prev, loan_amount: "金额必须大于0" }));
+                        } else {
+                          setFormErrors(prev => ({ ...prev, loan_amount: "" }));
+                        }
                       }}
                       onBlur={() => {
                         const value = loanAmountInput;
@@ -406,7 +429,9 @@ export default function CaseDetailPage() {
                           return;
                         }
                         
-                        // 验证通过，更新表单数据
+                        // 验证通过，自动格式化并更新表单数据
+                        const formattedValue = formatAmount(numValue);
+                        setLoanAmountInput(formattedValue);
                         setEditForm(prev => ({ ...prev, loan_amount: numValue }));
                         setFormErrors(prev => ({ ...prev, loan_amount: "" }));
                       }}
