@@ -277,7 +277,7 @@ class EvidenceProofreader:
         # 获取case中的参考值列表
         case_reference_values = []
         for case_field in rule.case_fields:
-            case_value = getattr(case, case_field, None)
+            case_value = self._get_case_field_value(case, case_field, rule.role, slot_name)
             if case_value is not None:
                 case_reference_values.append((case_field, case_value))
         
@@ -472,6 +472,67 @@ class EvidenceProofreader:
         
         return "; ".join(summary_parts)
     
+    def _get_case_field_value(self, case: Case, case_field: str, role: Optional[str] = None, slot_name: Optional[str] = None) -> Any:
+        """动态获取案件字段值，兼容新的case_parties结构
+        
+        Args:
+            case: 案件对象
+            case_field: 字段名
+            role: 角色（creditor/debtor）
+            slot_name: 槽位名称，用于更精确的字段映射
+            
+        Returns:
+            字段值或None
+        """
+        # 直接从case对象获取的字段（保持向后兼容）
+        if hasattr(case, case_field):
+            return getattr(case, case_field, None)
+        
+        # 从case_parties中获取的字段
+        if not case.case_parties:
+            return None
+            
+        # 字段映射：旧字段名 -> (party_field, 匹配逻辑)
+        field_mapping = {
+            'creditor_name': ('party_name', 'creditor'),
+            'debtor_name': ('party_name', 'debtor'),
+            'creditor_type': ('party_type', 'creditor'),
+            'debtor_type': ('party_type', 'debtor'),
+            'creditor_phone': ('phone', 'creditor'),
+            'debtor_phone': ('phone', 'debtor'),
+        }
+        
+        # 根据字段名和角色映射到case_parties
+        if case_field in field_mapping:
+            target_field, target_role = field_mapping[case_field]
+            for party in case.case_parties:
+                if party.party_role == target_role:
+                    return getattr(party, target_field, None)
+        
+        # 如果提供了role参数，尝试基于role获取对应当事人的字段
+        if role:
+            for party in case.case_parties:
+                if party.party_role == role:
+                    # 根据slot_name映射到具体字段
+                    if slot_name == "公司名称" and hasattr(party, 'party_name'):
+                        return party.party_name
+                    elif slot_name == "法定代表人":
+                        # 法定代表人信息可能在主体信息中
+                        if hasattr(party, 'name'):
+                            return party.name
+                        elif hasattr(party, 'party_name'):
+                            return party.party_name
+                    elif slot_name == "经营者姓名":
+                        # 经营者姓名对应个体工商户的姓名
+                        if hasattr(party, 'name'):
+                            return party.name
+                        elif hasattr(party, 'party_name'):
+                            return party.party_name
+                    elif hasattr(party, case_field):
+                        return getattr(party, case_field, None)
+        
+        return None
+
     def reload_config(self):
         """重新加载配置"""
         self.config_manager.reload_config()

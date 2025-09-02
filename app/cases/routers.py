@@ -10,11 +10,9 @@ from loguru import logger
 from app.core.deps import DBSession, get_current_staff
 from app.core.response import SingleResponse, ListResponse, Pagination
 from app.staffs.models import Staff
-from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser, AutoProcessRequest, AutoProcessResponse, CaseWithAssociationEvidenceFeaturesResponse, AssociationEvidenceFeatureUpdateRequest
+from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser, AutoProcessRequest, AutoProcessResponse, CaseWithAssociationEvidenceFeaturesResponse, AssociationEvidenceFeatureUpdateRequest, CasePartyResponse, CasePartyUpdate
 from app.cases import services as case_service
 from app.users import services as user_service
-from app.cases.schemas import CaseRegistrationRequest, CaseRegistrationResponse
-from app.cases.services import register_case_with_user
 
 router = APIRouter()
 
@@ -148,18 +146,6 @@ async def get_association_evidence_feature(
     return SingleResponse(data=feature)
 
 
-@router.post("/registration", response_model=SingleResponse[CaseRegistrationResponse])
-async def register_case(
-    request: CaseRegistrationRequest,
-    db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
-):
-    """综合录入案件和用户"""
-
-    result = await register_case_with_user(db, request)
-    return SingleResponse(data=result)
-
-
 @router.post("/auto-process", response_model=ListResponse[AutoProcessResponse])
 async def auto_process(
     db: DBSession,
@@ -263,3 +249,39 @@ async def websocket_auto_process(websocket: WebSocket):
             await websocket.close(code=1011, reason=str(e))
         except:
             pass
+
+
+# ==================== 当事人管理端点 ====================
+
+@router.get("/{case_id}/parties", response_model=ListResponse[CasePartyResponse])
+async def get_case_parties(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """获取案件的所有当事人"""
+    parties = await case_service.get_case_parties_by_case_id(db, case_id)
+    return ListResponse(
+        data=parties,
+        pagination=Pagination(total=len(parties), page=1, size=len(parties), pages=1)
+    )
+
+
+@router.put("/{case_id}/parties/{party_id}", response_model=SingleResponse[CasePartyResponse])
+async def update_case_party(
+    case_id: int,
+    party_id: int,
+    party_update: CasePartyUpdate,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """更新单个当事人"""
+    party = await case_service.update_case_party(db, party_id, party_update)
+    if not party:
+        raise HTTPException(status_code=404, detail="当事人不存在")
+    
+    # 验证当事人是否属于指定案件
+    if party.case_id != case_id:
+        raise HTTPException(status_code=400, detail="当事人不属于指定案件")
+    
+    return SingleResponse(data=party)

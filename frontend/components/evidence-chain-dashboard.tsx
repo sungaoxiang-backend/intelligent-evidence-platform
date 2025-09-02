@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { CheckCircle, AlertCircle, XCircle, ExternalLink, Star, Zap, ChevronDown, ChevronRight, X, Eye, Settings, ArrowRight, ChevronsRight } from "lucide-react"
+import { CheckCircle, AlertCircle, XCircle, ExternalLink, Star, Zap, ChevronDown, ChevronRight, X, Eye, Settings, ArrowRight, ChevronsRight, User, Phone, CreditCard, MapPin } from "lucide-react"
 import { evidenceChainAPI, type EvidenceChainDashboardData, type EvidenceChain, type EvidenceTypeRequirement } from "@/lib/evidence-chain-api"
+import { caseApi } from "@/lib/api"
+import useSWR from "swr"
 
 // 新增类型定义
 interface RoleBasedRequirement {
@@ -107,6 +109,15 @@ export function EvidenceChainDashboard({ caseId, onRefresh }: EvidenceChainDashb
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
+  // 获取案件信息
+  const { data: caseData, error: caseError } = useSWR(
+    caseId ? [`case-${caseId}`, caseId] : null,
+    async ([key, caseId]: [string, number]) => {
+      const result = await caseApi.getCaseById(caseId)
+      return result.data
+    }
+  )
+
   const fetchDashboardData = async (showRefreshing = false) => {
     try {
       if (showRefreshing) {
@@ -174,6 +185,14 @@ export function EvidenceChainDashboard({ caseId, onRefresh }: EvidenceChainDashb
     <div className="space-y-6">
       {/* 添加滚动条样式 */}
       <style dangerouslySetInnerHTML={{ __html: scrollbarStyles }} />
+      
+
+
+
+
+
+
+
       
       {/* 推荐证据链展示 */}
       {(() => {

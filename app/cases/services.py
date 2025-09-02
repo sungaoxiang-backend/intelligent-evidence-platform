@@ -6,23 +6,123 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from urllib.parse import unquote
-from app.cases.models import Case as CaseModel, AssociationEvidenceFeature
-from app.cases.schemas import CaseCreate, CaseUpdate, Case as CaseSchema
+from app.cases.models import Case as CaseModel, CaseParty as CasePartyModel, AssociationEvidenceFeature
+from app.cases.schemas import CaseCreate, CaseUpdate, Case as CaseSchema, CasePartyCreate, CasePartyUpdate
 from agno.run.response import RunResponse
 from agno.media import Image
 import asyncio
 from app.users.services import get_by_id_card, get_by_phone, create as create_user
 from app.users.schemas import UserCreate
-from app.cases.schemas import CaseRegistrationRequest, CaseRegistrationResponse
 from app.users.schemas import User as UserSchema
 from loguru import logger
 from app.evidences.services import batch_create
 from app.evidences.models import Evidence
 from app.agentic.agents.association_features_extractor_v2 import AssociationFeaturesExtractor, AssociationFeaturesExtractionResults
 from app.agentic.agents.evidence_proofreader import EvidenceProofreader
+from fastapi import HTTPException
 
 # 创建校对器实例
 evidence_proofreader = EvidenceProofreader()
+
+# ==================== 当事人独立管理方法 ====================
+
+async def create_case_party(db: AsyncSession, case_id: int, party_data: CasePartyCreate) -> CasePartyModel:
+    """创建单个当事人"""
+    party_create_data = party_data.model_dump(exclude_unset=True)
+    party_create_data['case_id'] = case_id
+    party_obj = CasePartyModel(**party_create_data)
+    db.add(party_obj)
+    await db.flush()
+    return party_obj
+
+async def get_case_parties_by_case_id(db: AsyncSession, case_id: int) -> List[CasePartyModel]:
+    """根据案件ID获取所有当事人"""
+    query = select(CasePartyModel).where(CasePartyModel.case_id == case_id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+async def get_case_party_by_id(db: AsyncSession, party_id: int) -> Optional[CasePartyModel]:
+    """根据ID获取单个当事人"""
+    query = select(CasePartyModel).where(CasePartyModel.id == party_id)
+    result = await db.execute(query)
+    return result.scalars().first()
+
+async def update_case_party(db: AsyncSession, party_id: int, party_update: 'CasePartyUpdate') -> Optional[CasePartyModel]:
+    """更新单个当事人"""
+    party = await get_case_party_by_id(db, party_id)
+    if not party:
+        return None
+    
+    # 如果更新了角色，需要验证整个案件的当事人配置
+    update_data = party_update.model_dump(exclude_unset=True)
+    old_role = party.party_role
+    new_role = update_data.get('party_role', old_role)
+    
+    # 更新当事人信息
+    for field, value in update_data.items():
+        setattr(party, field, value)
+    
+    db.add(party)
+    
+    # 如果角色发生了变化，验证业务规则
+    if new_role != old_role:
+        await validate_case_parties_business_rules(db, party.case_id)
+    
+    await db.commit()
+    await db.refresh(party)
+    return party
+
+async def validate_case_parties_business_rules(db: AsyncSession, case_id: int) -> None:
+    """验证案件当事人的业务规则"""
+    parties = await get_case_parties_by_case_id(db, case_id)
+    party_roles = [party.party_role for party in parties]
+    
+    # 验证角色有效性
+    valid_roles = {'creditor', 'debtor'}
+    invalid_roles = set(party_roles) - valid_roles
+    if invalid_roles:
+        raise HTTPException(
+            status_code=400,
+            detail=f"存在无效的当事人角色：{', '.join(invalid_roles)}"
+        )
+    
+    # 验证最终状态：必须有且仅有1个creditor和1个debtor
+    role_counts = {}
+    for role in party_roles:
+        role_counts[role] = role_counts.get(role, 0) + 1
+    
+    expected_roles = {'creditor': 1, 'debtor': 1}
+    
+    for role, expected_count in expected_roles.items():
+        actual_count = role_counts.get(role, 0)
+        if actual_count != expected_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"当事人配置不符合要求：{role}角色期望{expected_count}个，实际{actual_count}个"
+            )
+
+async def create_case_parties_batch(db: AsyncSession, case_id: int, parties_data: List) -> List[CasePartyModel]:
+    """批量创建当事人并验证业务规则"""
+    # 先验证输入数据中是否有重复角色
+    party_roles = [party.party_role for party in parties_data]
+    if len(party_roles) != len(set(party_roles)):
+        raise HTTPException(
+            status_code=400,
+            detail="提供的当事人中存在重复角色"
+        )
+    
+    # 创建当事人
+    created_parties = []
+    for party_data in parties_data:
+        party = await create_case_party(db, case_id, party_data)
+        created_parties.append(party)
+    
+    # 验证业务规则
+    await validate_case_parties_business_rules(db, case_id)
+    
+    return created_parties
+
+
 
 def _normalize_numeric_value(value: Any) -> Any:
     """标准化数字类型值，去除尾随零
@@ -189,7 +289,8 @@ async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
     """根据ID获取案件，包含校对信息"""
     query = select(CaseModel).options(
         joinedload(CaseModel.user),
-        joinedload(CaseModel.association_evidence_features)
+        joinedload(CaseModel.association_evidence_features),
+        joinedload(CaseModel.case_parties)
     ).where(CaseModel.id == case_id)
     result = await db.execute(query)
     case = result.scalars().first()
@@ -203,15 +304,24 @@ async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
 
 async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:
     """创建新案件"""
-    # 动态获取所有字段，排除未设置的字段
-    create_data = obj_in.model_dump(exclude_unset=True)
+    # 获取创建数据，排除case_parties字段
+    create_data = obj_in.model_dump(exclude_unset=True, exclude={'case_parties'})
     
     # 创建案件对象
     db_obj = CaseModel(**create_data)
     
+    # 添加案件到会话
     db.add(db_obj)
+    await db.flush()  # 获取案件ID，但不提交事务
+    
+    # 创建关联的当事人
+    if obj_in.case_parties:
+        await create_case_parties_batch(db, db_obj.id, obj_in.case_parties)
+    
+    # 提交整个事务
     await db.commit()
-    await db.refresh(db_obj)
+    await db.refresh(db_obj, ['case_parties'])
+
     return db_obj
 
 
@@ -219,15 +329,19 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
     """更新案件信息"""
     update_data = obj_in.model_dump(exclude_unset=True)
     
-    
-    # 更新属性
+    # 更新基本属性
     for field, value in update_data.items():
         setattr(db_obj, field, value)
     
     db.add(db_obj)
     await db.commit()
-    await db.refresh(db_obj)
-    return db_obj
+    
+    # 重新获取完整的案件数据，包含所有关系
+    updated_case = await get_by_id(db, db_obj.id)
+    if updated_case is None:
+        # 这种情况不应该发生，因为我们刚刚更新了这个案件
+        raise ValueError(f"Failed to retrieve updated case with id {db_obj.id}")
+    return updated_case
 
 
 async def delete(db: AsyncSession, case_id: int) -> bool:
@@ -251,7 +365,10 @@ async def get_multi_with_count(
     logger.debug(f"Sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
     
     # 构建基础查询，包含 joinedload
-    query = select(CaseModel).options(joinedload(CaseModel.user))
+    query = select(CaseModel).options(
+        joinedload(CaseModel.user),
+        joinedload(CaseModel.case_parties)
+    )
     
     if user_id is not None:
         query = query.where(CaseModel.user_id == user_id)
@@ -268,8 +385,6 @@ async def get_multi_with_count(
             'created_at': CaseModel.created_at,
             'updated_at': CaseModel.updated_at,
             'loan_amount': CaseModel.loan_amount,
-            'creditor_name': CaseModel.creditor_name,
-            'debtor_name': CaseModel.debtor_name,
             'case_type': CaseModel.case_type,
             'case_status': CaseModel.case_status
         }
@@ -294,56 +409,9 @@ async def get_multi_with_count(
     # 获取数据，保持 joinedload
     items_query = query.offset(skip).limit(limit)
     items_result = await db.execute(items_query)
-    items = items_result.scalars().all()
+    items = list(items_result.scalars().unique().all())
 
     return items, total
-
-
-async def register_case_with_user(db: AsyncSession, obj_in: CaseRegistrationRequest) -> CaseRegistrationResponse:
-    """综合录入案件和用户"""
-    # 1. 检查用户是否已存在（通过身份证号或手机号）
-    is_new_user = False
-    existing_user = None
-    if obj_in.user_id_card:
-        existing_user = await get_by_id_card(db, obj_in.user_id_card)
-    if obj_in.user_phone:
-        existing_user = await get_by_phone(db, obj_in.user_phone)
-    
-    # 2. 如果用户不存在，创建新用户
-    if not existing_user:
-        user_in = UserCreate(
-            name=obj_in.user_name,
-            id_card=obj_in.user_id_card,
-            phone=obj_in.user_phone
-        )
-        user = await create_user(db, user_in)
-        is_new_user = True
-    else:
-        user = existing_user
-    
-    # 3. 自动生成title: "债权人 VS 债务人 的 案件类型"
-    title = f"{obj_in.creditor_name} vs {obj_in.debtor_name}"
-    
-    # 4. 创建案件
-    case_in = CaseCreate(
-        user_id=user.id,
-        title=title,  # 使用自动生成的title
-        description=obj_in.description,
-        case_type=obj_in.case_type,
-        creditor_name=obj_in.creditor_name,
-        creditor_type=obj_in.creditor_type,
-        debtor_name=obj_in.debtor_name,
-        debtor_type=obj_in.debtor_type
-    )
-    case = await create(db, case_in)
-    
-    # 5. 构建响应
-    return CaseRegistrationResponse(
-        user=UserSchema.model_validate(user),
-        case=CaseSchema.model_validate(case),
-        is_new_user=is_new_user
-    )
-
     
 async def update_association_evidence_feature(
     db: AsyncSession, feature_id: int, update_data: dict
@@ -412,12 +480,10 @@ async def auto_process(
             "progress": 50
         })
     
-    run_response: RunResponse = await asyncio.wait_for(
+    evidence_extraction_results = await asyncio.wait_for(
         association_features_extractor.arun(image_urls=[ev.file_url for ev in evidences]),
         timeout=180.0
     )
-    
-    evidence_extraction_results: AssociationFeaturesExtractionResults = run_response.content
     
     results = evidence_extraction_results.results
     if not results:

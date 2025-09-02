@@ -1853,14 +1853,14 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
               <div className="grid grid-cols-3 gap-4 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground whitespace-nowrap">债权人:</span>
-                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.creditor_name}>
-                    {caseData.data.creditor_name || 'N/A'}
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.case_parties?.find((p: any) => p.party_role === "creditor")?.party_name || 'N/A'}>
+                    {caseData.data.case_parties?.find((p: any) => p.party_role === "creditor")?.party_name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground whitespace-nowrap">债务人:</span>
-                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.debtor_name || ''}>
-                    {caseData.data.debtor_name || 'N/A'}
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.data.case_parties?.find((p: any) => p.party_role === "debtor")?.party_name || 'N/A'}>
+                    {caseData.data.case_parties?.find((p: any) => p.party_role === "debtor")?.party_name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

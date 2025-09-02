@@ -120,16 +120,26 @@ export default function CaseManagement() {
   // 初始化表单状态
   const [addForm, setAddForm] = useState({
     user_id: 0,
-    creditor_name: "",
-    debtor_name: "",
     loan_amount: 0,
     case_type: null as null | CaseType,
-    creditor_type: null as null | PartyType,
-    debtor_type: null as null | PartyType,
-    creditor_phone: "",
-    creditor_bank_account: "",
-    creditor_bank_address: "",
-    debtor_phone: "",
+    case_parties: [
+      {
+        party_name: "",
+        party_role: "creditor",
+        party_type: null as null | PartyType,
+        phone: "",
+        bank_account: "",
+        bank_address: "",
+      },
+      {
+        party_name: "",
+        party_role: "debtor", 
+        party_type: null as null | PartyType,
+        phone: "",
+        bank_account: "",
+        bank_address: "",
+      }
+    ]
   });
 
     // 临时存储输入的金额字符串，用于显示
@@ -142,12 +152,12 @@ export default function CaseManagement() {
   // 表单验证状态
   const [addFormErrors, setAddFormErrors] = useState({
     user_id: "",
-    creditor_name: "",
-    debtor_name: "",
     loan_amount: "",
-    creditor_type: "",
-    debtor_type: "",
     case_type: "",
+    creditor_name: "",
+    creditor_type: "",
+    debtor_name: "",
+    debtor_type: "",
   });
 
   // Use paginated SWR hook with user filter and sorting
@@ -240,7 +250,13 @@ export default function CaseManagement() {
     setAddForm(prev => ({
       ...prev,
       user_id: user.id,
-      creditor_name: user.name || ""
+      case_parties: [
+        {
+          ...prev.case_parties[0],
+          party_name: user.name || ""
+        },
+        prev.case_parties[1]
+      ]
     }));
     setUserSearchTerm(user.name || "");
     setShowUserDropdown(false);
@@ -266,12 +282,12 @@ export default function CaseManagement() {
   const validateAddForm = () => {
     const errors = {
       user_id: "",
-      creditor_name: "",
-      debtor_name: "",
       loan_amount: "",
-      creditor_type: "",
-      debtor_type: "",
       case_type: "",
+      creditor_name: "",
+      creditor_type: "",
+      debtor_name: "",
+      debtor_type: "",
     };
 
     if (!addForm.user_id || addForm.user_id === 0) {
@@ -279,10 +295,14 @@ export default function CaseManagement() {
     } else if (!userSearchTerm.trim()) {
       errors.user_id = "请选择关联用户";
     }
-    if (!addForm.creditor_name.trim()) {
+    
+    const creditor = addForm.case_parties.find(p => p.party_role === "creditor");
+    const debtor = addForm.case_parties.find(p => p.party_role === "debtor");
+    
+    if (!creditor?.party_name.trim()) {
       errors.creditor_name = "请输入债权人姓名";
     }
-    if (!addForm.debtor_name.trim()) {
+    if (!debtor?.party_name.trim()) {
       errors.debtor_name = "请输入债务人姓名";
     }
     
@@ -295,10 +315,10 @@ export default function CaseManagement() {
       errors.loan_amount = "金额必须大于0";
     }
     
-    if (!addForm.creditor_type) {
+    if (!creditor?.party_type) {
       errors.creditor_type = "请选择债权人类型";
     }
-    if (!addForm.debtor_type) {
+    if (!debtor?.party_type) {
       errors.debtor_type = "请选择债务人类型";
     }
     if (!addForm.case_type) {
@@ -319,28 +339,38 @@ export default function CaseManagement() {
       setShowAddDialog(false);
       setAddForm({
         user_id: 0,
-        creditor_name: "",
-        debtor_name: "",
         loan_amount: 0,
         case_type: null,
-        creditor_type: null,
-        debtor_type: null,
-        creditor_phone: "",
-        creditor_bank_account: "",
-        creditor_bank_address: "",
-        debtor_phone: "",
+        case_parties: [
+          {
+            party_name: "",
+            party_role: "creditor",
+            party_type: null,
+            phone: "",
+            bank_account: "",
+            bank_address: "",
+          },
+          {
+            party_name: "",
+            party_role: "debtor", 
+            party_type: null,
+            phone: "",
+            bank_account: "",
+            bank_address: "",
+          }
+        ]
       });
       setLoanAmountInput("");
       setUserSearchTerm("");
       setShowUserDropdown(false);
       setAddFormErrors({
         user_id: "",
-        creditor_name: "",
-        debtor_name: "",
         loan_amount: "",
-        creditor_type: "",
-        debtor_type: "",
         case_type: "",
+        creditor_name: "",
+        creditor_type: "",
+        debtor_name: "",
+        debtor_type: "",
       });
       
       // 重置排序为创建时间倒序，确保新案件显示在最前面
@@ -426,7 +456,14 @@ export default function CaseManagement() {
       // 设置新创建的用户为选中用户
       setAddForm(prev => ({
         ...prev,
-        user_id: Number(newUser.data.id)
+        user_id: Number(newUser.data.id),
+        case_parties: [
+          {
+            ...prev.case_parties[0],
+            party_name: newUser.data.name || ""
+          },
+          prev.case_parties[1]
+        ]
       }));
 
       // 隐藏刷新loading状态
@@ -444,7 +481,13 @@ export default function CaseManagement() {
     setAddForm(prev => ({
       ...prev,
       user_id: parseInt(userId),
-      creditor_name: selectedUser?.name || "",
+      case_parties: [
+        {
+          ...prev.case_parties[0],
+          party_name: selectedUser?.name || ""
+        },
+        prev.case_parties[1]
+      ]
     }));
   };
 
@@ -514,56 +557,61 @@ export default function CaseManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedCases.map((caseItem) => (
-                <TableRow key={caseItem.id}>
-                  <TableCell className="whitespace-nowrap">{caseItem.user?.name || "-"}</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <div className="flex items-center space-x-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewCase(caseItem.id)}
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
-                      >
-                        证据
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewEvidenceChain(caseItem.id)}
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
-                      >
-                        详情
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
-                     caseItem.case_type === 'contract' ? '买卖合同纠纷' : '-'}
-                  </TableCell>
-                  <TableCell className="font-medium whitespace-nowrap">
-                    {caseItem.creditor_name}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {caseItem.creditor_type ? partyTypeLabels[caseItem.creditor_type] : "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {caseItem.debtor_name || "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {caseItem.debtor_type ? partyTypeLabels[caseItem.debtor_type] : "-"}
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-600 whitespace-nowrap">
-                    {formatDateTime(caseItem.created_at)}
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-600 whitespace-nowrap">
-                    {formatDateTime(caseItem.updated_at)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sortedCases.map((caseItem) => {
+                const creditor = caseItem.case_parties?.find((p: any) => p.party_role === "creditor");
+                const debtor = caseItem.case_parties?.find((p: any) => p.party_role === "debtor");
+                
+                return (
+                  <TableRow key={caseItem.id}>
+                    <TableCell className="whitespace-nowrap">{caseItem.user?.name || "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewCase(caseItem.id)}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                        >
+                          证据
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewEvidenceChain(caseItem.id)}
+                          className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                        >
+                          详情
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
+                       caseItem.case_type === 'contract' ? '买卖合同纠纷' : '-'}
+                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">
+                      {creditor?.party_name || "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {creditor?.party_type ? partyTypeLabels[creditor.party_type] : "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {debtor?.party_name || "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {debtor?.party_type ? partyTypeLabels[debtor.party_type] : "-"}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                      {formatDateTime(caseItem.created_at)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                      {formatDateTime(caseItem.updated_at)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -838,14 +886,20 @@ export default function CaseManagement() {
                 {/* 债权人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="creditor_name" className="text-sm font-medium">
-                    债权人姓名 <span className="text-red-500">*</span>
+                    当事人名称 <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="creditor_name"
-                    value={addForm.creditor_name}
-                    onChange={(e) => setAddForm({ ...addForm, creditor_name: e.target.value })}
+                    value={addForm.case_parties[0]?.party_name || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        { ...prev.case_parties[0], party_name: e.target.value },
+                        prev.case_parties[1]
+                      ]
+                    }))}
                     onBlur={() => {
-                      if (!addForm.creditor_name.trim()) {
+                      if (!addForm.case_parties[0]?.party_name.trim()) {
                         setAddFormErrors(prev => ({ ...prev, creditor_name: "请输入债权人姓名" }));
                       } else {
                         setAddFormErrors(prev => ({ ...prev, creditor_name: "" }));
@@ -865,9 +919,15 @@ export default function CaseManagement() {
                     债权人类型 <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    value={addForm.creditor_type || ""}
+                    value={addForm.case_parties[0]?.party_type || ""}
                     onValueChange={(value: any) => {
-                      setAddForm({ ...addForm, creditor_type: value });
+                      setAddForm(prev => ({
+                        ...prev,
+                        case_parties: [
+                          { ...prev.case_parties[0], party_type: value },
+                          prev.case_parties[1]
+                        ]
+                      }));
                       if (value) {
                         setAddFormErrors(prev => ({ ...prev, creditor_type: "" }));
                       }
@@ -894,8 +954,14 @@ export default function CaseManagement() {
                   </Label>
                   <Input
                     id="creditor_phone"
-                    value={addForm.creditor_phone || ""}
-                    onChange={(e) => setAddForm({ ...addForm, creditor_phone: e.target.value })}
+                    value={addForm.case_parties[0]?.phone || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        { ...prev.case_parties[0], phone: e.target.value },
+                        prev.case_parties[1]
+                      ]
+                    }))}
                     placeholder="请输入债权人电话"
                   />
                 </div>
@@ -907,8 +973,14 @@ export default function CaseManagement() {
                   </Label>
                   <Input
                     id="creditor_bank_account"
-                    value={addForm.creditor_bank_account || ""}
-                    onChange={(e) => setAddForm({ ...addForm, creditor_bank_account: e.target.value })}
+                    value={addForm.case_parties[0]?.bank_account || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        { ...prev.case_parties[0], bank_account: e.target.value },
+                        prev.case_parties[1]
+                      ]
+                    }))}
                     placeholder="请输入银行账户"
                   />
                 </div>
@@ -920,8 +992,14 @@ export default function CaseManagement() {
                   </Label>
                   <Input
                     id="creditor_bank_address"
-                    value={addForm.creditor_bank_address || ""}
-                    onChange={(e) => setAddForm({ ...addForm, creditor_bank_address: e.target.value })}
+                    value={addForm.case_parties[0]?.bank_address || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        { ...prev.case_parties[0], bank_address: e.target.value },
+                        prev.case_parties[1]
+                      ]
+                    }))}
                     placeholder="请输入银行地址"
                   />
                 </div>
@@ -934,14 +1012,20 @@ export default function CaseManagement() {
                 {/* 债务人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="debtor_name" className="text-sm font-medium">
-                    债务人姓名 <span className="text-red-500">*</span>
+                    当事人名称 <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="debtor_name"
-                    value={addForm.debtor_name}
-                    onChange={(e) => setAddForm({ ...addForm, debtor_name: e.target.value })}
+                    value={addForm.case_parties[1]?.party_name || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        prev.case_parties[0],
+                        { ...prev.case_parties[1], party_name: e.target.value }
+                      ]
+                    }))}
                     onBlur={() => {
-                      if (!addForm.debtor_name.trim()) {
+                      if (!addForm.case_parties[1]?.party_name.trim()) {
                         setAddFormErrors(prev => ({ ...prev, debtor_name: "请输入债务人姓名" }));
                       } else {
                         setAddFormErrors(prev => ({ ...prev, debtor_name: "" }));
@@ -961,9 +1045,15 @@ export default function CaseManagement() {
                     债务人类型 <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    value={addForm.debtor_type || ""}
+                    value={addForm.case_parties[1]?.party_type || ""}
                     onValueChange={(value: any) => {
-                      setAddForm({ ...addForm, debtor_type: value });
+                      setAddForm(prev => ({
+                        ...prev,
+                        case_parties: [
+                          prev.case_parties[0],
+                          { ...prev.case_parties[1], party_type: value }
+                        ]
+                      }));
                       if (value) {
                         setAddFormErrors(prev => ({ ...prev, debtor_type: "" }));
                       }
@@ -990,8 +1080,14 @@ export default function CaseManagement() {
                   </Label>
                   <Input
                     id="debtor_phone"
-                    value={addForm.debtor_phone || ""}
-                    onChange={(e) => setAddForm({ ...addForm, debtor_phone: e.target.value })}
+                    value={addForm.case_parties[1]?.phone || ""}
+                    onChange={(e) => setAddForm(prev => ({
+                      ...prev,
+                      case_parties: [
+                        prev.case_parties[0],
+                        { ...prev.case_parties[1], phone: e.target.value }
+                      ]
+                    }))}
                     placeholder="请输入债务人电话"
                   />
                 </div>

@@ -56,19 +56,8 @@ class Case(Base):
             SQLAlchemyEnum(CaseStatus), nullable=False, default=CaseStatus.DRAFT
         )
     loan_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
-    # 当事人信息
-    creditor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
-    creditor_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    creditor_bank_account: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    creditor_bank_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    creditor_type: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
-    debtor_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
-    debtor_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    debtor_type: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
+    loan_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    court_name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # 外键
@@ -78,6 +67,40 @@ class Case(Base):
     user = relationship("User", back_populates="cases")
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")
     association_evidence_features = relationship("AssociationEvidenceFeature", back_populates="case", cascade="all, delete-orphan")
+    case_parties = relationship("CaseParty", back_populates="case", cascade="all, delete-orphan")
+
+
+class CaseParty(Base):
+    """案件当事人模型"""
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # 当事人信息
+    party_name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    party_role: Mapped[str] = mapped_column(String(50), nullable=False)
+    party_type: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # 主体信息
+    name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    gender: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    birthday: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    nation: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    id_card: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
+    # 公司或个体工商户信息
+    company_name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    company_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    company_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 银行信息
+    owner_name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bank_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bank_account: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bank_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
+    # 外键
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
+    case = relationship("Case", back_populates="case_parties")
     
     
 class AssociationEvidenceFeature(Base):

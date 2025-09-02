@@ -1,0 +1,172 @@
+# 文书模板配置文件
+templates:
+  complaint_template:
+    name: "民事起诉状模板"
+    type: "complaint"
+    description: "适用于民事纠纷案件的起诉状模板，包含完整的原告被告信息和诉讼请求"
+    file_path: "templates/documents/complaint_template.docx"
+    variables:
+      # 基础案件信息
+      - name: "title"
+        description: "文书标题"
+        required: true
+        default: "民事起诉状"
+      - name: "case_type"
+        description: "案件类型 (debt: 借款纠纷, contract: 合同纠纷)"
+        required: true
+        default: "debt"
+      
+      # 原告信息
+      - name: "creditor_name"
+        description: "原告姓名"
+        required: true
+        default: ""
+      - name: "creditor_type"
+        description: "原告类型"
+        required: true
+        default: ""
+      - name: "creditor_gender"
+        description: "原告性别"
+        required: true
+        default: ""
+      - name: "creditor_birthday"
+        description: "原告出生日期"
+        required: true
+        default: ""
+      - name: "creditor_nation"
+        description: "原告民族"
+        required: true
+        default: ""
+      - name: "creditor_address"
+        description: "原告住址"
+        required: true
+        default: ""
+      - name: "creditor_id_card"
+        description: "原告公民身份号码"
+        required: true
+        default: ""
+      - name: "creditor_phone"
+        description: "原告联系电话"
+        required: true
+        default: ""
+      
+      # 被告信息
+      - name: "debtor_name"
+        description: "被告姓名"
+        required: true
+        default: ""
+      - name: "debtor_gender"
+        description: "被告性别"
+        required: true
+        default: ""
+      - name: "debtor_birthday"
+        description: "被告出生日期"
+        required: true
+        default: ""
+      - name: "debtor_nation"
+        description: "被告民族"
+        required: true
+        default: ""
+      - name: "debtor_address"
+        description: "被告住址"
+        required: true
+        default: ""
+      - name: "debtor_id_card"
+        description: "被告公民身份号码"
+        required: true
+        default: ""
+      - name: "debtor_phone"
+        description: "被告联系电话"
+        required: true
+        default: ""
+      
+      # 案件详情
+      - name: "loan_amount"
+        description: "金额 (借款金额或合同金额)"
+        required: true
+        default: ""
+      
+      # 诉讼内容
+      - name: "claims"
+        description: "诉讼请求内容 (根据案件类型自动生成)"
+        required: true
+        default: ""
+      - name: "reasons"
+        description: "事实与理由内容 (根据案件类型自动生成)"
+        required: true
+        default: ""
+      
+      # 结尾信息
+      - name: "court_address"
+        description: "受理法院地址"
+        required: true
+        default: "某某人民法院"
+      - name: "created_at"
+        description: "文书生成日期"
+        required: true
+        default: ""
+
+  evidence_list_template:
+    name: "证据材料清单模板"
+    type: "evidence_list"
+    description: "适用于整理案件证据材料的清单模板"
+    file_path: "templates/documents/evidence_list_template.docx"
+    variables:
+      - name: "case_title"
+        description: "案件标题"
+        required: true
+        default: ""
+      - name: "case_id"
+        description: "案件编号"
+        required: true
+        default: ""
+      - name: "evidence_count"
+        description: "证据数量"
+        required: false
+        default: "0"
+      - name: "total_pages"
+        description: "总页数"
+        required: false
+        default: "0"
+
+  settlement_agreement_template:
+    name: "调解协议模板"
+    type: "settlement_agreement"
+    description: "适用于案件调解的协议模板"
+    file_path: "templates/documents/settlement_agreement_template.docx"
+    variables:
+      - name: "creditor_name"
+        description: "债权人姓名"
+        required: true
+        default: ""
+      - name: "debtor_name"
+        description: "债务人姓名"
+        required: true
+        default: ""
+      - name: "settlement_amount"
+        description: "调解金额"
+        required: true
+        default: ""
+      - name: "settlement_date"
+        description: "调解日期"
+        required: true
+        default: ""
+
+# 默认变量映射规则
+variable_mapping:
+  # 从案件数据自动映射的变量
+  auto_mapping:
+    creditor_name: "案件.债权人姓名"
+    debtor_name: "案件.债务人姓名"
+    case_type: "案件.案件类型"
+    loan_amount: "案件.借款金额"
+    case_description: "案件.描述"
+    case_id: "案件.ID"
+  
+  # 自动生成的变量
+  generated_variables:
+    current_date: "当前日期"
+    case_title: "案件标题（自动生成）"
+    document_number: "文书编号（自动生成）"
+
+

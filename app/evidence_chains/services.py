@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, Optional, Set, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from app.evidence_chains.schemas import (
     EvidenceChainDashboard, EvidenceChain, EvidenceTypeRequirement, EvidenceSlotDetail,
@@ -24,15 +25,19 @@ class EvidenceChainService:
     
     async def get_case_evidence_dashboard(self, case_id: int) -> EvidenceChainDashboard:
         """获取案件证据链看板 - 核心方法（异步版本）"""
-        # 获取案件信息
-        case_result = await self.db.execute(select(Case).where(Case.id == case_id))
-        case = case_result.scalar_one_or_none()
+        # 获取案件信息，预加载case_parties关系
+        case_result = await self.db.execute(
+            select(Case).options(joinedload(Case.case_parties)).where(Case.id == case_id)
+        )
+        case = case_result.scalars().first()
         if not case:
             raise ValueError(f"案件不存在: {case_id}")
         
-        # 获取案件的所有证据和特征
-        evidences_result = await self.db.execute(select(Evidence).where(Evidence.case_id == case_id))
-        evidences = list(evidences_result.scalars().all())
+        # 获取案件的所有证据和特征，预加载case关系以供校对使用
+        evidences_result = await self.db.execute(
+            select(Evidence).options(joinedload(Evidence.case).joinedload(Case.case_parties)).where(Evidence.case_id == case_id)
+        )
+        evidences = list(evidences_result.scalars().unique().all())
         
         # 为每个证据添加校对信息，确保使用最新的校对结果
         from app.evidences.services import enhance_evidence_with_proofreading
@@ -107,8 +112,19 @@ class EvidenceChainService:
         # 获取所有匹配案件类型的证据链
         all_chains = config_manager.get_evidence_chains_by_case_type(case_type_str)
         
+        # 获取债权人和债务人类型
+        creditor_type = None
+        debtor_type = None
+        
+        if case.case_parties:
+            for party in case.case_parties:
+                if party.party_role == "creditor":
+                    creditor_type = party.party_type
+                elif party.party_role == "debtor":
+                    debtor_type = party.party_type
+        
         # 如果没有设置债权人和债务人类型，返回所有匹配案件类型的证据链
-        if not case.creditor_type or not case.debtor_type:
+        if not creditor_type or not debtor_type:
             return all_chains
         
         # 将数据库枚举值映射到YAML配置中的中文值
@@ -118,8 +134,8 @@ class EvidenceChainService:
             'individual': '个体工商户'
         }
         
-        creditor_type_chinese = type_mapping.get(case.creditor_type, case.creditor_type)
-        debtor_type_chinese = type_mapping.get(case.debtor_type, case.debtor_type)
+        creditor_type_chinese = type_mapping.get(creditor_type, creditor_type)
+        debtor_type_chinese = type_mapping.get(debtor_type, debtor_type)
         
         # 筛选匹配债权人和债务人类型的证据链
         applicable_chains = []
@@ -135,8 +151,8 @@ class EvidenceChainService:
         # 添加日志记录，方便调试
         from loguru import logger
         logger.info(f"案件 {case.id} 筛选证据链: case_type={case_type_str}, "
-                   f"creditor_type={case.creditor_type}->{creditor_type_chinese}, "
-                   f"debtor_type={case.debtor_type}->{debtor_type_chinese}, "
+                   f"creditor_type={creditor_type}->{creditor_type_chinese}, "
+                   f"debtor_type={debtor_type}->{debtor_type_chinese}, "
                    f"总证据链数={len(all_chains)}, 适用证据链数={len(applicable_chains)}")
         
         return applicable_chains

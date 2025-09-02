@@ -1497,14 +1497,14 @@ export function EvidenceReasoning({
               <div className="grid grid-cols-3 gap-4 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground whitespace-nowrap">债权人:</span>
-                  <span className="font-medium max-w-[80px] truncate" title={caseData.creditor_name}>
-                    {caseData.creditor_name || 'N/A'}
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.case_parties?.find((p: any) => p.party_role === "creditor")?.party_name || 'N/A'}>
+                    {caseData.case_parties?.find((p: any) => p.party_role === "creditor")?.party_name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground whitespace-nowrap">债务人:</span>
-                  <span className="font-medium max-w-[80px] truncate" title={caseData.debtor_name || ''}>
-                    {caseData.debtor_name || 'N/A'}
+                  <span className="font-medium max-w-[80px] truncate" title={caseData.case_parties?.find((p: any) => p.party_role === "debtor")?.party_name || 'N/A'}>
+                    {caseData.case_parties?.find((p: any) => p.party_role === "debtor")?.party_name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

@@ -9,56 +9,108 @@ from app.cases.models import CaseType, PartyType, CaseStatus
 from app.users.schemas import User
 
 
+class CasePartyCreate(BaseModel):
+    """案件当事人创建模型"""
+    party_name: str
+    party_role: str
+    party_type: PartyType
+    
+    # 主体信息
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    birthday: Optional[str] = None
+    nation: Optional[str] = None
+    address: Optional[str] = None
+    id_card: Optional[str] = None
+    phone: Optional[str] = None
+    
+    # 公司或个体工商户信息
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_code: Optional[str] = None
+    
+    # 银行信息
+    owner_name: Optional[str] = None
+    bank_address: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_phone: Optional[str] = None
+    
+    
+class CasePartyUpdate(BaseModel):
+    """案件当事人更新模型"""
+    party_name: Optional[str] = None
+    party_role: Optional[str] = None
+    party_type: Optional[PartyType] = None
+    
+     # 主体信息
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    birthday: Optional[str] = None
+    nation: Optional[str] = None
+    address: Optional[str] = None
+    id_card: Optional[str] = None
+    phone: Optional[str] = None
+    
+    # 公司或个体工商户信息
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_code: Optional[str] = None
+    
+    # 银行信息
+    owner_name: Optional[str] = None
+    bank_address: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_phone: Optional[str] = None
+    
+    
+class CasePartyResponse(BaseSchema):
+    """案件当事人模型"""
+    id: int
+    party_name: str
+    party_role: str
+    party_type: PartyType
+    
+    # 主体信息
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    birthday: Optional[str] = None
+    nation: Optional[str] = None
+    address: Optional[str] = None
+    id_card: Optional[str] = None
+    phone: Optional[str] = None
+    
+    # 公司或个体工商户信息
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_code: Optional[str] = None
+    
+    # 银行信息
+    owner_name: Optional[str] = None
+    bank_address: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_phone: Optional[str] = None
+
 
 # 创建时需要的属性
 class CaseCreate(BaseModel):
     """案件创建模型"""
     user_id: int
-    creditor_name: str
-    debtor_name: str
+    case_parties: List[CasePartyCreate]
     loan_amount: float
     case_type: CaseType
-    creditor_type: PartyType
-    debtor_type: PartyType
-
-    creditor_phone: Optional[str] = None
-    creditor_bank_account: Optional[str] = None
-    creditor_bank_address: Optional[str] = None
-    debtor_phone: Optional[str] = None
+    loan_date: Optional[datetime] = None
+    court_name: Optional[str] = None
     description: Optional[str] = None
-
-    @field_validator('creditor_type', 'debtor_type', mode='before')
-    @classmethod
-    def validate_party_type(cls, v):
-        """将空字符串转换为null"""
-        if v == "":
-            return None
-        return v
 
 
 # 更新时可以修改的属性
 class CaseUpdate(BaseModel):
     """案件更新模型"""
     loan_amount: Optional[float] = None
-    description: Optional[str] = None
     case_type: Optional[CaseType] = None
-    creditor_name: Optional[str] = None
-    creditor_phone: Optional[str] = None
-    creditor_bank_account: Optional[str] = None
-    creditor_bank_address: Optional[str] = None
-    creditor_type: Optional[PartyType] = None
-    debtor_name: Optional[str] = None
-    debtor_phone: Optional[str] = None
-    debtor_type: Optional[PartyType] = None
-
-    @field_validator('creditor_type', 'debtor_type', mode='before')
-    @classmethod
-    def validate_party_type(cls, v):
-        """将空字符串转换为null"""
-        if v == "":
-            return None
-        return v
-
+    loan_date: Optional[datetime] = None
+    court_name: Optional[str] = None
+    description: Optional[str] = None
 
 
 # API响应中的案件模型
@@ -66,65 +118,22 @@ class Case(BaseSchema):
     """案件响应模型"""
     id: int
     user_id: int
-    creditor_name: str
-    debtor_name: str
-    creditor_type: Optional[PartyType] = None
-    debtor_type: Optional[PartyType] = None
-    loan_amount: Optional[float] = 0.0
-
-    creditor_phone: Optional[str] = None
-    creditor_bank_account: Optional[str] = None
-    creditor_bank_address: Optional[str] = None
+    case_parties: List[CasePartyResponse]
+    loan_amount: float
+    case_type: CaseType
+    loan_date: Optional[datetime] = None
+    court_name: Optional[str] = None
     description: Optional[str] = None
-    case_type: Optional[CaseType] = None
-    debtor_phone: Optional[str] = None
+    
     created_at: datetime
     updated_at: datetime
-
+    
     class Config:
         from_attributes = True
 
 
 class CaseWithUser(Case):
     user: User
-
-
-# 综合案件录入模型
-class CaseRegistrationRequest(BaseModel):
-    """案件综合录入请求模型"""
-    # 用户信息 - 复用UserCreate模型的字段
-    user_name: str
-    user_id_card: Optional[str] = None
-    user_phone: Optional[str] = None
-    
-    # 案件信息 - 不包含title，将自动生成
-    description: Optional[str] = None
-    case_type: CaseType
-    loan_amount: float
-    creditor_name: str
-    creditor_phone: Optional[str] = None
-    creditor_bank_account: Optional[str] = None
-    creditor_bank_address: Optional[str] = None
-    creditor_type: Optional[PartyType] = None
-    debtor_name: str
-    debtor_phone: Optional[str] = None
-    debtor_type: Optional[PartyType] = None
-
-    @field_validator('creditor_type', 'debtor_type', mode='before')
-    @classmethod
-    def validate_party_type(cls, v):
-        """将空字符串转换为null"""
-        if v == "":
-            return None
-        return v
-
-
-# 综合案件录入响应模型
-class CaseRegistrationResponse(BaseModel):
-    """案件综合录入响应模型"""
-    user: User
-    case: Case
-    is_new_user: bool  # 标识是否创建了新用户
 
 
 class AssociationEvidenceFeature(BaseModel):

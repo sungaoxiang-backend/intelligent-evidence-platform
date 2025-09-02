@@ -152,6 +152,38 @@ export const caseApi = {
     }
   },
 
+  // 当事人管理API
+  async getCaseParties(caseId: number): Promise<{ data: any[] }> {
+    const url = buildApiUrl(`/cases/${caseId}/parties`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
+
+  async updateCaseParty(caseId: number, partyId: number, data: any): Promise<{ data: any }> {
+    const url = buildApiUrl(`/cases/${caseId}/parties/${partyId}`)
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
+
   async getAssociationEvidenceFeature(featureId: number): Promise<any> {
     const url = buildApiUrl(`/cases/association-features/${featureId}`)
     const resp = await fetch(url, {

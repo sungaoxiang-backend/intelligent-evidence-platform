@@ -14,6 +14,7 @@ from loguru import logger
 from agno.media import Image
 from agno.run.response import RunResponse
 from app.evidences.models import Evidence, EvidenceStatus
+from app.cases.models import Case
 from app.evidences.schemas import (
     EvidenceEditRequest, 
     UploadFileResponse
@@ -21,6 +22,72 @@ from app.evidences.schemas import (
 from app.integrations.cos import cos_service
 from app.agentic.agents.evidence_proofreader import evidence_proofreader
 from app.cases.models import Case
+
+
+def _get_case_field_value(case, case_field: str, role: Optional[str] = None, slot_name: Optional[str] = None) -> Any:
+    """从案件中获取字段值，适配新的case_parties数据结构
+    
+    Args:
+        case: 案件对象
+        case_field: 字段名（如 creditor_name, debtor_name, loan_amount等）
+        role: 角色（creditor或debtor），如果配置中指定了role
+        slot_name: 证据槽位名称，用于确定具体的映射逻辑
+        
+    Returns:
+        字段值或None
+    """
+    # 处理基本案件字段（非当事人相关）
+    if case_field == "loan_amount":
+        return getattr(case, "loan_amount", None)
+    elif case_field == "case_type":
+        return getattr(case, "case_type", None)
+    
+    # 处理当事人相关字段
+    if not case.case_parties:
+        return None
+    
+    # 确定目标角色
+    target_role = None
+    if role:
+        target_role = role
+    elif case_field.startswith("creditor"):
+        target_role = "creditor"
+    elif case_field.startswith("debtor"):
+        target_role = "debtor"
+    
+    if not target_role:
+        # 如果无法确定角色，尝试直接从案件对象获取
+        return getattr(case, case_field, None)
+    
+    # 查找对应角色的当事人
+    target_party = None
+    for party in case.case_parties:
+        if party.party_role == target_role:
+            target_party = party
+            break
+    
+    if not target_party:
+        return None
+    
+    # 根据字段名和槽位名称确定从哪个字段获取值
+    # 这里是关键：我们需要将旧的case字段映射到新的party字段
+    if case_field in ["creditor_name", "debtor_name"]:
+        # 根据槽位名称决定具体的映射逻辑
+        if slot_name == "法定代表人":
+            # 法定代表人应该校对主体信息中的name字段
+            return target_party.name
+        elif slot_name in ["公司名称", "经营名称"]:
+            # 公司名称或经营名称校对party_name
+            return target_party.party_name
+        else:
+            # 默认情况（如个人姓名）校对party_name
+            return target_party.party_name
+    elif case_field in ["creditor_phone", "debtor_phone"]:
+        # 电话号码存储在phone字段中
+        return target_party.phone
+    else:
+        # 对于其他字段，尝试直接从案件对象获取
+        return getattr(case, case_field, None)
 
 
 def _normalize_numeric_value(value: Any) -> Any:
@@ -121,17 +188,17 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
                 logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
     
     # # 如果所有有校对信息的槽位都有完整的校对信息，且没有不完整的槽位，则使用现有信息
-    # if existing_proofread_info and not incomplete_slots:
-    #     has_complete_proofread = True
-    #     logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
-    #     logger.info(f"现有校对信息: {existing_proofread_info}")
-    #     return evidence
-    # else:
-    #     logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
-    #     if incomplete_slots:
-    #         logger.info(f"不完整的槽位: {incomplete_slots}")
+    if existing_proofread_info and not incomplete_slots:
+        has_complete_proofread = True
+        logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
+        logger.info(f"现有校对信息: {existing_proofread_info}")
+        return evidence
+    else:
+        logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
+        if incomplete_slots:
+            logger.info(f"不完整的槽位: {incomplete_slots}")
     
-    # logger.info(f"证据 {evidence.id} 开始执行校对")
+    logger.info(f"证据 {evidence.id} 开始执行校对")
     
     try:
         # 执行校对
@@ -194,13 +261,15 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
 async def get_by_id(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
     """根据ID获取证据，包含案件信息和校对功能"""
     result = await db.execute(
-        select(Evidence).where(Evidence.id == evidence_id).options(joinedload(Evidence.case))
+        select(Evidence).where(Evidence.id == evidence_id).options(
+            joinedload(Evidence.case).joinedload(Case.case_parties)
+        )
     )
     evidence = result.scalars().first()
     
-    if evidence:
-        # 添加校对信息
-        evidence = await enhance_evidence_with_proofreading(evidence, db)
+    # if evidence:
+    #     # 添加校对信息
+    #     evidence = await enhance_evidence_with_proofreading(evidence, db)
     
     return evidence
 
@@ -212,7 +281,9 @@ async def get_multi_by_ids(db: AsyncSession, evidence_ids: List[int]) -> List[Ev
 async def get_by_id_with_case(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
     """根据ID获取证据，包含案件信息"""
     result = await db.execute(
-        select(Evidence).where(Evidence.id == evidence_id).options(joinedload(Evidence.case))
+        select(Evidence).where(Evidence.id == evidence_id).options(
+            joinedload(Evidence.case).joinedload(Case.case_parties)
+        )
     )
     return result.scalars().first()
 
@@ -309,7 +380,9 @@ async def get_multi_with_count(
     """获取多个证据，并返回总数，支持动态排序"""
     from loguru import logger
     
-    query = select(Evidence).options(joinedload(Evidence.case))
+    query = select(Evidence).options(
+        joinedload(Evidence.case).joinedload(Case.case_parties)
+    )
     if case_id is not None:
         query = query.where(Evidence.case_id == case_id)
     if search:
@@ -348,7 +421,7 @@ async def get_multi_with_count(
     # 获取数据
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    data = result.scalars().all()
+    data = list(result.scalars().unique().all())
 
     # 为每个证据添加校对信息
     enhanced_data = []
@@ -356,23 +429,27 @@ async def get_multi_with_count(
         enhanced_evidence = await enhance_evidence_with_proofreading(evidence, db)
         enhanced_data.append(enhanced_evidence)
 
-    return enhanced_data, total
+    return data, total
 
 
 async def get_multi_with_cases(
     db: AsyncSession, *, skip: int = 0, limit: int = 100
 ) -> list[Evidence]:
     """获取多个证据，包含案件信息"""
-    query = select(Evidence).options(joinedload(Evidence.case)).offset(skip).limit(limit)
+    query = select(Evidence).options(
+        joinedload(Evidence.case).joinedload(Case.case_parties)
+    ).offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    return list(result.scalars().unique().all())
 
 
 async def get_multi_with_cases_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100
 ):
     """获取多个证据，包含案件信息，并返回总数"""
-    query = select(Evidence).options(joinedload(Evidence.case))
+    query = select(Evidence).options(
+        joinedload(Evidence.case).joinedload(Case.case_parties)
+    )
 
     # 获取总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -381,8 +458,28 @@ async def get_multi_with_cases_with_count(
     # 获取数据
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    data = result.scalars().all()
+    data = list(result.scalars().unique().all())
 
+    return data, total
+
+async def list_evidences_by_case_id(db: AsyncSession, case_id: int, search: Optional[str] = None, skip: int = 0, limit: int = 100,
+    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"):
+    """根据案件ID获取证据"""
+    query = select(Evidence).options(
+        joinedload(Evidence.case).joinedload(Case.case_parties)
+    ).where(Evidence.case_id == case_id)
+    if search:
+        query = query.where(Evidence.file_name.ilike(f"%{search}%"))
+    if sort_by:
+        query = query.order_by(getattr(Evidence, sort_by).desc() if sort_order == "desc" else getattr(Evidence, sort_by).asc())
+    else:
+        query = query.order_by(Evidence.created_at.desc())
+    query = query.offset(skip).limit(limit)
+    if total := await db.scalar(select(func.count()).select_from(query.subquery())) is None:
+        total = 0
+    
+    result = await db.execute(query)
+    data = list(result.scalars().unique().all())
     return data, total
 
 
@@ -821,8 +918,10 @@ async def auto_process(
             if send_progress:
                 await send_progress({"status": "role_annotation", "message": "开始证据角色自动标注"})
             
-            # 获取案件信息
-            case_query = await db.execute(select(Case).where(Case.id == case_id))
+            # 获取案件信息，预加载case_parties关系
+            case_query = await db.execute(
+                select(Case).options(joinedload(Case.case_parties)).where(Case.id == case_id)
+            )
             case = case_query.scalars().first()
             if not case:
                 logger.error(f"未找到案件信息: case_id={case_id}")
@@ -882,7 +981,7 @@ async def auto_process(
                             # 执行匹配逻辑
                             match_results = []
                             for case_field in case_fields:
-                                case_value = getattr(case, case_field, None)
+                                case_value = _get_case_field_value(case, case_field, rule.get("role"), slot_name)
                                 if case_value is None:
                                     continue
                                 

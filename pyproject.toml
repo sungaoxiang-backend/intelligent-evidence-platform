@@ -30,6 +30,7 @@ dependencies = [
     "loguru>=0.7.3",
     "pytz>=2025.2",
     "jsonpath-rw==1.4.0",
+    "docxtpl>=0.20.1",
 ]
 
 [project.optional-dependencies]

@@ -65,3 +65,5 @@ logs/
 
 # cursor
 .cursor/
+
+static/

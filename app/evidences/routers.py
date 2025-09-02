@@ -58,6 +58,22 @@ async def read_evidences(
         )
 
 
+@router.get("/case/{case_id}", response_model=ListResponse[EvidenceResponse])
+async def read_evidences_by_case_id(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
+):
+    """获取案件的所有证据"""
+    evidences, total = await evidence_service.list_evidences_by_case_id(db, case_id, search=search, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order)
+    return ListResponse(data=evidences, pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit))
+
+
 @router.get("/{evidence_id}", response_model=SingleResponse[EvidenceResponse])
 async def read_evidence(
     evidence_id: int,

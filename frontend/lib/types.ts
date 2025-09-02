@@ -19,24 +19,50 @@ export interface AssociationEvidenceFeature {
   case_id: number;
 }
 
+export interface CaseParty {
+  id?: number;  // 创建时可选
+  party_name: string;
+  party_role: string;
+  party_type: PartyType | null;
+  // 主体信息
+  name?: string;
+  gender?: string;
+  birthday?: string;
+  nation?: string;
+  address?: string;
+  id_card?: string;
+  phone?: string;
+  // 公司或个体工商户信息
+  company_name?: string;
+  company_address?: string;
+  company_code?: string;
+  // 银行信息
+  owner_name?: string;
+  bank_address?: string;
+  bank_account?: string;
+  bank_phone?: string;
+}
+
 export interface Case {
   id: number;
   user_id: number;
   case_type: CaseType | null;
-  creditor_name: string;
-  creditor_phone?: string;
-  creditor_bank_account?: string;
-  creditor_bank_address?: string;
-  creditor_type: PartyType | null;
-  debtor_name: string;  // 从 string | null 改为 string
-  debtor_phone?: string;
-  debtor_type: PartyType | null;
-  loan_amount?: number;  // 新增贷款金额字段
+  case_parties: CaseParty[];
+  loan_amount?: number;
   description: string | null;
   created_at: string;
   updated_at: string;
   user?: User;
   association_evidence_features?: AssociationEvidenceFeature[];
+  // 保留旧字段以兼容，但标记为可选
+  creditor_name?: string;
+  creditor_phone?: string;
+  creditor_bank_account?: string;
+  creditor_bank_address?: string;
+  creditor_type?: PartyType | null;
+  debtor_name?: string;
+  debtor_phone?: string;
+  debtor_type?: PartyType | null;
 }
 
 export interface Evidence {
