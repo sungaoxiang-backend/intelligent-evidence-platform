@@ -182,85 +182,34 @@ export function EvidenceChainDashboard({ caseId, onRefresh }: EvidenceChainDashb
   }
 
   return (
-    <div className="space-y-6">
+    <>
       {/* 添加滚动条样式 */}
       <style dangerouslySetInnerHTML={{ __html: scrollbarStyles }} />
       
-
-
-
-
-
-
-
-      
-      {/* 推荐证据链展示 */}
-      {(() => {
-        const activatedChains = dashboardData.chains.filter(chain => chain.is_activated)
-        
-        if (activatedChains.length === 0) {
-          return null
-        }
-        
-        const bestActivatedChain = activatedChains.reduce((best, current) => {
-          return current.completion_percentage > best.completion_percentage ? current : best
+      {/* 证据链列表 - 使用与左侧相同的结构 */}
+      {dashboardData.chains
+        .sort((a, b) => {
+          if (a.is_feasible && !b.is_feasible) return -1
+          if (!a.is_feasible && b.is_feasible) return 1
+          return b.feasibility_completion - a.feasibility_completion
         })
-        
-        return (
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-green-900">
-                    🎯 推荐证据链
-                  </h2>
-                  <p className="text-green-700">{bestActivatedChain.chain_name}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-green-600">
-                  {bestActivatedChain.completion_percentage.toFixed(1)}%
-                </div>
-                <div className="text-sm text-green-600">完成度</div>
-              </div>
-            </div>
-            
-            <div className="mt-4 w-full bg-green-100 rounded-full h-2">
-              <div 
-                className="h-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500"
-                style={{ width: `${bestActivatedChain.completion_percentage}%` }}
-              ></div>
-            </div>
-            
-            <div className="flex items-center justify-between mt-4 text-sm text-green-700">
-              <span>🌟 核心特征: {bestActivatedChain.core_requirements_satisfied}/{bestActivatedChain.core_requirements_count}</span>
-              <span className="bg-green-200 px-3 py-1 rounded-full text-green-800 font-medium">已激活</span>
+        .map((chain, index) => (
+          <div key={chain.chain_id}>
+            {/* 子标题 - 与左侧完全相同的样式 */}
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 border-b border-gray-100 pb-1">
+              适用证据链{index + 1}
+            </h4>
+            {/* 内容区域 - 与左侧相同的结构 */}
+            <div>
+              <EvidenceChainCard
+                chain={chain}
+                caseId={caseId}
+                onSlotClick={handleSlotClick}
+              />
             </div>
           </div>
-        )
-      })()}
-
-      {/* 证据链列表 */}
-      <div className="space-y-4">
-        {dashboardData.chains
-          .sort((a, b) => {
-            if (a.is_feasible && !b.is_feasible) return -1
-            if (!a.is_feasible && b.is_feasible) return 1
-            return b.feasibility_completion - a.feasibility_completion
-          })
-          .map((chain) => (
-            <EvidenceChainCard
-              key={chain.chain_id}
-              chain={chain}
-              caseId={caseId}
-              onSlotClick={handleSlotClick}
-            />
-          ))}
-      </div>
-    </div>
+        ))}
+    </>
   )
 }
 

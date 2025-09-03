@@ -680,7 +680,7 @@ evidence_chains:
 
   - chain_id: "买卖合同纠纷证据链16"
     applicable_case_types: ["contract"]
-    applicable_creditor_type: "公司"
+    applicable_creditor_type: "个体工商户"
     applicable_debtor_type: "公司"
     required_evidence_types:
       - evidence_type: "货款欠条"

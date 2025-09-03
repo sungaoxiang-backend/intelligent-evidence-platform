@@ -886,7 +886,7 @@ export default function CaseManagement() {
                 {/* 债权人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="creditor_name" className="text-sm font-medium">
-                    当事人名称 <span className="text-red-500">*</span>
+                    债权人名称 <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="creditor_name"
@@ -1012,7 +1012,7 @@ export default function CaseManagement() {
                 {/* 债务人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="debtor_name" className="text-sm font-medium">
-                    当事人名称 <span className="text-red-500">*</span>
+                    债务人名称 <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="debtor_name"
