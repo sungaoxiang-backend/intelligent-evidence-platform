@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Edit, Save, X } from "lucide-react"
+import { Edit, Save, X, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EvidenceChainDashboard } from "@/components/evidence-chain-dashboard"
+import { DocumentTemplateSelector } from "@/components/document-template-selector"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
@@ -41,6 +42,9 @@ export default function CaseDetailPage() {
   
   // 临时存储输入的金额字符串，用于显示
   const [loanAmountInput, setLoanAmountInput] = useState("")
+  
+  // 文书生成相关状态
+  const [showDocumentSelector, setShowDocumentSelector] = useState(false)
 
   // 表单验证状态
   const [formErrors, setFormErrors] = useState({
@@ -131,6 +135,8 @@ export default function CaseDetailPage() {
         debtor_name: debtor?.party_name || '',
         loan_amount: caseData.loan_amount || '',
         case_type: caseData.case_type || '',
+        loan_date: caseData.loan_date || '',
+        court: caseData.court_name || '',
         creditor_type: creditor?.party_type || '',
         debtor_type: debtor?.party_type || '',
         creditor_phone: creditor?.phone || '',
@@ -186,6 +192,8 @@ export default function CaseDetailPage() {
       await caseApi.updateCase(numericCaseId, {
         loan_amount: loanAmountInput ? parseFloat(loanAmountInput) : undefined,
         case_type: editForm.case_type,
+        loan_date: editForm.loan_date || undefined,
+        court_name: editForm.court || undefined,
       })
 
       // 2. 分别更新债权人和债务人信息
@@ -322,6 +330,14 @@ export default function CaseDetailPage() {
           >
             返回
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowDocumentSelector(true)}
+            className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+          >
+            <FileText className="w-4 h-4 mr-1" />
+            生成文书
+          </Button>
           {editing ? (
             <>
               <Button size="sm" onClick={handleSave}>
@@ -342,6 +358,8 @@ export default function CaseDetailPage() {
                     debtor_name: debtor?.party_name || '',
                     loan_amount: caseData.loan_amount || '',
                     case_type: caseData.case_type || '',
+                    loan_date: caseData.loan_date || '',
+                    court: caseData.court_name || '',
                     creditor_type: creditor?.party_type || '',
                     debtor_type: debtor?.party_type || '',
                     creditor_phone: creditor?.phone || '',
@@ -516,13 +534,13 @@ export default function CaseDetailPage() {
                       <Input
                         id="loan_date"
                         type="date"
-                        value={editForm.loan_date || ''}
+                        value={editForm.loan_date ? (editForm.loan_date.includes('T') ? editForm.loan_date.split('T')[0] : editForm.loan_date) : ''}
                         onChange={(e) => setEditForm({ ...editForm, loan_date: e.target.value })}
                         className="h-9"
                       />
                     ) : (
                       <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                        {editForm.loan_date || '未设置'}
+                        {editForm.loan_date ? new Date(editForm.loan_date).toLocaleDateString('zh-CN') : '未设置'}
               </div>
                     )}
             </div>
@@ -1417,6 +1435,13 @@ export default function CaseDetailPage() {
         </CardContent>
       </Card>
       </div>
+
+      {/* 文书模板选择器 */}
+      <DocumentTemplateSelector
+        caseId={numericCaseId}
+        isOpen={showDocumentSelector}
+        onClose={() => setShowDocumentSelector(false)}
+      />
     </div>
   )
 }

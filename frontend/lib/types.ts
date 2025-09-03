@@ -49,6 +49,8 @@ export interface Case {
   case_type: CaseType | null;
   case_parties: CaseParty[];
   loan_amount?: number;
+  loan_date?: string;
+  court_name?: string;
   description: string | null;
   created_at: string;
   updated_at: string;

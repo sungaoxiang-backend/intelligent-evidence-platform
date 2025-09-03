@@ -521,3 +521,52 @@ export const evidenceApi = {
     }
   },
 }
+
+// 文书生成API
+export const documentApi = {
+  async getTemplates(): Promise<{ data: any[] }> {
+    const url = buildApiUrl(`/documents/templates`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "获取模板列表失败")
+    }
+  },
+
+  async generateDocument(templateId: string, caseId: number): Promise<{ data: any }> {
+    const url = buildApiUrl(`/documents/generate-by-case`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        template_id: templateId,
+        case_id: caseId,
+        custom_variables: {}
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "生成文书失败")
+    }
+  },
+
+  async downloadDocument(filename: string): Promise<Blob> {
+    const url = buildApiUrl(`/documents/download/${filename}`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    if (!resp.ok) {
+      throw new Error("下载文书失败")
+    }
+    return resp.blob()
+  },
+}

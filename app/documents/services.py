@@ -523,8 +523,7 @@ class DocumentGenerator:
                     else:
                         legal_rep_parts.append(f"联系电话：{party_phone}")
                 
-                legal_rep_info = indent + "，".join(legal_rep_parts) + "。"
-            
+                legal_rep_info = indent + "，".join(legal_rep_parts)
             # 组合两行信息
             if legal_rep_info:
                 return basic_info + "\n" + legal_rep_info
@@ -553,7 +552,7 @@ class DocumentGenerator:
             if party_phone:
                 info_parts.append(f"联系电话{party_phone}")
             
-            return "，".join(info_parts) + "。"
+            return "，".join(info_parts)
         
         else:
             # 默认格式（个体工商户或其他类型）

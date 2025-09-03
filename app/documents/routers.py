@@ -26,14 +26,18 @@ router = APIRouter()
 document_generator = DocumentGenerator()
 
 
-@router.get("/templates", response_model=List[DocumentTemplateInfo])
+@router.get("/templates")
 async def get_templates(
     current_staff: Staff = Depends(get_current_staff)
 ):
     """获取可用的文书模板列表"""
     try:
         templates = document_generator.get_available_templates()
-        return templates
+        return {
+            "code": 200,
+            "message": "获取模板列表成功",
+            "data": templates
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -41,7 +45,7 @@ async def get_templates(
         )
 
 
-@router.post("/generate", response_model=DocumentGenerateResponse)
+@router.post("/generate")
 async def generate_document(
     request: DocumentGenerateRequest,
     current_staff: Staff = Depends(get_current_staff)
@@ -96,7 +100,15 @@ async def generate_document(
         )
         
         if result["success"]:
-            return DocumentGenerateResponse(**result)
+            # 转换为统一的API响应格式
+            return {
+                "code": 200,
+                "message": result["message"],
+                "data": {
+                    "file_path": result["file_path"],
+                    "filename": result["filename"]
+                }
+            }
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -112,7 +124,7 @@ async def generate_document(
         )
 
 
-@router.post("/generate-by-case", response_model=DocumentGenerateResponse)
+@router.post("/generate-by-case")
 async def generate_document_by_case(
     request: DocumentGenerateByCaseRequest,
     db: AsyncSession = Depends(get_db),
@@ -129,7 +141,15 @@ async def generate_document_by_case(
         )
         
         if result["success"]:
-            return DocumentGenerateResponse(**result)
+            # 转换为统一的API响应格式
+            return {
+                "code": 200,
+                "message": result["message"],
+                "data": {
+                    "file_path": result["file_path"],
+                    "filename": result["filename"]
+                }
+            }
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

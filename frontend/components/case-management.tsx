@@ -247,6 +247,7 @@ export default function CaseManagement() {
 
   // 处理用户选择
   const handleUserSelect = (user: User) => {
+    console.log('用户选择:', user);
     setAddForm(prev => ({
       ...prev,
       user_id: user.id,
@@ -261,13 +262,20 @@ export default function CaseManagement() {
     setUserSearchTerm(user.name || "");
     setShowUserDropdown(false);
     setAddFormErrors(prev => ({ ...prev, user_id: "" }));
+    console.log('用户选择完成，user_id:', user.id, 'user_name:', user.name);
   };
 
   // 点击外部关闭下拉列表
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (showUserDropdown) {
-        setShowUserDropdown(false);
+        // 检查点击的目标是否在下拉列表容器内
+        const target = event.target as Element;
+        const dropdownContainer = document.querySelector('.user-dropdown-container');
+        
+        if (dropdownContainer && !dropdownContainer.contains(target)) {
+          setShowUserDropdown(false);
+        }
       }
     };
 
@@ -735,7 +743,7 @@ export default function CaseManagement() {
                   
                   {/* 用户下拉列表 */}
                   {showUserDropdown && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div className="user-dropdown-container absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
                       {filteredUsers.length > 0 ? (
                         filteredUsers.map((user) => (
                           <div
@@ -771,16 +779,6 @@ export default function CaseManagement() {
               </div>
               {addFormErrors.user_id && (
                 <div className="text-red-500 text-sm">{addFormErrors.user_id}</div>
-              )}
-              
-              {/* 显示当前选中的用户信息 */}
-              {addForm.user_id > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                  <div className="text-sm text-blue-800">
-                    <span className="font-medium">已选择用户：</span>
-                    {userSearchTerm}
-                  </div>
-                </div>
               )}
             </div>
 
