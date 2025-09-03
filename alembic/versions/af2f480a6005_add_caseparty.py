@@ -49,6 +49,10 @@ def upgrade() -> None:
     op.create_index(op.f('ix_case_partys_id'), 'case_partys', ['id'], unique=False)
     op.create_index(op.f('ix_case_partys_party_name'), 'case_partys', ['party_name'], unique=False)
     
+    # 添加 loan_date 和 court_name 字段到 cases 表
+    op.add_column('cases', sa.Column('loan_date', sa.DateTime(), nullable=True))
+    op.add_column('cases', sa.Column('court_name', sa.String(length=50), nullable=True))
+    
     # 数据迁移：将现有cases表中的当事人信息迁移到case_partys表
     # 迁移债权人信息
     op.execute("""
@@ -143,6 +147,10 @@ def downgrade() -> None:
     # 重新创建索引
     op.create_index(op.f('ix_cases_debtor_name'), 'cases', ['debtor_name'], unique=False)
     op.create_index(op.f('ix_cases_creditor_name'), 'cases', ['creditor_name'], unique=False)
+    
+    # 删除 loan_date 和 court_name 字段
+    op.drop_column('cases', 'court_name')
+    op.drop_column('cases', 'loan_date')
     
     # 删除case_partys表
     op.drop_index(op.f('ix_case_partys_party_name'), table_name='case_partys')
