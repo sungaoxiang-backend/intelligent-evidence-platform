@@ -160,46 +160,124 @@ class DocumentGenerator:
     
     def _convert_case_model_to_dict(self, case) -> Dict[str, Any]:
         """将案件模型转换为字典格式，用于文书生成"""
-        return {
+        # 分离债权人和债务人信息
+        creditor = None
+        debtor = None
+        
+        # 添加调试日志
+        logger.info(f"案件 {case.id} 的当事人数量: {len(case.case_parties) if case.case_parties else 0}")
+        
+        for party in case.case_parties:
+            logger.info(f"当事人: {party.party_name}, 角色: {party.party_role}, 类型: {party.party_type}, 法定代表人: {party.owner_name}")
+            if party.party_role == "creditor":
+                creditor = party
+            elif party.party_role == "debtor":
+                debtor = party
+        
+        # 构建基础案件信息
+        case_data = {
             "case_id": case.id,
-            "case_type": case.case_type.value if case.case_type else "debt",
-            
-            # 原告信息 - 使用已有字段
-            "creditor_name": case.creditor_name or "",
-            "creditor_type": case.creditor_type or "",
-            "creditor_phone": case.creditor_phone or "",
-            "creditor_bank_account": case.creditor_bank_account or "",
-            "creditor_bank_address": case.creditor_bank_address or "",
-            
-            # 原告信息 - 缺失字段使用空值
-            "creditor_gender": "",
-            "creditor_birthday": "",
-            "creditor_nation": "",
-            "creditor_address": "",
-            "creditor_id_card": "",
-            
-            # 被告信息 - 使用已有字段
-            "debtor_name": case.debtor_name or "",
-            "debtor_type": case.debtor_type or "",
-            "debtor_phone": case.debtor_phone or "",
-            
-            # 被告信息 - 缺失字段使用空值
-            "debtor_gender": "",
-            "debtor_birthday": "",
-            "debtor_nation": "",
-            "debtor_address": "",
-            "debtor_id_card": "",
-            
-            # 案件详情
+            "case_type": case.case_type.value if hasattr(case.case_type, 'value') else str(case.case_type) if case.case_type else "DEBT",
+            "case_status": case.case_status.value if hasattr(case.case_status, 'value') else str(case.case_status) if case.case_status else "DRAFT",
             "loan_amount": case.loan_amount or 0.0,
+            "loan_date": case.loan_date,
+            "court_name": case.court_name or "",
             "description": case.description or "",
-            
-            # 其他信息 - 使用空值
-            "court_address": "",
-            
-            # 时间信息
             "created_at": case.created_at if hasattr(case, 'created_at') else datetime.now()
         }
+        
+        # 添加债权人信息
+        if creditor:
+            case_data.update({
+                # 债权人基本信息
+                "creditor_name": creditor.party_name or "",
+                "creditor_type": creditor.party_type or "",
+                "creditor_phone": creditor.phone or "",
+                "creditor_legal_rep_name": creditor.name or "",  # 法人姓名
+                
+                # 债权人个人/公司信息
+                "creditor_gender": creditor.gender or "",
+                "creditor_birthday": creditor.birthday or "",
+                "creditor_nation": creditor.nation or "",
+                "creditor_address": creditor.address or "",
+                "creditor_id_card": creditor.id_card or "",
+                "creditor_company_name": creditor.company_name or "",
+                "creditor_company_address": creditor.company_address or "",
+                "creditor_company_code": creditor.company_code or "",
+                
+                # 债权人银行信息
+                "creditor_bank_account": creditor.bank_account or "",
+                "creditor_bank_address": creditor.bank_address or "",
+                "creditor_bank_phone": creditor.bank_phone or "",
+                "creditor_owner_name": creditor.owner_name or "",  # 银行持卡人姓名
+            })
+        else:
+            # 如果没有债权人信息，使用空值
+            case_data.update({
+                "creditor_name": "",
+                "creditor_type": "",
+                "creditor_phone": "",
+                "creditor_gender": "",
+                "creditor_birthday": "",
+                "creditor_nation": "",
+                "creditor_address": "",
+                "creditor_id_card": "",
+                "creditor_company_name": "",
+                "creditor_company_address": "",
+                "creditor_company_code": "",
+                "creditor_bank_account": "",
+                "creditor_bank_address": "",
+                "creditor_bank_phone": "",
+                "creditor_owner_name": "",
+            })
+        
+        # 添加债务人信息
+        if debtor:
+            logger.info(f"债务人信息: {debtor.party_name}, 法定代表人: {debtor.name}")
+            case_data.update({
+                # 债务人基本信息
+                "debtor_name": debtor.party_name or "",
+                "debtor_type": debtor.party_type or "",
+                "debtor_phone": debtor.phone or "",
+                "debtor_legal_rep_name": debtor.name or "",  # 法人姓名
+                
+                # 债务人个人/公司信息
+                "debtor_gender": debtor.gender or "",
+                "debtor_birthday": debtor.birthday or "",
+                "debtor_nation": debtor.nation or "",
+                "debtor_address": debtor.address or "",
+                "debtor_id_card": debtor.id_card or "",
+                "debtor_company_name": debtor.company_name or "",
+                "debtor_company_address": debtor.company_address or "",
+                "debtor_company_code": debtor.company_code or "",
+                
+                # 债务人银行信息
+                "debtor_bank_account": debtor.bank_account or "",
+                "debtor_bank_address": debtor.bank_address or "",
+                "debtor_bank_phone": debtor.bank_phone or "",
+                "debtor_owner_name": debtor.owner_name or "",  # 银行持卡人姓名
+            })
+        else:
+            # 如果没有债务人信息，使用空值
+            case_data.update({
+                "debtor_name": "",
+                "debtor_type": "",
+                "debtor_phone": "",
+                "debtor_gender": "",
+                "debtor_birthday": "",
+                "debtor_nation": "",
+                "debtor_address": "",
+                "debtor_id_card": "",
+                "debtor_company_name": "",
+                "debtor_company_address": "",
+                "debtor_company_code": "",
+                "debtor_bank_account": "",
+                "debtor_bank_address": "",
+                "debtor_bank_phone": "",
+                "debtor_owner_name": "",
+            })
+        
+        return case_data
 
     def generate_document(
         self, 
@@ -304,9 +382,15 @@ class DocumentGenerator:
         variables = {
             "title": "民事起诉状",
             "case_type": case_data.get("case_type", "货款纠纷"),
+            "case_status": case_data.get("case_status", "draft"),
             
-            # 原告信息 - 使用case_data中的值，如果没有则使用默认值
+            # 当事人信息（动态生成，不包含标签）
+            "creditor_info": self._generate_party_info(case_data, "creditor"),
+            "debtor_info": self._generate_party_info(case_data, "debtor"),
             "creditor_name": case_data.get("creditor_name", ""),
+            "debtor_name": case_data.get("debtor_name", ""),
+            
+            # 保留原有字段以兼容其他模板
             "creditor_type": case_data.get("creditor_type", ""),
             "creditor_gender": case_data.get("creditor_gender", ""),
             "creditor_birthday": case_data.get("creditor_birthday", ""),
@@ -314,18 +398,32 @@ class DocumentGenerator:
             "creditor_address": case_data.get("creditor_address", ""),
             "creditor_id_card": case_data.get("creditor_id_card", ""),
             "creditor_phone": case_data.get("creditor_phone", ""),
+            "creditor_company_name": case_data.get("creditor_company_name", ""),
+            "creditor_company_address": case_data.get("creditor_company_address", ""),
+            "creditor_company_code": case_data.get("creditor_company_code", ""),
+            "creditor_bank_account": case_data.get("creditor_bank_account", ""),
+            "creditor_bank_address": case_data.get("creditor_bank_address", ""),
+            "creditor_bank_phone": case_data.get("creditor_bank_phone", ""),
+            "creditor_owner_name": case_data.get("creditor_owner_name", ""),
             
-            # 被告信息 - 使用case_data中的值，如果没有则使用默认值
-            "debtor_name": case_data.get("debtor_name", ""),
+            "debtor_type": case_data.get("debtor_type", ""),
             "debtor_gender": case_data.get("debtor_gender", ""),
             "debtor_birthday": case_data.get("debtor_birthday", ""),
             "debtor_nation": case_data.get("debtor_nation", "汉族"),
             "debtor_address": case_data.get("debtor_address", ""),
             "debtor_id_card": case_data.get("debtor_id_card", ""),
             "debtor_phone": case_data.get("debtor_phone", ""),
+            "debtor_company_name": case_data.get("debtor_company_name", ""),
+            "debtor_company_address": case_data.get("debtor_company_address", ""),
+            "debtor_company_code": case_data.get("debtor_company_code", ""),
+            "debtor_bank_account": case_data.get("debtor_bank_account", ""),
+            "debtor_bank_address": case_data.get("debtor_bank_address", ""),
+            "debtor_bank_phone": case_data.get("debtor_bank_phone", ""),
+            "debtor_owner_name": case_data.get("debtor_owner_name", ""),
             
-            # 案件详情 - 使用case_data中的值，如果没有则使用默认值
+            # 案件详情
             "loan_amount": formatted_loan_amount,
+            "loan_date": case_data.get("loan_date", ""),
             "case_description": case_data.get("description", ""),
             
             # 自动生成的变量
@@ -337,7 +435,8 @@ class DocumentGenerator:
             "reasons": self._generate_reasons(case_data),
             
             # 结尾信息
-            "court_address": case_data.get("court_address", "某某人民法院"),
+            "court_name": case_data.get("court_name", "某某人民法院"),
+            "court_address": case_data.get("court_name", "某某人民法院"),
             "created_at": formatted_created_at
         }
         
@@ -347,24 +446,162 @@ class DocumentGenerator:
         
         return variables
     
+    def _generate_party_info(self, case_data: Dict[str, Any], party_role: str) -> str:
+        """根据当事人类型动态生成当事人信息"""
+        if party_role == "creditor":
+            party_type = case_data.get("creditor_type", "")
+            party_name = case_data.get("creditor_name", "")
+            party_phone = case_data.get("creditor_phone", "")
+            
+            # 个人信息
+            gender = case_data.get("creditor_gender", "")
+            birthday = case_data.get("creditor_birthday", "")
+            nation = case_data.get("creditor_nation", "")
+            address = case_data.get("creditor_address", "")
+            id_card = case_data.get("creditor_id_card", "")
+            name = case_data.get("creditor_legal_rep_name", "")  # 法人姓名
+            
+            # 公司信息
+            company_name = case_data.get("creditor_company_name", "")
+            company_address = case_data.get("creditor_company_address", "")
+            company_code = case_data.get("creditor_company_code", "")
+            owner_name = case_data.get("creditor_owner_name", "")  # 银行持卡人姓名
+        else:  # debtor
+            party_type = case_data.get("debtor_type", "")
+            party_name = case_data.get("debtor_name", "")
+            party_phone = case_data.get("debtor_phone", "")
+            
+            # 个人信息
+            gender = case_data.get("debtor_gender", "")
+            birthday = case_data.get("debtor_birthday", "")
+            nation = case_data.get("debtor_nation", "")
+            address = case_data.get("debtor_address", "")
+            id_card = case_data.get("debtor_id_card", "")
+            name = case_data.get("debtor_legal_rep_name", "")  # 法人姓名
+            
+            # 公司信息
+            company_name = case_data.get("debtor_company_name", "")
+            company_address = case_data.get("debtor_company_address", "")
+            company_code = case_data.get("debtor_company_code", "")
+            owner_name = case_data.get("debtor_owner_name", "")  # 银行持卡人姓名
+        
+        if not party_name:
+            return ""
+        
+        # 根据当事人类型生成不同的信息格式
+        if party_type == "company":
+            # 公司信息格式 - 按照法律文书标准格式
+            # 第一行：公司基本信息
+            basic_info_parts = []
+            basic_info_parts.append(party_name)
+            
+            if company_address:
+                basic_info_parts.append(f"住所地{company_address}")
+            
+            if company_code:
+                basic_info_parts.append(f"统一社会信用代码{company_code}")
+            
+            basic_info = "，".join(basic_info_parts) + "。"
+            
+            # 第二行：法定代表人信息（换行并与"原告"/"被告"对齐）
+            legal_rep_info = ""
+            if name:
+                # 计算缩进：与"原告"/"被告"对齐（约2个字符的缩进）
+                indent = "　　"  # 使用2个全角空格缩进
+                legal_rep_parts = [f"法定代表人：{name}"]
+                
+                # 添加职务信息
+                if party_role == "creditor":
+                    legal_rep_parts.append("职务：执行董事兼经理")
+                elif party_role == "debtor":
+                    legal_rep_parts.append("职务：执行董事兼总经理")
+                
+                # 添加联系电话
+                if party_phone:
+                    if party_role == "creditor":
+                        legal_rep_parts.append(f"代理人电话：{party_phone}")
+                    else:
+                        legal_rep_parts.append(f"联系电话：{party_phone}")
+                
+                legal_rep_info = indent + "，".join(legal_rep_parts) + "。"
+            
+            # 组合两行信息
+            if legal_rep_info:
+                return basic_info + "\n" + legal_rep_info
+            else:
+                return basic_info
+        
+        elif party_type == "person":
+            # 个人信息格式
+            info_parts = [party_name]
+            
+            if gender:
+                info_parts.append(gender)
+            
+            if birthday:
+                info_parts.append(f"{birthday}出生")
+            
+            if nation:
+                info_parts.append(f"{nation}族")
+            
+            if address:
+                info_parts.append(f"住{address}")
+            
+            if id_card:
+                info_parts.append(f"公民身份号码{id_card}")
+            
+            if party_phone:
+                info_parts.append(f"联系电话{party_phone}")
+            
+            return "，".join(info_parts) + "。"
+        
+        else:
+            # 默认格式（个体工商户或其他类型）
+            info_parts = [party_name]
+            
+            if company_name and company_name != party_name:
+                info_parts.append(f"（{company_name}）")
+            
+            if company_address:
+                info_parts.append(f"住所地{company_address}")
+            
+            if company_code:
+                info_parts.append(f"统一社会信用代码{company_code}")
+            
+            if owner_name:
+                info_parts.append(f"经营者{owner_name}")
+            
+            if party_phone:
+                info_parts.append(f"联系电话{party_phone}")
+            
+            return "，".join(info_parts) + "。"
+    
     def _generate_case_title(self, case_data: Dict[str, Any]) -> str:
         """生成案件标题"""
         creditor_name = case_data.get("creditor_name", "")
         debtor_name = case_data.get("debtor_name", "")
         case_type = case_data.get("case_type", "货款纠纷")
         
-        if creditor_name and debtor_name:
-            return f"{creditor_name}诉{debtor_name}个人{case_type}案"
-        elif creditor_name:
-            return f"{creditor_name}诉被告{case_type}案"
-        elif debtor_name:
-            return f"原告诉{debtor_name}{case_type}案"
+        # 根据案件类型调整标题
+        if case_type == "CONTRACT":
+            case_type_display = "买卖合同纠纷"
+        elif case_type == "DEBT":
+            case_type_display = "民间借贷纠纷"
         else:
-            return f"民事{case_type}案"
+            case_type_display = "货款纠纷"
+        
+        if creditor_name and debtor_name:
+            return f"{creditor_name}诉{debtor_name}{case_type_display}案"
+        elif creditor_name:
+            return f"{creditor_name}诉被告{case_type_display}案"
+        elif debtor_name:
+            return f"原告诉{debtor_name}{case_type_display}案"
+        else:
+            return f"民事{case_type_display}案"
     
     def _generate_claims(self, case_data: Dict[str, Any]) -> str:
         """智能生成诉讼请求"""
-        case_type = case_data.get("case_type", "debt")
+        case_type = case_data.get("case_type", "DEBT")
         loan_amount = case_data.get("loan_amount", 0)
         
         # 格式化loan_amount，去除尾随零
@@ -376,21 +613,27 @@ class DocumentGenerator:
         else:
             formatted_amount = str(loan_amount)
         
-        if case_type == "debt":
+        # 确保案件类型是大写字符串
+        case_type = str(case_type).upper()
+        
+        if case_type == "DEBT":
             # 民间借贷纠纷
             return f"一、请求判令被告偿还原告借款本金{formatted_amount}元及逾期利息（自起诉之日起，按全国银行间同业拆借中心公布的一年期贷款市场报价利率计算至借款实际清偿完毕之日止）。"
-        elif case_type == "contract":
+        elif case_type == "CONTRACT":
             # 买卖合同纠纷
             return f"一、请求判令被告向原告支付货款{formatted_amount}元及逾期付款损失（自起诉之日起，按全国银行间同业拆借中心公布的一年期贷款市场报价利率加计50%计算至货款实际清偿完毕之日止）。"
         else:
-            return ""
+            # 默认使用借款纠纷
+            return f"一、请求判令被告偿还原告借款本金{formatted_amount}元及逾期利息（自起诉之日起，按全国银行间同业拆借中心公布的一年期贷款市场报价利率计算至借款实际清偿完毕之日止）。"
 
     
     def _generate_reasons(self, case_data: Dict[str, Any]) -> str:
         """智能生成事实与理由"""
-        case_type = case_data.get("case_type", "debt")
+        case_type = case_data.get("case_type", "DEBT")
         loan_amount = case_data.get("loan_amount", 0)
         creditor_type = case_data.get("creditor_type", "")
+        creditor_company_name = case_data.get("creditor_company_name", "")
+        debtor_company_name = case_data.get("debtor_company_name", "")
         
         # 格式化loan_amount，去除尾随零
         if isinstance(loan_amount, (int, float)):
@@ -401,15 +644,23 @@ class DocumentGenerator:
         else:
             formatted_amount = str(loan_amount)
         
-        if case_type == "debt":
+        # 确保案件类型是大写字符串
+        case_type = str(case_type).upper()
+        
+        if case_type == "DEBT":
             # 民间借贷纠纷
             return f"原被告系朋友关系，xx年原告陆续出借被告借款{formatted_amount}元，截至起诉之日，被告余欠原告借款{formatted_amount}元。原告多次催讨未果，故双方纠纷成讼。"
-        elif case_type == "contract":
-            # 买卖合同纠纷
-            return f"原告系批发的{creditor_type}，原被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
+        elif case_type == "CONTRACT":
+            # 买卖合同纠纷 - 根据当事人类型生成不同的理由
+            if creditor_company_name and debtor_company_name:
+                return f"原告{creditor_company_name}与被告{debtor_company_name}之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
+            elif creditor_company_name:
+                return f"原告{creditor_company_name}与被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
+            else:
+                return f"原告与被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
         else:
             # 默认使用借款纠纷
-            return ""
+            return f"原被告系朋友关系，xx年原告陆续出借被告借款{formatted_amount}元，截至起诉之日，被告余欠原告借款{formatted_amount}元。原告多次催讨未果，故双方纠纷成讼。"
     
     def _create_document(
         self, 

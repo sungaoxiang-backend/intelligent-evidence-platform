@@ -3,7 +3,7 @@ templates:
   complaint_template:
     name: "民事起诉状模板"
     type: "complaint"
-    description: "适用于民事纠纷案件的起诉状模板，包含完整的原告被告信息和诉讼请求"
+    description: "适用于民事纠纷案件的起诉状模板，支持个人和公司主体的动态信息显示"
     file_path: "templates/documents/complaint_template.docx"
     variables:
       # 基础案件信息
@@ -12,71 +12,25 @@ templates:
         required: true
         default: "民事起诉状"
       - name: "case_type"
-        description: "案件类型 (debt: 借款纠纷, contract: 合同纠纷)"
+        description: "案件类型 (DEBT: 借款纠纷, CONTRACT: 合同纠纷)"
         required: true
-        default: "debt"
+        default: "DEBT"
       
-      # 原告信息
+      # 当事人信息（动态生成）
+      - name: "creditor_info"
+        description: "原告信息（根据主体类型自动生成：个人显示身份证信息，公司显示公司信息和法人信息）"
+        required: true
+        default: ""
+      - name: "debtor_info"
+        description: "被告信息（根据主体类型自动生成：个人显示身份证信息，公司显示公司信息和法人信息）"
+        required: true
+        default: ""
       - name: "creditor_name"
-        description: "原告姓名"
+        description: "原告名称（用于具状人签名）"
         required: true
         default: ""
-      - name: "creditor_type"
-        description: "原告类型"
-        required: true
-        default: ""
-      - name: "creditor_gender"
-        description: "原告性别"
-        required: true
-        default: ""
-      - name: "creditor_birthday"
-        description: "原告出生日期"
-        required: true
-        default: ""
-      - name: "creditor_nation"
-        description: "原告民族"
-        required: true
-        default: ""
-      - name: "creditor_address"
-        description: "原告住址"
-        required: true
-        default: ""
-      - name: "creditor_id_card"
-        description: "原告公民身份号码"
-        required: true
-        default: ""
-      - name: "creditor_phone"
-        description: "原告联系电话"
-        required: true
-        default: ""
-      
-      # 被告信息
       - name: "debtor_name"
-        description: "被告姓名"
-        required: true
-        default: ""
-      - name: "debtor_gender"
-        description: "被告性别"
-        required: true
-        default: ""
-      - name: "debtor_birthday"
-        description: "被告出生日期"
-        required: true
-        default: ""
-      - name: "debtor_nation"
-        description: "被告民族"
-        required: true
-        default: ""
-      - name: "debtor_address"
-        description: "被告住址"
-        required: true
-        default: ""
-      - name: "debtor_id_card"
-        description: "被告公民身份号码"
-        required: true
-        default: ""
-      - name: "debtor_phone"
-        description: "被告联系电话"
+        description: "被告名称"
         required: true
         default: ""
       
@@ -97,8 +51,8 @@ templates:
         default: ""
       
       # 结尾信息
-      - name: "court_address"
-        description: "受理法院地址"
+      - name: "court_name"
+        description: "受理法院名称"
         required: true
         default: "某某人民法院"
       - name: "created_at"
@@ -162,11 +116,16 @@ variable_mapping:
     loan_amount: "案件.借款金额"
     case_description: "案件.描述"
     case_id: "案件.ID"
+    court_name: "案件.法院名称"
   
   # 自动生成的变量
   generated_variables:
     current_date: "当前日期"
     case_title: "案件标题（自动生成）"
+    creditor_info: "原告信息（根据主体类型动态生成）"
+    debtor_info: "被告信息（根据主体类型动态生成）"
+    claims: "诉讼请求（根据案件类型自动生成）"
+    reasons: "事实与理由（根据案件类型自动生成）"
     document_number: "文书编号（自动生成）"
 
 
