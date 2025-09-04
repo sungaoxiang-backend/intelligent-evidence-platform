@@ -124,42 +124,8 @@ async def create_case_parties_batch(db: AsyncSession, case_id: int, parties_data
 
 
 
-def _normalize_numeric_value(value: Any) -> Any:
-    """标准化数字类型值，去除尾随零
-    
-    处理尾随零问题，如：
-    - 1000.00 -> 1000
-    - 1000.50 -> 1000.5
-    - 1000.35 -> 1000.35
-    
-    Args:
-        value: 原始值
-        
-    Returns:
-        标准化后的值
-    """
-    if value is None:
-        return value
-    
-    # 转换为字符串
-    str_value = str(value).strip()
-    
-    # 尝试解析为数字
-    try:
-        # 如果是整数
-        if '.' not in str_value:
-            return int(str_value)
-        
-        # 如果是浮点数，去除尾随零
-        float_value = float(str_value)
-        if float_value.is_integer():
-            return int(float_value)
-        else:
-            # 去除尾随零，但保留有效的小数位
-            return float_value
-    except (ValueError, TypeError):
-        # 如果无法解析为数字，返回原值
-        return value
+# 导入证据模块中的标准化函数
+from app.evidences.services import _normalize_numeric_value
 
 async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
     """为案件的关联特征组添加校对信息"""
@@ -210,25 +176,57 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                         if wechat_config and wechat_config.get("extraction_slots"):
                             for slot_config in wechat_config["extraction_slots"]:
                                 if slot_config.get("slot_name") == slot_name:
-                                    slot_proofread_config = slot_config.get("proofread_with_case")
+                                    slot_proofread_config = slot_config.get("proofread_rules")
                                     break
                         
                         if slot_proofread_config:
                             # 执行校对 - slot_proofread_config是一个规则列表
                             for rule in slot_proofread_config:
-                                case_fields = rule.get("case_fields", [])
-                                expected_values = []
+                                rule_name = rule.get("rule_name", "")
+                                target_type = rule.get("target_type", "case")
+                                party_role = rule.get("party_role", [])
                                 
-                                # 从案件中获取期待值
-                                for case_field in case_fields:
-                                    case_value = getattr(case, case_field, None)
-                                    if case_value is not None:
-                                        expected_values.append(str(case_value))
+                                expected_values = []
+                                match_strategy = rule.get("match_strategy", "exact")
+                                match_condition = rule.get("match_condition", "all")
+                                
+                                # 根据target_type获取期待值
+                                if target_type == "case":
+                                    # 案件字段匹配
+                                    target_fields = rule.get("target_fields", [])
+                                    for case_field in target_fields:
+                                        case_value = getattr(case, case_field, None)
+                                        if case_value is not None:
+                                            expected_values.append(str(case_value))
+                                
+                                elif target_type == "case_party":
+                                    # 当事人字段匹配
+                                    conditions = rule.get("conditions", [])
+                                    if not conditions:
+                                        continue
+                                    
+                                    # 确定目标角色
+                                    target_roles = party_role if party_role else []
+                                    if not target_roles:
+                                        continue
+                                    
+                                    # 查找匹配的当事人
+                                    for party in case.case_parties:
+                                        if party.party_role not in target_roles:
+                                            continue
+                                        
+                                        # 根据当事人类型匹配条件
+                                        for condition in conditions:
+                                            if condition.get("party_type") != party.party_type:
+                                                continue
+                                            
+                                            target_fields = condition.get("target_fields", [])
+                                            for party_field in target_fields:
+                                                party_value = getattr(party, party_field, None)
+                                                if party_value is not None:
+                                                    expected_values.append(str(party_value))
                                 
                                 if expected_values:
-                                    # 获取匹配策略
-                                    match_strategy = rule.get("match_strategy", "exact")
-                                    
                                     # 简单的精确匹配逻辑
                                     is_consistent = False
                                     
@@ -264,7 +262,7 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                     logger.info(f"特征 {slot_name} 校对完成: {is_consistent} ({strategy_desc})")
                                     break  # 只处理第一个有效规则
                                 else:
-                                    logger.info(f"特征 {slot_name} 的规则 {rule.get('rule_name')} 没有期待值")
+                                    logger.info(f"特征 {slot_name} 的规则 {rule_name} 没有期待值")
                         else:
                             logger.info(f"特征 {slot_name} 没有校对配置，跳过校对")
                             

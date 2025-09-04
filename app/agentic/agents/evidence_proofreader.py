@@ -21,15 +21,23 @@ class EvidenceFeatureItem(BaseModel):
     slot_required: Any
 
 
+class ProofreadCondition(BaseModel):
+    """校对条件（根据当事人类型）"""
+    party_type: str  # person, company, individual
+    target_fields: List[str]  # 目标字段列表
+    match_strategy: str  # 匹配策略：exact, fuzzy等
+    match_condition: str = "any"  # 匹配条件：any, all
+
+
 class ProofreadRule(BaseModel):
     """校对规则（从配置文件解析）"""
     rule_name: str
-    case_fields: List[str]  # 对应的case字段列表
-    match_strategy: str  # 匹配策略：exact, fuzzy, range等
-    match_condition: str = "any"  # 匹配条件：any, all
-    tolerance_percent: Optional[float] = None  # 数值容差百分比
-    tolerance_absolute: Optional[float] = None  # 数值绝对容差
-    role: Optional[str] = None  # 证据角色：creditor, debtor等，用于精确匹配
+    target_type: str  # case 或 case_party
+    party_role: Optional[List[str]] = None  # 当事人角色列表：["creditor", "debtor"]等
+    conditions: Optional[List[ProofreadCondition]] = None  # 条件列表（用于case_party）
+    target_fields: Optional[List[str]] = None  # 目标字段列表（用于case）
+    match_strategy: Optional[str] = None  # 匹配策略（用于case）
+    match_condition: Optional[str] = None  # 匹配条件（用于case）
 
 
 class ProofreadResult(BaseModel):
@@ -123,7 +131,11 @@ class EvidenceProofreader:
         extraction_slots = self.config_manager.get_extraction_slots_by_chinese_types([evidence.classification_category])
         evidence_type_slots = extraction_slots.get(evidence.classification_category, [])
         
+        logger.info(f"证据 {evidence.id} 类型: {evidence.classification_category}")
+        logger.info(f"提取到的词槽配置: {evidence_type_slots}")
+        
         if not evidence_type_slots:
+            logger.warning(f"证据 {evidence.id} 没有找到词槽配置")
             return None
         
         # 解析已提取的特征
@@ -140,7 +152,9 @@ class EvidenceProofreader:
         proofread_tasks = []  # [(slot_name, proofread_rules)]
         for slot_config in evidence_type_slots:
             slot_name = slot_config.get("slot_name")
-            proofread_config = slot_config.get("proofread_with_case", [])
+            proofread_config = slot_config.get("proofread_rules", [])
+            
+            logger.info(f"槽位 {slot_name} 的校对配置: {proofread_config}")
             
             if proofread_config and slot_name:
                 # 解析校对规则
@@ -148,21 +162,24 @@ class EvidenceProofreader:
                 for rule_data in proofread_config:
                     try:
                         rule = ProofreadRule(**rule_data)
-                        # 检查规则是否适用于当前证据（基于角色）
-                        if rule.role and hasattr(evidence, 'evidence_role') and evidence.evidence_role:
-                            if rule.role == evidence.evidence_role:
-                                rules.append(rule)
-                        elif not rule.role:
-                            # 没有指定角色的规则适用于所有证据
+                        logger.info(f"解析规则: {rule.rule_name}, target_type: {rule.target_type}, party_role: {rule.party_role}")
+                        # 检查规则是否适用于当前证据
+                        if self._is_rule_applicable(rule, evidence):
                             rules.append(rule)
+                            logger.info(f"规则 {rule.rule_name} 适用于证据 {evidence.id}")
+                        else:
+                            logger.info(f"规则 {rule.rule_name} 不适用于证据 {evidence.id}")
                     except Exception as e:
                         logger.error(f"解析字段 {slot_name} 的校对规则失败: {e}")
                         continue
                 
                 if rules:
                     proofread_tasks.append((slot_name, rules))
+                    logger.info(f"槽位 {slot_name} 有 {len(rules)} 个适用规则")
         
+        logger.info(f"证据 {evidence.id} 共有 {len(proofread_tasks)} 个校对任务")
         if not proofread_tasks:
+            logger.warning(f"证据 {evidence.id} 没有校对任务")
             return None
         
         # 执行校对
@@ -236,6 +253,26 @@ class EvidenceProofreader:
         
         return results
     
+    def _is_rule_applicable(self, rule: ProofreadRule, evidence: Evidence) -> bool:
+        """检查规则是否适用于当前证据
+        
+        Args:
+            rule: 校对规则
+            evidence: 证据对象
+            
+        Returns:
+            是否适用
+        """
+        # 如果规则指定了 party_role，检查证据角色是否匹配
+        if rule.party_role is not None and len(rule.party_role) > 0:
+            if not evidence.evidence_role:
+                # 如果证据没有角色，但规则指定了角色，仍然适用（因为规则会尝试匹配所有指定角色）
+                return True
+            return evidence.evidence_role in rule.party_role
+        
+        # 没有指定角色限制，适用于所有证据
+        return True
+    
     async def _apply_proofread_rule(
         self,
         slot_name: str,
@@ -257,12 +294,6 @@ class EvidenceProofreader:
         Returns:
             校对结果，如果规则不适用则返回None
         """
-        # 检查角色匹配（如果规则指定了角色）
-        if rule.role and hasattr(evidence, 'evidence_role') and evidence.evidence_role:
-            if rule.role != evidence.evidence_role:
-                logger.debug(f"证据角色 {evidence.evidence_role} 与规则角色 {rule.role} 不匹配，跳过校对规则")
-                return None
-        
         # 查找对应的特征字段
         target_feature = None
         for feature in evidence_features:
@@ -274,30 +305,171 @@ class EvidenceProofreader:
             logger.debug(f"未找到字段 {slot_name}，跳过校对规则")
             return None
         
-        # 获取case中的参考值列表
+        # 根据 target_type 执行不同的校对逻辑
+        if rule.target_type == "case":
+            return self._apply_case_proofread_rule(slot_name, rule, target_feature, case, evidence)
+        elif rule.target_type == "case_party":
+            return self._apply_case_party_proofread_rule(slot_name, rule, target_feature, case, evidence)
+        else:
+            logger.warning(f"未知的 target_type: {rule.target_type}")
+            return None
+    
+    def _apply_case_proofread_rule(
+        self,
+        slot_name: str,
+        rule: ProofreadRule,
+        feature: EvidenceFeatureItem,
+        case: Case,
+        evidence: Evidence
+    ) -> Optional[ProofreadResult]:
+        """应用案件字段校对规则"""
+        if not rule.target_fields or not rule.match_strategy:
+            logger.warning(f"案件校对规则缺少必要字段: {rule.rule_name}")
+            return None
+        
+        # 获取案件中的参考值列表
         case_reference_values = []
-        for case_field in rule.case_fields:
-            case_value = self._get_case_field_value(case, case_field, rule.role, slot_name)
+        for case_field in rule.target_fields:
+            case_value = getattr(case, case_field, None)
             if case_value is not None:
                 case_reference_values.append((case_field, case_value))
         
         if not case_reference_values:
-            logger.debug(f"案例中没有找到字段 {rule.case_fields} 的值，跳过校对")
+            logger.debug(f"案件中没有找到字段 {rule.target_fields} 的值，跳过校对")
             return None
         
         # 根据匹配策略执行校对
         if rule.match_strategy == "exact":
-            return self._apply_exact_match_rule(slot_name, rule, target_feature, case_reference_values)
+            return self._apply_exact_match_rule(slot_name, rule, feature, case_reference_values)
         elif rule.match_strategy == "fuzzy":
-            return self._apply_fuzzy_match_rule(slot_name, rule, target_feature, case_reference_values)
+            return self._apply_fuzzy_match_rule(slot_name, rule, feature, case_reference_values)
         else:
             logger.warning(f"未知的匹配策略: {rule.match_strategy}")
             return None
     
-    def _apply_exact_match_rule(
+    def _apply_case_party_proofread_rule(
         self,
         slot_name: str,
         rule: ProofreadRule,
+        feature: EvidenceFeatureItem,
+        case: Case,
+        evidence: Evidence
+    ) -> Optional[ProofreadResult]:
+        """应用当事人字段校对规则"""
+        if not rule.conditions:
+            logger.warning(f"当事人校对规则缺少条件: {rule.rule_name}")
+            return None
+        
+        # 确定要校对的当事人角色
+        target_roles = self._get_target_roles(rule, evidence)
+        logger.info(f"目标角色: {target_roles}")
+        if not target_roles:
+            logger.debug(f"无法确定目标角色，跳过校对: {rule.rule_name}")
+            return None
+        
+        # 查找匹配的当事人
+        target_parties = []
+        logger.info(f"案件中的所有当事人: {[(p.party_name, p.party_role, p.party_type) for p in case.case_parties]}")
+        for party in case.case_parties:
+            if party.party_role in target_roles:
+                target_parties.append(party)
+                logger.info(f"找到匹配的当事人: {party.party_name}, 角色: {party.party_role}, 类型: {party.party_type}")
+        
+        logger.info(f"最终目标当事人数量: {len(target_parties)}")
+        
+        if not target_parties:
+            logger.debug(f"没有找到角色为 {target_roles} 的当事人，跳过校对")
+            return None
+        
+        # 对每个匹配的当事人执行校对
+        all_matches = []
+        for party in target_parties:
+            logger.info(f"处理当事人: {party.party_name}, 类型: {party.party_type}")
+            # 根据当事人类型找到对应的条件
+            matching_condition = None
+            for condition in rule.conditions:
+                if condition.party_type == party.party_type:
+                    matching_condition = condition
+                    break
+            
+            if not matching_condition:
+                logger.debug(f"当事人类型 {party.party_type} 没有对应的校对条件")
+                continue
+            
+            logger.info(f"找到匹配条件: {matching_condition.party_type}, 目标字段: {matching_condition.target_fields}")
+            
+            # 获取当事人字段的参考值
+            party_reference_values = []
+            for field in matching_condition.target_fields:
+                party_value = getattr(party, field, None)
+                logger.info(f"字段 {field}: {party_value}")
+                if party_value is not None:
+                    party_reference_values.append((field, party_value))
+            
+            logger.info(f"当事人 {party.party_name} 的参考值: {party_reference_values}")
+            
+            if party_reference_values:
+                # 根据匹配策略执行校对
+                if matching_condition.match_strategy == "exact":
+                    result = self._apply_exact_match_rule(slot_name, matching_condition, feature, party_reference_values)
+                elif matching_condition.match_strategy == "fuzzy":
+                    result = self._apply_fuzzy_match_rule(slot_name, matching_condition, feature, party_reference_values)
+                else:
+                    logger.warning(f"未知的匹配策略: {matching_condition.match_strategy}")
+                    continue
+                
+                if result:
+                    logger.info(f"校对结果: {result.expected_value}")
+                    all_matches.append(result)
+        
+        # 如果找到匹配结果，合并所有期待值
+        if not all_matches:
+            return None
+        
+        # 合并所有匹配结果的期待值
+        all_expected_values = []
+        is_consistent = False
+        
+        for match in all_matches:
+            if match.expected_value:
+                logger.info(f"原始期待值: '{match.expected_value}'")
+                # 解析期待值（可能包含多个值，用" 或 "分隔）
+                expected_parts = match.expected_value.split(" 或 ")
+                logger.info(f"分割后的部分: {expected_parts}")
+                # 过滤掉空值和只包含"或"的值
+                filtered_parts = [part.strip() for part in expected_parts if part.strip() and part.strip() != "或"]
+                logger.info(f"过滤后的部分: {filtered_parts}")
+                all_expected_values.extend(filtered_parts)
+            if match.is_consistent:
+                is_consistent = True
+        
+        # 去重并生成合并后的期待值
+        unique_expected_values = list(dict.fromkeys(all_expected_values))  # 保持顺序的去重
+        merged_expected_value = " 或 ".join(unique_expected_values) if unique_expected_values else None
+        
+        # 使用第一个匹配结果作为基础，更新期待值
+        base_result = all_matches[0]
+        base_result.expected_value = merged_expected_value
+        base_result.is_consistent = is_consistent
+        
+        # 更新推理说明
+        base_result.proofread_reasoning = f"实际提取: '{base_result.original_value}', 期待值: '{merged_expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
+        
+        return base_result
+    
+    def _get_target_roles(self, rule: ProofreadRule, evidence: Evidence) -> List[str]:
+        """获取目标角色列表"""
+        if rule.party_role is not None and len(rule.party_role) > 0:
+            return rule.party_role
+        elif evidence.evidence_role:
+            return [evidence.evidence_role]
+        else:
+            return []
+    
+    def _apply_exact_match_rule(
+        self,
+        slot_name: str,
+        rule_or_condition: Union[ProofreadRule, ProofreadCondition],
         feature: EvidenceFeatureItem,
         case_reference_values: List[tuple]  # [(field_name, value), ...]
     ) -> ProofreadResult:
@@ -317,7 +489,8 @@ class EvidenceProofreader:
             matches.append((case_field, case_value_str, is_match))
         
         # 根据match_condition判断整体匹配结果
-        if rule.match_condition == "any":
+        match_condition = getattr(rule_or_condition, 'match_condition', 'any')
+        if match_condition == "any":
             is_consistent = any(match[2] for match in matches)
         else:  # "all"
             is_consistent = all(match[2] for match in matches)
@@ -331,13 +504,8 @@ class EvidenceProofreader:
         
         expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
         
-        # 构建友好的推理说明，包含角色信息（如果适用）
-        role_name_mapping = {
-            "creditor": "债权人",
-            "debtor": "债务人"
-        }
-        role_info = f"[{role_name_mapping.get(rule.role, rule.role)}] " if rule.role else ""
-        reasoning = f"{role_info}实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
+        # 构建友好的推理说明
+        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
         
         return ProofreadResult(
             field_name=slot_name,
@@ -350,7 +518,7 @@ class EvidenceProofreader:
     def _apply_fuzzy_match_rule(
         self,
         slot_name: str,
-        rule: ProofreadRule,
+        rule_or_condition: Union[ProofreadRule, ProofreadCondition],
         feature: EvidenceFeatureItem,
         case_reference_values: List[tuple]
     ) -> ProofreadResult:
@@ -365,7 +533,8 @@ class EvidenceProofreader:
             matches.append((case_field, case_value_str, is_match))
         
         # 根据match_condition判断整体匹配结果
-        if rule.match_condition == "any":
+        match_condition = getattr(rule_or_condition, 'match_condition', 'any')
+        if match_condition == "any":
             is_consistent = any(match[2] for match in matches)
         else:  # "all"
             is_consistent = all(match[2] for match in matches)
@@ -379,13 +548,8 @@ class EvidenceProofreader:
         
         expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
         
-        # 构建友好的推理说明，包含角色信息（如果适用）
-        role_name_mapping = {
-            "creditor": "债权人",
-            "debtor": "债务人"
-        }
-        role_info = f"[{role_name_mapping.get(rule.role, rule.role)}] " if rule.role else ""
-        reasoning = f"{role_info}实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (脱敏匹配)"
+        # 构建友好的推理说明
+        reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (脱敏匹配)"
         
         return ProofreadResult(
             field_name=slot_name,
@@ -472,66 +636,6 @@ class EvidenceProofreader:
         
         return "; ".join(summary_parts)
     
-    def _get_case_field_value(self, case: Case, case_field: str, role: Optional[str] = None, slot_name: Optional[str] = None) -> Any:
-        """动态获取案件字段值，兼容新的case_parties结构
-        
-        Args:
-            case: 案件对象
-            case_field: 字段名
-            role: 角色（creditor/debtor）
-            slot_name: 槽位名称，用于更精确的字段映射
-            
-        Returns:
-            字段值或None
-        """
-        # 直接从case对象获取的字段（保持向后兼容）
-        if hasattr(case, case_field):
-            return getattr(case, case_field, None)
-        
-        # 从case_parties中获取的字段
-        if not case.case_parties:
-            return None
-            
-        # 字段映射：旧字段名 -> (party_field, 匹配逻辑)
-        field_mapping = {
-            'creditor_name': ('party_name', 'creditor'),
-            'debtor_name': ('party_name', 'debtor'),
-            'creditor_type': ('party_type', 'creditor'),
-            'debtor_type': ('party_type', 'debtor'),
-            'creditor_phone': ('phone', 'creditor'),
-            'debtor_phone': ('phone', 'debtor'),
-        }
-        
-        # 根据字段名和角色映射到case_parties
-        if case_field in field_mapping:
-            target_field, target_role = field_mapping[case_field]
-            for party in case.case_parties:
-                if party.party_role == target_role:
-                    return getattr(party, target_field, None)
-        
-        # 如果提供了role参数，尝试基于role获取对应当事人的字段
-        if role:
-            for party in case.case_parties:
-                if party.party_role == role:
-                    # 根据slot_name映射到具体字段
-                    if slot_name == "公司名称" and hasattr(party, 'party_name'):
-                        return party.party_name
-                    elif slot_name == "法定代表人":
-                        # 法定代表人信息可能在主体信息中
-                        if hasattr(party, 'name'):
-                            return party.name
-                        elif hasattr(party, 'party_name'):
-                            return party.party_name
-                    elif slot_name == "经营者姓名":
-                        # 经营者姓名对应个体工商户的姓名
-                        if hasattr(party, 'name'):
-                            return party.name
-                        elif hasattr(party, 'party_name'):
-                            return party.party_name
-                    elif hasattr(party, case_field):
-                        return getattr(party, case_field, None)
-        
-        return None
 
     def reload_config(self):
         """重新加载配置"""

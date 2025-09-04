@@ -141,62 +141,18 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
         logger.warning(f"证据 {evidence.id} 的case数据未加载，跳过校对")
         return evidence
     
-    # 智能检查证据是否已经有完整有效的校对信息
-    has_complete_proofread = False
-    existing_proofread_info = []
-    incomplete_slots = []
+    # 强制重新校对（清除旧的校对信息）
+    logger.info(f"证据 {evidence.id} 强制重新校对，清除旧的校对信息")
     
-    for feature in evidence.evidence_features:
-        if isinstance(feature, dict):
-            slot_name = feature.get("slot_name")
-            slot_proofread_at = feature.get("slot_proofread_at")
-            slot_is_consistent = feature.get("slot_is_consistent")
-            slot_expected_value = feature.get("slot_expected_value")
-            slot_proofread_reasoning = feature.get("slot_proofread_reasoning")
-            
-            if slot_proofread_at:
-                # 检查校对信息是否完整
-                if all(v is not None for v in [slot_is_consistent, slot_expected_value, slot_proofread_reasoning]):
-                    existing_proofread_info.append({
-                        "slot_name": slot_name,
-                        "proofread_at": slot_proofread_at,
-                        "is_consistent": slot_is_consistent,
-                        "expected_value": slot_expected_value,
-                        "reasoning": slot_proofread_reasoning
-                    })
-                else:
-                    incomplete_slots.append(slot_name)
-                    logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
-        elif hasattr(feature, 'slot_proofread_at') and getattr(feature, 'slot_proofread_at'):
-            # 处理非dict格式的特征
-            slot_name = getattr(feature, 'slot_name', 'unknown')
-            slot_proofread_at = getattr(feature, 'slot_proofread_at')
-            slot_is_consistent = getattr(feature, 'slot_is_consistent', None)
-            slot_expected_value = getattr(feature, 'slot_expected_value', None)
-            slot_proofread_reasoning = getattr(feature, 'slot_proofread_reasoning', None)
-            
-            if all(v is not None for v in [slot_is_consistent, slot_expected_value, slot_proofread_reasoning]):
-                existing_proofread_info.append({
-                    "slot_name": slot_name,
-                    "proofread_at": slot_proofread_at,
-                    "is_consistent": slot_is_consistent,
-                    "expected_value": slot_expected_value,
-                    "reasoning": slot_proofread_reasoning
-                })
-            else:
-                incomplete_slots.append(slot_name)
-                logger.warning(f"证据 {evidence.id} 槽位 {slot_name} 校对信息不完整")
-    
-    # # 如果所有有校对信息的槽位都有完整的校对信息，且没有不完整的槽位，则使用现有信息
-    if existing_proofread_info and not incomplete_slots:
-        has_complete_proofread = True
-        logger.info(f"证据 {evidence.id} 有完整有效的校对信息，跳过重新校对")
-        logger.info(f"现有校对信息: {existing_proofread_info}")
-        return evidence
-    else:
-        logger.info(f"证据 {evidence.id} 校对信息不完整，需要重新校对")
-        if incomplete_slots:
-            logger.info(f"不完整的槽位: {incomplete_slots}")
+    # 清除所有校对信息
+    if evidence.evidence_features:
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                # 清除校对相关字段
+                feature.pop("slot_proofread_at", None)
+                feature.pop("slot_is_consistent", None)
+                feature.pop("slot_expected_value", None)
+                feature.pop("slot_proofread_reasoning", None)
     
     logger.info(f"证据 {evidence.id} 开始执行校对")
     
@@ -267,9 +223,9 @@ async def get_by_id(db: AsyncSession, evidence_id: int) -> Optional[Evidence]:
     )
     evidence = result.scalars().first()
     
-    # if evidence:
-    #     # 添加校对信息
-    #     evidence = await enhance_evidence_with_proofreading(evidence, db)
+    if evidence:
+        # 添加校对信息
+        evidence = await enhance_evidence_with_proofreading(evidence, db)
     
     return evidence
 
@@ -943,14 +899,14 @@ async def auto_process(
                         logger.warning(f"未找到证据类型配置: {evidence.classification_category}")
                         continue
                     
-                    # 检查是否有proofread_with_case配置
+                    # 检查是否有proofread_rules配置
                     extraction_slots = evidence_type_config.get("extraction_slots", [])
                     if not extraction_slots:
                         continue
                     
-                    # 遍历每个词槽配置，检查是否有proofread_with_case
+                    # 遍历每个词槽配置，检查是否有proofread_rules
                     for slot_config in extraction_slots:
-                        proofread_rules = slot_config.get("proofread_with_case", [])
+                        proofread_rules = slot_config.get("proofread_rules", [])
                         if not proofread_rules:
                             continue
                         
@@ -968,76 +924,90 @@ async def auto_process(
                         if not slot_value or slot_value == "未知":
                             continue
                         
-                        # 执行校对规则
+                        # 执行角色标注规则
                         for rule in proofread_rules:
                             rule_name = rule.get("rule_name", "")
-                            case_fields = rule.get("case_fields", [])
-                            match_strategy = rule.get("match_strategy", "exact")
-                            match_condition = rule.get("match_condition", "all")
+                            target_type = rule.get("target_type", "case_party")
+                            party_role = rule.get("party_role", [])
                             
-                            if not case_fields:
-                                continue
-                            
-                            # 执行匹配逻辑
-                            match_results = []
-                            for case_field in case_fields:
-                                case_value = _get_case_field_value(case, case_field, rule.get("role"), slot_name)
-                                if case_value is None:
-                                    continue
-                                
-                                # 根据匹配策略执行匹配
-                                if match_strategy == "exact":
-                                    # 对于数字类型特征，先进行标准化处理，去除尾随零
-                                    normalized_slot_value = _normalize_numeric_value(slot_value)
-                                    normalized_case_value = _normalize_numeric_value(case_value)
-                                    is_match = str(normalized_slot_value).strip() == str(normalized_case_value).strip()
-                                elif match_strategy == "contains":
-                                    is_match = str(case_value).strip() in str(slot_value).strip()
-                                elif match_strategy == "startswith":
-                                    is_match = str(slot_value).strip().startswith(str(case_value).strip())
-                                elif match_strategy == "endswith":
-                                    is_match = str(slot_value).strip().endswith(str(case_value).strip())
+                            # 角色标注逻辑：尝试与所有当事人匹配
+                            if target_type == "case_party":
+                                # 确定目标角色
+                                if party_role and len(party_role) > 0:
+                                    # 如果指定了party_role，使用指定的角色
+                                    target_roles = party_role
                                 else:
-                                    # 默认使用精确匹配
-                                    # 对于数字类型特征，先进行标准化处理，去除尾随零
-                                    normalized_slot_value = _normalize_numeric_value(slot_value)
-                                    normalized_case_value = _normalize_numeric_value(case_value)
-                                    is_match = str(normalized_slot_value).strip() == str(normalized_case_value).strip()
+                                    # 如果没有指定角色，尝试与所有当事人匹配
+                                    target_roles = ["creditor", "debtor"]
                                 
-                                match_results.append(is_match)
+                                # 查找匹配的当事人
+                                for party in case.case_parties:
+                                    if party.party_role not in target_roles:
+                                        continue
+                                    
+                                    # 根据当事人类型匹配条件
+                                    conditions = rule.get("conditions", [])
+                                    if not conditions:
+                                        continue
+                                    
+                                    for condition in conditions:
+                                        if condition.get("party_type") != party.party_type:
+                                            continue
+                                        
+                                        target_fields = condition.get("target_fields", [])
+                                        match_strategy = condition.get("match_strategy", "exact")
+                                        match_condition = condition.get("match_condition", "any")
+                                        
+                                        if not target_fields:
+                                            continue
+                                        
+                                        # 执行匹配逻辑
+                                        match_results = []
+                                        for party_field in target_fields:
+                                            party_value = getattr(party, party_field, None)
+                                            if party_value is None:
+                                                continue
+                                            
+                                            # 根据匹配策略执行匹配
+                                            if match_strategy == "exact":
+                                                normalized_slot_value = _normalize_numeric_value(slot_value)
+                                                normalized_party_value = _normalize_numeric_value(party_value)
+                                                is_match = str(normalized_slot_value).strip() == str(normalized_party_value).strip()
+                                            elif match_strategy == "contains":
+                                                is_match = str(party_value).strip() in str(slot_value).strip()
+                                            elif match_strategy == "startswith":
+                                                is_match = str(slot_value).strip().startswith(str(party_value).strip())
+                                            elif match_strategy == "endswith":
+                                                is_match = str(slot_value).strip().endswith(str(party_value).strip())
+                                            else:
+                                                normalized_slot_value = _normalize_numeric_value(slot_value)
+                                                normalized_party_value = _normalize_numeric_value(party_value)
+                                                is_match = str(normalized_slot_value).strip() == str(normalized_party_value).strip()
+                                            
+                                            match_results.append(is_match)
+                                        
+                                        # 根据匹配条件判断是否匹配成功
+                                        match_success = False
+                                        if match_condition == "all" and match_results:
+                                            match_success = all(match_results)
+                                        elif match_condition == "any" and match_results:
+                                            match_success = any(match_results)
+                                        elif match_condition == "majority" and match_results:
+                                            match_success = sum(match_results) > len(match_results) / 2
+                                        
+                                        # 如果匹配成功，确定证据角色
+                                        if match_success:
+                                            evidence_role = party.party_role
+                                            evidence.evidence_role = evidence_role
+                                            db.add(evidence)
+                                            logger.info(f"证据角色标注成功: {evidence.file_name} -> {evidence_role} (规则: {rule_name})")
+                                            break
+                                    
+                                    # 如果已经找到匹配的角色，跳出当事人循环
+                                    if evidence.evidence_role:
+                                        break
                             
-                            # 根据匹配条件判断是否匹配成功
-                            match_success = False
-                            if match_condition == "all" and match_results:
-                                match_success = all(match_results)
-                            elif match_condition == "any" and match_results:
-                                match_success = any(match_results)
-                            elif match_condition == "majority" and match_results:
-                                match_success = sum(match_results) > len(match_results) / 2
-                            
-                            # 如果匹配成功，确定证据角色
-                            if match_success:
-                                # 根据规则名称或字段名推断角色
-                                evidence_role = None
-                                if "债权人" in rule_name or "creditor" in str(case_fields).lower():
-                                    evidence_role = "creditor"
-                                elif "债务人" in rule_name or "debtor" in str(case_fields).lower():
-                                    evidence_role = "debtor"
-                                else:
-                                    # 根据case_fields推断角色
-                                    if "creditor_name" in case_fields:
-                                        evidence_role = "creditor"
-                                    elif "debtor_name" in case_fields:
-                                        evidence_role = "debtor"
-                                
-                                if evidence_role:
-                                    # 更新证据角色
-                                    evidence.evidence_role = evidence_role
-                                    db.add(evidence)
-                                    logger.info(f"证据角色标注成功: {evidence.file_name} -> {evidence_role} (规则: {rule_name})")
-                                    break
-                            
-                            # 如果已经找到匹配的角色，跳出内层循环
+                            # 如果已经找到匹配的角色，跳出规则循环
                             if evidence.evidence_role:
                                 break
                         

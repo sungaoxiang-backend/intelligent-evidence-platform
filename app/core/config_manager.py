@@ -49,7 +49,7 @@ class ConfigManager:
         self._evidence_chains_config: Optional[EvidenceChainsConfig] = None
         self._config_cache: Dict[str, Any] = {}
         self._business_config_path = "app/core/business_config.yaml"
-        self._evidence_types_path = "app/core/evidence_types.yaml"
+        self._evidence_types_path = "app/core/evidence_types_v2.yaml"
         self._evidence_chains_path = "app/core/evidence_chains.yaml"
     
     def load_business_config(self) -> BusinessConfig:
