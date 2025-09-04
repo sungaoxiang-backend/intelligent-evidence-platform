@@ -447,6 +447,10 @@ class EvidenceProofreader:
         unique_expected_values = list(dict.fromkeys(all_expected_values))  # 保持顺序的去重
         merged_expected_value = " 或 ".join(unique_expected_values) if unique_expected_values else None
         
+        logger.info(f"所有期待值: {all_expected_values}")
+        logger.info(f"去重后的期待值: {unique_expected_values}")
+        logger.info(f"合并后的期待值: '{merged_expected_value}'")
+        
         # 使用第一个匹配结果作为基础，更新期待值
         base_result = all_matches[0]
         base_result.expected_value = merged_expected_value
@@ -502,7 +506,13 @@ class EvidenceProofreader:
             normalized_value = self._normalize_numeric_value(case_value_str)
             normalized_expected_values.append(str(normalized_value))
         
-        expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
+        # 只有当有多个值时才用" 或 "连接
+        if len(normalized_expected_values) > 1:
+            expected_value = " 或 ".join(normalized_expected_values)
+        elif len(normalized_expected_values) == 1:
+            expected_value = normalized_expected_values[0]
+        else:
+            expected_value = None
         
         # 构建友好的推理说明
         reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (精确匹配)"
@@ -546,7 +556,13 @@ class EvidenceProofreader:
             normalized_value = self._normalize_numeric_value(case_value_str)
             normalized_expected_values.append(str(normalized_value))
         
-        expected_value = " 或 ".join(normalized_expected_values) if normalized_expected_values else None
+        # 只有当有多个值时才用" 或 "连接
+        if len(normalized_expected_values) > 1:
+            expected_value = " 或 ".join(normalized_expected_values)
+        elif len(normalized_expected_values) == 1:
+            expected_value = normalized_expected_values[0]
+        else:
+            expected_value = None
         
         # 构建友好的推理说明
         reasoning = f"实际提取: '{feature.slot_value}', 期待值: '{expected_value}', {'匹配' if is_consistent else '不匹配'} (脱敏匹配)"

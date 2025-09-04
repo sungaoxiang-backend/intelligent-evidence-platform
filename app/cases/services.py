@@ -196,8 +196,11 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                     target_fields = rule.get("target_fields", [])
                                     for case_field in target_fields:
                                         case_value = getattr(case, case_field, None)
-                                        if case_value is not None:
-                                            expected_values.append(str(case_value))
+                                        if case_value is not None and str(case_value).strip():
+                                            # 避免添加重复值
+                                            case_value_str = str(case_value).strip()
+                                            if case_value_str not in expected_values:
+                                                expected_values.append(case_value_str)
                                 
                                 elif target_type == "case_party":
                                     # 当事人字段匹配
@@ -223,8 +226,11 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                             target_fields = condition.get("target_fields", [])
                                             for party_field in target_fields:
                                                 party_value = getattr(party, party_field, None)
-                                                if party_value is not None:
-                                                    expected_values.append(str(party_value))
+                                                if party_value is not None and str(party_value).strip():
+                                                    # 避免添加重复值
+                                                    party_value_str = str(party_value).strip()
+                                                    if party_value_str not in expected_values:
+                                                        expected_values.append(party_value_str)
                                 
                                 if expected_values:
                                     # 简单的精确匹配逻辑
@@ -236,7 +242,11 @@ async def enhance_case_features_with_proofreading(case: CaseModel) -> CaseModel:
                                         normalized_value = _normalize_numeric_value(expected)
                                         normalized_expected_values.append(str(normalized_value))
                                     
-                                    expected_value = " 或 ".join(normalized_expected_values)  # 多个期待值用"或"连接
+                                    # 只有当有多个期待值时才用"或"连接
+                                    if len(normalized_expected_values) > 1:
+                                        expected_value = " 或 ".join(normalized_expected_values)
+                                    else:
+                                        expected_value = normalized_expected_values[0] if normalized_expected_values else ""
                                     
                                     # 使用标准化后的值进行比较
                                     for expected in expected_values:
@@ -478,7 +488,7 @@ async def auto_process(
             "progress": 50
         })
     
-    evidence_extraction_results = await asyncio.wait_for(
+    evidence_extraction_results: AssociationFeaturesExtractionResults = await asyncio.wait_for(
         association_features_extractor.arun(image_urls=[ev.file_url for ev in evidences]),
         timeout=180.0
     )
