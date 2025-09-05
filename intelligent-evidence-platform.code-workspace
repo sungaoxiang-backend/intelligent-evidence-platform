@@ -19,7 +19,9 @@
         },
         "files.associations": {
             "*.py": "python"
-        }
+        },
+        "cursorpyright.analysis.autoImportCompletions": true,
+        "cursorpyright.analysis.typeCheckingMode": "basic"
     },
     "extensions": {
         "recommendations": [

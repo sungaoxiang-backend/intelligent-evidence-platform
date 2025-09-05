@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     COS_REGION: str
     COS_BUCKET: str
     COS_BUCKET_SERVICE: str = None
-    
+
     @field_validator("COS_BUCKET_SERVICE", mode="before")
     def assemble_cos_bucket_service(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     XUNFEI_OCR_GENERAL_API_URL: str # 用于通用OCR识别
     XUNFEI_OCR_TIMEOUT: str
     # ----------------------- Agentic ------------------------------------
-    
+
     # Qwen llm
     QWEN_API_KEY: str
     QWEN_BASE_URL: str
@@ -83,5 +83,12 @@ class Settings(BaseSettings):
     OPENAI_IMAGE_MODEL: str
     OPENAI_BASE_URL: str
 
+    # Wecom
+    WECOM_CORP_ID: str
+    WECOM_CORP_SECRET: str
+    WECOM_AGENT_ID: str
+    WECOM_TOKEN: str
+    WECOM_ENCODING_AES_KEY: str
+    WECOM_CALLBACK_URL: str
 
 settings = Settings()
