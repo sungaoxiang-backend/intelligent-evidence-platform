@@ -43,9 +43,13 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr)
             logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
 
-            # 企业微信要求直接写入响应流，模拟Spring Boot的response.getWriter().print()
-            logger.info(f"=== URL验证请求处理成功，直接写入响应流: {decrypted_echostr} ===")
-            return Response(content=decrypted_echostr, media_type="text/plain")
+            # 企业微信官方要求：1秒内响应，返回明文消息内容（不能加引号，不能带bom头，不能带换行符）
+            logger.info(f"=== URL验证请求处理成功，返回明文: {decrypted_echostr} ===")
+            return Response(
+                content=decrypted_echostr,
+                media_type="text/plain",
+                headers={"Content-Type": "text/plain; charset=utf-8"}
+            )
         else:
             logger.warning("签名验证失败")
             logger.warning("=== URL验证请求处理失败 ===")
