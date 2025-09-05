@@ -43,7 +43,7 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr)
             logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
 
-            # 企业微信官方要求：1秒内响应，返回明文消息内容（不能加引号，不能带bom头，不能带换行符）
+            # 企业微信官方要求：1秒内原样返回明文消息内容（不能加引号，不能带bom头，不能带换行符）
             logger.info(f"=== URL验证请求处理成功，返回明文: {decrypted_echostr} ===")
             return Response(
                 content=decrypted_echostr,

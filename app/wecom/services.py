@@ -154,6 +154,9 @@ class WeComService:
 
             content = decrypted_data[20 : 20 + content_length].decode("utf-8")
             logger.info(f"解密后的消息内容: {content}")
+            
+            # 根据官方文档，解密后应该包含4个字段：random、msg_len、msg、CorpID
+            # 企业微信要求返回的是msg字段的内容，但可能需要完整的解密结果
             logger.info("=== 消息解密结束 ===")
 
             return content
