@@ -10,16 +10,25 @@ router = APIRouter()
 
 @router.get("/callback")
 async def verify_callback(
-    msg_signature: Annotated[str, Query(description="签名")],
-    timestamp: Annotated[str, Query(description="时间戳")],
-    nonce: Annotated[str, Query(description="随机数")],
-    echostr: Annotated[str, Query(description="加密字符串")],
+    msg_signature: Annotated[Optional[str], Query(description="签名")] = None,
+    timestamp: Annotated[Optional[str], Query(description="时间戳")] = None,
+    nonce: Annotated[Optional[str], Query(description="随机数")] = None,
+    echostr: Annotated[Optional[str], Query(description="加密字符串")] = None,
 ):
     """
     验证回调URL - 企业微信配置时调用
     这是企微官方要求的URL验证接口
     """
     try:
+        # 检查必需参数
+        if not msg_signature or not timestamp or not nonce or not echostr:
+            logger.error("缺少必需的验证参数")
+            logger.error(f"msg_signature: {msg_signature}")
+            logger.error(f"timestamp: {timestamp}")
+            logger.error(f"nonce: {nonce}")
+            logger.error(f"echostr: {echostr}")
+            return "参数错误"
+            
         logger.info("=== 开始处理URL验证请求 ===")
         logger.info(f"请求参数:")
         logger.info(f"  - msg_signature: {msg_signature}")
