@@ -101,8 +101,9 @@ class WeComService:
             echostr_decoded = urllib.parse.unquote(echostr)
             logger.info(f"URL解码后的echostr: {echostr_decoded}")
 
+            # 根据官方文档，签名验证只使用token、timestamp、nonce三个参数
             # 构建签名字符串
-            tmp_list = [self.token, timestamp, nonce, echostr_decoded]
+            tmp_list = [self.token, timestamp, nonce]
             tmp_list.sort()
             tmp_str = "".join(tmp_list)
             logger.info(f"排序后的字符串: {tmp_str}")
@@ -148,15 +149,22 @@ class WeComService:
             decrypted_data = unpad(decrypted_data, AES.block_size)
             logger.info(f"去除填充后的数据长度: {len(decrypted_data)}")
 
-            # 获取消息内容
-            content_length = int.from_bytes(decrypted_data[16:20], "big")
-            logger.info(f"消息内容长度: {content_length}")
-
-            content = decrypted_data[20 : 20 + content_length].decode("utf-8")
-            logger.info(f"解密后的消息内容: {content}")
+            # 根据官方文档，解密后应该包含4个字段：random(16字节)、msg_len(4字节)、msg、receiveid
+            # 提取各个字段
+            random_bytes = decrypted_data[:16]
+            msg_len_bytes = decrypted_data[16:20]
+            content_length = int.from_bytes(msg_len_bytes, "big")
+            msg_content = decrypted_data[20:20 + content_length]
+            receive_id = decrypted_data[20 + content_length:].decode("utf-8")
             
-            # 根据官方文档，解密后应该包含4个字段：random、msg_len、msg、CorpID
-            # 企业微信要求返回的是msg字段的内容，但可能需要完整的解密结果
+            logger.info(f"random字段: {random_bytes}")
+            logger.info(f"msg_len字段: {content_length}")
+            logger.info(f"receive_id字段: {receive_id}")
+            logger.info(f"msg字段内容: {msg_content.decode('utf-8')}")
+            
+            # 企业微信要求返回的是msg字段的内容
+            content = msg_content.decode("utf-8")
+            logger.info(f"最终返回的消息内容: {content}")
             logger.info("=== 消息解密结束 ===")
 
             return content

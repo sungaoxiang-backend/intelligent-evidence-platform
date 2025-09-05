@@ -46,8 +46,11 @@ async def index():
     return {"server_status": "running"}
 
 from app.api.v1 import api_router
+from app.wecom.routers import router as wecom_router
 
 app.include_router(api_router, prefix="/api/v1")
+# 企微回调接口必须在根路径下
+app.include_router(wecom_router, prefix="")
 
 if __name__ == "__main__":
     import uvicorn
