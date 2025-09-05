@@ -101,9 +101,10 @@ class WeComService:
             echostr_decoded = urllib.parse.unquote(echostr)
             logger.info(f"URL解码后的echostr: {echostr_decoded}")
 
-            # 根据官方文档，签名验证只使用token、timestamp、nonce三个参数
+            # 根据官方文档，签名验证需要包含token、timestamp、nonce、msg_encrypt四个参数
+            # 对于URL验证，msg_encrypt就是echostr
             # 构建签名字符串
-            tmp_list = [self.token, timestamp, nonce]
+            tmp_list = [self.token, timestamp, nonce, echostr_decoded]
             tmp_list.sort()
             tmp_str = "".join(tmp_list)
             logger.info(f"排序后的字符串: {tmp_str}")
@@ -136,7 +137,7 @@ class WeComService:
             encrypted_data = base64.b64decode(encrypted_msg_decoded)
             logger.info(f"Base64解码后的数据长度: {len(encrypted_data)}")
 
-            # 获取AES密钥
+            # 获取AES密钥 - 根据官方文档：AESKey = Base64_Decode(EncodingAESKey + "=")
             aes_key = base64.b64decode(self.encoding_aes_key + "=")
             logger.info(f"AES密钥长度: {len(aes_key)}")
 
@@ -149,25 +150,30 @@ class WeComService:
             decrypted_data = unpad(decrypted_data, AES.block_size)
             logger.info(f"去除填充后的数据长度: {len(decrypted_data)}")
 
-            # 根据官方文档，解密后应该包含4个字段：random(16字节)、msg_len(4字节)、msg、receiveid
-            # 提取各个字段
-            random_bytes = decrypted_data[:16]
-            msg_len_bytes = decrypted_data[16:20]
-            content_length = int.from_bytes(msg_len_bytes, "big")
-            msg_content = decrypted_data[20:20 + content_length]
-            receive_id = decrypted_data[20 + content_length:].decode("utf-8")
+            # 根据官方文档伪代码实现解密
+            # content = rand_msg[16:]  # 去掉前16随机字节
+            content = decrypted_data[16:]
+            logger.info(f"去掉前16字节后的内容长度: {len(content)}")
             
-            logger.info(f"random字段: {random_bytes}")
+            # msg_len = str_to_uint(content[0:4]) # 取出4字节的msg_len
+            msg_len_bytes = content[0:4]
+            content_length = int.from_bytes(msg_len_bytes, "big")
             logger.info(f"msg_len字段: {content_length}")
-            logger.info(f"receive_id字段: {receive_id}")
+            
+            # msg = content[4:msg_len+4] # 截取msg_len 长度的msg
+            msg_content = content[4:4 + content_length]
             logger.info(f"msg字段内容: {msg_content.decode('utf-8')}")
             
+            # receiveid = content[msg_len+4:] # 剩余字节为receiveid
+            receive_id = content[4 + content_length:].decode("utf-8")
+            logger.info(f"receive_id字段: {receive_id}")
+            
             # 企业微信要求返回的是msg字段的内容
-            content = msg_content.decode("utf-8")
-            logger.info(f"最终返回的消息内容: {content}")
+            final_content = msg_content.decode("utf-8")
+            logger.info(f"最终返回的消息内容: {final_content}")
             logger.info("=== 消息解密结束 ===")
 
-            return content
+            return final_content
         except Exception as e:
             error_msg = f"消息解密失败: {e}"
             logger.error(f"=== 消息解密异常 ===")
