@@ -33,14 +33,11 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr)
             logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
 
-            # 返回解密后的内容
-            response = PlainTextResponse(
-                decrypted_echostr,
-                status_code=200,
-                media_type="text/plain",
-                headers={"Content-Type": "text/plain; charset=utf-8"},
-            )
-            logger.info("=== URL验证请求处理成功 ===")
+            # 返回解密后的内容 - 企业微信要求纯文本响应
+            logger.info(f"=== URL验证请求处理成功，返回内容: {decrypted_echostr} ===")
+            response = PlainTextResponse(decrypted_echostr)
+            logger.info(f"响应状态码: {response.status_code}")
+            logger.info(f"响应头: {response.headers}")
             return response
         else:
             logger.warning("签名验证失败")
