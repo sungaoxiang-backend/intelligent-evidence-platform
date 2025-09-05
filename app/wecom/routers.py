@@ -33,23 +33,20 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr)
             logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
 
-            # 返回解密后的内容 - 企业微信要求纯文本响应
-            logger.info(f"=== URL验证请求处理成功，返回内容: {decrypted_echostr} ===")
-            response = PlainTextResponse(decrypted_echostr)
-            logger.info(f"响应状态码: {response.status_code}")
-            logger.info(f"响应头: {response.headers}")
-            return response
+            # 企业微信要求直接返回解密后的字符串，不能包装
+            logger.info(f"=== URL验证请求处理成功，直接返回字符串: {decrypted_echostr} ===")
+            return decrypted_echostr
         else:
             logger.warning("签名验证失败")
             logger.warning("=== URL验证请求处理失败 ===")
-            return PlainTextResponse("验证失败", status_code=401)
+            return "验证失败"
 
     except Exception as e:
         logger.error(f"URL验证处理异常: {e}")
         logger.error(f"异常类型: {type(e).__name__}")
         logger.error(f"异常详情: {str(e)}")
         logger.error("=== URL验证请求处理异常 ===")
-        return PlainTextResponse("验证失败", status_code=500)
+        return "验证失败"
 
 
 @router.post("/callback")
