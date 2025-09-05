@@ -1,7 +1,7 @@
 # app/wecom/router.py
 from typing import Annotated, Optional, Dict, Any
 from fastapi import APIRouter, Query, Request, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from app.wecom.services import wecom_service
 from app.core.logging import logger
 
@@ -10,6 +10,7 @@ router = APIRouter()
 
 @router.get("/callback")
 async def verify_callback(
+    request: Request,
     msg_signature: Annotated[Optional[str], Query(description="签名")] = None,
     timestamp: Annotated[Optional[str], Query(description="时间戳")] = None,
     nonce: Annotated[Optional[str], Query(description="随机数")] = None,
@@ -42,20 +43,20 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr)
             logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
 
-            # 企业微信要求直接返回解密后的字符串，不能包装
-            logger.info(f"=== URL验证请求处理成功，直接返回字符串: {decrypted_echostr} ===")
-            return decrypted_echostr
+            # 企业微信要求直接写入响应流，模拟Spring Boot的response.getWriter().print()
+            logger.info(f"=== URL验证请求处理成功，直接写入响应流: {decrypted_echostr} ===")
+            return Response(content=decrypted_echostr, media_type="text/plain")
         else:
             logger.warning("签名验证失败")
             logger.warning("=== URL验证请求处理失败 ===")
-            return "验证失败"
+            return Response(content="验证失败", media_type="text/plain")
 
     except Exception as e:
         logger.error(f"URL验证处理异常: {e}")
         logger.error(f"异常类型: {type(e).__name__}")
         logger.error(f"异常详情: {str(e)}")
         logger.error("=== URL验证请求处理异常 ===")
-        return "验证失败"
+        return Response(content="验证失败", media_type="text/plain")
 
 
 @router.post("/callback")
