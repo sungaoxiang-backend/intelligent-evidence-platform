@@ -99,19 +99,20 @@ class WeComService:
             logger.info(f"  - msg_encrypt: {msg_encrypt}")
             logger.info(f"  - token: {self.token}")
 
-            # URL验证阶段：只使用token、timestamp、nonce三个参数
+            # URL验证阶段：使用token、timestamp、nonce、echostr四个参数
             # 消息接收阶段：使用token、timestamp、nonce、msg_encrypt四个参数
-            if echostr and not msg_encrypt:
-                # URL验证阶段 - 只使用三个参数
-                tmp_list = [self.token, timestamp, nonce]
-                logger.info("URL验证阶段 - 使用三个参数")
+            if echostr is not None:
+                # URL验证阶段 - 使用四个参数（包含echostr）
+                tmp_list = [self.token, timestamp, nonce, echostr]
+                logger.info("URL验证阶段 - 使用四个参数（包含echostr）")
             elif msg_encrypt:
                 # 消息接收阶段 - 使用四个参数  
                 tmp_list = [self.token, timestamp, nonce, msg_encrypt]
                 logger.info("消息接收阶段 - 使用四个参数")
             else:
-                logger.error("参数错误：缺少msg_encrypt或echostr")
-                return False
+                # 默认使用三个参数（不应该到达这里）
+                tmp_list = [self.token, timestamp, nonce]
+                logger.info("默认使用三个参数")
                 
             tmp_list.sort()
             tmp_str = "".join(tmp_list)

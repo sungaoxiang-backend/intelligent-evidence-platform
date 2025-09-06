@@ -43,7 +43,7 @@ async def verify_callback(
         echostr_decoded = urllib.parse.unquote(echostr)
         logger.info(f"URL解码后的echostr: {echostr_decoded}")
 
-        # 验证签名 - URL验证阶段只使用三个参数
+        # 验证签名 - URL验证阶段使用四个参数（包含echostr）
         if wecom_service.verify_signature(msg_signature, timestamp, nonce, echostr=echostr_decoded):
             logger.info("签名验证通过，开始解密消息")
             decrypted_echostr = wecom_service.decrypt_message(echostr_decoded)
