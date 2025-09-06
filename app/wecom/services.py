@@ -46,17 +46,11 @@ class WeComService:
         self.token_expires_at: float = 0
         self.client = httpx.AsyncClient(timeout=30.0)
 
-        logger.info(
-            f"WeCom服务初始化完成 - CorpID: {self.corp_id}, AgentID: {self.agent_id}"
-        )
-        logger.info(f"回调URL: {self.callback_url}")
-        logger.info(f"Token: {self.token}")
-        logger.info(f"EncodingAESKey: {self.encoding_aes_key}")
+        logger.info(f"WeCom服务初始化完成 - CorpID: {self.corp_id}, AgentID: {self.agent_id}")
 
     async def close(self):
         """关闭服务"""
         await self.client.aclose()
-        logger.info("WeCom服务已关闭")
 
     async def get_access_token(self) -> Optional[str]:
         """获取access_token"""
@@ -74,7 +68,6 @@ class WeComService:
             if data["errcode"] == 0:
                 self.access_token = data["access_token"]
                 self.token_expires_at = time.time() + data["expires_in"] - 60
-                logger.info("Access token获取成功")
                 return self.access_token
             else:
                 error_msg = f"获取access_token失败: {data}"
@@ -88,46 +81,27 @@ class WeComService:
     def verify_signature(
         self, signature: str, timestamp: str, nonce: str, echostr: str = None, msg_encrypt: str = None
     ) -> bool:
-        """验证签名 - 修复版本"""
+        """验证签名 - 支持URL验证和消息接收两种模式"""
         try:
-            logger.info("=== 开始签名验证 ===")
-            logger.info(f"接收到的参数:")
-            logger.info(f"  - signature: {signature}")
-            logger.info(f"  - timestamp: {timestamp}")
-            logger.info(f"  - nonce: {nonce}")
-            logger.info(f"  - echostr: {echostr}")
-            logger.info(f"  - msg_encrypt: {msg_encrypt}")
-            logger.info(f"  - token: {self.token}")
 
             # URL验证阶段：使用token、timestamp、nonce、echostr四个参数
             # 消息接收阶段：使用token、timestamp、nonce、msg_encrypt四个参数
             if echostr is not None:
                 # URL验证阶段 - 使用四个参数（包含echostr）
                 tmp_list = [self.token, timestamp, nonce, echostr]
-                logger.info("URL验证阶段 - 使用四个参数（包含echostr）")
             elif msg_encrypt:
                 # 消息接收阶段 - 使用四个参数  
                 tmp_list = [self.token, timestamp, nonce, msg_encrypt]
-                logger.info("消息接收阶段 - 使用四个参数")
             else:
                 # 默认使用三个参数（不应该到达这里）
                 tmp_list = [self.token, timestamp, nonce]
-                logger.info("默认使用三个参数")
                 
             tmp_list.sort()
             tmp_str = "".join(tmp_list)
-            logger.info(f"排序后的字符串: {tmp_str}")
 
             # 计算SHA1
             sha1 = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
-            logger.info(f"计算得到的签名: {sha1}")
-            logger.info(f"接收到的签名: {signature}")
-
-            is_valid = sha1 == signature
-            logger.info(f"签名验证结果: {'通过' if is_valid else '失败'}")
-            logger.info("=== 签名验证结束 ===")
-
-            return is_valid
+            return sha1 == signature
         except Exception as e:
             logger.error(f"签名验证异常: {e}")
             return False
@@ -135,128 +109,57 @@ class WeComService:
     def decrypt_message(self, encrypted_msg: str) -> str:
         """解密消息"""
         try:
-            logger.info("=== 开始消息解密 ===")
-            logger.info(f"接收到的加密消息: {encrypted_msg}")
-
             # URL解码
             encrypted_msg_decoded = urllib.parse.unquote(encrypted_msg)
-            logger.info(f"URL解码后的加密消息: {encrypted_msg_decoded}")
 
             # Base64解码
             encrypted_data = base64.b64decode(encrypted_msg_decoded)
-            logger.info(f"Base64解码后的数据长度: {len(encrypted_data)}")
 
             # 获取AES密钥 - 根据官方文档：AESKey = Base64_Decode(EncodingAESKey + "=")
             aes_key = base64.b64decode(self.encoding_aes_key + "=")
-            logger.info(f"AES密钥长度: {len(aes_key)}")
 
             # 获取IV - 根据官方文档，IV是AES密钥的前16字节
             iv = aes_key[:16]
-            logger.info(f"IV长度: {len(iv)}")
-            logger.info(f"IV内容: {iv}")
 
             # 解密 - 使用正确的IV
             cipher = AES.new(aes_key, AES.MODE_CBC, iv)
             decrypted_data = cipher.decrypt(encrypted_data)
-            logger.info(f"解密后的数据长度: {len(decrypted_data)}")
 
             # 去除填充
             decrypted_data = unpad(decrypted_data, AES.block_size)
-            logger.info(f"去除填充后的数据长度: {len(decrypted_data)}")
 
             # 根据官方文档伪代码实现解密
             # content = rand_msg[16:]  # 去掉前16随机字节
             content = decrypted_data[16:]
-            logger.info(f"去掉前16字节后的内容长度: {len(content)}")
             
             # msg_len = str_to_uint(content[0:4]) # 取出4字节的msg_len
             msg_len_bytes = content[0:4]
             content_length = int.from_bytes(msg_len_bytes, "big")
-            logger.info(f"msg_len字段: {content_length}")
             
             # msg = content[4:msg_len+4] # 截取msg_len 长度的msg
             msg_content = content[4:4 + content_length]
-            logger.info(f"msg字段内容: {msg_content.decode('utf-8')}")
             
             # receiveid = content[msg_len+4:] # 剩余字节为receiveid
             receive_id = content[4 + content_length:].decode("utf-8")
-            logger.info(f"receive_id字段: {receive_id}")
             
             # 企业微信要求返回的是msg字段的内容
             final_content = msg_content.decode("utf-8")
-            logger.info(f"最终返回的消息内容: {final_content}")
-            logger.info("=== 消息解密结束 ===")
-
             return final_content
         except Exception as e:
             error_msg = f"消息解密失败: {e}"
-            logger.error(f"=== 消息解密异常 ===")
-            logger.error(f"异常类型: {type(e).__name__}")
-            logger.error(f"异常信息: {str(e)}")
-            logger.error(f"加密消息: {encrypted_msg}")
-            logger.error("=== 消息解密异常结束 ===")
-            raise Exception(error_msg)
-
-    def encrypt_message(self, plaintext: str) -> str:
-        """加密消息 - 用于URL验证响应"""
-        try:
-            logger.info("=== 开始消息加密 ===")
-            logger.info(f"需要加密的明文: {plaintext}")
-
-            # 获取AES密钥
-            aes_key = base64.b64decode(self.encoding_aes_key + "=")
-            iv = aes_key[:16]  # IV是密钥的前16字节
-
-            # 构建消息格式
-            # 随机16字节 + 4字节长度 + 消息内容 + receive_id
-            random_bytes = os.urandom(16)
-            msg_bytes = plaintext.encode('utf-8')
-            msg_len = len(msg_bytes)
-            receive_id = self.corp_id.encode('utf-8')
-            
-            # 构建完整消息
-            content = random_bytes + msg_len.to_bytes(4, 'big') + msg_bytes + receive_id
-            
-            # PKCS7填充
-            padded_content = pad(content, AES.block_size)
-            
-            # AES加密
-            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-            encrypted_data = cipher.encrypt(padded_content)
-            
-            # Base64编码
-            encrypted_base64 = base64.b64encode(encrypted_data).decode('utf-8')
-            
-            logger.info(f"加密后的消息: {encrypted_base64}")
-            logger.info("=== 消息加密结束 ===")
-            
-            return encrypted_base64
-            
-        except Exception as e:
-            error_msg = f"消息加密失败: {e}"
-            logger.error(f"消息加密异常: {error_msg}")
+            logger.error(f"消息解密异常: {error_msg}")
             raise Exception(error_msg)
 
     def parse_callback_event(self, decrypted_msg: str) -> Optional[Dict[str, Any]]:
         """解析回调事件"""
         try:
-            logger.info("=== 开始解析回调事件 ===")
-            logger.info(f"解密后的消息: {decrypted_msg}")
-
             root = ET.fromstring(decrypted_msg)
-            logger.info(f"XML根节点: {root.tag}")
-
             event_data = {}
             for child in root:
                 event_data[child.tag] = child.text
-                logger.info(f"解析到字段: {child.tag} = {child.text}")
-
-            logger.info(f"解析完成的事件数据: {event_data}")
-            logger.info("=== 解析回调事件结束 ===")
             return event_data
         except Exception as e:
             logger.error(f"解析回调事件失败: {e}")
-            logger.error(f"解密后的消息: {decrypted_msg}")
             return None
 
     async def create_contact_way(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -269,11 +172,6 @@ class WeComService:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, params=params, json=contact_data)
                 data = response.json()
-
-            if data["errcode"] == 0:
-                logger.info(f"创建联系方式成功: {data}")
-            else:
-                logger.error(f"创建联系方式失败: {data}")
 
             return data
         except Exception as e:
@@ -292,11 +190,6 @@ class WeComService:
                 response = await client.post(url, params=params, json=welcome_data)
                 data = response.json()
 
-            if data["errcode"] == 0:
-                logger.info("欢迎语发送成功")
-            else:
-                logger.error(f"欢迎语发送失败: {data}")
-
             return data
         except Exception as e:
             error_msg = f"发送欢迎语异常: {e}"
@@ -314,11 +207,6 @@ class WeComService:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, params=params, json=data)
                 result = response.json()
-
-            if result["errcode"] == 0:
-                logger.info(f"获取客户详情成功: {external_userid}")
-            else:
-                logger.error(f"获取客户详情失败: {result}")
 
             return result
         except Exception as e:

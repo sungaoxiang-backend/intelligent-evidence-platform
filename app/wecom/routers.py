@@ -38,31 +38,18 @@ async def verify_callback(
             logger.error(f"echostr: {echostr}")
             return "参数错误"
             
-        logger.info("=== 开始处理URL验证请求 ===")
-        logger.info(f"请求参数:")
-        logger.info(f"  - msg_signature: {msg_signature}")
-        logger.info(f"  - timestamp: {timestamp}")
-        logger.info(f"  - nonce: {nonce}")
-        logger.info(f"  - echostr: {echostr}")
-
         # URL解码 echostr
         echostr_decoded = urllib.parse.unquote(echostr)
-        logger.info(f"URL解码后的echostr: {echostr_decoded}")
 
         # 验证签名 - URL验证阶段使用四个参数（包含echostr）
         if wecom_service.verify_signature(msg_signature, timestamp, nonce, echostr=echostr_decoded):
-            logger.info("签名验证通过，开始解密消息")
             decrypted_echostr = wecom_service.decrypt_message(echostr_decoded)
-            logger.info(f"消息解密成功，解密后的明文: {decrypted_echostr}")
 
             # 企业微信URL验证阶段的正确要求：
             # 1. 必须只返回解密后的明文（纯文本）
             # 2. Content-Type必须是text/plain
             # 3. 不能有任何额外字符，包括XML、JSON、引号、换行符
             # 4. 不需要重新加密，直接返回解密后的明文
-            logger.info("URL验证阶段 - 返回纯文本明文")
-            
-            logger.info(f"=== URL验证请求处理成功，返回明文: {decrypted_echostr} ===")
             
             # 关键合规性检查：
             # 1. 确保没有BOM头
@@ -74,8 +61,6 @@ async def verify_callback(
                 logger.warning("解密后的明文包含换行符，可能导致验证失败")
             
             response_bytes = decrypted_echostr.encode('utf-8')
-            logger.info(f"响应字节长度: {len(response_bytes)}")
-            logger.info(f"响应内容: {repr(response_bytes)}")
             
             return Response(
                 content=response_bytes,
@@ -83,15 +68,9 @@ async def verify_callback(
                 headers={"Content-Type": "text/plain; charset=utf-8"}
             )
         else:
-            logger.warning("签名验证失败")
-            logger.warning("=== URL验证请求处理失败 ===")
             return Response(content="验证失败", media_type="text/plain")
 
     except Exception as e:
-        logger.error(f"URL验证处理异常: {e}")
-        logger.error(f"异常类型: {type(e).__name__}")
-        logger.error(f"异常详情: {str(e)}")
-        logger.error("=== URL验证请求处理异常 ===")
         return Response(content="验证失败", media_type="text/plain")
 
 
@@ -113,61 +92,38 @@ async def handle_callback(
     4. 需要包含新的签名
     """
     try:
-        logger.info("=== 开始处理回调事件 ===")
-        logger.info(f"请求参数:")
-        logger.info(f"  - msg_signature: {msg_signature}")
-        logger.info(f"  - timestamp: {timestamp}")
-        logger.info(f"  - nonce: {nonce}")
-
         body = await request.body()
-        logger.info(f"收到回调数据长度: {len(body)}")
-        logger.info(f"收到回调数据: {body.decode('utf-8')}")
 
         # 解析XML数据
         import xml.etree.ElementTree as ET
-
         root = ET.fromstring(body)
-        logger.info(f"XML根节点: {root.tag}")
 
         # 提取加密消息
         encrypt_element = root.find("Encrypt")
         if encrypt_element is None:
-            logger.error("未找到加密消息")
             return PlainTextResponse("success")
 
         encrypted_msg = encrypt_element.text
         if encrypted_msg is None:
-            logger.error("加密消息内容为空")
             return PlainTextResponse("success")
-        
-        logger.info(f"提取到的加密消息: {encrypted_msg}")
 
         # 验证签名 - 消息接收阶段使用四个参数
         if not wecom_service.verify_signature(msg_signature, timestamp, nonce, msg_encrypt=encrypted_msg):
-            logger.error("签名验证失败")
             return PlainTextResponse("error")
-        
-        logger.info("签名验证通过")
 
         # 解密消息
         decrypted_msg = wecom_service.decrypt_message(encrypted_msg)
-        logger.info(f"解密后消息: {decrypted_msg}")
 
         # 解析事件数据
         event_data = wecom_service.parse_callback_event(decrypted_msg)
         if event_data:
             await process_callback_event(event_data)
-
-        logger.info("=== 回调事件处理完成 ===")
         # 消息接收阶段：根据企业微信要求，处理完成后返回success
         # 注意：这里不需要返回XML，只需要返回纯文本的"success"
         return PlainTextResponse("success", headers={"Content-Type": "text/plain"})
 
     except Exception as e:
         logger.error(f"处理回调异常: {e}")
-        logger.error(f"异常类型: {type(e).__name__}")
-        logger.error(f"异常详情: {str(e)}")
-        logger.error("=== 回调事件处理异常 ===")
         return PlainTextResponse("error")
 
 
@@ -176,7 +132,6 @@ async def handle_callback(
 async def create_contact_way(contact_data: Dict[str, Any]):
     """创建联系方式"""
     try:
-        logger.info(f"创建联系方式请求: {contact_data}")
         result = await wecom_service.create_contact_way(contact_data)
         return {"success": True, "data": result}
     except Exception as e:
@@ -188,17 +143,11 @@ async def create_contact_way(contact_data: Dict[str, Any]):
 async def process_callback_event(event_data: Dict[str, Any]):
     """处理回调事件"""
     try:
-        logger.info("=== 开始处理回调事件业务逻辑 ===")
-        logger.info(f"事件数据: {event_data}")
-
         event_type = event_data.get("Event")
         change_type = event_data.get("ChangeType")
 
         if not event_type:
-            logger.warning("未找到事件类型")
             return
-
-        logger.info(f"事件类型: {event_type}, 变更类型: {change_type}")
 
         # 处理客户添加事件
         if (
@@ -206,10 +155,6 @@ async def process_callback_event(event_data: Dict[str, Any]):
             and change_type == "add_external_contact"
         ):
             await handle_customer_add_event(event_data)
-        else:
-            logger.info(f"未处理的事件类型: {event_type}")
-
-        logger.info("=== 回调事件业务逻辑处理完成 ===")
 
     except Exception as e:
         logger.error(f"处理回调事件失败: {e}")
@@ -218,22 +163,14 @@ async def process_callback_event(event_data: Dict[str, Any]):
 async def handle_customer_add_event(event_data: Dict[str, Any]):
     """处理客户添加事件"""
     try:
-        logger.info("=== 开始处理客户添加事件 ===")
-        logger.info(f"事件数据: {event_data}")
-
         user_id = event_data.get("UserID")
         external_user_id = event_data.get("ExternalUserID")
         welcome_code = event_data.get("WelcomeCode")
         state = event_data.get("State")
 
-        logger.info(
-            f"客户添加事件 - 员工: {user_id}, 客户: {external_user_id}, 状态: {state}"
-        )
-
         # 获取客户详情
         if external_user_id:
             contact_info = await wecom_service.get_external_contact(external_user_id)
-            logger.info(f"客户详情: {contact_info}")
 
         # 发送欢迎语
         if welcome_code:
@@ -243,8 +180,6 @@ async def handle_customer_add_event(event_data: Dict[str, Any]):
         if user_id and external_user_id:
             await save_customer_info_to_db(user_id, external_user_id, state or "")
 
-        logger.info("=== 客户添加事件处理完成 ===")
-
     except Exception as e:
         logger.error(f"处理客户添加事件失败: {e}")
 
@@ -252,15 +187,12 @@ async def handle_customer_add_event(event_data: Dict[str, Any]):
 async def send_welcome_message_to_customer(welcome_code: str):
     """发送欢迎语给客户"""
     try:
-        logger.info(f"发送欢迎语给客户，welcome_code: {welcome_code}")
-
         welcome_data = {
             "welcome_code": welcome_code,
             "text": {"content": "欢迎添加我们为好友！我们将为您提供专业的法律服务。"},
         }
 
         result = await wecom_service.send_welcome_msg(welcome_data)
-        logger.info(f"发送欢迎语结果: {result}")
 
     except Exception as e:
         logger.error(f"发送欢迎语失败: {e}")
@@ -269,9 +201,7 @@ async def send_welcome_message_to_customer(welcome_code: str):
 async def save_customer_info_to_db(user_id: str, external_user_id: str, state: str):
     """保存客户信息到数据库"""
     try:
-        logger.info(
-            f"保存客户信息 - 员工: {user_id}, 客户: {external_user_id}, 状态: {state}"
-        )
         # 这里实现数据库保存逻辑
+        pass
     except Exception as e:
         logger.error(f"保存客户信息失败: {e}")
