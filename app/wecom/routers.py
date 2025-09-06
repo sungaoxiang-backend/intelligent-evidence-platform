@@ -4,6 +4,8 @@ from fastapi import APIRouter, Query, Request, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 from app.wecom.services import wecom_service
 from app.core.logging import logger
+import hashlib
+import urllib.parse
 
 router = APIRouter()
 
@@ -18,7 +20,7 @@ async def verify_callback(
 ):
     """
     验证回调URL - 企业微信配置时调用
-    这是企微官方要求的URL验证接口
+    这是企微官方要求的URL验证接口 - 修复版本
     """
     try:
         # 检查必需参数
@@ -37,18 +39,41 @@ async def verify_callback(
         logger.info(f"  - nonce: {nonce}")
         logger.info(f"  - echostr: {echostr}")
 
-        # 验证签名
-        if wecom_service.verify_signature(msg_signature, timestamp, nonce, echostr):
-            logger.info("签名验证通过，开始解密消息")
-            decrypted_echostr = wecom_service.decrypt_message(echostr)
-            logger.info(f"消息解密成功，返回内容: {decrypted_echostr}")
+        # URL解码 echostr
+        echostr_decoded = urllib.parse.unquote(echostr)
+        logger.info(f"URL解码后的echostr: {echostr_decoded}")
 
-            # 企业微信官方要求：1秒内原样返回明文消息内容（不能加引号，不能带bom头，不能带换行符）
-            logger.info(f"=== URL验证请求处理成功，返回明文: {decrypted_echostr} ===")
+        # 验证签名 - URL验证阶段只使用三个参数
+        if wecom_service.verify_signature(msg_signature, timestamp, nonce, echostr=echostr_decoded):
+            logger.info("签名验证通过，开始解密消息")
+            decrypted_echostr = wecom_service.decrypt_message(echostr_decoded)
+            logger.info(f"消息解密成功，解密后的明文: {decrypted_echostr}")
+
+            # 企业微信官方要求：需要重新加密解密后的echostr并返回XML格式
+            logger.info("开始重新加密响应消息")
+            encrypted_response = wecom_service.encrypt_message(decrypted_echostr)
+            
+            # 计算新的签名用于响应
+            tmp_list = [wecom_service.token, timestamp, nonce, encrypted_response]
+            tmp_list.sort()
+            tmp_str = "".join(tmp_list)
+            response_signature = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
+            
+            logger.info(f"响应签名: {response_signature}")
+
+            # 构建XML响应 - 按照企业微信要求的格式
+            response_xml = f"""<xml>
+<Encrypt><![CDATA[{encrypted_response}]]></Encrypt>
+<MsgSignature><![CDATA[{response_signature}]]></MsgSignature>
+<TimeStamp>{timestamp}</TimeStamp>
+<Nonce><![CDATA[{nonce}]]></Nonce>
+</xml>"""
+
+            logger.info(f"=== URL验证请求处理成功，返回XML: {response_xml} ===")
             return Response(
-                content=decrypted_echostr,
-                media_type="text/plain",
-                headers={"Content-Type": "text/plain; charset=utf-8"}
+                content=response_xml,
+                media_type="text/xml",
+                headers={"Content-Type": "text/xml; charset=utf-8"}
             )
         else:
             logger.warning("签名验证失败")
@@ -64,13 +89,22 @@ async def verify_callback(
 
 
 @router.post("/callback")
-async def handle_callback(request: Request):
+async def handle_callback(
+    request: Request,
+    msg_signature: Annotated[Optional[str], Query(description="签名")] = None,
+    timestamp: Annotated[Optional[str], Query(description="时间戳")] = None,
+    nonce: Annotated[Optional[str], Query(description="随机数")] = None,
+):
     """
-    处理回调事件 - 实际事件发生时调用
+    处理回调事件 - 实际事件发生时调用 - 修复版本
     这是企微官方要求的事件接收接口
     """
     try:
         logger.info("=== 开始处理回调事件 ===")
+        logger.info(f"请求参数:")
+        logger.info(f"  - msg_signature: {msg_signature}")
+        logger.info(f"  - timestamp: {timestamp}")
+        logger.info(f"  - nonce: {nonce}")
 
         body = await request.body()
         logger.info(f"收到回调数据长度: {len(body)}")
@@ -94,6 +128,13 @@ async def handle_callback(request: Request):
             return PlainTextResponse("success")
         
         logger.info(f"提取到的加密消息: {encrypted_msg}")
+
+        # 验证签名 - 消息接收阶段使用四个参数
+        if not wecom_service.verify_signature(msg_signature, timestamp, nonce, msg_encrypt=encrypted_msg):
+            logger.error("签名验证失败")
+            return PlainTextResponse("error")
+        
+        logger.info("签名验证通过")
 
         # 解密消息
         decrypted_msg = wecom_service.decrypt_message(encrypted_msg)

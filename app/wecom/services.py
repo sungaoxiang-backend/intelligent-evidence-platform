@@ -3,8 +3,9 @@ import httpx
 import time
 import base64
 import hashlib
+import os
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
+from Crypto.Util.Padding import unpad, pad
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional
 import logging
@@ -85,9 +86,9 @@ class WeComService:
             raise Exception(error_msg)
 
     def verify_signature(
-        self, signature: str, timestamp: str, nonce: str, echostr: str
+        self, signature: str, timestamp: str, nonce: str, echostr: str = None, msg_encrypt: str = None
     ) -> bool:
-        """验证签名"""
+        """验证签名 - 修复版本"""
         try:
             logger.info("=== 开始签名验证 ===")
             logger.info(f"接收到的参数:")
@@ -95,16 +96,23 @@ class WeComService:
             logger.info(f"  - timestamp: {timestamp}")
             logger.info(f"  - nonce: {nonce}")
             logger.info(f"  - echostr: {echostr}")
+            logger.info(f"  - msg_encrypt: {msg_encrypt}")
             logger.info(f"  - token: {self.token}")
 
-            # URL解码 echostr
-            echostr_decoded = urllib.parse.unquote(echostr)
-            logger.info(f"URL解码后的echostr: {echostr_decoded}")
-
-            # 根据官方文档，签名验证需要包含token、timestamp、nonce、msg_encrypt四个参数
-            # 对于URL验证，msg_encrypt就是echostr
-            # 构建签名字符串
-            tmp_list = [self.token, timestamp, nonce, echostr_decoded]
+            # URL验证阶段：只使用token、timestamp、nonce三个参数
+            # 消息接收阶段：使用token、timestamp、nonce、msg_encrypt四个参数
+            if echostr and not msg_encrypt:
+                # URL验证阶段 - 只使用三个参数
+                tmp_list = [self.token, timestamp, nonce]
+                logger.info("URL验证阶段 - 使用三个参数")
+            elif msg_encrypt:
+                # 消息接收阶段 - 使用四个参数  
+                tmp_list = [self.token, timestamp, nonce, msg_encrypt]
+                logger.info("消息接收阶段 - 使用四个参数")
+            else:
+                logger.error("参数错误：缺少msg_encrypt或echostr")
+                return False
+                
             tmp_list.sort()
             tmp_str = "".join(tmp_list)
             logger.info(f"排序后的字符串: {tmp_str}")
@@ -141,9 +149,14 @@ class WeComService:
             aes_key = base64.b64decode(self.encoding_aes_key + "=")
             logger.info(f"AES密钥长度: {len(aes_key)}")
 
-            # 解密
-            cipher = AES.new(aes_key, AES.MODE_CBC, encrypted_data[:16])
-            decrypted_data = cipher.decrypt(encrypted_data[16:])
+            # 获取IV - 根据官方文档，IV是AES密钥的前16字节
+            iv = aes_key[:16]
+            logger.info(f"IV长度: {len(iv)}")
+            logger.info(f"IV内容: {iv}")
+
+            # 解密 - 使用正确的IV
+            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+            decrypted_data = cipher.decrypt(encrypted_data)
             logger.info(f"解密后的数据长度: {len(decrypted_data)}")
 
             # 去除填充
@@ -181,6 +194,46 @@ class WeComService:
             logger.error(f"异常信息: {str(e)}")
             logger.error(f"加密消息: {encrypted_msg}")
             logger.error("=== 消息解密异常结束 ===")
+            raise Exception(error_msg)
+
+    def encrypt_message(self, plaintext: str) -> str:
+        """加密消息 - 用于URL验证响应"""
+        try:
+            logger.info("=== 开始消息加密 ===")
+            logger.info(f"需要加密的明文: {plaintext}")
+
+            # 获取AES密钥
+            aes_key = base64.b64decode(self.encoding_aes_key + "=")
+            iv = aes_key[:16]  # IV是密钥的前16字节
+
+            # 构建消息格式
+            # 随机16字节 + 4字节长度 + 消息内容 + receive_id
+            random_bytes = os.urandom(16)
+            msg_bytes = plaintext.encode('utf-8')
+            msg_len = len(msg_bytes)
+            receive_id = self.corp_id.encode('utf-8')
+            
+            # 构建完整消息
+            content = random_bytes + msg_len.to_bytes(4, 'big') + msg_bytes + receive_id
+            
+            # PKCS7填充
+            padded_content = pad(content, AES.block_size)
+            
+            # AES加密
+            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+            encrypted_data = cipher.encrypt(padded_content)
+            
+            # Base64编码
+            encrypted_base64 = base64.b64encode(encrypted_data).decode('utf-8')
+            
+            logger.info(f"加密后的消息: {encrypted_base64}")
+            logger.info("=== 消息加密结束 ===")
+            
+            return encrypted_base64
+            
+        except Exception as e:
+            error_msg = f"消息加密失败: {e}"
+            logger.error(f"消息加密异常: {error_msg}")
             raise Exception(error_msg)
 
     def parse_callback_event(self, decrypted_msg: str) -> Optional[Dict[str, Any]]:
