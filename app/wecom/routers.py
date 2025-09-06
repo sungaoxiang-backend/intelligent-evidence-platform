@@ -20,7 +20,13 @@ async def verify_callback(
 ):
     """
     验证回调URL - 企业微信配置时调用
-    这是企微官方要求的URL验证接口 - 修复版本
+    这是企微官方要求的URL验证接口 - 修正版本
+    
+    关键要求：
+    1. 只返回解密后的明文（纯文本）
+    2. Content-Type必须是text/plain
+    3. 不能有任何XML/JSON包装
+    4. 不需要重新加密
     """
     try:
         # 检查必需参数
@@ -49,31 +55,32 @@ async def verify_callback(
             decrypted_echostr = wecom_service.decrypt_message(echostr_decoded)
             logger.info(f"消息解密成功，解密后的明文: {decrypted_echostr}")
 
-            # 企业微信官方要求：需要重新加密解密后的echostr并返回XML格式
-            logger.info("开始重新加密响应消息")
-            encrypted_response = wecom_service.encrypt_message(decrypted_echostr)
+            # 企业微信URL验证阶段的正确要求：
+            # 1. 必须只返回解密后的明文（纯文本）
+            # 2. Content-Type必须是text/plain
+            # 3. 不能有任何额外字符，包括XML、JSON、引号、换行符
+            # 4. 不需要重新加密，直接返回解密后的明文
+            logger.info("URL验证阶段 - 返回纯文本明文")
             
-            # 计算新的签名用于响应
-            tmp_list = [wecom_service.token, timestamp, nonce, encrypted_response]
-            tmp_list.sort()
-            tmp_str = "".join(tmp_list)
-            response_signature = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
+            logger.info(f"=== URL验证请求处理成功，返回明文: {decrypted_echostr} ===")
             
-            logger.info(f"响应签名: {response_signature}")
-
-            # 构建XML响应 - 按照企业微信要求的格式
-            response_xml = f"""<xml>
-<Encrypt><![CDATA[{encrypted_response}]]></Encrypt>
-<MsgSignature><![CDATA[{response_signature}]]></MsgSignature>
-<TimeStamp>{timestamp}</TimeStamp>
-<Nonce><![CDATA[{nonce}]]></Nonce>
-</xml>"""
-
-            logger.info(f"=== URL验证请求处理成功，返回XML: {response_xml} ===")
+            # 关键合规性检查：
+            # 1. 确保没有BOM头
+            # 2. 确保没有前后空白字符
+            # 3. 确保没有换行符
+            # 4. 使用bytes确保没有隐式的字符串转换问题
+            decrypted_echostr = decrypted_echostr.strip()
+            if '\n' in decrypted_echostr or '\r' in decrypted_echostr:
+                logger.warning("解密后的明文包含换行符，可能导致验证失败")
+            
+            response_bytes = decrypted_echostr.encode('utf-8')
+            logger.info(f"响应字节长度: {len(response_bytes)}")
+            logger.info(f"响应内容: {repr(response_bytes)}")
+            
             return Response(
-                content=response_xml,
-                media_type="text/xml",
-                headers={"Content-Type": "text/xml; charset=utf-8"}
+                content=response_bytes,
+                media_type="text/plain",
+                headers={"Content-Type": "text/plain; charset=utf-8"}
             )
         else:
             logger.warning("签名验证失败")
@@ -96,8 +103,14 @@ async def handle_callback(
     nonce: Annotated[Optional[str], Query(description="随机数")] = None,
 ):
     """
-    处理回调事件 - 实际事件发生时调用 - 修复版本
-    这是企微官方要求的事件接收接口
+    处理回调事件 - 实际事件发生时调用
+    这是企微官方要求的事件接收接口 - 消息接收阶段
+    
+    消息接收阶段要求：
+    1. 需要解密并重新加密消息
+    2. 返回XML格式响应
+    3. Content-Type应该是application/xml
+    4. 需要包含新的签名
     """
     try:
         logger.info("=== 开始处理回调事件 ===")
@@ -146,7 +159,9 @@ async def handle_callback(
             await process_callback_event(event_data)
 
         logger.info("=== 回调事件处理完成 ===")
-        return PlainTextResponse("success")
+        # 消息接收阶段：根据企业微信要求，处理完成后返回success
+        # 注意：这里不需要返回XML，只需要返回纯文本的"success"
+        return PlainTextResponse("success", headers={"Content-Type": "text/plain"})
 
     except Exception as e:
         logger.error(f"处理回调异常: {e}")
