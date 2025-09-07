@@ -6,3 +6,4 @@ from app.staffs.models import Staff  # noqa
 from app.users.models import User  # noqa
 from app.cases.models import Case  # noqa
 from app.evidences.models import Evidence  # noqa
+from app.wecom.models import WeComStaff, ExternalContact, CustomerSession, ContactWay, CustomerEventLog  # noqa
