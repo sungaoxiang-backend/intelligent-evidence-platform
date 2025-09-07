@@ -186,12 +186,75 @@ class WeComService:
             return None
 
     async def create_contact_way(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
-        """创建联系方式 - 智能版本，自动处理回调配置"""
+        """创建联系方式 - 企业微信官方标准版本，严格遵循文档规范"""
         url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_contact_way"
         access_token = await self.get_access_token()
         params = {"access_token": access_token}
 
         try:
+            # ===== 严格参数验证 - 遵循官方文档 =====
+            
+            # 1. 必填参数检查
+            if 'type' not in contact_data:
+                raise Exception("缺少必需参数: type (联系方式类型)")
+            if 'scene' not in contact_data:
+                raise Exception("缺少必需参数: scene (场景)")
+            
+            # 2. 参数类型和范围验证
+            contact_type = contact_data.get('type')
+            scene = contact_data.get('scene')
+            
+            # type 范围验证
+            valid_types = {1, 2, 3} | set(range(10, 41))  # 1-3, 10-40
+            if contact_type not in valid_types:
+                raise Exception(f"无效的type参数: {contact_type}，有效范围: 1-3, 10-40")
+            
+            # scene 范围验证  
+            if scene not in {1, 2}:
+                raise Exception(f"无效的scene参数: {scene}，有效值: 1, 2")
+            
+            # 3. type/scene 组合验证（关键！）
+            type_scene_rules = {
+                1: {1},      # 单人联系方式，仅支持场景1
+                2: {2},      # 多人联系方式，仅支持场景2  
+                3: {1},      # 单人二维码，仅支持场景1
+            }
+            
+            # 对于type≥10的规则（10-40仅支持scene=2）
+            if contact_type >= 10:
+                if scene != 2:
+                    raise Exception(f"type={contact_type} 仅支持 scene=2，当前scene={scene}")
+            elif contact_type in type_scene_rules:
+                if scene not in type_scene_rules[contact_type]:
+                    raise Exception(f"type={contact_type} 仅支持 scene={type_scene_rules[contact_type]}，当前scene={scene}")
+            
+            # 4. userid 参数验证（官方文档要求的是userid，不是user！）
+            userid = contact_data.get('userid')
+            if not userid:
+                # 兼容我们之前的user参数
+                user_list = contact_data.get('user', [])
+                if user_list and isinstance(user_list, list) and len(user_list) > 0:
+                    userid = user_list[0]  # 取第一个用户
+                    contact_data['userid'] = userid  # 转换为官方格式
+                    # 移除旧的user参数，避免企微API报错
+                    if 'user' in contact_data:
+                        del contact_data['user']
+                else:
+                    raise Exception("缺少必需参数: userid (成员UserID)")
+            
+            # 5. 验证员工存在性和权限
+            user_detail = await self.get_user_detail(userid)
+            if user_detail.get('errcode') != 0:
+                raise Exception(f"员工不存在或无权限 - UserID: {userid}, 错误: {user_detail.get('errmsg')}")
+            
+            # 6. 特殊类型验证
+            if contact_type == 2:  # 多人联系方式
+                party = contact_data.get('party')
+                if not party:
+                    logger.warning("多人联系方式（type=2）建议指定 party 参数，否则可能创建失败")
+            
+            # ===== 智能参数设置 =====
+            
             # 自动设置回调所需的参数
             if 'skip_verify' not in contact_data:
                 contact_data['skip_verify'] = 0  # 必须设为0才能触发事件
@@ -199,6 +262,12 @@ class WeComService:
             # 如果没有state，自动生成一个
             if 'state' not in contact_data:
                 contact_data['state'] = f"api_created_{int(time.time())}"
+            
+            # 确保参数类型正确
+            if isinstance(contact_data.get('skip_verify'), bool):
+                contact_data['skip_verify'] = 1 if contact_data['skip_verify'] else 0
+            
+            logger.info(f"创建联系方式请求参数: {contact_data}")
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, params=params, json=contact_data)
@@ -289,12 +358,18 @@ class WeComService:
                     await session.flush()
                 
                 # 2. 获取外部联系人详情
-                contact_info = await self.get_external_contact(external_user_id)
-                if contact_info.get('errcode') != 0:
-                    logger.error(f"获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误: {contact_info}")
-                    return False
-                
-                contact_data = contact_info.get('external_contact', {})
+                try:
+                    contact_info = await self.get_external_contact(external_user_id)
+                    if contact_info.get('errcode') != 0:
+                        logger.error(f"获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误: {contact_info}")
+                        # 即使获取详情失败，也继续处理，使用基础信息
+                        contact_data = {}
+                    else:
+                        contact_data = contact_info.get('external_contact', {})
+                except Exception as e:
+                    logger.error(f"获取外部联系人详情异常 - ExternalUserID: {external_user_id}, 错误: {e}")
+                    # 即使获取详情失败，也继续处理，使用基础信息
+                    contact_data = {}
                 
                 # 3. 创建外部联系人记录
                 external_contact = ExternalContact(

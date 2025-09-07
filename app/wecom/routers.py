@@ -224,6 +224,32 @@ async def get_contact_way_detail(config_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/supported-types")
+async def get_supported_contact_types():
+    """获取支持的联系方式类型和场景组合"""
+    return {
+        "success": True,
+        "data": {
+            "type_scene_combinations": {
+                "1": {"name": "单人联系方式", "supported_scenes": [1], "description": "一个成员对外联系方式"},
+                "2": {"name": "多人联系方式", "supported_scenes": [2], "description": "多个成员共用对外联系方式"},
+                "3": {"name": "单人二维码", "supported_scenes": [1], "description": "生成单人二维码"},
+                "10-40": {"name": "批量联系方式", "supported_scenes": [2], "description": "批量生成联系方式"}
+            },
+            "scene_descriptions": {
+                "1": "在小程序或H5页面中使用",
+                "2": "在PC端网页中使用"
+            },
+            "recommendations": {
+                "for_qr_code": "使用 type=1, scene=1",
+                "for_web_page": "使用 type=2, scene=2", 
+                "for_single_person": "使用 type=1, scene=1",
+                "for_multiple_people": "使用 type=2, scene=2"
+            }
+        }
+    }
+
+
 @router.get("/setup-guide")
 async def get_setup_guide():
     """获取配置指导"""
@@ -248,8 +274,15 @@ async def get_setup_guide():
                 "scene": 1, 
                 "skip_verify": 0,
                 "state": "your_tracking_code",
-                "user": ["employee_userid"],
+                "userid": "SunGaoXiang",  # 注意：官方要求的是userid，不是user
                 "remark": "专业法律服务"
+            },
+            "parameter_notes": {
+                "type": "1=单人，2=多人，3=单人二维码，10-40=其他类型",
+                "scene": "1=在小程序或H5中，2=在PC端网页",
+                "skip_verify": "0=需要验证（推荐，可触发回调），1=免验证",
+                "userid": "企业微信成员UserID（官方参数名，不是user）",
+                "state": "渠道追踪参数，会原样返回在回调中"
             }
         }
     }
