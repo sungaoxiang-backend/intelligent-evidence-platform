@@ -40,14 +40,10 @@ export default function UserManagement() {
 
   const [addForm, setAddForm] = useState({
     name: "",
-    wechat_nickname: "",
-    wechat_number: "",
   });
 
   const [editForm, setEditForm] = useState({
     name: "",
-    wechat_nickname: "",
-    wechat_number: "",
   });
 
   // Use paginated SWR hook with sorting
@@ -80,8 +76,6 @@ export default function UserManagement() {
       setShowAddDialog(false);
       setAddForm({
         name: "",
-        wechat_nickname: "",
-        wechat_number: "",
       });
       mutate();
     } catch (error) {
@@ -124,8 +118,6 @@ export default function UserManagement() {
     setEditingUser(user);
     setEditForm({
       name: user.name,
-      wechat_nickname: user.wechat_nickname || "",
-      wechat_number: user.wechat_number || "",
     });
     setShowEditDialog(true);
   };
@@ -148,10 +140,6 @@ export default function UserManagement() {
             <TableRow>
               <TableHead>头像</TableHead>
               <TableHead>姓名</TableHead>
-              <TableHead>微信昵称</TableHead>
-              <TableHead>微信号</TableHead>
-              <TableHead>企微用户ID</TableHead>
-              <TableHead>类型</TableHead>
               <TableHead>
                 <SortableHeader
                   field="created_at"
@@ -201,32 +189,6 @@ export default function UserManagement() {
                 
                 {/* 姓名 */}
                 <TableCell className="font-medium">{user.name}</TableCell>
-                
-                {/* 微信昵称 */}
-                <TableCell>{user.wechat_nickname || "-"}</TableCell>
-                
-                {/* 微信号 */}
-                <TableCell>{user.wechat_number || "-"}</TableCell>
-                
-                {/* 企微用户ID */}
-                <TableCell className="text-sm text-gray-600 font-mono max-w-32 truncate" title={user.wechat_number || ""}>
-                  {user.wechat_number || "-"}
-                </TableCell>
-                
-                {/* 用户类型 */}
-                <TableCell>
-                  <div className="flex items-center">
-                    {user.wechat_avatar ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        企微客户
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        系统用户
-                      </span>
-                    )}
-                  </div>
-                </TableCell>
                 
                 {/* 创建时间 */}
                 <TableCell className="text-sm text-gray-600">
@@ -326,32 +288,6 @@ export default function UserManagement() {
                 className="col-span-3"
               />
             </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="wechat_nickname" className="text-right">
-                微信昵称
-              </Label>
-              <Input
-                id="wechat_nickname"
-                value={addForm.wechat_nickname}
-                onChange={(e) => setAddForm({ ...addForm, wechat_nickname: e.target.value })}
-                className="col-span-3"
-                placeholder="可选"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="wechat_number" className="text-right">
-                微信号
-              </Label>
-              <Input
-                id="wechat_number"
-                value={addForm.wechat_number}
-                onChange={(e) => setAddForm({ ...addForm, wechat_number: e.target.value })}
-                className="col-span-3"
-                placeholder="可选"
-              />
-            </div>
-
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleAddUser}>
@@ -382,32 +318,6 @@ export default function UserManagement() {
                 className="col-span-3"
               />
             </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-wechat_nickname" className="text-right">
-                微信昵称
-              </Label>
-              <Input
-                id="edit-wechat_nickname"
-                value={editForm.wechat_nickname}
-                onChange={(e) => setEditForm({ ...editForm, wechat_nickname: e.target.value })}
-                className="col-span-3"
-                placeholder="可选"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-wechat_number" className="text-right">
-                微信号
-              </Label>
-              <Input
-                id="edit-wechat_number"
-                value={editForm.wechat_number}
-                onChange={(e) => setEditForm({ ...editForm, wechat_number: e.target.value })}
-                className="col-span-3"
-                placeholder="可选"
-              />
-            </div>
-
           </div>
           <DialogFooter>
             <Button type="submit" onClick={handleEditUser}>
