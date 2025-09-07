@@ -38,8 +38,7 @@ class WeComStaff(Base):
     avatar: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     status: Mapped[WeComStaffStatus] = mapped_column(SQLAlchemyEnum(WeComStaffStatus), default=WeComStaffStatus.ACTIVE)
     
-    # 关系
-    external_contacts = relationship("ExternalContact", back_populates="staff", cascade="all, delete-orphan")
+    # 关系 - 员工通过CustomerSession与外部联系人建立多对多关系
     customer_sessions = relationship("CustomerSession", back_populates="staff", cascade="all, delete-orphan")
 
 class ExternalContact(Base):
@@ -61,9 +60,7 @@ class ExternalContact(Base):
     corp_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # 企业名称
     corp_full_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # 企业全称
     
-    # 关系
-    staff_id: Mapped[int] = mapped_column(Integer, ForeignKey("we_com_staffs.id"), nullable=False)
-    staff = relationship("WeComStaff", back_populates="external_contacts")
+    # 关系 - 外部联系人是全局的，通过CustomerSession与员工建立多对多关系
     customer_sessions = relationship("CustomerSession", back_populates="external_contact", cascade="all, delete-orphan")
 
 class CustomerSession(Base):

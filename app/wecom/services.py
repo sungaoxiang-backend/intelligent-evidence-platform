@@ -379,24 +379,53 @@ class WeComService:
                     # 即使获取详情失败，也继续处理，使用基础信息
                     contact_data = {}
                 
-                # 3. 创建外部联系人记录
-                logger.info(f"[CUSTOMER_ADD] 步骤3: 创建外部联系人记录 - ExternalUserID: {external_user_id}")
-                external_contact = ExternalContact(
-                    external_user_id=external_user_id,
-                    name=contact_data.get('name', ''),
-                    avatar=contact_data.get('avatar', ''),
-                    type=contact_data.get('type', 1),
-                    gender=contact_data.get('gender'),
-                    union_id=contact_data.get('unionid'),
-                    corp_name=contact_data.get('corp_name', ''),
-                    corp_full_name=contact_data.get('corp_full_name', ''),
-                    status=ExternalContactStatus.NORMAL,
-                    contact_type=ContactType.FULL,
-                    staff_id=staff.id
+                # 3. 获取或创建外部联系人记录（关键修复：处理重复客户）
+                logger.info(f"[CUSTOMER_ADD] 步骤3: 获取外部联系人记录 - ExternalUserID: {external_user_id}")
+                
+                # 首先检查此外部用户是否已存在
+                existing_contact_stmt = select(ExternalContact).where(
+                    ExternalContact.external_user_id == external_user_id
                 )
-                session.add(external_contact)
-                await session.flush()
-                logger.info(f"[CUSTOMER_ADD] 外部联系人记录创建成功 - ID: {external_contact.id}, Name: {external_contact.name}")
+                existing_contact_result = await session.execute(existing_contact_stmt)
+                existing_contact = existing_contact_result.scalar_one_or_none()
+                
+                if existing_contact:
+                    logger.info(f"[CUSTOMER_ADD] 找到现有外部联系人记录 - ID: {existing_contact.id}, Name: {existing_contact.name}")
+                    
+                    # 更新客户信息（如果获取到了新详情）
+                    if contact_data:
+                        logger.info(f"[CUSTOMER_ADD] 更新外部联系人信息")
+                        existing_contact.name = contact_data.get('name', existing_contact.name)
+                        existing_contact.avatar = contact_data.get('avatar', existing_contact.avatar)
+                        existing_contact.gender = contact_data.get('gender', existing_contact.gender)
+                        existing_contact.union_id = contact_data.get('unionid', existing_contact.union_id)
+                        existing_contact.corp_name = contact_data.get('corp_name', existing_contact.corp_name)
+                        existing_contact.corp_full_name = contact_data.get('corp_full_name', existing_contact.corp_full_name)
+                        existing_contact.updated_at = datetime.now()
+                        session.add(existing_contact)
+                        await session.flush()
+                        logger.info(f"[CUSTOMER_ADD] 外部联系人信息更新成功")
+                    
+                    external_contact = existing_contact
+                else:
+                    logger.info(f"[CUSTOMER_ADD] 外部联系人不存在，创建新记录 - ExternalUserID: {external_user_id}")
+                    # 创建新的外部联系人记录
+                    external_contact = ExternalContact(
+                        external_user_id=external_user_id,
+                        name=contact_data.get('name', ''),
+                        avatar=contact_data.get('avatar', ''),
+                        type=contact_data.get('type', 1),
+                        gender=contact_data.get('gender'),
+                        union_id=contact_data.get('unionid'),
+                        corp_name=contact_data.get('corp_name', ''),
+                        corp_full_name=contact_data.get('corp_full_name', ''),
+                        status=ExternalContactStatus.NORMAL,
+                        contact_type=ContactType.FULL
+                        # 注意：不再设置 staff_id，因为外部联系人是全局的
+                    )
+                    session.add(external_contact)
+                    await session.flush()
+                    logger.info(f"[CUSTOMER_ADD] 外部联系人记录创建成功 - ID: {external_contact.id}, Name: {external_contact.name}")
                 
                 # 4. 创建客户会话
                 logger.info(f"[CUSTOMER_ADD] 步骤4: 创建客户会话 - StaffID: {staff.id}, ExternalContactID: {external_contact.id}")
@@ -452,37 +481,46 @@ class WeComService:
             return False
 
     async def handle_customer_edit_event(self, event_data: Dict[str, Any]) -> bool:
-        """处理编辑企业客户事件"""
+        """处理编辑企业客户事件 - 增强版本"""
         try:
             user_id = event_data.get('UserID')
             external_user_id = event_data.get('ExternalUserID')
             
-            logger.info(f"处理编辑企业客户事件 - User: {user_id}, External: {external_user_id}")
+            logger.info(f"[CUSTOMER_EDIT] 开始处理编辑企业客户事件 - User: {user_id}, External: {external_user_id}")
+            
+            # 事件开始时间
+            start_time = datetime.now()
             
             async with SessionLocal() as session:
                 # 1. 查找现有外部联系人
+                logger.info(f"[CUSTOMER_EDIT] 步骤1: 查找外部联系人记录 - ExternalUserID: {external_user_id}")
                 contact_stmt = select(ExternalContact).where(
                     ExternalContact.external_user_id == external_user_id,
                     ExternalContact.status == ExternalContactStatus.NORMAL
-                ).options(selectinload(ExternalContact.staff))
+                )
                 
                 contact_result = await session.execute(contact_stmt)
                 contact = contact_result.scalar_one_or_none()
                 
                 if not contact:
-                    logger.warning(f"未找到外部联系人记录 - ExternalUserID: {external_user_id}")
+                    logger.warning(f"[CUSTOMER_EDIT] 未找到外部联系人记录，降级为添加事件 - ExternalUserID: {external_user_id}")
                     # 如果找不到，可能需要创建新记录（降级为添加事件）
                     return await self.handle_customer_add_event(event_data)
                 
+                logger.info(f"[CUSTOMER_EDIT] 找到外部联系人记录 - ID: {contact.id}, Name: {contact.name}")
+                
                 # 2. 获取最新联系人详情
+                logger.info(f"[CUSTOMER_EDIT] 步骤2: 获取最新联系人详情 - ExternalUserID: {external_user_id}")
                 contact_info = await self.get_external_contact(external_user_id)
                 if contact_info.get('errcode') != 0:
-                    logger.error(f"获取外部联系人详情失败 - ExternalUserID: {external_user_id}")
+                    logger.error(f"[CUSTOMER_EDIT] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}")
                     return False
                 
                 contact_data = contact_info.get('external_contact', {})
+                logger.info(f"[CUSTOMER_EDIT] 获取外部联系人详情成功")
                 
                 # 3. 更新联系人信息
+                logger.info(f"[CUSTOMER_EDIT] 步骤3: 更新联系人信息")
                 contact.name = contact_data.get('name', contact.name)
                 contact.avatar = contact_data.get('avatar', contact.avatar)
                 contact.gender = contact_data.get('gender', contact.gender)
@@ -490,8 +528,10 @@ class WeComService:
                 contact.corp_name = contact_data.get('corp_name', contact.corp_name)
                 contact.corp_full_name = contact_data.get('corp_full_name', contact.corp_full_name)
                 contact.updated_at = datetime.now()
+                logger.info(f"[CUSTOMER_EDIT] 联系人信息更新完成 - Name: {contact.name}")
                 
                 # 4. 记录事件日志
+                logger.info(f"[CUSTOMER_EDIT] 步骤4: 记录事件日志")
                 event_log = CustomerEventLog(
                     event_type="change_external_contact",
                     change_type="edit_external_contact",
@@ -502,26 +542,35 @@ class WeComService:
                 )
                 session.add(event_log)
                 
+                logger.info(f"[CUSTOMER_EDIT] 步骤5: 提交数据库事务")
                 await session.commit()
+                logger.info(f"[CUSTOMER_EDIT] 数据库事务提交成功")
                 
-                logger.info(f"编辑企业客户事件处理成功 - User: {user_id}, External: {external_user_id}")
+                # 6. 记录处理完成
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                logger.info(f"[CUSTOMER_EDIT] ✅ 编辑企业客户事件处理完成 - User: {user_id}, External: {external_user_id}, 耗时: {duration:.2f}s")
                 return True
                 
         except Exception as e:
-            logger.error(f"处理编辑企业客户事件失败: {e}")
+            logger.error(f"[CUSTOMER_EDIT] ❌ 处理编辑企业客户事件失败: {e}")
             await self._log_event_error("edit_external_contact", event_data, str(e))
             return False
 
     async def handle_customer_delete_event(self, event_data: Dict[str, Any]) -> bool:
-        """处理删除企业客户事件"""
+        """处理删除企业客户事件 - 增强版本"""
         try:
             user_id = event_data.get('UserID')
             external_user_id = event_data.get('ExternalUserID')
             
-            logger.info(f"处理删除企业客户事件 - User: {user_id}, External: {external_user_id}")
+            logger.info(f"[CUSTOMER_DELETE] 开始处理删除企业客户事件 - User: {user_id}, External: {external_user_id}")
+            
+            # 事件开始时间
+            start_time = datetime.now()
             
             async with SessionLocal() as session:
                 # 1. 查找现有外部联系人
+                logger.info(f"[CUSTOMER_DELETE] 步骤1: 查找外部联系人记录 - ExternalUserID: {external_user_id}")
                 contact_stmt = select(ExternalContact).where(
                     ExternalContact.external_user_id == external_user_id,
                     ExternalContact.status == ExternalContactStatus.NORMAL
@@ -531,14 +580,18 @@ class WeComService:
                 contact = contact_result.scalar_one_or_none()
                 
                 if not contact:
-                    logger.warning(f"未找到外部联系人记录 - ExternalUserID: {external_user_id}")
+                    logger.warning(f"[CUSTOMER_DELETE] 未找到外部联系人记录 - ExternalUserID: {external_user_id}")
                     return True  # 已经删除或不存在，也算成功
                 
+                logger.info(f"[CUSTOMER_DELETE] 找到外部联系人记录 - ID: {contact.id}, Name: {contact.name}")
+                
                 # 2. 更新联系人状态为已删除
+                logger.info(f"[CUSTOMER_DELETE] 步骤2: 更新联系人状态为已删除")
                 contact.status = ExternalContactStatus.DELETED
                 contact.updated_at = datetime.now()
                 
                 # 3. 关闭相关会话
+                logger.info(f"[CUSTOMER_DELETE] 步骤3: 关闭相关会话")
                 session_stmt = select(CustomerSession).where(
                     CustomerSession.external_contact_id == contact.id,
                     CustomerSession.is_active == True
@@ -546,11 +599,16 @@ class WeComService:
                 session_result = await session.execute(session_stmt)
                 sessions = session_result.scalars().all()
                 
+                closed_count = 0
                 for session_record in sessions:
                     session_record.is_active = False
                     session_record.ended_at = datetime.now()
+                    closed_count += 1
+                
+                logger.info(f"[CUSTOMER_DELETE] 已关闭 {closed_count} 个活跃会话")
                 
                 # 4. 记录事件日志
+                logger.info(f"[CUSTOMER_DELETE] 步骤4: 记录事件日志")
                 event_log = CustomerEventLog(
                     event_type="change_external_contact",
                     change_type="del_external_contact",
@@ -561,13 +619,18 @@ class WeComService:
                 )
                 session.add(event_log)
                 
+                logger.info(f"[CUSTOMER_DELETE] 步骤5: 提交数据库事务")
                 await session.commit()
+                logger.info(f"[CUSTOMER_DELETE] 数据库事务提交成功")
                 
-                logger.info(f"删除企业客户事件处理成功 - User: {user_id}, External: {external_user_id}")
+                # 6. 记录处理完成
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                logger.info(f"[CUSTOMER_DELETE] ✅ 删除企业客户事件处理完成 - User: {user_id}, External: {external_user_id}, 耗时: {duration:.2f}s")
                 return True
                 
         except Exception as e:
-            logger.error(f"处理删除企业客户事件失败: {e}")
+            logger.error(f"[CUSTOMER_DELETE] ❌ 处理删除企业客户事件失败: {e}")
             await self._log_event_error("del_external_contact", event_data, str(e))
             return False
 
