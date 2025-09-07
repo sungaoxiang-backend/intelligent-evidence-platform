@@ -173,6 +173,87 @@ async def create_contact_way(contact_data: Dict[str, Any]):
         logger.error(f"创建联系方式失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/users")
+async def get_department_users(department_id: int = 1):
+    """获取部门成员列表"""
+    try:
+        result = await wecom_service.get_department_users(department_id)
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"获取部门成员列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/user/{user_id}")
+async def get_user_detail(user_id: str):
+    """获取成员详情"""
+    try:
+        result = await wecom_service.get_user_detail(user_id)
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"获取成员详情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/contact-ways")
+async def get_contact_ways():
+    """获取联系方式列表"""
+    try:
+        result = await wecom_service.get_contact_way_list()
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"获取联系方式列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/contact-way/{config_id}")
+async def get_contact_way_detail(config_id: str):
+    """获取联系方式详情"""
+    try:
+        # 这里可以实现更详细的查询逻辑
+        result = await wecom_service.get_contact_way_list()
+        contact_way = next((item for item in result['items'] if item['config_id'] == config_id), None)
+        
+        if not contact_way:
+            raise HTTPException(status_code=404, detail="联系方式不存在")
+            
+        return {"success": True, "data": contact_way}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取联系方式详情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/setup-guide")
+async def get_setup_guide():
+    """获取配置指导"""
+    return {
+        "success": True,
+        "data": {
+            "message": "要使用回调功能，必须通过API创建「联系我」方式",
+            "steps": [
+                "1. 调用 POST /wecom/contact-way 创建联系方式",
+                "2. 使用返回的 callback_enabled_url 生成二维码",
+                "3. 客户扫描此二维码即可触发回调事件",
+                "4. 避免使用管理后台创建的联系方式（不会触发回调）"
+            ],
+            "important_notes": [
+                "• API创建的联系方式在管理后台不可见",
+                "• 必须使用 skip_verify=0 才能启用回调",
+                "• 二维码URL必须包含 customer_channel 参数",
+                "• 管理后台创建的联系方式无法触发回调事件"
+            ],
+            "example_request": {
+                "type": 1,
+                "scene": 1, 
+                "skip_verify": 0,
+                "state": "your_tracking_code",
+                "user": ["employee_userid"],
+                "remark": "专业法律服务"
+            }
+        }
+    }
+
 
 # 业务逻辑方法
 async def process_callback_event(event_data: Dict[str, Any]):

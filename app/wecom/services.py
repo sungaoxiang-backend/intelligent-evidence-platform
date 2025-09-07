@@ -186,17 +186,41 @@ class WeComService:
             return None
 
     async def create_contact_way(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
-        """创建联系方式"""
+        """创建联系方式 - 智能版本，自动处理回调配置"""
         url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_contact_way"
         access_token = await self.get_access_token()
         params = {"access_token": access_token}
 
         try:
+            # 自动设置回调所需的参数
+            if 'skip_verify' not in contact_data:
+                contact_data['skip_verify'] = 0  # 必须设为0才能触发事件
+            
+            # 如果没有state，自动生成一个
+            if 'state' not in contact_data:
+                contact_data['state'] = f"api_created_{int(time.time())}"
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, params=params, json=contact_data)
                 data = response.json()
 
-            return data
+            if data.get('errcode') == 0:
+                logger.info(f"联系方式创建成功 - config_id: {data.get('config_id')}")
+                
+                # 保存到数据库
+                await self._save_contact_way(data, contact_data)
+                
+                # 返回增强数据，包含回调URL
+                enhanced_data = data.copy()
+                enhanced_data['callback_enabled_url'] = self._build_callback_url(data.get('config_id'), contact_data.get('state'))
+                enhanced_data['qr_code_url'] = data.get('qr_code')
+                
+                return enhanced_data
+            else:
+                error_msg = f"创建联系方式失败 - 错误码: {data.get('errcode')}, 错误信息: {data.get('errmsg')}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+                
         except Exception as e:
             error_msg = f"创建联系方式异常: {e}"
             logger.error(error_msg)
@@ -591,6 +615,47 @@ class WeComService:
             logger.error(f"获取外部联系人信息失败 - ExternalUserID: {external_user_id}, 错误: {e}")
             return None
 
+    async def get_department_users(self, department_id: int = 1) -> Dict[str, Any]:
+        """获取部门成员列表"""
+        url = "https://qyapi.weixin.qq.com/cgi-bin/user/simplelist"
+        access_token = await self.get_access_token()
+        params = {
+            "access_token": access_token,
+            "department_id": department_id,
+            "fetch_child": 1  # 获取子部门成员
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params)
+                data = response.json()
+            
+            return data
+        except Exception as e:
+            error_msg = f"获取部门成员列表异常: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+    async def get_user_detail(self, user_id: str) -> Dict[str, Any]:
+        """获取成员详情"""
+        url = "https://qyapi.weixin.qq.com/cgi-bin/user/get"
+        access_token = await self.get_access_token()
+        params = {
+            "access_token": access_token,
+            "userid": user_id
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params)
+                data = response.json()
+            
+            return data
+        except Exception as e:
+            error_msg = f"获取成员详情异常: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
 
 
     async def send_welcome_msg_async(self, welcome_code: str) -> Dict[str, Any]:
@@ -613,6 +678,74 @@ class WeComService:
         except Exception as e:
             logger.error(f"发送欢迎语异常 - welcome_code: {welcome_code[:20]}..., 错误: {e}")
             raise
+
+    async def _save_contact_way(self, api_response: Dict[str, Any], request_data: Dict[str, Any]):
+        """保存联系方式到数据库"""
+        try:
+            async with SessionLocal() as session:
+                contact_way = ContactWay(
+                    config_id=api_response.get('config_id'),
+                    type=request_data.get('type', 1),
+                    scene=request_data.get('scene', 1),
+                    style=request_data.get('style'),
+                    remark=request_data.get('remark'),
+                    skip_verify=request_data.get('skip_verify', 0) == 1,
+                    is_active=True,
+                    qr_code=api_response.get('qr_code'),
+                    callback_enabled=request_data.get('skip_verify', 0) == 0,  # skip_verify=0 启用回调
+                    state=request_data.get('state'),
+                    extra_data={
+                        'api_response': api_response,
+                        'request_data': request_data
+                    }
+                )
+                session.add(contact_way)
+                await session.commit()
+                logger.info(f"联系方式已保存到数据库 - config_id: {api_response.get('config_id')}")
+        except Exception as e:
+            logger.error(f"保存联系方式到数据库失败: {e}")
+            # 不抛出异常，避免影响主流程
+
+    def _build_callback_url(self, config_id: str, state: str) -> str:
+        """构建启用回调的URL"""
+        if not config_id:
+            return ""
+        base_url = f"https://work.weixin.qq.com/ca/{config_id}"
+        if state:
+            return f"{base_url}?customer_channel={state}"
+        return base_url
+
+    async def get_contact_way_list(self) -> Dict[str, Any]:
+        """获取联系方式列表"""
+        # 先从数据库获取
+        try:
+            async with SessionLocal() as session:
+                stmt = select(ContactWay).where(ContactWay.is_active == True).order_by(ContactWay.created_at.desc())
+                result = await session.execute(stmt)
+                contact_ways = result.scalars().all()
+                
+                return {
+                    'total': len(contact_ways),
+                    'items': [
+                        {
+                            'id': cw.id,
+                            'config_id': cw.config_id,
+                            'type': cw.type,
+                            'scene': cw.scene,
+                            'skip_verify': cw.skip_verify,
+                            'callback_enabled': cw.callback_enabled,
+                            'state': cw.state,
+                            'qr_code': cw.qr_code,
+                            'callback_url': self._build_callback_url(cw.config_id, cw.state) if cw.callback_enabled else None,
+                            'created_at': cw.created_at.isoformat() if cw.created_at else None,
+                            'is_active': cw.is_active
+                        }
+                        for cw in contact_ways
+                    ]
+                }
+        except Exception as e:
+            logger.error(f"获取联系方式列表失败: {e}")
+            return {'total': 0, 'items': []}
 
 
 # 创建全局实例
