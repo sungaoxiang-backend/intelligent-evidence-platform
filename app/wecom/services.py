@@ -331,24 +331,27 @@ class WeComService:
             raise Exception(error_msg)
 
     async def handle_customer_add_event(self, event_data: Dict[str, Any]) -> bool:
-        """处理添加企业客户事件"""
+        """处理添加企业客户事件 - 增强版本，确保数据持久化"""
         try:
             user_id = event_data.get('UserID')
             external_user_id = event_data.get('ExternalUserID')
             welcome_code = event_data.get('WelcomeCode')
             state = event_data.get('State', '')
             
-            logger.info(f"处理添加企业客户事件 - User: {user_id}, External: {external_user_id}, State: {state}")
+            logger.info(f"[CUSTOMER_ADD] 开始处理添加企业客户事件 - User: {user_id}, External: {external_user_id}, State: {state}, WelcomeCode: {'有' if welcome_code else '无'}")
+            
+            # 事件开始时间
+            start_time = datetime.now()
             
             async with SessionLocal() as session:
                 # 1. 获取或创建员工记录
+                logger.info(f"[CUSTOMER_ADD] 步骤1: 获取员工记录 - UserID: {user_id}")
                 staff_stmt = select(WeComStaff).where(WeComStaff.user_id == user_id)
                 staff_result = await session.execute(staff_stmt)
                 staff = staff_result.scalar_one_or_none()
                 
                 if not staff:
-                    logger.warning(f"未找到员工记录 - UserID: {user_id}, 将创建基础记录")
-                    # 获取员工详情（这里简化处理，实际应该调用企业微信API）
+                    logger.info(f"[CUSTOMER_ADD] 员工不存在，创建基础记录 - UserID: {user_id}")
                     staff = WeComStaff(
                         user_id=user_id,
                         name=user_id,  # 临时使用UserID作为名称
@@ -356,22 +359,28 @@ class WeComService:
                     )
                     session.add(staff)
                     await session.flush()
+                    logger.info(f"[CUSTOMER_ADD] 员工记录创建成功 - ID: {staff.id}")
+                else:
+                    logger.info(f"[CUSTOMER_ADD] 找到现有员工记录 - ID: {staff.id}, Name: {staff.name}")
                 
                 # 2. 获取外部联系人详情
+                logger.info(f"[CUSTOMER_ADD] 步骤2: 获取外部联系人详情 - ExternalUserID: {external_user_id}")
                 try:
                     contact_info = await self.get_external_contact(external_user_id)
                     if contact_info.get('errcode') != 0:
-                        logger.error(f"获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误: {contact_info}")
+                        logger.warning(f"[CUSTOMER_ADD] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误: {contact_info}")
                         # 即使获取详情失败，也继续处理，使用基础信息
                         contact_data = {}
                     else:
                         contact_data = contact_info.get('external_contact', {})
+                        logger.info(f"[CUSTOMER_ADD] 获取外部联系人详情成功 - Name: {contact_data.get('name')}, Type: {contact_data.get('type')}")
                 except Exception as e:
-                    logger.error(f"获取外部联系人详情异常 - ExternalUserID: {external_user_id}, 错误: {e}")
+                    logger.error(f"[CUSTOMER_ADD] 获取外部联系人详情异常 - ExternalUserID: {external_user_id}, 错误: {e}")
                     # 即使获取详情失败，也继续处理，使用基础信息
                     contact_data = {}
                 
                 # 3. 创建外部联系人记录
+                logger.info(f"[CUSTOMER_ADD] 步骤3: 创建外部联系人记录 - ExternalUserID: {external_user_id}")
                 external_contact = ExternalContact(
                     external_user_id=external_user_id,
                     name=contact_data.get('name', ''),
@@ -387,8 +396,10 @@ class WeComService:
                 )
                 session.add(external_contact)
                 await session.flush()
+                logger.info(f"[CUSTOMER_ADD] 外部联系人记录创建成功 - ID: {external_contact.id}, Name: {external_contact.name}")
                 
                 # 4. 创建客户会话
+                logger.info(f"[CUSTOMER_ADD] 步骤4: 创建客户会话 - StaffID: {staff.id}, ExternalContactID: {external_contact.id}")
                 session_record = CustomerSession(
                     session_id=f"{user_id}_{external_user_id}_{int(datetime.now().timestamp())}",
                     staff_id=staff.id,
@@ -399,8 +410,10 @@ class WeComService:
                     started_at=datetime.now()
                 )
                 session.add(session_record)
+                logger.info(f"[CUSTOMER_ADD] 客户会话创建成功 - SessionID: {session_record.session_id}")
                 
                 # 5. 记录事件日志
+                logger.info(f"[CUSTOMER_ADD] 步骤5: 记录事件日志 - StaffUserID: {user_id}, ExternalUserID: {external_user_id}")
                 event_log = CustomerEventLog(
                     event_type="change_external_contact",
                     change_type="add_external_contact",
@@ -413,21 +426,27 @@ class WeComService:
                 )
                 session.add(event_log)
                 
+                logger.info(f"[CUSTOMER_ADD] 步骤6: 提交数据库事务")
                 await session.commit()
+                logger.info(f"[CUSTOMER_ADD] 数据库事务提交成功")
                 
-                # 6. 发送欢迎语（异步调用，不影响主流程）
+                # 7. 发送欢迎语（异步调用，不影响主流程）
                 if welcome_code:
                     try:
+                        logger.info(f"[CUSTOMER_ADD] 步骤7: 异步发送欢迎语 - WelcomeCode: {welcome_code[:20]}...")
                         await self.send_welcome_msg_async(welcome_code)
-                        logger.info(f"欢迎语发送已触发 - welcome_code: {welcome_code[:20]}...")
+                        logger.info(f"[CUSTOMER_ADD] 欢迎语发送成功 - WelcomeCode: {welcome_code[:20]}...")
                     except Exception as e:
-                        logger.warning(f"欢迎语发送失败，但不影响主流程 - {e}")
+                        logger.warning(f"[CUSTOMER_ADD] 欢迎语发送失败，但不影响主流程 - {e}")
                 
-                logger.info(f"添加企业客户事件处理成功 - User: {user_id}, External: {external_user_id}")
+                # 8. 记录处理完成
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                logger.info(f"[CUSTOMER_ADD] ✅ 添加企业客户事件处理完成 - User: {user_id}, External: {external_user_id}, 耗时: {duration:.2f}s")
                 return True
                 
         except Exception as e:
-            logger.error(f"处理添加企业客户事件失败: {e}")
+            logger.error(f"[CUSTOMER_ADD] ❌ 处理添加企业客户事件失败: {e}")
             # 记录失败日志
             await self._log_event_error("add_external_contact", event_data, str(e))
             return False

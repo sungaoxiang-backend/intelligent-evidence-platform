@@ -148,7 +148,13 @@ async def handle_callback(
         # 解析事件数据
         event_data = wecom_service.parse_callback_event(decrypted_msg)
         if event_data:
-            logger.info(f"事件解析成功 - 将开始处理事件")
+            logger.info(f"事件解析成功 - 事件类型: {event_data.get('Event', 'unknown')}, 变更类型: {event_data.get('ChangeType', 'unknown')}")
+            logger.info(f"事件详情 - FromUserName: {event_data.get('FromUserName')}, ToUserName: {event_data.get('ToUserName')}, CreateTime: {event_data.get('CreateTime')}")
+            
+            # 记录完整事件数据（去除敏感信息）
+            safe_event_data = {k: v for k, v in event_data.items() if k not in ['ToUserName']}
+            logger.info(f"完整事件数据: {safe_event_data}")
+            
             await process_callback_event(event_data)
         else:
             logger.warning("事件解析失败或返回空数据")
@@ -248,6 +254,151 @@ async def get_supported_contact_types():
             }
         }
     }
+
+
+@router.post("/debug/simulate-callback")
+async def simulate_callback(callback_data: Dict[str, Any]):
+    """调试接口：模拟回调事件，用于测试事件处理逻辑"""
+    try:
+        logger.info(f"[DEBUG] 收到模拟回调请求 - 数据: {callback_data}")
+        
+        # 验证必需字段
+        required_fields = ['Event', 'ChangeType', 'UserID', 'ExternalUserID']
+        missing_fields = [field for field in required_fields if field not in callback_data]
+        
+        if missing_fields:
+            return {
+                "success": False,
+                "error": f"缺少必需字段: {missing_fields}",
+                "required_fields": required_fields
+            }
+        
+        # 调用事件处理
+        await process_callback_event(callback_data)
+        
+        return {
+            "success": True,
+            "message": "模拟回调处理完成",
+            "processed_event": callback_data.get('ChangeType'),
+            "note": "请检查服务器日志确认处理详情"
+        }
+        
+    except Exception as e:
+        logger.error(f"[DEBUG] 模拟回调处理失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "模拟回调处理失败"
+        }
+
+
+@router.get("/debug/event-stats")
+async def get_event_statistics():
+    """调试接口：获取事件统计信息"""
+    try:
+        from app.db.session import SessionLocal
+        from sqlalchemy import select, func, and_
+        from app.wecom.models import CustomerEventLog
+        
+        async with SessionLocal() as session:
+            # 按状态统计
+            status_stats = await session.execute(
+                select(CustomerEventLog.status, func.count(CustomerEventLog.id))
+                .group_by(CustomerEventLog.status)
+            )
+            status_stats = dict(status_stats.all())
+            
+            # 按事件类型统计
+            event_type_stats = await session.execute(
+                select(CustomerEventLog.change_type, func.count(CustomerEventLog.id))
+                .group_by(CustomerEventLog.change_type)
+            )
+            event_type_stats = dict(event_type_stats.all())
+            
+            # 最近24小时的事件
+            from datetime import datetime, timedelta
+            yesterday = datetime.now() - timedelta(days=1)
+            
+            recent_events = await session.execute(
+                select(func.count(CustomerEventLog.id))
+                .where(CustomerEventLog.created_at >= yesterday)
+            )
+            recent_count = recent_events.scalar()
+            
+            return {
+                "success": True,
+                "data": {
+                    "status_distribution": status_stats,
+                    "event_type_distribution": event_type_stats,
+                    "last_24h_count": recent_count,
+                    "summary": {
+                        "total_events": sum(status_stats.values()),
+                        "success_rate": f"{(status_stats.get('success', 0) / max(sum(status_stats.values()), 1) * 100):.1f}%"
+                    }
+                }
+            }
+    except Exception as e:
+        logger.error(f"获取事件统计失败: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@router.get("/debug/data-status")
+async def get_data_status():
+    """调试接口：获取当前数据状态"""
+    try:
+        from app.db.session import SessionLocal
+        from sqlalchemy import select, func
+        from app.wecom.models import WeComStaff, ExternalContact, CustomerSession, CustomerEventLog
+        
+        async with SessionLocal() as session:
+            # 统计数据
+            staff_count = await session.execute(select(func.count(WeComStaff.id)))
+            external_contact_count = await session.execute(select(func.count(ExternalContact.id)))
+            session_count = await session.execute(select(func.count(CustomerSession.id)))
+            event_count = await session.execute(select(func.count(CustomerEventLog.id)))
+            
+            # 获取最近的事件
+            recent_events = await session.execute(
+                select(CustomerEventLog)
+                .order_by(CustomerEventLog.created_at.desc())
+                .limit(5)
+            )
+            recent_events = recent_events.scalars().all()
+            
+            return {
+                "success": True,
+                "data": {
+                    "database_stats": {
+                        "staff_count": staff_count.scalar(),
+                        "external_contact_count": external_contact_count.scalar(),
+                        "session_count": session_count.scalar(),
+                        "event_count": event_count.scalar()
+                    },
+                    "recent_events": [
+                        {
+                            "id": event.id,
+                            "event_type": event.event_type,
+                            "change_type": event.change_type,
+                            "staff_user_id": event.staff_user_id,
+                            "external_user_id": event.external_user_id,
+                            "status": event.status,
+                            "created_at": event.created_at.isoformat() if event.created_at else None
+                        }
+                        for event in recent_events
+                    ],
+                    "message": "如果event_count为0，说明还没有收到任何回调事件"
+                }
+            }
+    except Exception as e:
+        logger.error(f"获取数据状态失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "数据库查询失败，请检查连接"
+        }
 
 
 @router.get("/setup-guide")
