@@ -202,6 +202,6 @@ async def save_customer_info_to_db(user_id: str, external_user_id: str, state: s
     """保存客户信息到数据库"""
     try:
         # 这里实现数据库保存逻辑
-        pass
+        logger.info(f"保存客户信息到数据库: {user_id}, {external_user_id}, {state}")
     except Exception as e:
         logger.error(f"保存客户信息失败: {e}")
