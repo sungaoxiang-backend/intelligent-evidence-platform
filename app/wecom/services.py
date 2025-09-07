@@ -21,6 +21,8 @@ from app.wecom.models import (
 from app.db.session import SessionLocal
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
+from app.users.schemas import UserCreate
+from app.users import services as user_service
 
 logger = logging.getLogger(__name__)
 
@@ -510,7 +512,27 @@ class WeComService:
                     except Exception as e:
                         logger.warning(f"[CUSTOMER_ADD] 欢迎语发送失败，但不影响主流程 - {e}")
                 
-                # 8. 记录处理完成
+                # 8. 创建对应的系统用户（关键功能：自动创建用户）
+                logger.info(f"[CUSTOMER_ADD] 步骤8: 创建系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
+                try:
+                    # 准备用户创建数据
+                    user_data = UserCreate(
+                        name=external_contact.name or external_contact.external_user_id,
+                        wechat_nickname=external_contact.name,
+                        wechat_number=external_contact.external_user_id,
+                        wechat_avatar=external_contact.avatar
+                    )
+                    
+                    # 创建用户
+                    new_user = await user_service.create(session, user_data)
+                    logger.info(f"[CUSTOMER_ADD] 系统用户创建成功 - UserID: {new_user.id}, Name: {new_user.name}")
+                    
+                except Exception as e:
+                    # 用户创建失败不应该中断整个流程，只是记录错误
+                    logger.error(f"[CUSTOMER_ADD] 系统用户创建失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
+                    logger.warning(f"[CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建失败，需要手动处理")
+                
+                # 9. 记录处理完成
                 end_time = datetime.now()
                 duration = (end_time - start_time).total_seconds()
                 logger.info(f"[CUSTOMER_ADD] ✅ 添加企业客户事件处理完成 - User: {user_id}, External: {external_user_id}, 耗时: {duration:.2f}s")
@@ -697,14 +719,17 @@ class WeComService:
             return False
 
     async def handle_half_customer_add_event(self, event_data: Dict[str, Any]) -> bool:
-        """处理外部联系人免验证添加成员事件"""
+        """处理外部联系人免验证添加成员事件 - 增强版本"""
         try:
             user_id = event_data.get('UserID')
             external_user_id = event_data.get('ExternalUserID')
             welcome_code = event_data.get('WelcomeCode')
             state = event_data.get('State', '')
             
-            logger.info(f"处理免验证添加成员事件 - User: {user_id}, External: {external_user_id}, State: {state}")
+            logger.info(f"[HALF_CUSTOMER_ADD] 开始处理免验证添加成员事件 - User: {user_id}, External: {external_user_id}, State: {state}, WelcomeCode: {'有' if welcome_code else '无'}")
+            
+            # 事件开始时间
+            start_time = datetime.now()
             
             async with SessionLocal() as session:
                 # 1. 获取或创建员工记录
@@ -777,16 +802,40 @@ class WeComService:
                 # 6. 发送欢迎语（异步调用，不影响主流程）
                 if welcome_code:
                     try:
+                        logger.info(f"[HALF_CUSTOMER_ADD] 步骤6: 异步发送欢迎语 - WelcomeCode: {welcome_code[:20]}...")
                         await self.send_welcome_msg_async(welcome_code)
-                        logger.info(f"免验证欢迎语发送已触发 - welcome_code: {welcome_code[:20]}...")
+                        logger.info(f"[HALF_CUSTOMER_ADD] 欢迎语发送成功 - WelcomeCode: {welcome_code[:20]}...")
                     except Exception as e:
-                        logger.warning(f"免验证欢迎语发送失败，但不影响主流程 - {e}")
+                        logger.warning(f"[HALF_CUSTOMER_ADD] 欢迎语发送失败，但不影响主流程 - {e}")
                 
-                logger.info(f"免验证添加成员事件处理成功 - User: {user_id}, External: {external_user_id}")
+                # 7. 创建对应的系统用户（关键功能：自动创建用户）
+                logger.info(f"[HALF_CUSTOMER_ADD] 步骤7: 创建系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
+                try:
+                    # 准备用户创建数据
+                    user_data = UserCreate(
+                        name=external_contact.name or external_contact.external_user_id,
+                        wechat_nickname=external_contact.name,
+                        wechat_number=external_contact.external_user_id,
+                        wechat_avatar=external_contact.avatar
+                    )
+                    
+                    # 创建用户
+                    new_user = await user_service.create(session, user_data)
+                    logger.info(f"[HALF_CUSTOMER_ADD] 系统用户创建成功 - UserID: {new_user.id}, Name: {new_user.name}")
+                    
+                except Exception as e:
+                    # 用户创建失败不应该中断整个流程，只是记录错误
+                    logger.error(f"[HALF_CUSTOMER_ADD] 系统用户创建失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
+                    logger.warning(f"[HALF_CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建失败，需要手动处理")
+                
+                # 8. 记录处理完成
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                logger.info(f"[HALF_CUSTOMER_ADD] ✅ 免验证添加成员事件处理完成 - User: {user_id}, External: {external_user_id}, 耗时: {duration:.2f}s")
                 return True
                 
         except Exception as e:
-            logger.error(f"处理免验证添加成员事件失败: {e}")
+            logger.error(f"[HALF_CUSTOMER_ADD] ❌ 处理免验证添加成员事件失败: {e}")
             await self._log_event_error("add_half_external_contact", event_data, str(e))
             return False
 

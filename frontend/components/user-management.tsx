@@ -146,9 +146,12 @@ export default function UserManagement() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>头像</TableHead>
               <TableHead>姓名</TableHead>
               <TableHead>微信昵称</TableHead>
               <TableHead>微信号</TableHead>
+              <TableHead>企微用户ID</TableHead>
+              <TableHead>类型</TableHead>
               <TableHead>
                 <SortableHeader
                   field="created_at"
@@ -173,15 +176,69 @@ export default function UserManagement() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
+                {/* 头像预览 */}
+                <TableCell>
+                  <div className="flex items-center">
+                    {user.wechat_avatar ? (
+                      <img 
+                        src={user.wechat_avatar} 
+                        alt="头像" 
+                        className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                        onError={(e) => {
+                          // 头像加载失败时显示默认头像
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.src = "/api/placeholder/40/40";
+                          target.className = "w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                        {user.name?.charAt(0).toUpperCase() || "U"}
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                
+                {/* 姓名 */}
                 <TableCell className="font-medium">{user.name}</TableCell>
+                
+                {/* 微信昵称 */}
                 <TableCell>{user.wechat_nickname || "-"}</TableCell>
+                
+                {/* 微信号 */}
                 <TableCell>{user.wechat_number || "-"}</TableCell>
+                
+                {/* 企微用户ID */}
+                <TableCell className="text-sm text-gray-600 font-mono max-w-32 truncate" title={user.wechat_number || ""}>
+                  {user.wechat_number || "-"}
+                </TableCell>
+                
+                {/* 用户类型 */}
+                <TableCell>
+                  <div className="flex items-center">
+                    {user.wechat_avatar ? (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        企微客户
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        系统用户
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                
+                {/* 创建时间 */}
                 <TableCell className="text-sm text-gray-600">
                   {formatDateTime(user.created_at)}
                 </TableCell>
+                
+                {/* 更新时间 */}
                 <TableCell className="text-sm text-gray-600">
                   {formatDateTime(user.updated_at)}
                 </TableCell>
+                
+                {/* 操作按钮 */}
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Button
