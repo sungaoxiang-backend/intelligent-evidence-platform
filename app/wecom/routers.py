@@ -292,6 +292,55 @@ async def simulate_callback(callback_data: Dict[str, Any]):
         }
 
 
+@router.get("/debug/test-contact-api/{external_userid}")
+async def test_contact_api(external_userid: str):
+    """调试接口：测试客户详情API调用"""
+    try:
+        logger.info(f"[DEBUG] 测试客户详情API - ExternalUserID: {external_userid}")
+        
+        result = await wecom_service.get_external_contact(external_userid)
+        
+        # 分析结果
+        if result.get('errcode') == 0:
+            contact = result.get('external_contact', {})
+            follow_users = result.get('follow_user', [])
+            
+            return {
+                "success": True,
+                "message": "API调用成功",
+                "data": {
+                    "contact_info": {
+                        "external_userid": contact.get('external_userid'),
+                        "name": contact.get('name'),
+                        "avatar": contact.get('avatar'),
+                        "type": contact.get('type'),
+                        "gender": contact.get('gender'),
+                        "corp_name": contact.get('corp_name'),
+                        "position": contact.get('position')
+                    },
+                    "follow_user_count": len(follow_users),
+                    "first_follow_user": follow_users[0] if follow_users else None,
+                    "raw_response": result  # 完整响应供调试
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"API调用失败 - 错误码: {result.get('errcode')}, 错误信息: {result.get('errmsg')}",
+                "error_code": result.get('errcode'),
+                "error_msg": result.get('errmsg'),
+                "raw_response": result
+            }
+            
+    except Exception as e:
+        logger.error(f"[DEBUG] 测试客户详情API异常: {e}")
+        return {
+            "success": False,
+            "message": f"测试异常: {e}",
+            "error": str(e)
+        }
+
+
 @router.get("/debug/event-stats")
 async def get_event_statistics():
     """调试接口：获取事件统计信息"""

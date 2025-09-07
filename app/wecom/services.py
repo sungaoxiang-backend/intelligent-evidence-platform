@@ -4,6 +4,7 @@ import time
 import base64
 import hashlib
 import os
+import json
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad, pad
@@ -313,22 +314,49 @@ class WeComService:
             raise Exception(error_msg)
 
     async def get_external_contact(self, external_userid: str) -> Dict[str, Any]:
-        """获取客户详情"""
-        url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/get_external_contact"
+        """获取客户详情 - 遵循官方文档标准实现"""
+        url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/get"
         access_token = await self.get_access_token()
-        params = {"access_token": access_token}
-        data = {"external_userid": external_userid}
+        
+        # 构建正确的GET请求参数
+        params = {
+            "access_token": access_token,
+            "external_userid": external_userid
+        }
 
         try:
+            logger.info(f"[API_CALL] 获取客户详情 - ExternalUserID: {external_userid}")
+            
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, params=params, json=data)
+                response = await client.get(url, params=params)
+                
+                # 检查响应状态
+                if response.status_code != 200:
+                    logger.error(f"[API_CALL] 获取客户详情HTTP错误 - 状态码: {response.status_code}, 响应: {response.text[:200]}")
+                    return {"errcode": response.status_code, "errmsg": f"HTTP {response.status_code}"}
+                
                 result = response.json()
-
-            return result
-        except Exception as e:
-            error_msg = f"获取客户详情异常: {e}"
+                
+                # 记录API调用结果
+                if result.get("errcode") == 0:
+                    logger.info(f"[API_CALL] 获取客户详情成功 - ExternalUserID: {external_userid}, Name: {result.get('external_contact', {}).get('name', '未知')}")
+                else:
+                    logger.warning(f"[API_CALL] 获取客户详情失败 - ExternalUserID: {external_userid}, 错误码: {result.get('errcode')}, 错误信息: {result.get('errmsg')}")
+                
+                return result
+                
+        except httpx.RequestError as e:
+            error_msg = f"[API_CALL] 获取客户详情网络异常: {e}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            return {"errcode": -1, "errmsg": f"网络请求失败: {e}"}
+        except json.JSONDecodeError as e:
+            error_msg = f"[API_CALL] 获取客户详情JSON解析异常: {e}, 原始响应: {response.text[:200] if 'response' in locals() else '无响应'}"
+            logger.error(error_msg)
+            return {"errcode": -2, "errmsg": f"响应解析失败: {e}"}
+        except Exception as e:
+            error_msg = f"[API_CALL] 获取客户详情未知异常: {e}"
+            logger.error(error_msg)
+            return {"errcode": -3, "errmsg": f"未知错误: {e}"}
 
     async def handle_customer_add_event(self, event_data: Dict[str, Any]) -> bool:
         """处理添加企业客户事件 - 增强版本，确保数据持久化"""
@@ -365,19 +393,33 @@ class WeComService:
                 
                 # 2. 获取外部联系人详情
                 logger.info(f"[CUSTOMER_ADD] 步骤2: 获取外部联系人详情 - ExternalUserID: {external_user_id}")
+                contact_data = {}  # 默认空数据
+                
                 try:
                     contact_info = await self.get_external_contact(external_user_id)
-                    if contact_info.get('errcode') != 0:
-                        logger.warning(f"[CUSTOMER_ADD] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误: {contact_info}")
-                        # 即使获取详情失败，也继续处理，使用基础信息
-                        contact_data = {}
-                    else:
+                    
+                    # 详细检查API响应
+                    if contact_info.get('errcode') == 0:
                         contact_data = contact_info.get('external_contact', {})
                         logger.info(f"[CUSTOMER_ADD] 获取外部联系人详情成功 - Name: {contact_data.get('name')}, Type: {contact_data.get('type')}")
+                    elif contact_info.get('errcode') == 40096:
+                        logger.warning(f"[CUSTOMER_ADD] 外部联系人ID不合法 - ExternalUserID: {external_user_id}，这可能是新客户或ID格式错误")
+                    elif contact_info.get('errcode') == 84014:
+                        logger.warning(f"[CUSTOMER_ADD] 外部联系人不属于本企业 - ExternalUserID: {external_user_id}")
+                    elif contact_info.get('errcode') == 84061:
+                        logger.warning(f"[CUSTOMER_ADD] 无可查看成员 - ExternalUserID: {external_user_id}")
+                    elif contact_info.get('errcode') == 84064:
+                        logger.warning(f"[CUSTOMER_ADD] 无可查看标签 - ExternalUserID: {external_user_id}")
+                    else:
+                        logger.warning(f"[CUSTOMER_ADD] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误码: {contact_info.get('errcode')}, 错误信息: {contact_info.get('errmsg')}")
+                        
                 except Exception as e:
                     logger.error(f"[CUSTOMER_ADD] 获取外部联系人详情异常 - ExternalUserID: {external_user_id}, 错误: {e}")
-                    # 即使获取详情失败，也继续处理，使用基础信息
-                    contact_data = {}
+                    # 记录异常但不中断主流程
+                    
+                # 如果没有获取到详情数据，给出提示
+                if not contact_data:
+                    logger.info(f"[CUSTOMER_ADD] 未获取到外部联系人详情，将使用基础信息处理 - ExternalUserID: {external_user_id}")
                 
                 # 3. 获取或创建外部联系人记录（关键修复：处理重复客户）
                 logger.info(f"[CUSTOMER_ADD] 步骤3: 获取外部联系人记录 - ExternalUserID: {external_user_id}")
@@ -511,13 +553,33 @@ class WeComService:
                 
                 # 2. 获取最新联系人详情
                 logger.info(f"[CUSTOMER_EDIT] 步骤2: 获取最新联系人详情 - ExternalUserID: {external_user_id}")
-                contact_info = await self.get_external_contact(external_user_id)
-                if contact_info.get('errcode') != 0:
-                    logger.error(f"[CUSTOMER_EDIT] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}")
-                    return False
+                contact_data = {}  # 默认空数据
                 
-                contact_data = contact_info.get('external_contact', {})
-                logger.info(f"[CUSTOMER_EDIT] 获取外部联系人详情成功")
+                try:
+                    contact_info = await self.get_external_contact(external_user_id)
+                    
+                    # 详细检查API响应
+                    if contact_info.get('errcode') == 0:
+                        contact_data = contact_info.get('external_contact', {})
+                        logger.info(f"[CUSTOMER_EDIT] 获取外部联系人详情成功")
+                    elif contact_info.get('errcode') == 40096:
+                        logger.warning(f"[CUSTOMER_EDIT] 外部联系人ID不合法 - ExternalUserID: {external_user_id}")
+                    elif contact_info.get('errcode') == 84014:
+                        logger.warning(f"[CUSTOMER_EDIT] 外部联系人不属于本企业 - ExternalUserID: {external_user_id}")
+                    elif contact_info.get('errcode') == 84061:
+                        logger.warning(f"[CUSTOMER_EDIT] 无可查看成员 - ExternalUserID: {external_user_id}")
+                    elif contact_info.get('errcode') == 84064:
+                        logger.warning(f"[CUSTOMER_EDIT] 无可查看标签 - ExternalUserID: {external_user_id}")
+                    else:
+                        logger.warning(f"[CUSTOMER_EDIT] 获取外部联系人详情失败 - ExternalUserID: {external_user_id}, 错误码: {contact_info.get('errcode')}, 错误信息: {contact_info.get('errmsg')}")
+                        
+                except Exception as e:
+                    logger.error(f"[CUSTOMER_EDIT] 获取外部联系人详情异常 - ExternalUserID: {external_user_id}, 错误: {e}")
+                    # 记录异常但不中断主流程
+                    
+                # 如果没有获取到详情数据，给出提示
+                if not contact_data:
+                    logger.info(f"[CUSTOMER_EDIT] 未获取到外部联系人详情，将使用现有信息处理 - ExternalUserID: {external_user_id}")
                 
                 # 3. 更新联系人信息
                 logger.info(f"[CUSTOMER_EDIT] 步骤3: 更新联系人信息")
