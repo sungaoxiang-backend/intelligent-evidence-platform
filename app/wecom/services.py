@@ -465,7 +465,6 @@ class WeComService:
                         corp_full_name=contact_data.get('corp_full_name', ''),
                         status=ExternalContactStatus.NORMAL,
                         contact_type=ContactType.FULL
-                        # 注意：不再设置 staff_id，因为外部联系人是全局的
                     )
                     session.add(external_contact)
                     await session.flush()
@@ -766,8 +765,7 @@ class WeComService:
                     corp_name=contact_data.get('corp_name', ''),
                     corp_full_name=contact_data.get('corp_full_name', ''),
                     status=ExternalContactStatus.NORMAL,
-                    contact_type=ContactType.HALF,  # 关键：标记为半联系
-                    staff_id=staff.id
+                    contact_type=ContactType.HALF  # 关键：标记为半联系
                 )
                 session.add(external_contact)
                 await session.flush()
