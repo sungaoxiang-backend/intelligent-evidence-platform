@@ -56,15 +56,40 @@ async def create_case(
     case_in: CaseCreate,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
-    """创建新案件"""
-    # 检查用户是否存在
-    user = await user_service.get_by_id(db, case_in.user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    """创建新案件
+    
+    根据基准校对要求，案件创建需要满足以下必要字段校验：
+    
+    基础必要信息：
+    - 案件类型 (case_type)
+    - 欠款金额 (loan_amount) > 0
+    - 必须包含两个当事人：一个债权人(creditor)和一个债务人(debtor)
+    
+    当事人类型对应的必要信息：
+    - 个人类型：当事人名称 + 自然人姓名
+    - 个体工商户类型：当事人名称 + 个体工商户名称 + 经营者名称  
+    - 公司类型：当事人名称 + 公司名称 + 法定代表人名称
+    """
+    try:
+        # 检查用户是否存在
+        user = await user_service.get_by_id(db, case_in.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
 
-    # 创建案件
-    new_case = await case_service.create(db, case_in)
-    return SingleResponse(data=new_case)
+        # 创建案件（包含完整的校验逻辑）
+        new_case = await case_service.create(db, case_in)
+        return SingleResponse(code=201, message="案件创建成功", data=new_case)
+        
+    except HTTPException:
+        # 重新抛出HTTP异常
+        raise
+    except Exception as e:
+        # 处理其他未预期的异常
+        logger.error(f"创建案件时发生未预期错误: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="创建案件时发生内部错误，请稍后重试"
+        )
 
 
 @router.get("/{case_id}", response_model=SingleResponse[CaseWithAssociationEvidenceFeaturesResponse])
@@ -77,7 +102,7 @@ async def read_case(
     case = await case_service.get_by_id(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="案件不存在")
-    return SingleResponse(data=case)
+    return SingleResponse(code=200, message="获取案件信息成功", data=case)
 
 
 @router.put("/{case_id}", response_model=SingleResponse[CaseSchema])
@@ -93,7 +118,7 @@ async def update_case(
         raise HTTPException(status_code=404, detail="案件不存在")
 
     updated_case = await case_service.update(db, case, case_in)
-    return SingleResponse(data=updated_case)
+    return SingleResponse(code=200, message="案件更新成功", data=updated_case)
 
 
 @router.delete("/{case_id}", response_model=SingleResponse[CaseSchema])
@@ -106,7 +131,7 @@ async def delete_case(
     success_deleted = await case_service.delete(db, case_id)
     if not success_deleted:
         raise HTTPException(status_code=404, detail="案件不存在")
-    return SingleResponse()
+    return SingleResponse(code=200, message="案件删除成功", data=None)
 
 
 @router.put("/association-features/{feature_id}", response_model=SingleResponse[dict])
@@ -129,7 +154,7 @@ async def update_association_evidence_feature(
     if not updated_feature:
         raise HTTPException(status_code=500, detail="更新失败")
     
-    return SingleResponse(data={"message": "关联证据特征更新成功", "feature_id": feature_id})
+    return SingleResponse(code=200, message="关联证据特征更新成功", data={"feature_id": feature_id})
 
 
 @router.get("/association-features/{feature_id}", response_model=SingleResponse[dict])
@@ -143,7 +168,7 @@ async def get_association_evidence_feature(
     if not feature:
         raise HTTPException(status_code=404, detail="关联证据特征不存在")
     
-    return SingleResponse(data=feature)
+    return SingleResponse(code=200, message="获取关联证据特征成功", data=feature)
 
 
 @router.post("/auto-process", response_model=ListResponse[AutoProcessResponse])
@@ -164,7 +189,7 @@ async def auto_process(
         )
 
     result = await case_service.auto_process(db, request.case_id, request.evidence_ids)
-    return ListResponse(data=result)
+    return ListResponse(code=200, message="自动处理完成", data=result)
 
 
 @router.websocket("/ws/auto-process")
@@ -223,7 +248,7 @@ async def websocket_auto_process(websocket: WebSocket):
                     send_progress=send_progress
                 )
                 
-                logger.info(f"处理完成 [ID: {connection_id}]: 成功处理 {len(result)} 个关联特征")
+                logger.info(f"处理完成 [ID: {connection_id}]: 成功处理 {len(result) if result else 0} 个关联特征")
             
         except Exception as e:
             logger.error(f"处理过程中出错 [ID: {connection_id}]: {e}")
@@ -262,6 +287,8 @@ async def get_case_parties(
     """获取案件的所有当事人"""
     parties = await case_service.get_case_parties_by_case_id(db, case_id)
     return ListResponse(
+        code=200,
+        message="获取当事人列表成功",
         data=parties,
         pagination=Pagination(total=len(parties), page=1, size=len(parties), pages=1)
     )
@@ -284,4 +311,4 @@ async def update_case_party(
     if party.case_id != case_id:
         raise HTTPException(status_code=400, detail="当事人不属于指定案件")
     
-    return SingleResponse(data=party)
+    return SingleResponse(code=200, message="当事人更新成功", data=party)

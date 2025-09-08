@@ -127,17 +127,15 @@ export default function CaseManagement() {
         party_name: "",
         party_role: "creditor",
         party_type: null as null | PartyType,
-        phone: "",
-        bank_account: "",
-        bank_address: "",
+        name: "", // 自然人姓名/经营者名称/法定代表人名称
+        company_name: "", // 个体工商户名称/公司名称
       },
       {
         party_name: "",
         party_role: "debtor", 
         party_type: null as null | PartyType,
-        phone: "",
-        bank_account: "",
-        bank_address: "",
+        name: "", // 自然人姓名/经营者名称/法定代表人名称
+        company_name: "", // 个体工商户名称/公司名称
       }
     ]
   });
@@ -156,8 +154,12 @@ export default function CaseManagement() {
     case_type: "",
     creditor_name: "",
     creditor_type: "",
+    creditor_required_name: "", // 债权人必要姓名字段
+    creditor_required_company: "", // 债权人必要公司字段
     debtor_name: "",
     debtor_type: "",
+    debtor_required_name: "", // 债务人必要姓名字段
+    debtor_required_company: "", // 债务人必要公司字段
   });
 
   // Use paginated SWR hook with user filter and sorting
@@ -254,7 +256,8 @@ export default function CaseManagement() {
       case_parties: [
         {
           ...prev.case_parties[0],
-          party_name: user.name || ""
+          party_name: user.name || "",
+          name: user.name || "" // 同时设置必要姓名字段
         },
         prev.case_parties[1]
       ]
@@ -294,8 +297,12 @@ export default function CaseManagement() {
       case_type: "",
       creditor_name: "",
       creditor_type: "",
+      creditor_required_name: "",
+      creditor_required_company: "",
       debtor_name: "",
       debtor_type: "",
+      debtor_required_name: "",
+      debtor_required_company: "",
     };
 
     if (!addForm.user_id || addForm.user_id === 0) {
@@ -307,6 +314,7 @@ export default function CaseManagement() {
     const creditor = addForm.case_parties.find(p => p.party_role === "creditor");
     const debtor = addForm.case_parties.find(p => p.party_role === "debtor");
     
+    // 验证当事人名称
     if (!creditor?.party_name.trim()) {
       errors.creditor_name = "请输入债权人姓名";
     }
@@ -333,6 +341,57 @@ export default function CaseManagement() {
       errors.case_type = "请选择案件类型";
     }
 
+    // 根据当事人类型验证必要字段
+    if (creditor?.party_type) {
+      if (creditor.party_type === "person") {
+        // 个人类型：需要 name（自然人姓名）
+        if (!creditor.name?.trim()) {
+          errors.creditor_required_name = "请输入自然人姓名";
+        }
+      } else if (creditor.party_type === "individual") {
+        // 个体工商户类型：需要 company_name（个体工商户名称）和 name（经营者名称）
+        if (!creditor.company_name?.trim()) {
+          errors.creditor_required_company = "请输入个体工商户名称";
+        }
+        if (!creditor.name?.trim()) {
+          errors.creditor_required_name = "请输入经营者名称";
+        }
+      } else if (creditor.party_type === "company") {
+        // 公司类型：需要 company_name（公司名称）和 name（法定代表人名称）
+        if (!creditor.company_name?.trim()) {
+          errors.creditor_required_company = "请输入公司名称";
+        }
+        if (!creditor.name?.trim()) {
+          errors.creditor_required_name = "请输入法定代表人名称";
+        }
+      }
+    }
+
+    if (debtor?.party_type) {
+      if (debtor.party_type === "person") {
+        // 个人类型：需要 name（自然人姓名）
+        if (!debtor.name?.trim()) {
+          errors.debtor_required_name = "请输入自然人姓名";
+        }
+      } else if (debtor.party_type === "individual") {
+        // 个体工商户类型：需要 company_name（个体工商户名称）和 name（经营者名称）
+        if (!debtor.company_name?.trim()) {
+          errors.debtor_required_company = "请输入个体工商户名称";
+        }
+        if (!debtor.name?.trim()) {
+          errors.debtor_required_name = "请输入经营者名称";
+        }
+      } else if (debtor.party_type === "company") {
+        // 公司类型：需要 company_name（公司名称）和 name（法定代表人名称）
+        if (!debtor.company_name?.trim()) {
+          errors.debtor_required_company = "请输入公司名称";
+        }
+        if (!debtor.name?.trim()) {
+          errors.debtor_required_name = "请输入法定代表人名称";
+        }
+      }
+    }
+
     setAddFormErrors(errors);
     return Object.values(errors).every(error => error === "");
   };
@@ -354,17 +413,15 @@ export default function CaseManagement() {
             party_name: "",
             party_role: "creditor",
             party_type: null,
-            phone: "",
-            bank_account: "",
-            bank_address: "",
+            name: "",
+            company_name: "",
           },
           {
             party_name: "",
             party_role: "debtor", 
             party_type: null,
-            phone: "",
-            bank_account: "",
-            bank_address: "",
+            name: "",
+            company_name: "",
           }
         ]
       });
@@ -377,8 +434,12 @@ export default function CaseManagement() {
         case_type: "",
         creditor_name: "",
         creditor_type: "",
+        creditor_required_name: "",
+        creditor_required_company: "",
         debtor_name: "",
         debtor_type: "",
+        debtor_required_name: "",
+        debtor_required_company: "",
       });
       
       // 重置排序为创建时间倒序，确保新案件显示在最前面
@@ -468,7 +529,8 @@ export default function CaseManagement() {
         case_parties: [
           {
             ...prev.case_parties[0],
-            party_name: newUser.data.name || ""
+            party_name: newUser.data.name || "",
+            name: newUser.data.name || "" // 同时设置必要姓名字段
           },
           prev.case_parties[1]
         ]
@@ -492,7 +554,8 @@ export default function CaseManagement() {
       case_parties: [
         {
           ...prev.case_parties[0],
-          party_name: selectedUser?.name || ""
+          party_name: selectedUser?.name || "",
+          name: selectedUser?.name || "" // 同时设置必要姓名字段
         },
         prev.case_parties[1]
       ]
@@ -539,7 +602,7 @@ export default function CaseManagement() {
                 <TableHead className="whitespace-nowrap">关联用户</TableHead>
                 <TableHead className="whitespace-nowrap">快速查看</TableHead>
                 <TableHead className="whitespace-nowrap">欠款金额</TableHead>
-                <TableHead className="whitespace-nowrap">案件类型</TableHead>
+                <TableHead className="whitespace-nowrap">案由</TableHead>
                 <TableHead className="whitespace-nowrap">债权人</TableHead>
                 <TableHead className="whitespace-nowrap">债权人类型</TableHead>
                 <TableHead className="whitespace-nowrap">债务人</TableHead>
@@ -786,10 +849,10 @@ export default function CaseManagement() {
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">基础案件信息</h3>
               <div className="grid grid-cols-2 gap-6">
-                {/* 案件类型 */}
+                {/* 案由 */}
                 <div className="space-y-2">
                   <Label htmlFor="case_type" className="text-sm font-medium">
-                    案件类型 <span className="text-red-500">*</span>
+                    案由 <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={addForm.case_type || ""}
@@ -801,7 +864,7 @@ export default function CaseManagement() {
                     }}
                   >
                     <SelectTrigger className={`${addFormErrors.case_type ? 'border-red-500' : ''}`}>
-                      <SelectValue placeholder="选择案件类型" />
+                      <SelectValue placeholder="选择案由" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="debt">民间借贷纠纷</SelectItem>
@@ -945,62 +1008,160 @@ export default function CaseManagement() {
                   )}
                 </div>
 
-                {/* 债权人电话 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_phone" className="text-sm font-medium">
-                    债权人电话
-                  </Label>
-                  <Input
-                    id="creditor_phone"
-                    value={addForm.case_parties[0]?.phone || ""}
-                    onChange={(e) => setAddForm(prev => ({
-                      ...prev,
-                      case_parties: [
-                        { ...prev.case_parties[0], phone: e.target.value },
-                        prev.case_parties[1]
-                      ]
-                    }))}
-                    placeholder="请输入债权人电话"
-                  />
-                </div>
+                {/* 基于债权人类型的必要字段 */}
+                {addForm.case_parties[0]?.party_type === "person" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="creditor_person_name" className="text-sm font-medium">
+                      自然人姓名 <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="creditor_person_name"
+                      value={addForm.case_parties[0]?.name || ""}
+                      onChange={(e) => setAddForm(prev => ({
+                        ...prev,
+                        case_parties: [
+                          { ...prev.case_parties[0], name: e.target.value },
+                          prev.case_parties[1]
+                        ]
+                      }))}
+                      onBlur={() => {
+                        if (!addForm.case_parties[0]?.name?.trim()) {
+                          setAddFormErrors(prev => ({ ...prev, creditor_required_name: "请输入自然人姓名" }));
+                        } else {
+                          setAddFormErrors(prev => ({ ...prev, creditor_required_name: "" }));
+                        }
+                      }}
+                      className={`${addFormErrors.creditor_required_name ? 'border-red-500' : ''}`}
+                      placeholder="请输入自然人姓名"
+                    />
+                    {addFormErrors.creditor_required_name && (
+                      <div className="text-red-500 text-xs">{addFormErrors.creditor_required_name}</div>
+                    )}
+                  </div>
+                )}
 
-                {/* 债权人银行账户 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_bank_account" className="text-sm font-medium">
-                    债权人银行账户
-                  </Label>
-                  <Input
-                    id="creditor_bank_account"
-                    value={addForm.case_parties[0]?.bank_account || ""}
-                    onChange={(e) => setAddForm(prev => ({
-                      ...prev,
-                      case_parties: [
-                        { ...prev.case_parties[0], bank_account: e.target.value },
-                        prev.case_parties[1]
-                      ]
-                    }))}
-                    placeholder="请输入银行账户"
-                  />
-                </div>
+                {addForm.case_parties[0]?.party_type === "individual" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="creditor_company_name" className="text-sm font-medium">
+                        个体工商户名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="creditor_company_name"
+                        value={addForm.case_parties[0]?.company_name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            { ...prev.case_parties[0], company_name: e.target.value },
+                            prev.case_parties[1]
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[0]?.company_name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_company: "请输入个体工商户名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_company: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.creditor_required_company ? 'border-red-500' : ''}`}
+                        placeholder="请输入个体工商户名称"
+                      />
+                      {addFormErrors.creditor_required_company && (
+                        <div className="text-red-500 text-xs">{addFormErrors.creditor_required_company}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="creditor_operator_name" className="text-sm font-medium">
+                        经营者名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="creditor_operator_name"
+                        value={addForm.case_parties[0]?.name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            { ...prev.case_parties[0], name: e.target.value },
+                            prev.case_parties[1]
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[0]?.name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_name: "请输入经营者名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_name: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.creditor_required_name ? 'border-red-500' : ''}`}
+                        placeholder="请输入经营者名称"
+                      />
+                      {addFormErrors.creditor_required_name && (
+                        <div className="text-red-500 text-xs">{addFormErrors.creditor_required_name}</div>
+                      )}
+                    </div>
+                  </>
+                )}
 
-                {/* 债权人银行地址 */}
-                <div className="space-y-2">
-                  <Label htmlFor="creditor_bank_address" className="text-sm font-medium">
-                    债权人银行地址
-                  </Label>
-                  <Input
-                    id="creditor_bank_address"
-                    value={addForm.case_parties[0]?.bank_address || ""}
-                    onChange={(e) => setAddForm(prev => ({
-                      ...prev,
-                      case_parties: [
-                        { ...prev.case_parties[0], bank_address: e.target.value },
-                        prev.case_parties[1]
-                      ]
-                    }))}
-                    placeholder="请输入银行地址"
-                  />
-                </div>
+                {addForm.case_parties[0]?.party_type === "company" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="creditor_company_name" className="text-sm font-medium">
+                        公司名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="creditor_company_name"
+                        value={addForm.case_parties[0]?.company_name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            { ...prev.case_parties[0], company_name: e.target.value },
+                            prev.case_parties[1]
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[0]?.company_name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_company: "请输入公司名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_company: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.creditor_required_company ? 'border-red-500' : ''}`}
+                        placeholder="请输入公司名称"
+                      />
+                      {addFormErrors.creditor_required_company && (
+                        <div className="text-red-500 text-xs">{addFormErrors.creditor_required_company}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="creditor_legal_rep_name" className="text-sm font-medium">
+                        法定代表人名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="creditor_legal_rep_name"
+                        value={addForm.case_parties[0]?.name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            { ...prev.case_parties[0], name: e.target.value },
+                            prev.case_parties[1]
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[0]?.name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_name: "请输入法定代表人名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, creditor_required_name: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.creditor_required_name ? 'border-red-500' : ''}`}
+                        placeholder="请输入法定代表人名称"
+                      />
+                      {addFormErrors.creditor_required_name && (
+                        <div className="text-red-500 text-xs">{addFormErrors.creditor_required_name}</div>
+                      )}
+                    </div>
+                  </>
+                )}
+
               </div>
 
               {/* 右侧：债务人信息 */}
@@ -1071,24 +1232,160 @@ export default function CaseManagement() {
                   )}
                 </div>
 
-                {/* 债务人电话 */}
-                <div className="space-y-2">
-                  <Label htmlFor="debtor_phone" className="text-sm font-medium">
-                    债务人电话
-                  </Label>
-                  <Input
-                    id="debtor_phone"
-                    value={addForm.case_parties[1]?.phone || ""}
-                    onChange={(e) => setAddForm(prev => ({
-                      ...prev,
-                      case_parties: [
-                        prev.case_parties[0],
-                        { ...prev.case_parties[1], phone: e.target.value }
-                      ]
-                    }))}
-                    placeholder="请输入债务人电话"
-                  />
-                </div>
+                {/* 基于债务人类型的必要字段 */}
+                {addForm.case_parties[1]?.party_type === "person" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="debtor_person_name" className="text-sm font-medium">
+                      自然人姓名 <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="debtor_person_name"
+                      value={addForm.case_parties[1]?.name || ""}
+                      onChange={(e) => setAddForm(prev => ({
+                        ...prev,
+                        case_parties: [
+                          prev.case_parties[0],
+                          { ...prev.case_parties[1], name: e.target.value }
+                        ]
+                      }))}
+                      onBlur={() => {
+                        if (!addForm.case_parties[1]?.name?.trim()) {
+                          setAddFormErrors(prev => ({ ...prev, debtor_required_name: "请输入自然人姓名" }));
+                        } else {
+                          setAddFormErrors(prev => ({ ...prev, debtor_required_name: "" }));
+                        }
+                      }}
+                      className={`${addFormErrors.debtor_required_name ? 'border-red-500' : ''}`}
+                      placeholder="请输入自然人姓名"
+                    />
+                    {addFormErrors.debtor_required_name && (
+                      <div className="text-red-500 text-xs">{addFormErrors.debtor_required_name}</div>
+                    )}
+                  </div>
+                )}
+
+                {addForm.case_parties[1]?.party_type === "individual" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor_company_name" className="text-sm font-medium">
+                        个体工商户名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="debtor_company_name"
+                        value={addForm.case_parties[1]?.company_name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            prev.case_parties[0],
+                            { ...prev.case_parties[1], company_name: e.target.value }
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[1]?.company_name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_company: "请输入个体工商户名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_company: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.debtor_required_company ? 'border-red-500' : ''}`}
+                        placeholder="请输入个体工商户名称"
+                      />
+                      {addFormErrors.debtor_required_company && (
+                        <div className="text-red-500 text-xs">{addFormErrors.debtor_required_company}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor_operator_name" className="text-sm font-medium">
+                        经营者名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="debtor_operator_name"
+                        value={addForm.case_parties[1]?.name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            prev.case_parties[0],
+                            { ...prev.case_parties[1], name: e.target.value }
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[1]?.name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_name: "请输入经营者名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_name: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.debtor_required_name ? 'border-red-500' : ''}`}
+                        placeholder="请输入经营者名称"
+                      />
+                      {addFormErrors.debtor_required_name && (
+                        <div className="text-red-500 text-xs">{addFormErrors.debtor_required_name}</div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {addForm.case_parties[1]?.party_type === "company" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor_company_name" className="text-sm font-medium">
+                        公司名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="debtor_company_name"
+                        value={addForm.case_parties[1]?.company_name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            prev.case_parties[0],
+                            { ...prev.case_parties[1], company_name: e.target.value }
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[1]?.company_name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_company: "请输入公司名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_company: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.debtor_required_company ? 'border-red-500' : ''}`}
+                        placeholder="请输入公司名称"
+                      />
+                      {addFormErrors.debtor_required_company && (
+                        <div className="text-red-500 text-xs">{addFormErrors.debtor_required_company}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor_legal_rep_name" className="text-sm font-medium">
+                        法定代表人名称 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="debtor_legal_rep_name"
+                        value={addForm.case_parties[1]?.name || ""}
+                        onChange={(e) => setAddForm(prev => ({
+                          ...prev,
+                          case_parties: [
+                            prev.case_parties[0],
+                            { ...prev.case_parties[1], name: e.target.value }
+                          ]
+                        }))}
+                        onBlur={() => {
+                          if (!addForm.case_parties[1]?.name?.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_name: "请输入法定代表人名称" }));
+                          } else {
+                            setAddFormErrors(prev => ({ ...prev, debtor_required_name: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.debtor_required_name ? 'border-red-500' : ''}`}
+                        placeholder="请输入法定代表人名称"
+                      />
+                      {addFormErrors.debtor_required_name && (
+                        <div className="text-red-500 text-xs">{addFormErrors.debtor_required_name}</div>
+                      )}
+                    </div>
+                  </>
+                )}
+
               </div>
             </div>
           </div>

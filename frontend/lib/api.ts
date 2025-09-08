@@ -77,7 +77,7 @@ export const caseApi = {
       body: JSON.stringify(data),
     })
     const result = await resp.json()
-    if (result.code === 200) {
+    if (result.code === 201) {
       return { data: result.data }
     } else {
       throw new Error(result.message || "请求失败")

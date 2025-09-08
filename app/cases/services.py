@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from urllib.parse import unquote
-from app.cases.models import Case as CaseModel, CaseParty as CasePartyModel, AssociationEvidenceFeature
+from app.cases.models import Case as CaseModel, CaseParty as CasePartyModel, AssociationEvidenceFeature, PartyType
 from app.cases.schemas import CaseCreate, CaseUpdate, Case as CaseSchema, CasePartyCreate, CasePartyUpdate
 from agno.run.response import RunResponse
 from agno.media import Image
@@ -20,9 +20,95 @@ from app.evidences.models import Evidence
 from app.agentic.agents.association_features_extractor_v2 import AssociationFeaturesExtractor, AssociationFeaturesExtractionResults
 from app.agentic.agents.evidence_proofreader import EvidenceProofreader
 from fastapi import HTTPException
+from app.cases.models import PartyType
 
 # 创建校对器实例
 evidence_proofreader = EvidenceProofreader()
+
+# ==================== 案件创建校验方法 ====================
+
+async def validate_case_basic_info(obj_in: CaseCreate) -> None:
+    """验证案件基础信息"""
+    # 验证案件类型
+    if not obj_in.case_type:
+        raise HTTPException(
+            status_code=400,
+            detail="案件类型不能为空"
+        )
+    
+    # 验证欠款金额
+    if obj_in.loan_amount is None or obj_in.loan_amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="欠款金额必须大于0"
+        )
+    
+    # 验证当事人列表（必须有两个当事人：债权人和债务人）
+    if not obj_in.case_parties or len(obj_in.case_parties) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="案件必须包含两个当事人：一个债权人(creditor)和一个债务人(debtor)"
+        )
+    
+    # 验证当事人角色
+    party_roles = [party.party_role for party in obj_in.case_parties]
+    expected_roles = {'creditor', 'debtor'}
+    if set(party_roles) != expected_roles:
+        raise HTTPException(
+            status_code=400,
+            detail="案件必须包含一个债权人(creditor)和一个债务人(debtor)"
+        )
+
+async def validate_case_parties_info(parties: List[CasePartyCreate]) -> None:
+    """验证当事人信息完整性"""
+    if not parties:
+        return
+    
+    # 验证每个当事人的必要字段
+    for i, party in enumerate(parties):
+        party_type = party.party_type
+        
+        # 验证当事人名称
+        if not party.party_name or not party.party_name.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"第{i+1}个当事人：当事人名称不能为空"
+            )
+        
+        # 根据当事人类型验证必要字段
+        if party_type == PartyType.PERSON:
+            # 个人类型：需要 party_name 和 name（自然人姓名）
+            if not party.name or not party.name.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第{i+1}个当事人（个人）：自然人姓名不能为空"
+                )
+                
+        elif party_type == PartyType.INDIVIDUAL:
+            # 个体工商户类型：需要 party_name、company_name（个体工商户名称）和 name（经营者名称）
+            if not party.company_name or not party.company_name.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第{i+1}个当事人（个体工商户）：个体工商户名称不能为空"
+                )
+            if not party.name or not party.name.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第{i+1}个当事人（个体工商户）：经营者名称不能为空"
+                )
+                
+        elif party_type == PartyType.COMPANY:
+            # 公司类型：需要 party_name、company_name（公司名称）和 name（法定代表人名称）
+            if not party.company_name or not party.company_name.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第{i+1}个当事人（公司）：公司名称不能为空"
+                )
+            if not party.name or not party.name.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"第{i+1}个当事人（公司）：法定代表人名称不能为空"
+                )
 
 # ==================== 当事人独立管理方法 ====================
 
@@ -312,6 +398,12 @@ async def get_by_id(db: AsyncSession, case_id: int) -> Optional[CaseModel]:
 
 async def create(db: AsyncSession, obj_in: CaseCreate) -> CaseModel:
     """创建新案件"""
+    # 验证案件基础信息
+    await validate_case_basic_info(obj_in)
+    
+    # 验证当事人信息完整性
+    await validate_case_parties_info(obj_in.case_parties)
+    
     # 获取创建数据，排除case_parties字段
     create_data = obj_in.model_dump(exclude_unset=True, exclude={'case_parties'})
     
@@ -493,7 +585,7 @@ async def auto_process(
         timeout=180.0
     )
     
-    results = evidence_extraction_results.content.results
+    results = evidence_extraction_results.results
     if not results:
         logger.error("证据特征提取失败")
         if send_progress:

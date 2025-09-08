@@ -35,6 +35,50 @@ class CasePartyCreate(BaseModel):
     bank_account: Optional[str] = None
     bank_phone: Optional[str] = None
     
+    @field_validator('party_name')
+    @classmethod
+    def validate_party_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('当事人名称不能为空')
+        return v.strip()
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v, info):
+        party_type = info.data.get('party_type')
+        if party_type in [PartyType.PERSON, PartyType.INDIVIDUAL, PartyType.COMPANY]:
+            if not v or not v.strip():
+                raise ValueError(f'当当事人类型为{party_type.value}时，{cls._get_name_field_description(party_type)}不能为空')
+        return v.strip() if v else v
+    
+    @field_validator('company_name')
+    @classmethod
+    def validate_company_name(cls, v, info):
+        party_type = info.data.get('party_type')
+        if party_type in [PartyType.INDIVIDUAL, PartyType.COMPANY]:
+            if not v or not v.strip():
+                raise ValueError(f'当当事人类型为{party_type.value}时，{cls._get_company_name_field_description(party_type)}不能为空')
+        return v.strip() if v else v
+    
+    @classmethod
+    def _get_name_field_description(cls, party_type: PartyType) -> str:
+        """获取name字段的描述"""
+        descriptions = {
+            PartyType.PERSON: "自然人姓名",
+            PartyType.INDIVIDUAL: "经营者名称", 
+            PartyType.COMPANY: "法定代表人名称"
+        }
+        return descriptions.get(party_type, "姓名")
+    
+    @classmethod
+    def _get_company_name_field_description(cls, party_type: PartyType) -> str:
+        """获取company_name字段的描述"""
+        descriptions = {
+            PartyType.INDIVIDUAL: "个体工商户名称",
+            PartyType.COMPANY: "公司名称"
+        }
+        return descriptions.get(party_type, "公司名称")
+    
     
 class CasePartyUpdate(BaseModel):
     """案件当事人更新模型"""
@@ -101,6 +145,21 @@ class CaseCreate(BaseModel):
     loan_date: Optional[datetime] = None
     court_name: Optional[str] = None
     description: Optional[str] = None
+    
+    @field_validator('case_parties')
+    @classmethod
+    def validate_case_parties(cls, v):
+        """验证当事人配置：必须有一个债权人和一个债务人"""
+        if not v or len(v) != 2:
+            raise ValueError('案件必须包含两个当事人：一个债权人(creditor)和一个债务人(debtor)')
+        
+        party_roles = [party.party_role for party in v]
+        expected_roles = {'creditor', 'debtor'}
+        
+        if set(party_roles) != expected_roles:
+            raise ValueError('案件必须包含一个债权人(creditor)和一个债务人(debtor)')
+        
+        return v
 
 
 # 更新时可以修改的属性
@@ -193,7 +252,6 @@ class AssociationEvidenceFeatureUpdateRequest(BaseModel):
     """关联证据特征更新请求模型"""
     slot_group_name: Optional[str] = None
     association_evidence_ids: Optional[List[int]] = None
-    evidence_feature_status: Optional[str] = None
     evidence_feature_status: Optional[str] = None
     evidence_features: Optional[List[AssociationEvidenceFeature]] = None
 
