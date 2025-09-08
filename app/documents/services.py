@@ -279,6 +279,30 @@ class DocumentGenerator:
         
         return case_data
 
+    def _format_birthday_to_chinese(self, birthday_str):
+        """将出生日期格式化为中文格式"""
+        if not birthday_str:
+            return ""
+        
+        try:
+            # 处理ISO格式日期 (如: 2025-09-25T16:00:00.000Z)
+            if 'T' in birthday_str:
+                # 移除时区信息并解析
+                date_part = birthday_str.split('T')[0]
+                parsed_date = datetime.strptime(date_part, '%Y-%m-%d')
+                return parsed_date.strftime("%Y年%m月%d日")
+            # 处理其他格式
+            elif '-' in birthday_str and len(birthday_str.split('-')) == 3:
+                # 处理 YYYY-MM-DD 格式
+                parsed_date = datetime.strptime(birthday_str, '%Y-%m-%d')
+                return parsed_date.strftime("%Y年%m月%d日")
+            else:
+                # 如果已经是中文格式或其他格式，直接返回
+                return birthday_str
+        except Exception as e:
+            logger.warning(f"日期格式化失败: {birthday_str}, 错误: {str(e)}")
+            return birthday_str
+
     def generate_document(
         self, 
         template_id: str,
@@ -361,6 +385,35 @@ class DocumentGenerator:
         else:
             formatted_loan_amount = str(loan_amount)
         
+        # 格式化出生日期为中文格式
+        def format_birthday_to_chinese(birthday_str):
+            """将出生日期格式化为中文格式"""
+            if not birthday_str:
+                return ""
+            
+            try:
+                # 处理ISO格式日期 (如: 2025-09-25T16:00:00.000Z)
+                if 'T' in birthday_str:
+                    # 移除时区信息并解析
+                    date_part = birthday_str.split('T')[0]
+                    parsed_date = datetime.strptime(date_part, '%Y-%m-%d')
+                    return parsed_date.strftime("%Y年%m月%d日")
+                # 处理其他格式
+                elif '-' in birthday_str and len(birthday_str.split('-')) == 3:
+                    # 处理 YYYY-MM-DD 格式
+                    parsed_date = datetime.strptime(birthday_str, '%Y-%m-%d')
+                    return parsed_date.strftime("%Y年%m月%d日")
+                else:
+                    # 如果已经是中文格式或其他格式，直接返回
+                    return birthday_str
+            except Exception as e:
+                logger.warning(f"日期格式化失败: {birthday_str}, 错误: {str(e)}")
+                return birthday_str
+        
+        # 格式化债权人和债务人的出生日期
+        creditor_birthday = format_birthday_to_chinese(case_data.get("creditor_birthday", ""))
+        debtor_birthday = format_birthday_to_chinese(case_data.get("debtor_birthday", ""))
+        
         # 格式化created_at为中文日期格式
         created_at = case_data.get("created_at")
         if created_at:
@@ -393,7 +446,7 @@ class DocumentGenerator:
             # 保留原有字段以兼容其他模板
             "creditor_type": case_data.get("creditor_type", ""),
             "creditor_gender": case_data.get("creditor_gender", ""),
-            "creditor_birthday": case_data.get("creditor_birthday", ""),
+            "creditor_birthday": creditor_birthday,  # 使用格式化后的出生日期
             "creditor_nation": case_data.get("creditor_nation", "汉族"),
             "creditor_address": case_data.get("creditor_address", ""),
             "creditor_id_card": case_data.get("creditor_id_card", ""),
@@ -408,7 +461,7 @@ class DocumentGenerator:
             
             "debtor_type": case_data.get("debtor_type", ""),
             "debtor_gender": case_data.get("debtor_gender", ""),
-            "debtor_birthday": case_data.get("debtor_birthday", ""),
+            "debtor_birthday": debtor_birthday,  # 使用格式化后的出生日期
             "debtor_nation": case_data.get("debtor_nation", "汉族"),
             "debtor_address": case_data.get("debtor_address", ""),
             "debtor_id_card": case_data.get("debtor_id_card", ""),
@@ -538,7 +591,9 @@ class DocumentGenerator:
                 info_parts.append(gender)
             
             if birthday:
-                info_parts.append(f"{birthday}出生")
+                # 格式化出生日期
+                formatted_birthday = self._format_birthday_to_chinese(birthday)
+                info_parts.append(f"{formatted_birthday}出生")
             
             if nation:
                 info_parts.append(f"{nation}族")
@@ -631,8 +686,14 @@ class DocumentGenerator:
         case_type = case_data.get("case_type", "DEBT")
         loan_amount = case_data.get("loan_amount", 0)
         creditor_type = case_data.get("creditor_type", "")
+        creditor_name = case_data.get("creditor_name", "")
+        debtor_name = case_data.get("debtor_name", "")
         creditor_company_name = case_data.get("creditor_company_name", "")
         debtor_company_name = case_data.get("debtor_company_name", "")
+        
+        # 添加调试日志
+        logger.info(f"生成事实与理由 - 案件类型: {case_type}, 债权人: {creditor_name}, 债务人: {debtor_name}")
+        logger.info(f"债权人公司名称: {creditor_company_name}, 债务人公司名称: {debtor_company_name}")
         
         # 格式化loan_amount，去除尾随零
         if isinstance(loan_amount, (int, float)):
@@ -651,10 +712,25 @@ class DocumentGenerator:
             return f"原被告系朋友关系，xx年原告陆续出借被告借款{formatted_amount}元，截至起诉之日，被告余欠原告借款{formatted_amount}元。原告多次催讨未果，故双方纠纷成讼。"
         elif case_type == "CONTRACT":
             # 买卖合同纠纷 - 根据当事人类型生成不同的理由
-            if creditor_company_name and debtor_company_name:
-                return f"原告{creditor_company_name}与被告{debtor_company_name}之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
-            elif creditor_company_name:
-                return f"原告{creditor_company_name}与被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
+            # 根据当事人类型决定使用哪个名称
+            creditor_type = case_data.get("creditor_type", "")
+            debtor_type = case_data.get("debtor_type", "")
+            
+            # 如果是公司类型，使用公司名称；如果是个人类型，使用个人姓名
+            if creditor_type == "company" and creditor_company_name:
+                creditor_display_name = creditor_company_name
+            else:
+                creditor_display_name = creditor_name
+            
+            if debtor_type == "company" and debtor_company_name:
+                debtor_display_name = debtor_company_name
+            else:
+                debtor_display_name = debtor_name
+            
+            if creditor_display_name and debtor_display_name:
+                return f"原告{creditor_display_name}与被告{debtor_display_name}之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
+            elif creditor_display_name:
+                return f"原告{creditor_display_name}与被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
             else:
                 return f"原告与被告之间素有交易往来。截至起诉之日，被告余欠原告货款{formatted_amount}元。经原告多次催讨，被告仍未履行付款义务，故双方纠纷成讼。"
         else:
