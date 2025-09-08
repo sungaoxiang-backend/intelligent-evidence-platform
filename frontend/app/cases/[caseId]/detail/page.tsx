@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Edit, Save, X, FileText } from "lucide-react"
+import { Edit, Save, X, FileText, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker"
 import { EvidenceChainDashboard } from "@/components/evidence-chain-dashboard"
 import { DocumentTemplateSelector } from "@/components/document-template-selector"
+import { OcrUpload } from "@/components/ui/ocr-upload"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
@@ -46,6 +47,10 @@ export default function CaseDetailPage() {
   
   // 文书生成相关状态
   const [showDocumentSelector, setShowDocumentSelector] = useState(false)
+  
+  // OCR相关状态
+  const [showOcrUpload, setShowOcrUpload] = useState(false)
+  const [ocrPartyType, setOcrPartyType] = useState<"creditor" | "debtor" | null>(null)
 
   // 表单验证状态
   const [formErrors, setFormErrors] = useState({
@@ -331,6 +336,52 @@ export default function CaseDetailPage() {
         variant: "destructive" 
       })
     }
+  }
+
+  // OCR数据处理函数
+  const handleOcrDataExtracted = (data: any) => {
+    if (!ocrPartyType) return
+
+    const updates: any = {}
+    
+    // 根据OCR识别的数据更新表单
+    if (data.company_name) {
+      updates[`${ocrPartyType}_company_name`] = data.company_name
+    }
+    if (data.name) {
+      updates[`${ocrPartyType}_real_name`] = data.name
+    }
+    if (data.company_address) {
+      updates[`${ocrPartyType}_company_address`] = data.company_address
+    }
+    if (data.company_code) {
+      updates[`${ocrPartyType}_company_code`] = data.company_code
+    }
+
+    setEditForm((prev: any) => ({ ...prev, ...updates }))
+    
+    toast({
+      title: "OCR识别成功",
+      description: "已自动填入识别到的信息",
+    })
+  }
+
+  // 打开OCR上传对话框
+  const handleOpenOcr = (partyType: "creditor" | "debtor") => {
+    const currentPartyType = partyType === "creditor" ? editForm.creditor_type : editForm.debtor_type
+    
+    // 只允许非个人类型使用OCR
+    if (currentPartyType === "person") {
+      toast({
+        title: "提示",
+        description: "个人类型不需要使用OCR识别",
+        variant: "default",
+      })
+      return
+    }
+    
+    setOcrPartyType(partyType)
+    setShowOcrUpload(true)
   }
 
   if (caseError) {
@@ -780,30 +831,45 @@ export default function CaseDetailPage() {
                     <Label htmlFor="creditor_type" className="text-sm font-medium text-gray-700">
                       债权人类型 <span className="text-red-500">*</span>
                     </Label>
-                    {editing ? (
-                      <Select
-                        value={editForm.creditor_type || ""}
-                        onValueChange={(value: string) => setEditForm({ ...editForm, creditor_type: value as PartyType })}
-                      >
-                        <SelectTrigger className={`h-9 ${formErrors.creditor_type ? "border-red-500" : ""}`}>
-                          <SelectValue placeholder="选择债权人类型" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="person">个人</SelectItem>
-                          <SelectItem value="company">公司</SelectItem>
-                          <SelectItem value="individual">个体工商户</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                        {(() => {
-                          const creditorType = caseData.case_parties?.find((p: any) => p.party_role === "creditor")?.party_type;
-                          return creditorType === 'person' ? '个人' : 
-                                 creditorType === 'company' ? '公司' : 
-                                 creditorType === 'individual' ? '个体工商户' : '未设置';
-                        })()}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        {editing ? (
+                          <Select
+                            value={editForm.creditor_type || ""}
+                            onValueChange={(value: string) => setEditForm({ ...editForm, creditor_type: value as PartyType })}
+                          >
+                            <SelectTrigger className={`h-9 ${formErrors.creditor_type ? "border-red-500" : ""}`}>
+                              <SelectValue placeholder="选择债权人类型" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="person">个人</SelectItem>
+                              <SelectItem value="company">公司</SelectItem>
+                              <SelectItem value="individual">个体工商户</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                            {(() => {
+                              const creditorType = caseData.case_parties?.find((p: any) => p.party_role === "creditor")?.party_type;
+                              return creditorType === 'person' ? '个人' : 
+                                     creditorType === 'company' ? '公司' : 
+                                     creditorType === 'individual' ? '个体工商户' : '未设置';
+                            })()}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      {editing && editForm.creditor_type && editForm.creditor_type !== "person" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenOcr("creditor")}
+                          className="h-9 px-3"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                     {formErrors.creditor_type && (
                       <div className="text-red-500 text-xs">{formErrors.creditor_type}</div>
                     )}
@@ -847,7 +913,7 @@ export default function CaseDetailPage() {
                                 {editing ? (
                                   <Input
                                     id="creditor_real_name"
-                                    value={editForm.creditor_real_name}
+                                    value={editForm.creditor_real_name || ''}
                                     onChange={(e) => setEditForm({ ...editForm, creditor_real_name: e.target.value })}
                                     placeholder="请输入姓名"
                                     className={`h-9 ${formErrors.creditor_required_name ? 'border-red-500' : ''}`}
@@ -1026,7 +1092,7 @@ export default function CaseDetailPage() {
                                 {editing ? (
                                   <Input
                                     id="creditor_real_name"
-                                    value={editForm.creditor_real_name}
+                                    value={editForm.creditor_real_name || ''}
                                     onChange={(e) => setEditForm({ ...editForm, creditor_real_name: e.target.value })}
                                     placeholder="请输入姓名"
                                     className={`h-9 ${formErrors.creditor_required_name ? 'border-red-500' : ''}`}
@@ -1205,7 +1271,7 @@ export default function CaseDetailPage() {
                                 {editing ? (
                                   <Input
                                     id="creditor_real_name"
-                                    value={editForm.creditor_real_name}
+                                    value={editForm.creditor_real_name || ''}
                                     onChange={(e) => setEditForm({ ...editForm, creditor_real_name: e.target.value })}
                                     placeholder="请输入姓名"
                                     className={`h-9 ${formErrors.creditor_required_name ? 'border-red-500' : ''}`}
@@ -1281,30 +1347,45 @@ export default function CaseDetailPage() {
                     <Label htmlFor="debtor_type" className="text-sm font-medium text-gray-700">
                       债务人类型 <span className="text-red-500">*</span>
                     </Label>
-                    {editing ? (
-                      <Select
-                        value={editForm.debtor_type || ""}
-                        onValueChange={(value: string) => setEditForm({ ...editForm, debtor_type: value as PartyType })}
-                      >
-                        <SelectTrigger className={`h-9 ${formErrors.debtor_type ? "border-red-500" : ""}`}>
-                          <SelectValue placeholder="选择债务人类型" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="person">个人</SelectItem>
-                          <SelectItem value="company">公司</SelectItem>
-                          <SelectItem value="individual">个体工商户</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                        {(() => {
-                          const debtorType = caseData.case_parties?.find((p: any) => p.party_role === "debtor")?.party_type;
-                          return debtorType === 'person' ? '个人' : 
-                                 debtorType === 'company' ? '公司' : 
-                                 debtorType === 'individual' ? '个体工商户' : '未设置';
-                        })()}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        {editing ? (
+                          <Select
+                            value={editForm.debtor_type || ""}
+                            onValueChange={(value: string) => setEditForm({ ...editForm, debtor_type: value as PartyType })}
+                          >
+                            <SelectTrigger className={`h-9 ${formErrors.debtor_type ? "border-red-500" : ""}`}>
+                              <SelectValue placeholder="选择债务人类型" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="person">个人</SelectItem>
+                              <SelectItem value="company">公司</SelectItem>
+                              <SelectItem value="individual">个体工商户</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                            {(() => {
+                              const debtorType = caseData.case_parties?.find((p: any) => p.party_role === "debtor")?.party_type;
+                              return debtorType === 'person' ? '个人' : 
+                                     debtorType === 'company' ? '公司' : 
+                                     debtorType === 'individual' ? '个体工商户' : '未设置';
+                            })()}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      {editing && editForm.debtor_type && editForm.debtor_type !== "person" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenOcr("debtor")}
+                          className="h-9 px-3"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                     {formErrors.debtor_type && (
                       <div className="text-red-500 text-xs">{formErrors.debtor_type}</div>
                     )}
@@ -1731,6 +1812,26 @@ export default function CaseDetailPage() {
         isOpen={showDocumentSelector}
         onClose={() => setShowDocumentSelector(false)}
       />
+
+      {/* OCR上传对话框 */}
+      {showOcrUpload && ocrPartyType && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                   <OcrUpload
+                     evidenceType={ocrPartyType === "creditor" ? 
+                       (editForm.creditor_type === "company" ? "公司营业执照" : "个体工商户营业执照") :
+                       (editForm.debtor_type === "company" ? "公司营业执照" : "个体工商户营业执照")
+                     }
+                     caseId={numericCaseId}
+                     onDataExtracted={handleOcrDataExtracted}
+                     onClose={() => {
+                       setShowOcrUpload(false)
+                       setOcrPartyType(null)
+                     }}
+                   />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

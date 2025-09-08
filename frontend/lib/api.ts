@@ -522,6 +522,39 @@ export const evidenceApi = {
   },
 }
 
+// OCR API
+export const ocrApi = {
+  async recognizeEvidence(imageUrl: string, evidenceType: string): Promise<{ data: any }> {
+    const url = buildApiUrl(`/ocr/recognize`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        evidence_type: evidenceType,
+      }),
+    })
+    const result = await resp.json()
+    if (result.success) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.error_message || "OCR识别失败")
+    }
+  },
+
+  async getSupportedTypes(): Promise<{ data: any }> {
+    const url = buildApiUrl(`/ocr/supported-types`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    return { data: result }
+  },
+}
+
 // 文书生成API
 export const documentApi = {
   async getTemplates(): Promise<{ data: any[] }> {
