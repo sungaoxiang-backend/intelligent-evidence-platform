@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, HttpUrl
 from typing import List, Dict, Any, Optional
-from app.utils.xunfei_ocr import XunfeiOcrService
+from app.utils.business_license_ocr import BusinessLicenseOcrClient
 from app.core.response import SingleResponse
 from app.core.logging import logger
 
@@ -23,7 +23,7 @@ class OcrResponse(BaseModel):
 @router.post("/recognize", response_model=OcrResponse)
 async def recognize_evidence(request: OcrRequest):
     """
-    识别证据并返回表单可用的数据
+    识别营业执照并返回表单可用的数据
     
     Args:
         request: OCR识别请求
@@ -32,12 +32,9 @@ async def recognize_evidence(request: OcrRequest):
         OcrResponse: 包含识别结果的响应
     """
     try:
-        # 调用OCR服务
-        ocr_service = XunfeiOcrService()
-        result = ocr_service.extract_evidence_features(
-            str(request.image_url), 
-            request.evidence_type
-        )
+        # 调用营业执照识别服务
+        ocr_client = BusinessLicenseOcrClient()
+        result = ocr_client.recognize_business_license(str(request.image_url))
         
         # 检查是否有错误
         if "error" in result:
@@ -47,14 +44,10 @@ async def recognize_evidence(request: OcrRequest):
                 error_message=result["error"]
             )
         
-        # 提取evidence_features并转换为表单数据
-        evidence_features = result.get("evidence_features", [])
-        
-        form_data = _convert_to_form_data(evidence_features)
-        
+        # 直接返回识别结果
         return OcrResponse(
             success=True,
-            data=form_data
+            data=result
         )
         
     except Exception as e:
@@ -64,48 +57,6 @@ async def recognize_evidence(request: OcrRequest):
             error_message=f"OCR识别失败: {str(e)}"
         )
 
-def _convert_to_form_data(evidence_features: List[Dict]) -> Dict[str, Any]:
-    """
-    将OCR识别的evidence_features转换为表单数据
-    
-    Args:
-        evidence_features: OCR识别的特征列表
-        
-    Returns:
-        Dict: 表单数据
-    """
-    form_data = {}
-    
-    # 字段映射 - 统一处理营业执照信息
-    field_mapping = {
-        "公司名称": "company_name",
-        "法定代表人": "name",
-        "经营者姓名": "name", 
-        "经营者": "name",
-        "姓名": "name",  # 可能的其他字段名
-        "负责人": "name",  # 可能的其他字段名
-        "住所地": "company_address", 
-        "统一社会信用代码": "company_code",
-    }
-    
-    # 提取字段值
-    for feature in evidence_features:
-        slot_name = feature.get("slot_name", "")
-        slot_value = feature.get("slot_value", "")
-        confidence = feature.get("confidence", 0.0)
-        
-        # 调试信息：打印所有识别的字段
-        logger.info(f"OCR识别字段: {slot_name} = {slot_value} (置信度: {confidence})")
-        
-        # 只处理置信度较高的结果
-        if confidence > 0.5 and slot_name in field_mapping:
-            form_field = field_mapping[slot_name]
-            form_data[form_field] = slot_value
-            logger.info(f"字段映射: {slot_name} -> {form_field} = {slot_value}")
-        elif confidence > 0.5:
-            logger.warning(f"未映射的字段: {slot_name} = {slot_value} (置信度: {confidence})")
-    
-    return form_data
 
 @router.get("/supported-types")
 async def get_supported_types():

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Edit, Save, X, FileText, Camera } from "lucide-react"
+import { Edit, Save, X, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker"
 import { EvidenceChainDashboard } from "@/components/evidence-chain-dashboard"
 import { DocumentTemplateSelector } from "@/components/document-template-selector"
-import { OcrUpload } from "@/components/ui/ocr-upload"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
@@ -48,9 +47,6 @@ export default function CaseDetailPage() {
   // 文书生成相关状态
   const [showDocumentSelector, setShowDocumentSelector] = useState(false)
   
-  // OCR相关状态
-  const [showOcrUpload, setShowOcrUpload] = useState(false)
-  const [ocrPartyType, setOcrPartyType] = useState<"creditor" | "debtor" | null>(null)
 
   // 表单验证状态
   const [formErrors, setFormErrors] = useState({
@@ -338,51 +334,6 @@ export default function CaseDetailPage() {
     }
   }
 
-  // OCR数据处理函数
-  const handleOcrDataExtracted = (data: any) => {
-    if (!ocrPartyType) return
-
-    const updates: any = {}
-    
-    // 根据OCR识别的数据更新表单
-    if (data.company_name) {
-      updates[`${ocrPartyType}_company_name`] = data.company_name
-    }
-    if (data.name) {
-      updates[`${ocrPartyType}_real_name`] = data.name
-    }
-    if (data.company_address) {
-      updates[`${ocrPartyType}_company_address`] = data.company_address
-    }
-    if (data.company_code) {
-      updates[`${ocrPartyType}_company_code`] = data.company_code
-    }
-
-    setEditForm((prev: any) => ({ ...prev, ...updates }))
-    
-    toast({
-      title: "OCR识别成功",
-      description: "已自动填入识别到的信息",
-    })
-  }
-
-  // 打开OCR上传对话框
-  const handleOpenOcr = (partyType: "creditor" | "debtor") => {
-    const currentPartyType = partyType === "creditor" ? editForm.creditor_type : editForm.debtor_type
-    
-    // 只允许非个人类型使用OCR
-    if (currentPartyType === "person") {
-      toast({
-        title: "提示",
-        description: "个人类型不需要使用OCR识别",
-        variant: "default",
-      })
-      return
-    }
-    
-    setOcrPartyType(partyType)
-    setShowOcrUpload(true)
-  }
 
   if (caseError) {
     return (
@@ -413,7 +364,8 @@ export default function CaseDetailPage() {
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
       {/* 页面头部 */}
-      <div className="flex items-center justify-between">
+      <div className="space-y-4">
+        {/* 第一行：案件标题和案由标签 */}
         <div className="flex items-center space-x-4">
           <h1 className="text-xl font-semibold text-foreground">
               {caseData.case_parties?.find((p: any) => p.party_role === "creditor")?.party_name || '未设置债权人'} vs {caseData.case_parties?.find((p: any) => p.party_role === "debtor")?.party_name || '未设置债务人'}
@@ -425,7 +377,9 @@ export default function CaseDetailPage() {
              caseData.case_type || '未设置案由'}
           </div>
         </div>
-        <div className="mt-2">
+        
+        {/* 第二行：时间和按钮 */}
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6 text-sm text-muted-foreground">
             <span>创建时间：{caseData.created_at ? new Date(caseData.created_at).toLocaleString('zh-CN', {
               year: 'numeric',
@@ -442,9 +396,8 @@ export default function CaseDetailPage() {
               minute: '2-digit'
             }) : '未设置'}</span>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
+          
+          <div className="flex items-center gap-2">
           <Button
             variant="outline"
             onClick={() => router.push("/cases")}
@@ -544,6 +497,7 @@ export default function CaseDetailPage() {
               </Button>
             </>
           )}
+          </div>
         </div>
       </div>
 
@@ -858,17 +812,6 @@ export default function CaseDetailPage() {
                           </div>
                         )}
                       </div>
-                      {editing && editForm.creditor_type && editForm.creditor_type !== "person" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenOcr("creditor")}
-                          className="h-9 px-3"
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                     {formErrors.creditor_type && (
                       <div className="text-red-500 text-xs">{formErrors.creditor_type}</div>
@@ -1374,17 +1317,6 @@ export default function CaseDetailPage() {
                           </div>
                         )}
                       </div>
-                      {editing && editForm.debtor_type && editForm.debtor_type !== "person" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenOcr("debtor")}
-                          className="h-9 px-3"
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                     {formErrors.debtor_type && (
                       <div className="text-red-500 text-xs">{formErrors.debtor_type}</div>
@@ -1813,25 +1745,6 @@ export default function CaseDetailPage() {
         onClose={() => setShowDocumentSelector(false)}
       />
 
-      {/* OCR上传对话框 */}
-      {showOcrUpload && ocrPartyType && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                   <OcrUpload
-                     evidenceType={ocrPartyType === "creditor" ? 
-                       (editForm.creditor_type === "company" ? "公司营业执照" : "个体工商户营业执照") :
-                       (editForm.debtor_type === "company" ? "公司营业执照" : "个体工商户营业执照")
-                     }
-                     caseId={numericCaseId}
-                     onDataExtracted={handleOcrDataExtracted}
-                     onClose={() => {
-                       setShowOcrUpload(false)
-                       setOcrPartyType(null)
-                     }}
-                   />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
