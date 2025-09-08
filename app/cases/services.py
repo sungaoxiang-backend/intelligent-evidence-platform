@@ -493,7 +493,7 @@ async def auto_process(
         timeout=180.0
     )
     
-    results = evidence_extraction_results.results
+    results = evidence_extraction_results.content.results
     if not results:
         logger.error("证据特征提取失败")
         if send_progress:
