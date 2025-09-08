@@ -25,6 +25,12 @@ async def get_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
     return result.scalars().first()
 
 
+async def get_by_wechat_number(db: AsyncSession, wechat_number: str) -> Optional[User]:
+    """根据微信号获取用户"""
+    result = await db.execute(select(User).where(User.wechat_number == wechat_number))
+    return result.scalars().first()
+
+
 async def create(db: AsyncSession, obj_in: UserCreate) -> User:
     """创建新用户"""
     # 使用model_dump获取所有字段，确保包含微信字段
@@ -119,3 +125,22 @@ async def get_multi_with_count(
     items = items_result.scalars().all()
 
     return items, total
+
+
+async def update_or_create_by_wechat_number(
+    db: AsyncSession, 
+    wechat_number: str, 
+    user_data: UserCreate
+) -> Tuple[User, bool]:
+    """根据微信号更新或创建用户，返回 (用户对象, 是否新创建)"""
+    # 首先尝试查找现有用户
+    existing_user = await get_by_wechat_number(db, wechat_number)
+    
+    if existing_user:
+        # 更新现有用户
+        updated_user = await update(db, existing_user, UserUpdate(**user_data.model_dump()))
+        return updated_user, False
+    else:
+        # 创建新用户
+        new_user = await create(db, user_data)
+        return new_user, True

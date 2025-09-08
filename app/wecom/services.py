@@ -511,10 +511,10 @@ class WeComService:
                     except Exception as e:
                         logger.warning(f"[CUSTOMER_ADD] 欢迎语发送失败，但不影响主流程 - {e}")
                 
-                # 8. 创建对应的系统用户（关键功能：自动创建用户）
-                logger.info(f"[CUSTOMER_ADD] 步骤8: 创建系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
+                # 8. 创建或更新对应的系统用户（关键功能：自动创建用户）
+                logger.info(f"[CUSTOMER_ADD] 步骤8: 创建或更新系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
                 try:
-                    # 准备用户创建数据
+                    # 准备用户数据
                     user_data = UserCreate(
                         name=external_contact.name or external_contact.external_user_id,
                         wechat_nickname=external_contact.name,
@@ -522,14 +522,22 @@ class WeComService:
                         wechat_avatar=external_contact.avatar
                     )
                     
-                    # 创建用户
-                    new_user = await user_service.create(session, user_data)
-                    logger.info(f"[CUSTOMER_ADD] 系统用户创建成功 - UserID: {new_user.id}, Name: {new_user.name}")
+                    # 使用 update-or-create 逻辑，确保每个 external_user_id 只对应一个用户
+                    user, is_created = await user_service.update_or_create_by_wechat_number(
+                        session, 
+                        external_contact.external_user_id, 
+                        user_data
+                    )
+                    
+                    if is_created:
+                        logger.info(f"[CUSTOMER_ADD] 系统用户创建成功 - UserID: {user.id}, Name: {user.name}")
+                    else:
+                        logger.info(f"[CUSTOMER_ADD] 系统用户更新成功 - UserID: {user.id}, Name: {user.name}")
                     
                 except Exception as e:
                     # 用户创建失败不应该中断整个流程，只是记录错误
-                    logger.error(f"[CUSTOMER_ADD] 系统用户创建失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
-                    logger.warning(f"[CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建失败，需要手动处理")
+                    logger.error(f"[CUSTOMER_ADD] 系统用户创建/更新失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
+                    logger.warning(f"[CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建/更新失败，需要手动处理")
                 
                 # 9. 记录处理完成
                 end_time = datetime.now()
@@ -806,10 +814,10 @@ class WeComService:
                     except Exception as e:
                         logger.warning(f"[HALF_CUSTOMER_ADD] 欢迎语发送失败，但不影响主流程 - {e}")
                 
-                # 7. 创建对应的系统用户（关键功能：自动创建用户）
-                logger.info(f"[HALF_CUSTOMER_ADD] 步骤7: 创建系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
+                # 7. 创建或更新对应的系统用户（关键功能：自动创建用户）
+                logger.info(f"[HALF_CUSTOMER_ADD] 步骤7: 创建或更新系统用户 - ExternalContactID: {external_contact.id}, Name: {external_contact.name}")
                 try:
-                    # 准备用户创建数据
+                    # 准备用户数据
                     user_data = UserCreate(
                         name=external_contact.name or external_contact.external_user_id,
                         wechat_nickname=external_contact.name,
@@ -817,14 +825,22 @@ class WeComService:
                         wechat_avatar=external_contact.avatar
                     )
                     
-                    # 创建用户
-                    new_user = await user_service.create(session, user_data)
-                    logger.info(f"[HALF_CUSTOMER_ADD] 系统用户创建成功 - UserID: {new_user.id}, Name: {new_user.name}")
+                    # 使用 update-or-create 逻辑，确保每个 external_user_id 只对应一个用户
+                    user, is_created = await user_service.update_or_create_by_wechat_number(
+                        session, 
+                        external_contact.external_user_id, 
+                        user_data
+                    )
+                    
+                    if is_created:
+                        logger.info(f"[HALF_CUSTOMER_ADD] 系统用户创建成功 - UserID: {user.id}, Name: {user.name}")
+                    else:
+                        logger.info(f"[HALF_CUSTOMER_ADD] 系统用户更新成功 - UserID: {user.id}, Name: {user.name}")
                     
                 except Exception as e:
                     # 用户创建失败不应该中断整个流程，只是记录错误
-                    logger.error(f"[HALF_CUSTOMER_ADD] 系统用户创建失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
-                    logger.warning(f"[HALF_CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建失败，需要手动处理")
+                    logger.error(f"[HALF_CUSTOMER_ADD] 系统用户创建/更新失败 - ExternalContactID: {external_contact.id}, 错误: {e}")
+                    logger.warning(f"[HALF_CUSTOMER_ADD] 外部联系人已创建，但对应的系统用户创建/更新失败，需要手动处理")
                 
                 # 8. 记录处理完成
                 end_time = datetime.now()
