@@ -234,14 +234,14 @@ export function DocumentGeneratorSimple({ caseId, onClose }: DocumentGeneratorSi
                           <h4 className="text-base font-medium text-gray-900 truncate">
                             {getCleanTemplateName(document.template_name)}
                           </h4>
-                          <div className="flex items-center gap-2 mt-1">
+                          {/* <div className="flex items-center gap-2 mt-1">
                             <Badge variant="secondary" className="text-xs">
                               {getDocumentTypeDisplay(document.template_type)}
                             </Badge>
                             <span className="text-xs text-gray-500 truncate">
                               {document.filename}
                             </span>
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                       
