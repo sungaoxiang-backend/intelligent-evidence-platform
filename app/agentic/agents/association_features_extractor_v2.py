@@ -19,7 +19,7 @@ class SlotExtraction(BaseModel):
     slot_name: str
     slot_desc: str
     slot_value_type: str
-    slot_required: bool
+    slot_required: Any
     slot_value: str
     slot_value_from_url: List[str]
     confidence: float
