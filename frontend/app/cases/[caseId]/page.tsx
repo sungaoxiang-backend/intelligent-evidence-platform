@@ -103,12 +103,14 @@ export default function CaseDetailPage() {
         <EvidenceGallery
           caseId={numericCaseId}
           onBack={() => router.push("/cases")}
+          onGoToCaseDetail={() => router.push(`/cases/${caseId}/detail`)}
           initialSelectedEvidenceId={searchParams.get('evidence') ? parseInt(searchParams.get('evidence')!) : undefined}
         />
       ) : (
         <EvidenceReasoning
           caseId={numericCaseId}
           onBack={() => router.push("/cases")}
+          onGoToCaseDetail={() => router.push(`/cases/${caseId}/detail`)}
           initialSelectedGroup={searchParams.get('group') || undefined}
         />
       )}

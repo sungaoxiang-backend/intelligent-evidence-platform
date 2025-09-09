@@ -405,7 +405,15 @@ export default function CaseDetailPage() {
             variant="outline"
             onClick={() => router.push("/cases")}
           >
-            返回
+            返回案件列表
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/cases/${caseId}`)}
+            className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+          >
+            <FileText className="w-4 h-4 mr-1" />
+            证据分析
           </Button>
           <Button
             variant="outline"

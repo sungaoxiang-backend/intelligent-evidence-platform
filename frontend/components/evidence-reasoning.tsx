@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical, CheckCircle, XCircle } from "lucide-react"
+import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical, CheckCircle, XCircle, FileText } from "lucide-react"
 import { caseApi, evidenceApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
@@ -1046,10 +1046,12 @@ function EvidenceReasoningContent({
 export function EvidenceReasoning({ 
   caseId, 
   onBack, 
+  onGoToCaseDetail,
   initialSelectedGroup 
 }: { 
   caseId: string | number; 
   onBack?: () => void;
+  onGoToCaseDetail?: () => void;
   initialSelectedGroup?: string;
 }) {
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<number[]>([])
@@ -1472,7 +1474,17 @@ export function EvidenceReasoning({
             审核证据
           </Button> */}
           {onBack && (
-            <Button variant="outline" onClick={onBack}>返回案件</Button>
+            <Button variant="outline" onClick={onBack}>返回案件列表</Button>
+          )}
+          {onGoToCaseDetail && (
+            <Button 
+              variant="outline" 
+              onClick={onGoToCaseDetail}
+              className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+            >
+              <FileText className="w-4 h-4 mr-1" />
+              案件详情
+            </Button>
           )}
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   Upload,
   CheckCircle,
   XCircle,
+  FileText,
 } from "lucide-react"
 import { evidenceApi } from "@/lib/api"
 import { caseApi } from "@/lib/api"
@@ -1312,7 +1313,7 @@ function EvidenceGalleryContent({
   )
 }
 
-export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; onBack?: () => void }) {
+export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: string | number; onBack?: () => void; onGoToCaseDetail?: () => void }) {
   const searchTerm = ""
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -1676,7 +1677,17 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
             上传证据
           </Button>
           {onBack && (
-            <Button variant="outline" onClick={onBack}>返回案件</Button>
+            <Button variant="outline" onClick={onBack}>返回案件列表</Button>
+          )}
+          {onGoToCaseDetail && (
+            <Button 
+              variant="outline" 
+              onClick={onGoToCaseDetail}
+              className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+            >
+              <FileText className="w-4 h-4 mr-1" />
+              案件详情
+            </Button>
           )}
         </div>
       </div>
