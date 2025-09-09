@@ -66,4 +66,7 @@ logs/
 # cursor
 .cursor/
 
+# claude
+.claude/
+
 static/

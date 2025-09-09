@@ -8,6 +8,8 @@ import uuid
 import yaml
 import zipfile
 import io
+import tempfile
+import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -20,7 +22,9 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 from docx.table import Table, _Cell
 from docx.oxml.shared import qn
+from docx.shared import Mm
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +157,11 @@ class DocumentGenerator:
             
             # 将案件模型转换为字典格式
             case_data = self._convert_case_model_to_dict(case)
+            
+            # 如果是主体身份模板，处理图片证据
+            if template_id == "subject_identity_template":
+                image_evidence = await self._get_image_evidence_for_subject_identity(db, case_id)
+                case_data.update(image_evidence)
             
             # 调用原有的生成方法
             return self.generate_document(template_id, case_data, custom_variables)
@@ -719,6 +728,11 @@ class DocumentGenerator:
             
             # 使用docxtpl生成文档
             doc = DocxTemplate(template_path)
+            
+            # 如果是主体身份模板，处理图片插入
+            if template.get("type") == "subject_identity":
+                variables = self._process_images_for_subject_identity(doc, variables, case_data)
+            
             doc.render(variables)
             
             # 生成输出文件名
@@ -727,6 +741,10 @@ class DocumentGenerator:
             
             # 保存文档
             doc.save(output_path)
+            
+            # 清理临时图片文件
+            if template.get("type") == "subject_identity" and "_temp_image_dir" in case_data:
+                self._cleanup_temp_images(case_data["_temp_image_dir"])
             
             return str(output_path)
             
@@ -933,6 +951,82 @@ class DocumentGenerator:
                 "success": False,
                 "error": str(e)
             }
+    
+    def _process_images_for_subject_identity(self, doc: Document, variables: Dict[str, Any], case_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        处理主体身份模板的图片插入
+        
+        Args:
+            doc: Word文档对象
+            variables: 模板变量
+            case_data: 案件数据
+            
+        Returns:
+            更新后的变量字典
+        """
+        try:
+            # 处理债权人身份证图片 - 使用与模板相同的变量名
+            if variables.get("creditor_id_card_image"):
+                image_path = variables["creditor_id_card_image"]
+                if Path(image_path).exists():
+                    # 使用docxtpl的图片插入语法
+                    # 模板中使用 {{ creditor_id_card_image }} 来插入图片
+                    from docxtpl import InlineImage
+                    
+                    # 创建内联图片对象 - 设置合适的尺寸
+                    creditor_image = InlineImage(doc, image_path, width=Mm(80), height=Mm(50))
+                    variables["creditor_id_card_image"] = creditor_image
+                    logger.info(f"债权人身份证图片插入成功: {image_path}")
+                else:
+                    logger.warning(f"债权人身份证图片不存在: {image_path}")
+                    # 图片不存在时，保持变量为空字符串，模板会显示空内容
+                    variables["creditor_id_card_image"] = ""
+            else:
+                # 没有图片数据时，保持变量为空字符串
+                variables["creditor_id_card_image"] = ""
+            
+            # 处理债务人身份证图片 - 使用与模板相同的变量名
+            if variables.get("debtor_id_card_image"):
+                image_path = variables["debtor_id_card_image"]
+                if Path(image_path).exists():
+                    # 创建内联图片对象
+                    from docxtpl import InlineImage
+                    
+                    debtor_image = InlineImage(doc, image_path, width=Mm(80), height=Mm(50))
+                    variables["debtor_id_card_image"] = debtor_image
+                    logger.info(f"债务人身份证图片插入成功: {image_path}")
+                else:
+                    logger.warning(f"债务人身份证图片不存在: {image_path}")
+                    # 图片不存在时，保持变量为空字符串
+                    variables["debtor_id_card_image"] = ""
+            else:
+                # 没有图片数据时，保持变量为空字符串
+                variables["debtor_id_card_image"] = ""
+            
+            return variables
+            
+        except Exception as e:
+            logger.error(f"处理主体身份图片失败: {str(e)}")
+            # 失败时返回空字符串，确保文档生成不中断
+            variables["creditor_id_card_image"] = ""
+            variables["debtor_id_card_image"] = ""
+            return variables
+    
+    def _cleanup_temp_images(self, temp_dir: str) -> None:
+        """
+        清理临时图片文件
+        
+        Args:
+            temp_dir: 临时目录路径
+        """
+        try:
+            import shutil
+            temp_path = Path(temp_dir)
+            if temp_path.exists():
+                shutil.rmtree(temp_path)
+                logger.info(f"清理临时图片目录: {temp_dir}")
+        except Exception as e:
+            logger.error(f"清理临时图片失败: {str(e)}")
     
     def _create_default_template(
         self, 
@@ -1197,8 +1291,109 @@ class DocumentGenerator:
     def _prepare_subject_identity_variables(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
         """准备主体身份模板变量"""
         return {
-            "creditor_id_card_frontend": case_data.get("creditor_id_card_frontend", ""),
-            "creditor_id_card_back": case_data.get("creditor_id_card_back", ""),
-            "debtor_id_card_frontend": case_data.get("debtor_id_card_frontend", ""),
-            "debtor_id_card_back": case_data.get("debtor_id_card_back", "")
+            "creditor_id_card_image": case_data.get("creditor_id_card_image", ""),
+            "debtor_id_card_image": case_data.get("debtor_id_card_image", "")
         }
+    
+    async def _get_image_evidence_for_subject_identity(self, db: AsyncSession, case_id: int) -> Dict[str, Any]:
+        """
+        获取主体身份模板所需的图片证据
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            
+        Returns:
+            包含图片路径的字典
+        """
+        try:
+            # 获取案件的所有证据
+            from sqlalchemy import select
+            from app.evidences.models import Evidence
+            
+            stmt = select(Evidence).where(Evidence.case_id == case_id)
+            result = await db.execute(stmt)
+            evidences = result.scalars().all()
+            
+            # 查找身份证图片证据
+            creditor_id_card_image = None
+            debtor_id_card_image = None
+            
+            temp_dir = Path(tempfile.gettempdir()) / f"document_images_{case_id}_{uuid.uuid4().hex[:8]}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            for evidence in evidences:
+                logger.info(f"检查证据: ID={evidence.id}, 分类={evidence.classification_category}, 角色={evidence.evidence_role}, 状态={evidence.evidence_status}, 文件={evidence.file_name}")
+                
+                # 检查是否为身份证类型且已分类（包括已提取特征的状态）
+                if (evidence.classification_category == "身份证" and 
+                    evidence.evidence_role in ["creditor", "debtor"] and
+                    evidence.evidence_status in ["classified", "features_extracted"]):
+                    
+                    logger.info(f"匹配到身份证证据: ID={evidence.id}, 角色={evidence.evidence_role}, URL={evidence.file_url}")
+                    
+                    # 下载并临时存储图片
+                    image_path = await self._download_and_save_image(
+                        evidence.file_url, 
+                        evidence.file_name,
+                        temp_dir
+                    )
+                    
+                    if image_path:
+                        if evidence.evidence_role == "creditor":
+                            creditor_id_card_image = str(image_path)
+                            logger.info(f"设置债权人身份证图片: {image_path}")
+                        elif evidence.evidence_role == "debtor":
+                            debtor_id_card_image = str(image_path)
+                            logger.info(f"设置债务人身份证图片: {image_path}")
+            
+            return {
+                "creditor_id_card_image": creditor_id_card_image or "",
+                "debtor_id_card_image": debtor_id_card_image or "",
+                "_temp_image_dir": str(temp_dir)  # 存储临时目录路径用于后续清理
+            }
+            
+        except Exception as e:
+            logger.error(f"获取主体身份图片证据失败: {str(e)}")
+            return {
+                "creditor_id_card_image": "",
+                "debtor_id_card_image": ""
+            }
+    
+    async def _download_and_save_image(self, file_url: str, file_name: str, temp_dir: Path) -> Optional[Path]:
+        """
+        下载并保存图片到临时目录
+        
+        Args:
+            file_url: 文件URL
+            file_name: 文件名
+            temp_dir: 临时目录
+            
+        Returns:
+            保存的图片路径，失败返回None
+        """
+        try:
+            # 确保URL完整
+            if not file_url.startswith(('http://', 'https://')):
+                # 如果是相对路径，添加基础URL
+                base_url = "http://localhost:8008"  # 可以根据实际配置调整
+                file_url = f"{base_url}{file_url}"
+            
+            # 下载图片
+            response = requests.get(file_url, timeout=30)
+            response.raise_for_status()
+            
+            # 生成安全的文件名
+            safe_filename = f"{uuid.uuid4().hex[:8]}_{file_name}"
+            image_path = temp_dir / safe_filename
+            
+            # 保存图片
+            with open(image_path, 'wb') as f:
+                f.write(response.content)
+            
+            logger.info(f"图片下载成功: {file_url} -> {image_path}")
+            return image_path
+            
+        except Exception as e:
+            logger.error(f"下载图片失败 {file_url}: {str(e)}")
+            return None

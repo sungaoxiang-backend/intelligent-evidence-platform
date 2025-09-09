@@ -143,22 +143,15 @@ templates:
     description: "适用于主体身份的模板"
     file_path: "templates/documents/subject_identity_template.docx"
     variables:
-      - name: "creditor_id_card_frontend"
-        description: "债权人身份证正面照片"
+      - name: "creditor_id_card_image"
+        description: "债权人身份证照片"
         required: true
         default: ""
-      - name: "creditor_id_card_back"
-        description: "债权人身份证反面照片"
+      - name: "debtor_id_card_image"
+        description: "债务人身份证照片"
         required: true
         default: ""
-      - name: "debtor_id_card_frontend"
-        description: "债务人身份证正面照片"
-        required: true
-        default: ""
-      - name: "debtor_id_card_back"
-        description: "债务人身份证反面照片"
-        required: true
-        default: ""
+
 
 # # 默认变量映射规则
 # variable_mapping:
