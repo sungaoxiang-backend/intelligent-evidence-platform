@@ -1692,10 +1692,36 @@ export function EvidenceGallery({ caseId, onBack }: { caseId: string | number; o
               <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 mb-2">点击上传或拖拽文件到此处</p>
-                <p className="text-sm text-gray-500">支持 PDF、JPG、PNG、MP3 等格式，最大 50MB</p>
-                <Input type="file" className="hidden" id="fileUpload" multiple onChange={e => {
-                  if (e.target.files) setSelectedFiles(Array.from(e.target.files))
-                }} />
+                <p className="text-sm text-gray-500">支持 JPG、PNG、BMP、WEBP 等图片格式，最大 50MB</p>
+                <Input 
+                  type="file" 
+                  className="hidden" 
+                  id="fileUpload" 
+                  multiple 
+                  accept="image/*"
+                  onChange={e => {
+                    if (e.target.files) {
+                      const files = Array.from(e.target.files)
+                      const supportedFormats = ['jpg', 'jpeg', 'png', 'bmp', 'webp']
+                      
+                      // 验证文件类型
+                      const validFiles = files.filter(file => {
+                        const ext = file.name.split('.').pop()?.toLowerCase()
+                        return ext && supportedFormats.includes(ext)
+                      })
+                      
+                      if (validFiles.length !== files.length) {
+                        const invalidFiles = files.filter(file => {
+                          const ext = file.name.split('.').pop()?.toLowerCase()
+                          return !ext || !supportedFormats.includes(ext)
+                        })
+                        alert(`以下文件格式不支持，已自动过滤：\n${invalidFiles.map(f => f.name).join('\n')}\n\n支持的格式：${supportedFormats.join(', ')}`)
+                      }
+                      
+                      setSelectedFiles(validFiles)
+                    }
+                  }} 
+                />
                 <Button
                   variant="outline"
                   className="mt-4 bg-transparent"

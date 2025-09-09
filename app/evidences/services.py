@@ -249,22 +249,29 @@ async def upload_file(
 ) -> UploadFileResponse:
     """上传文件到COS"""
     from loguru import logger
+    from app.utils.filename_utils import sanitize_filename_for_llm, validate_filename_for_llm
+    
+    # 验证和清理文件名
+    is_valid, error_msg = validate_filename_for_llm(filename)
+    if not is_valid:
+        logger.warning(f"文件名可能有问题: {filename}, 错误: {error_msg}")
+        # 清理文件名
+        original_filename = filename
+        filename = sanitize_filename_for_llm(filename)
+        logger.info(f"文件名已清理: {original_filename} -> {filename}")
     
     # 获取文件扩展名
     _, file_extension = os.path.splitext(filename)
     file_extension = file_extension.lower().lstrip(".")
     
-    # 根据文件扩展名确定存储文件夹
-    if file_extension in ["pdf", "doc", "docx", "txt", "xls", "xlsx"]:
-        folder = "documents"
-    elif file_extension in ["jpg", "jpeg", "png", "gif", "bmp"]:
-        folder = "images"
-    elif file_extension in ["mp3", "wav", "ogg", "flac"]:
-        folder = "audios"
-    elif file_extension in ["mp4", "avi", "mov", "wmv"]:
-        folder = "videos"
-    else:
-        folder = "others"
+    # 只支持图片格式
+    supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
+    if file_extension not in supported_image_formats:
+        logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
+        raise ValueError(f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}")
+    
+    # 所有文件都存储到images文件夹
+    folder = "images"
     
     # 获取文件大小
     file.seek(0, os.SEEK_END)
@@ -834,12 +841,12 @@ async def auto_process(
                 
                 # 设置超时时间（3分钟）
                 import asyncio
-                run_response: RunResponse = await asyncio.wait_for(
+                llm_run_response: RunResponse = await asyncio.wait_for(
                     extractor.arun(images),
                     timeout=180.0
                 )
                 
-                evidence_extraction_results: EvidenceExtractionResults = run_response.content
+                evidence_extraction_results: EvidenceExtractionResults = llm_run_response.content
                 if results := evidence_extraction_results.results:
                     from urllib.parse import unquote
                     for res in results:

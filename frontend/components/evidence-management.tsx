@@ -130,12 +130,11 @@ function EvidenceTableContent({
     const ext = fileName.split('.').pop()?.toLowerCase()
     if (!ext) return "-"
     switch (ext) {
-      case "pdf": return "PDF"
       case "jpg": case "jpeg": return "图片(JPG)"
       case "png": return "图片(PNG)"
-      case "mp3": return "音频(MP3)"
-      case "wav": return "音频(WAV)"
-      default: return ext.toUpperCase()
+      case "bmp": return "图片(BMP)"
+      case "webp": return "图片(WEBP)"
+      default: return `图片(${ext.toUpperCase()})`
     }
   }
 
@@ -293,10 +292,26 @@ export function EvidenceManagement() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
       const files = Array.from(e.target.files)
-      setSelectedFiles(files)
-      if (uploadCaseId && files.length > 0) {
+      const supportedFormats = ['jpg', 'jpeg', 'png', 'bmp', 'webp']
+      
+      // 验证文件类型
+      const validFiles = files.filter(file => {
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        return ext && supportedFormats.includes(ext)
+      })
+      
+      if (validFiles.length !== files.length) {
+        const invalidFiles = files.filter(file => {
+          const ext = file.name.split('.').pop()?.toLowerCase()
+          return !ext || !supportedFormats.includes(ext)
+        })
+        alert(`以下文件格式不支持，已自动过滤：\n${invalidFiles.map(f => f.name).join('\n')}\n\n支持的格式：${supportedFormats.join(', ')}`)
+      }
+      
+      setSelectedFiles(validFiles)
+      if (uploadCaseId && validFiles.length > 0) {
         setIsUploadDialogOpen(false)
-        autoUpload(files, uploadCaseId)
+        autoUpload(validFiles, uploadCaseId)
       }
     }
   }
@@ -404,8 +419,15 @@ export function EvidenceManagement() {
               <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 mb-2">点击上传或拖拽文件到此处</p>
-                <p className="text-sm text-gray-500">支持 PDF、JPG、PNG、MP3 等格式，最大 50MB</p>
-                <Input type="file" className="hidden" id="fileUpload" multiple onChange={handleFileChange} />
+                <p className="text-sm text-gray-500">支持 JPG、PNG、BMP、WEBP 等图片格式，最大 50MB</p>
+                <Input 
+                  type="file" 
+                  className="hidden" 
+                  id="fileUpload" 
+                  multiple 
+                  accept="image/*"
+                  onChange={handleFileChange} 
+                />
                 <Button
                   variant="outline"
                   className="mt-4 bg-transparent"

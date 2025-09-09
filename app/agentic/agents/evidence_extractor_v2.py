@@ -141,7 +141,7 @@ class EvidenceFeaturesExtractor:
         
         message = "\n".join(message_parts)
         
-        # 创建图片对象
+        # 创建图片对象，直接使用URL（文件名已在上传时清理）
         images = [Image(url=image.url) for image in evidence_images]
         return await self.agent.arun(message=message, images=images)
 

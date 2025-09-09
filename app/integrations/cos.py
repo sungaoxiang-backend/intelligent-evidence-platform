@@ -159,17 +159,17 @@ class COSService:
                 file_extension = file_extension.lower().lstrip(".")
                 logger.debug(f"文件扩展名: {file_extension}")
                 
-                # 根据文件扩展名确定存储文件夹
-                if file_extension in ["pdf", "doc", "docx", "txt", "xls", "xlsx"]:
-                    file_folder = "documents"
-                elif file_extension in ["jpg", "jpeg", "png", "gif", "bmp"]:
-                    file_folder = "images"
-                elif file_extension in ["mp3", "wav", "ogg", "flac"]:
-                    file_folder = "audios"
-                elif file_extension in ["mp4", "avi", "mov", "wmv"]:
-                    file_folder = "videos"
-                else:
-                    file_folder = "others"
+                # 只支持图片格式，所有文件都存储到images文件夹
+                supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
+                if file_extension not in supported_image_formats:
+                    logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
+                    failed.append({
+                        "file": file.filename,
+                        "error": f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}"
+                    })
+                    continue
+                
+                file_folder = "images"
                 
                 # 使用指定的文件夹或根据文件类型确定的文件夹
                 target_folder = folder if folder else file_folder
