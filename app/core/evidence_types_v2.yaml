@@ -392,14 +392,13 @@ evidence_types:
   # Legal Documents
   goods_iou_note:
     type: "货款欠条"
-    description: "明确因'货款'事由产生的欠条"
+    description: "明确因'货款'事由产生的欠条，需要非常仔细的分析其内容，确立产生这个欠条的事由是因为一些合同或货物交易等。这里要严格和借款借条区分开，借款借条产生的事由是因为借款、借钱等。"
     category: "票据类"
     features:
       decisive:
-        - "欠条"
-        - "拿货"
         - "货款"
-        - "今欠到"
+        - "拿货"
+        - "货款欠条"
       important:
         - "金额大写和小写"
         - "欠款人签名"
@@ -564,7 +563,7 @@ evidence_types:
 
   loan_iou_note:
     type: "借款借条"
-    description: "明确为'借款'事由产生的借条"
+    description: "明确为'借款'事由产生的借条，需要非常仔细的分析其内容，确立产生这个借条的事由是因为借款、借钱等。这里要严格和货款欠条区分开，货款欠条产生的事由是因为一些合同或货物交易等。"
     category: "票据类"
     features:
       decisive:
