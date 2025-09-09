@@ -4,20 +4,22 @@
 
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from datetime import datetime
 from app.core.deps import get_current_staff, get_db
 from app.staffs.models import Staff
 from .services import DocumentGenerator
 from .schemas import (
     DocumentGenerateRequest, 
     DocumentGenerateByCaseRequest,
+    DocumentGenerateAllByCaseRequest,
     DocumentGenerateResponse,
     DocumentTemplateInfo,
     DocumentRecordInfo,
-    HealthCheckResponse
+    HealthCheckResponse,
+    DocumentPreviewResponse
 )
 
 router = APIRouter()
@@ -196,7 +198,7 @@ async def download_document(
 
 @router.post("/generate-all-by-case")
 async def generate_all_documents_by_case(
-    request: DocumentGenerateByCaseRequest,
+    request: DocumentGenerateAllByCaseRequest,
     db: AsyncSession = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff)
 ):
@@ -272,6 +274,74 @@ async def generate_all_documents_by_case(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量生成文书失败: {str(e)}"
+        )
+
+
+@router.get("/preview/{filename:path}", response_model=DocumentPreviewResponse)
+async def get_document_preview(
+    filename: str,
+    current_staff: Staff = Depends(get_current_staff)
+):
+    """获取文档预览内容"""
+    try:
+        # 获取文档预览数据
+        preview_data = document_generator.get_document_preview_data(filename)
+        
+        if preview_data["success"]:
+            return {
+                "code": 200,
+                "message": "获取预览成功",
+                "data": preview_data
+            }
+        else:
+            return {
+                "code": 404,
+                "message": preview_data.get("error", "文档不存在"),
+                "data": preview_data
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取文档预览失败: {str(e)}"
+        )
+
+
+@router.post("/download-zip")
+async def download_documents_zip(
+    request: Dict[str, Any],
+    current_staff: Staff = Depends(get_current_staff)
+):
+    """下载多个文档的ZIP压缩包"""
+    try:
+        documents = request.get("documents", [])
+        case_id = request.get("case_id", 0)
+        
+        if not documents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请提供要下载的文档列表"
+            )
+        
+        # 创建ZIP文件
+        zip_data = document_generator.create_documents_zip(documents, case_id)
+        
+        # 生成ZIP文件名
+        zip_filename = f"case_{case_id}_documents_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        # 返回ZIP文件响应
+        return Response(
+            content=zip_data,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{zip_filename}"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建ZIP文件失败: {str(e)}"
         )
 
 

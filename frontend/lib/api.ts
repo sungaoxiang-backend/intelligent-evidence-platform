@@ -602,4 +602,54 @@ export const documentApi = {
     }
     return resp.blob()
   },
+  async generateAllDocumentsByCase(caseId: number): Promise<{ data: any }> {
+    const url = buildApiUrl(`/documents/generate-all-by-case`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        case_id: caseId,
+        custom_variables: {}
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "批量生成文书失败")
+    }
+  },
+  async getDocumentPreview(filename: string): Promise<{ data: any }> {
+    const url = buildApiUrl(`/documents/preview/${filename}`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data }
+    } else {
+      throw new Error(result.message || "获取文档预览失败")
+    }
+  },
+  async downloadDocumentsZip(documents: any[], caseId: number): Promise<Blob> {
+    const url = buildApiUrl(`/documents/download-zip`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        documents: documents,
+        case_id: caseId
+      }),
+    })
+    if (!resp.ok) {
+      throw new Error("下载ZIP文件失败")
+    }
+    return resp.blob()
+  },
 }

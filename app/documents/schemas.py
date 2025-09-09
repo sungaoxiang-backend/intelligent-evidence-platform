@@ -39,6 +39,18 @@ class DocumentGenerateByCaseRequest(BaseModel):
         return v
 
 
+class DocumentGenerateAllByCaseRequest(BaseModel):
+    """通过案件ID生成所有文书请求（批量生成）"""
+    case_id: int = Field(..., description="案件ID")
+    custom_variables: Optional[Dict[str, Any]] = Field(default_factory=dict, description="自定义变量（覆盖案件数据）")
+    
+    @validator('case_id')
+    def validate_case_id(cls, v):
+        if v <= 0:
+            raise ValueError('案件ID必须大于0')
+        return v
+
+
 class DocumentGenerateResponse(BaseModel):
     """文书生成响应"""
     success: bool = Field(..., description="是否成功")
@@ -121,4 +133,13 @@ class HealthCheckResponse(BaseModel):
     output_dir_exists: bool = Field(..., description="输出目录是否存在")
     template_dir: str = Field(..., description="模板目录路径")
     output_dir: str = Field(..., description="输出目录路径")
+    error: Optional[str] = Field(None, description="错误信息")
+
+
+class DocumentPreviewResponse(BaseModel):
+    """文档预览响应"""
+    success: bool = Field(..., description="是否成功")
+    text_content: Optional[str] = Field(None, description="文本内容")
+    html_content: Optional[str] = Field(None, description="HTML内容")
+    filename: Optional[str] = Field(None, description="文件名")
     error: Optional[str] = Field(None, description="错误信息")

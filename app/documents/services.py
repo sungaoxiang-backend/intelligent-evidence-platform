@@ -6,6 +6,8 @@
 import os
 import uuid
 import yaml
+import zipfile
+import io
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -14,6 +16,10 @@ import logging
 from docxtpl import DocxTemplate
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.text.paragraph import Paragraph
+from docx.text.run import Run
+from docx.table import Table, _Cell
+from docx.oxml.shared import qn
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -727,6 +733,206 @@ class DocumentGenerator:
         except Exception as e:
             logger.error(f"创建文档失败: {str(e)}")
             raise
+    
+    def extract_document_text(self, file_path: str) -> str:
+        """
+        提取Word文档的文本内容用于预览
+        
+        Args:
+            file_path: 文档文件路径
+            
+        Returns:
+            文档文本内容
+        """
+        try:
+            doc = Document(file_path)
+            text_parts = []
+            
+            # 提取段落文本
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text_parts.append(paragraph.text.strip())
+            
+            # 提取表格文本
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            row_text.append(cell_text)
+                    if row_text:
+                        text_parts.append(" | ".join(row_text))
+            
+            return "\n\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"提取文档文本失败: {str(e)}")
+            return f"无法提取文档内容: {str(e)}"
+    
+    def convert_document_to_html(self, file_path: str) -> str:
+        """
+        将Word文档转换为HTML格式用于预览
+        
+        Args:
+            file_path: 文档文件路径
+            
+        Returns:
+            HTML格式的文档内容
+        """
+        try:
+            doc = Document(file_path)
+            html_parts = []
+            
+            # HTML头部
+            html_parts.append("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 20px; }
+                    h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+                    h2 { color: #34495e; margin-top: 25px; }
+                    h3 { color: #7f8c8d; }
+                    p { margin: 10px 0; text-align: justify; }
+                    .paragraph { margin: 15px 0; }
+                    .table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+                    .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .table th { background-color: #f2f2f2; font-weight: bold; }
+                    .center { text-align: center; }
+                    .right { text-align: right; }
+                </style>
+            </head>
+            <body>
+            """)
+            
+            # 转换段落
+            for i, paragraph in enumerate(doc.paragraphs):
+                if paragraph.text.strip():
+                    alignment = paragraph.alignment
+                    text = paragraph.text.strip()
+                    
+                    # 根据文本特征判断标题级别
+                    if len(text) < 50 and text.endswith('书'):
+                        html_parts.append(f"<h1>{text}</h1>")
+                    elif len(text) < 100 and (text.startswith('关于') or text.startswith('为')):
+                        html_parts.append(f"<h2>{text}</h2>")
+                    elif len(text) < 80 and text.endswith('：'):
+                        html_parts.append(f"<h3>{text}</h3>")
+                    else:
+                        # 处理对齐方式
+                        css_class = ""
+                        if alignment == WD_ALIGN_PARAGRAPH.CENTER:
+                            css_class = " class=\"center\""
+                        elif alignment == WD_ALIGN_PARAGRAPH.RIGHT:
+                            css_class = " class=\"right\""
+                        
+                        html_parts.append(f"<div class=\"paragraph\"{css_class}>{text}</div>")
+            
+            # 转换表格
+            for table in doc.tables:
+                html_parts.append('<table class="table">')
+                
+                # 表头
+                if len(table.rows) > 0:
+                    html_parts.append('<thead><tr>')
+                    for cell in table.rows[0].cells:
+                        html_parts.append(f"<th>{cell.text.strip()}</th>")
+                    html_parts.append('</tr></thead>')
+                
+                # 表内容
+                html_parts.append('<tbody>')
+                for i, row in enumerate(table.rows):
+                    if i == 0:  # 跳过第一行（表头）
+                        continue
+                    html_parts.append('<tr>')
+                    for cell in row.cells:
+                        html_parts.append(f"<td>{cell.text.strip()}</td>")
+                    html_parts.append('</tr>')
+                html_parts.append('</tbody></table>')
+            
+            html_parts.append("</body></html>")
+            return "".join(html_parts)
+            
+        except Exception as e:
+            logger.error(f"转换文档为HTML失败: {str(e)}")
+            return f"<html><body><p>无法转换文档: {str(e)}</p></body></html>"
+    
+    def create_documents_zip(self, documents: List[Dict[str, Any]], case_id: int) -> bytes:
+        """
+        创建包含多个文档的ZIP文件
+        
+        Args:
+            documents: 文档信息列表
+            case_id: 案件ID
+            
+        Returns:
+            ZIP文件的字节数据
+        """
+        try:
+            # 创建内存中的ZIP文件
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
+                for doc in documents:
+                    if doc.get("success") and doc.get("file_path"):
+                        file_path = doc["file_path"]
+                        filename = doc.get("filename", Path(file_path).name)
+                        
+                        # 检查文件是否存在
+                        if os.path.exists(file_path):
+                            # 添加到ZIP文件
+                            zip_file.write(file_path, filename)
+                        else:
+                            logger.warning(f"文档文件不存在: {file_path}")
+            
+            # 获取ZIP文件字节数据
+            zip_buffer.seek(0)
+            return zip_buffer.getvalue()
+            
+        except Exception as e:
+            logger.error(f"创建ZIP文件失败: {str(e)}")
+            raise
+    
+    def get_document_preview_data(self, filename: str) -> Dict[str, Any]:
+        """
+        获取文档预览数据
+        
+        Args:
+            filename: 文档文件名
+            
+        Returns:
+            包含文本内容和HTML内容的预览数据
+        """
+        try:
+            file_path = self.output_dir / filename
+            
+            if not file_path.exists():
+                return {
+                    "success": False,
+                    "error": "文档文件不存在"
+                }
+            
+            # 提取文本内容
+            text_content = self.extract_document_text(str(file_path))
+            
+            # 转换为HTML
+            html_content = self.convert_document_to_html(str(file_path))
+            
+            return {
+                "success": True,
+                "text_content": text_content,
+                "html_content": html_content,
+                "filename": filename
+            }
+            
+        except Exception as e:
+            logger.error(f"获取文档预览数据失败: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     def _create_default_template(
         self, 

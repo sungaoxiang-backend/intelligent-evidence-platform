@@ -61,7 +61,7 @@ templates:
         default: ""
 
   receipt_account_template:
-    name: "收款庄户确认书文书模板"
+    name: "收款账户确认书文书模板"
     type: "receipt_account"
     description: "适用于收款账户确认书的模板"
     file_path: "templates/documents/receipt_account_template.docx"

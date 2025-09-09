@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker"
 import { EvidenceChainDashboard } from "@/components/evidence-chain-dashboard"
 import { DocumentTemplateSelector } from "@/components/document-template-selector"
+import { DocumentGeneratorNew } from "@/components/document-generator-new"
+import { DocumentGeneratorV2 } from "@/components/document-generator-v2"
+import { DocumentGeneratorSimple } from "@/components/document-generator-simple"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
@@ -45,7 +48,7 @@ export default function CaseDetailPage() {
   const [loanAmountInput, setLoanAmountInput] = useState("")
   
   // 文书生成相关状态
-  const [showDocumentSelector, setShowDocumentSelector] = useState(false)
+  const [showDocumentGenerator, setShowDocumentGenerator] = useState(false)
   
 
   // 表单验证状态
@@ -406,7 +409,7 @@ export default function CaseDetailPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setShowDocumentSelector(true)}
+            onClick={() => setShowDocumentGenerator(true)}
             className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
           >
             <FileText className="w-4 h-4 mr-1" />
@@ -1738,12 +1741,17 @@ export default function CaseDetailPage() {
       </Card>
       </div>
 
-      {/* 文书模板选择器 */}
-      <DocumentTemplateSelector
-        caseId={numericCaseId}
-        isOpen={showDocumentSelector}
-        onClose={() => setShowDocumentSelector(false)}
-      />
+      {/* 新文书生成器 */}
+      {showDocumentGenerator && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+            <DocumentGeneratorSimple
+              caseId={numericCaseId}
+              onClose={() => setShowDocumentGenerator(false)}
+            />
+          </div>
+        </div>
+      )}
 
     </div>
   )
