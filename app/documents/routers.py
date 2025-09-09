@@ -194,6 +194,87 @@ async def download_document(
         )
 
 
+@router.post("/generate-all-by-case")
+async def generate_all_documents_by_case(
+    request: DocumentGenerateByCaseRequest,
+    db: AsyncSession = Depends(get_db),
+    current_staff: Staff = Depends(get_current_staff)
+):
+    """通过案件ID生成所有模板的文书（聚合API）"""
+    try:
+        # 获取所有可用的模板
+        available_templates = document_generator.get_available_templates()
+        
+        if not available_templates:
+            return {
+                "code": 400,
+                "message": "没有可用的模板",
+                "data": []
+            }
+        
+        # 生成所有模板的文书
+        results = []
+        failed_templates = []
+        
+        for template in available_templates:
+            template_id = template.get("template_id")
+            if not template_id:
+                continue
+                
+            try:
+                # 生成单个模板的文书
+                result = await document_generator.generate_document_by_case_id(
+                    db=db,
+                    template_id=template_id,
+                    case_id=request.case_id,
+                    custom_variables=request.custom_variables
+                )
+                
+                if result["success"]:
+                    results.append({
+                        "template_id": template_id,
+                        "template_name": template.get("name", ""),
+                        "template_type": template.get("type", ""),
+                        "file_path": result["file_path"],
+                        "filename": result["filename"],
+                        "success": True
+                    })
+                else:
+                    failed_templates.append({
+                        "template_id": template_id,
+                        "template_name": template.get("name", ""),
+                        "error": result["message"],
+                        "success": False
+                    })
+                    
+            except Exception as e:
+                failed_templates.append({
+                    "template_id": template_id,
+                    "template_name": template.get("name", ""),
+                    "error": str(e),
+                    "success": False
+                })
+        
+        # 返回结果
+        return {
+            "code": 200,
+            "message": f"成功生成 {len(results)} 个文书，失败 {len(failed_templates)} 个",
+            "data": {
+                "successful_documents": results,
+                "failed_documents": failed_templates,
+                "total_templates": len(available_templates),
+                "success_count": len(results),
+                "failure_count": len(failed_templates)
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量生成文书失败: {str(e)}"
+        )
+
+
 @router.post("/init-templates")
 async def initialize_templates(
     current_staff: Staff = Depends(get_current_staff)

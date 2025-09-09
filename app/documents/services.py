@@ -431,67 +431,27 @@ class DocumentGenerator:
         else:
             formatted_created_at = datetime.now().strftime("%Y年%m月%d日")
         
-        # 基础案件信息
-        variables = {
-            "title": "民事起诉状",
-            "case_type": case_data.get("case_type", "货款纠纷"),
-            "case_status": case_data.get("case_status", "draft"),
-            
-            # 当事人信息（动态生成，不包含标签）
-            "creditor_info": self._generate_party_info(case_data, "creditor"),
-            "debtor_info": self._generate_party_info(case_data, "debtor"),
-            "creditor_name": case_data.get("creditor_name", ""),
-            "debtor_name": case_data.get("debtor_name", ""),
-            
-            # 保留原有字段以兼容其他模板
-            "creditor_type": case_data.get("creditor_type", ""),
-            "creditor_gender": case_data.get("creditor_gender", ""),
-            "creditor_birthday": creditor_birthday,  # 使用格式化后的出生日期
-            "creditor_nation": case_data.get("creditor_nation", "汉族"),
-            "creditor_address": case_data.get("creditor_address", ""),
-            "creditor_id_card": case_data.get("creditor_id_card", ""),
-            "creditor_phone": case_data.get("creditor_phone", ""),
-            "creditor_company_name": case_data.get("creditor_company_name", ""),
-            "creditor_company_address": case_data.get("creditor_company_address", ""),
-            "creditor_company_code": case_data.get("creditor_company_code", ""),
-            "creditor_bank_account": case_data.get("creditor_bank_account", ""),
-            "creditor_bank_address": case_data.get("creditor_bank_address", ""),
-            "creditor_bank_phone": case_data.get("creditor_bank_phone", ""),
-            "creditor_owner_name": case_data.get("creditor_owner_name", ""),
-            
-            "debtor_type": case_data.get("debtor_type", ""),
-            "debtor_gender": case_data.get("debtor_gender", ""),
-            "debtor_birthday": debtor_birthday,  # 使用格式化后的出生日期
-            "debtor_nation": case_data.get("debtor_nation", "汉族"),
-            "debtor_address": case_data.get("debtor_address", ""),
-            "debtor_id_card": case_data.get("debtor_id_card", ""),
-            "debtor_phone": case_data.get("debtor_phone", ""),
-            "debtor_company_name": case_data.get("debtor_company_name", ""),
-            "debtor_company_address": case_data.get("debtor_company_address", ""),
-            "debtor_company_code": case_data.get("debtor_company_code", ""),
-            "debtor_bank_account": case_data.get("debtor_bank_account", ""),
-            "debtor_bank_address": case_data.get("debtor_bank_address", ""),
-            "debtor_bank_phone": case_data.get("debtor_bank_phone", ""),
-            "debtor_owner_name": case_data.get("debtor_owner_name", ""),
-            
-            # 案件详情
-            "loan_amount": formatted_loan_amount,
-            "loan_date": case_data.get("loan_date", ""),
-            "case_description": case_data.get("description", ""),
-            
-            # 自动生成的变量
-            "current_date": datetime.now().strftime("%Y年%m月%d日"),
-            "case_title": self._generate_case_title(case_data),
-            
-            # 诉讼内容（智能生成）
-            "claims": self._generate_claims(case_data),
-            "reasons": self._generate_reasons(case_data),
-            
-            # 结尾信息
-            "court_name": case_data.get("court_name", "某某人民法院"),
-            "court_address": case_data.get("court_name", "某某人民法院"),
-            "created_at": formatted_created_at
-        }
+        # 根据模板类型准备不同的变量
+        template_type = template.get("type", "complaint")
+        
+        if template_type == "complaint":
+            # 民事起诉状模板
+            variables = self._prepare_complaint_variables(case_data, formatted_loan_amount, creditor_birthday, debtor_birthday, formatted_created_at)
+        elif template_type == "receipt_account":
+            # 收款账户确认书模板
+            variables = self._prepare_receipt_account_variables(case_data, formatted_created_at)
+        elif template_type == "service_address":
+            # 送达地址确认书模板
+            variables = self._prepare_service_address_variables(case_data, formatted_created_at)
+        elif template_type == "evidence_list":
+            # 证据材料清单模板
+            variables = self._prepare_evidence_list_variables(case_data, formatted_created_at)
+        elif template_type == "subject_identity":
+            # 主体身份模板
+            variables = self._prepare_subject_identity_variables(case_data)
+        else:
+            # 默认使用民事起诉状模板的变量
+            variables = self._prepare_complaint_variables(case_data, formatted_loan_amount, creditor_birthday, debtor_birthday, formatted_created_at)
         
         # 合并自定义变量，自定义变量优先级最高
         if custom_variables:
@@ -924,3 +884,115 @@ class DocumentGenerator:
         case_data.setdefault("court_address", "某某人民法院")
         
         return case_data
+
+    def _prepare_complaint_variables(self, case_data: Dict[str, Any], formatted_loan_amount: str, 
+                                   creditor_birthday: str, debtor_birthday: str, formatted_created_at: str) -> Dict[str, Any]:
+        """准备民事起诉状模板变量"""
+        return {
+            "title": "民事起诉状",
+            "case_type": case_data.get("case_type", "货款纠纷"),
+            "case_status": case_data.get("case_status", "draft"),
+            
+            # 当事人信息（动态生成，不包含标签）
+            "creditor_info": self._generate_party_info(case_data, "creditor"),
+            "debtor_info": self._generate_party_info(case_data, "debtor"),
+            "creditor_name": case_data.get("creditor_name", ""),
+            "debtor_name": case_data.get("debtor_name", ""),
+            
+            # 保留原有字段以兼容其他模板
+            "creditor_type": case_data.get("creditor_type", ""),
+            "creditor_gender": case_data.get("creditor_gender", ""),
+            "creditor_birthday": creditor_birthday,
+            "creditor_nation": case_data.get("creditor_nation", "汉族"),
+            "creditor_address": case_data.get("creditor_address", ""),
+            "creditor_id_card": case_data.get("creditor_id_card", ""),
+            "creditor_phone": case_data.get("creditor_phone", ""),
+            "creditor_company_name": case_data.get("creditor_company_name", ""),
+            "creditor_company_address": case_data.get("creditor_company_address", ""),
+            "creditor_company_code": case_data.get("creditor_company_code", ""),
+            "creditor_bank_account": case_data.get("creditor_bank_account", ""),
+            "creditor_bank_address": case_data.get("creditor_bank_address", ""),
+            "creditor_bank_phone": case_data.get("creditor_bank_phone", ""),
+            "creditor_owner_name": case_data.get("creditor_owner_name", ""),
+            
+            "debtor_type": case_data.get("debtor_type", ""),
+            "debtor_gender": case_data.get("debtor_gender", ""),
+            "debtor_birthday": debtor_birthday,
+            "debtor_nation": case_data.get("debtor_nation", "汉族"),
+            "debtor_address": case_data.get("debtor_address", ""),
+            "debtor_id_card": case_data.get("debtor_id_card", ""),
+            "debtor_phone": case_data.get("debtor_phone", ""),
+            "debtor_company_name": case_data.get("debtor_company_name", ""),
+            "debtor_company_address": case_data.get("debtor_company_address", ""),
+            "debtor_company_code": case_data.get("debtor_company_code", ""),
+            "debtor_bank_account": case_data.get("debtor_bank_account", ""),
+            "debtor_bank_address": case_data.get("debtor_bank_address", ""),
+            "debtor_bank_phone": case_data.get("debtor_bank_phone", ""),
+            "debtor_owner_name": case_data.get("debtor_owner_name", ""),
+            
+            # 案件详情
+            "loan_amount": formatted_loan_amount,
+            "loan_date": case_data.get("loan_date", ""),
+            "case_description": case_data.get("description", ""),
+            
+            # 自动生成的变量
+            "current_date": datetime.now().strftime("%Y年%m月%d日"),
+            "case_title": self._generate_case_title(case_data),
+            
+            # 诉讼内容（智能生成）
+            "claims": self._generate_claims(case_data),
+            "reasons": self._generate_reasons(case_data),
+            
+            # 结尾信息
+            "court_name": case_data.get("court_name", "某某人民法院"),
+            "court_address": case_data.get("court_name", "某某人民法院"),
+            "created_at": formatted_created_at
+        }
+
+    def _prepare_receipt_account_variables(self, case_data: Dict[str, Any], formatted_created_at: str) -> Dict[str, Any]:
+        """准备收款账户确认书模板变量"""
+        return {
+            "court_name": case_data.get("court_name", "某某人民法院"),
+            "owner_name": case_data.get("creditor_owner_name", ""),  # 银行持卡人姓名
+            "bank_account": case_data.get("creditor_bank_account", ""),
+            "bank_address": case_data.get("creditor_bank_address", ""),
+            "phone": case_data.get("creditor_phone", ""),
+            "create_date": formatted_created_at
+        }
+
+    def _prepare_service_address_variables(self, case_data: Dict[str, Any], formatted_created_at: str) -> Dict[str, Any]:
+        """准备送达地址确认书模板变量"""
+        # 格式化案件类型
+        case_type = case_data.get("case_type", "DEBT")
+        if case_type == "CONTRACT":
+            case_type_display = "买卖合同纠纷"
+        elif case_type == "DEBT":
+            case_type_display = "民间借贷纠纷"
+        else:
+            case_type_display = "货款纠纷"
+        
+        return {
+            "court_name": case_data.get("court_name", "某某人民法院"),
+            "case_type": case_type_display,
+            "creditor_name": case_data.get("creditor_name", ""),
+            "creditor_id_card": case_data.get("creditor_id_card", ""),
+            "send_address": case_data.get("creditor_address", ""),
+            "phone": case_data.get("creditor_phone", ""),
+            "create_date": formatted_created_at
+        }
+
+    def _prepare_evidence_list_variables(self, case_data: Dict[str, Any], formatted_created_at: str) -> Dict[str, Any]:
+        """准备证据材料清单模板变量"""
+        return {
+            "creditor_name": case_data.get("creditor_name", ""),
+            "create_date": formatted_created_at
+        }
+
+    def _prepare_subject_identity_variables(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
+        """准备主体身份模板变量"""
+        return {
+            "creditor_id_card_frontend": case_data.get("creditor_id_card_frontend", ""),
+            "creditor_id_card_back": case_data.get("creditor_id_card_back", ""),
+            "debtor_id_card_frontend": case_data.get("debtor_id_card_frontend", ""),
+            "debtor_id_card_back": case_data.get("debtor_id_card_back", "")
+        }
