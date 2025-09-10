@@ -43,6 +43,7 @@ export default function CaseDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [refreshKey, setRefreshKey] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // 临时存储输入的金额字符串，用于显示
   const [loanAmountInput, setLoanAmountInput] = useState("")
@@ -472,9 +473,24 @@ export default function CaseDetailPage() {
           <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push("/cases")}
+            disabled={isRefreshing}
+            onClick={async () => {
+              try {
+                setIsRefreshing(true);
+                // 强制刷新案件列表数据，等待完成
+                await mutate("/cases", undefined, { revalidate: true });
+                // 数据刷新完成后跳转到案件列表页面
+                router.push("/cases");
+              } catch (error) {
+                console.error("刷新案件列表失败:", error);
+                // 即使刷新失败也要跳转
+                router.push("/cases");
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
           >
-            返回案件列表
+            {isRefreshing ? "刷新中..." : "返回案件列表"}
           </Button>
           <Button
             variant="outline"
@@ -652,6 +668,7 @@ export default function CaseDetailPage() {
                                       </div>
                                     )}
                                   </div>
+                                  <div className="text-xs text-gray-400 font-mono">#{user.id}</div>
                                 </div>
                               </div>
                             ))

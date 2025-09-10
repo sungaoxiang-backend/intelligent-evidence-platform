@@ -190,11 +190,11 @@ export default function CaseManagement() {
     [selectedUserId, sort.field, sort.direction], // Add sorting as dependencies
     20, // initialPageSize
     {
-      // 优化刷新策略：避免不必要的重新获取
-      revalidateOnFocus: false,      // 页面获得焦点时不重新验证
-      revalidateOnReconnect: false,  // 网络重连时不重新验证
-      revalidateIfStale: false,      // 数据过期时不自动重新验证
-      dedupingInterval: 30000,       // 30秒内重复请求会被去重
+      // 优化刷新策略：平衡性能和实时性
+      revalidateOnFocus: true,       // 页面获得焦点时重新验证
+      revalidateOnReconnect: true,   // 网络重连时重新验证
+      revalidateIfStale: true,       // 数据过期时自动重新验证
+      dedupingInterval: 10000,       // 10秒内重复请求会被去重
     }
   );
 
@@ -599,6 +599,7 @@ export default function CaseManagement() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="whitespace-nowrap w-16">ID</TableHead>
                 <TableHead className="whitespace-nowrap">关联用户</TableHead>
                 <TableHead className="whitespace-nowrap">快速查看</TableHead>
                 <TableHead className="whitespace-nowrap">欠款金额</TableHead>
@@ -634,6 +635,9 @@ export default function CaseManagement() {
                 
                 return (
                   <TableRow key={caseItem.id}>
+                    <TableCell className="whitespace-nowrap font-mono text-sm text-gray-600">
+                      #{caseItem.id}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">{caseItem.user?.name || "-"}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       <div className="flex items-center space-x-1">
@@ -814,7 +818,10 @@ export default function CaseManagement() {
                             className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                             onClick={() => handleUserSelect(user)}
                           >
-                            <div className="font-medium">{user.name || '未命名用户'}</div>
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium">{user.name || '未命名用户'}</div>
+                              <div className="text-xs text-gray-400 font-mono">#{user.id}</div>
+                            </div>
                             <div className="text-sm text-gray-500">
                               {user.wechat_nickname && `微信: ${user.wechat_nickname}`}
                               {user.wechat_number && ` (${user.wechat_number})`}

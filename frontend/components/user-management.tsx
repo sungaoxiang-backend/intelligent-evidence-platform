@@ -68,6 +68,14 @@ export default function UserManagement() {
       return userApi.getUsers(apiParams);
     },
     [sort.field, sort.direction], // Add sorting as dependencies
+    20, // initialPageSize
+    {
+      // 优化刷新策略：平衡性能和实时性
+      revalidateOnFocus: true,       // 页面获得焦点时重新验证
+      revalidateOnReconnect: true,   // 网络重连时重新验证
+      revalidateIfStale: true,       // 数据过期时自动重新验证
+      dedupingInterval: 10000,       // 10秒内重复请求会被去重
+    }
   );
 
   const handleAddUser = async () => {
@@ -138,6 +146,7 @@ export default function UserManagement() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-16">ID</TableHead>
               <TableHead>头像</TableHead>
               <TableHead>姓名</TableHead>
               <TableHead>
@@ -164,6 +173,10 @@ export default function UserManagement() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
+                {/* ID */}
+                <TableCell className="font-mono text-sm text-gray-600">
+                  #{user.id}
+                </TableCell>
                 {/* 头像预览 */}
                 <TableCell>
                   <div className="flex items-center">

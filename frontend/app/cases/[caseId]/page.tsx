@@ -5,6 +5,7 @@ import { EvidenceReasoning } from "@/components/evidence-reasoning"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
 import { FileText, Network } from "lucide-react"
+import { mutate } from "swr"
 
 export default function CaseDetailPage() {
   const router = useRouter()
@@ -102,14 +103,36 @@ export default function CaseDetailPage() {
       {activeTab === 'evidence' ? (
         <EvidenceGallery
           caseId={numericCaseId}
-          onBack={() => router.push("/cases")}
+          onBack={async () => {
+            try {
+              // 强制刷新案件列表数据，等待完成
+              await mutate("/cases", undefined, { revalidate: true });
+              // 数据刷新完成后跳转到案件列表页面
+              router.push("/cases");
+            } catch (error) {
+              console.error("刷新案件列表失败:", error);
+              // 即使刷新失败也要跳转
+              router.push("/cases");
+            }
+          }}
           onGoToCaseDetail={() => router.push(`/cases/${caseId}/detail`)}
           initialSelectedEvidenceId={searchParams.get('evidence') ? parseInt(searchParams.get('evidence')!) : undefined}
         />
       ) : (
         <EvidenceReasoning
           caseId={numericCaseId}
-          onBack={() => router.push("/cases")}
+          onBack={async () => {
+            try {
+              // 强制刷新案件列表数据，等待完成
+              await mutate("/cases", undefined, { revalidate: true });
+              // 数据刷新完成后跳转到案件列表页面
+              router.push("/cases");
+            } catch (error) {
+              console.error("刷新案件列表失败:", error);
+              // 即使刷新失败也要跳转
+              router.push("/cases");
+            }
+          }}
           onGoToCaseDetail={() => router.push(`/cases/${caseId}/detail`)}
           initialSelectedGroup={searchParams.get('group') || undefined}
         />
