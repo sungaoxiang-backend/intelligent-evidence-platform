@@ -196,6 +196,31 @@ export const caseApi = {
       throw new Error(result.message || "请求失败")
     }
   },
+
+  // 获取用户列表，用于案件归属用户选择
+  async getUsers(params: PaginationParams & { sort_by?: string; sort_order?: string }): Promise<{ data: User[]; pagination?: any }> {
+    const { page = 1, pageSize = 100, sort_by, sort_order } = params
+    const skip = (page - 1) * pageSize
+    let url = buildApiUrl(`/cases/users?skip=${skip}&limit=${pageSize}`)
+    
+    // Add sorting parameters if provided
+    if (sort_by) {
+      url += `&sort_by=${encodeURIComponent(sort_by)}`
+    }
+    if (sort_order) {
+      url += `&sort_order=${encodeURIComponent(sort_order)}`
+    }
+    
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      return { data: result.data, pagination: result.pagination }
+    } else {
+      throw new Error(result.message || "请求失败")
+    }
+  },
 }
 
 export const userApi = {

@@ -14,7 +14,7 @@ import { DocumentTemplateSelector } from "@/components/document-template-selecto
 import { DocumentGeneratorNew } from "@/components/document-generator-new"
 import { DocumentGeneratorV2 } from "@/components/document-generator-v2"
 import { DocumentGeneratorSimple } from "@/components/document-generator-simple"
-import { caseApi } from "@/lib/api"
+import { caseApi, userApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
 import type { CaseType, PartyType } from "@/lib/types"
@@ -49,6 +49,12 @@ export default function CaseDetailPage() {
   
   // 文书生成相关状态
   const [showDocumentGenerator, setShowDocumentGenerator] = useState(false)
+  
+  // 用户选择相关状态
+  const [users, setUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [userSearchTerm, setUserSearchTerm] = useState("")
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
   
 
   // 表单验证状态
@@ -188,6 +194,65 @@ export default function CaseDetailPage() {
     caseFetcher
   )
 
+  // 加载用户列表
+  const loadUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const result = await userApi.getUsers({ page: 1, pageSize: 100 })
+      setUsers(result.data)
+    } catch (error) {
+      console.error('加载用户列表失败:', error)
+      toast({
+        title: "加载失败",
+        description: "无法加载用户列表",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  // 用户筛选逻辑
+  const filteredUsers = users?.filter(user => {
+    if (!userSearchTerm.trim()) return true;
+    const searchLower = userSearchTerm.toLowerCase();
+    return (
+      user.name?.toLowerCase().includes(searchLower) ||
+      user.wechat_nickname?.toLowerCase().includes(searchLower) ||
+      user.wechat_number?.toLowerCase().includes(searchLower) ||
+      user.id.toString().includes(searchLower)
+    );
+  }) || [];
+
+  // 处理用户选择
+  const handleUserSelect = (user: any) => {
+    setEditForm((prev: any) => ({
+      ...prev,
+      user_id: user.id
+    }));
+    setUserSearchTerm(user.name || user.wechat_nickname || `用户${user.id}`);
+    setShowUserDropdown(false);
+  };
+
+  // 点击外部关闭下拉列表
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserDropdown) {
+        const target = event.target as Element;
+        const dropdownContainer = document.querySelector('.user-dropdown-container');
+        
+        if (dropdownContainer && !dropdownContainer.contains(target)) {
+          setShowUserDropdown(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
+
   // 初始化编辑表单
   useEffect(() => {
     if (caseData && !editing) {
@@ -195,6 +260,7 @@ export default function CaseDetailPage() {
       const debtor = caseData.case_parties?.find((p: any) => p.party_role === "debtor");
       
       setEditForm({
+        user_id: caseData.user_id || '',
         creditor_name: creditor?.party_name || '',
         debtor_name: debtor?.party_name || '',
         loan_amount: caseData.loan_amount || '',
@@ -231,6 +297,8 @@ export default function CaseDetailPage() {
       })
       // 设置金额输入值
       setLoanAmountInput(caseData.loan_amount ? caseData.loan_amount.toString() : '')
+      // 设置用户搜索词
+      setUserSearchTerm(caseData.user?.name || caseData.user?.wechat_nickname || `用户${caseData.user_id}` || '')
     }
   }, [caseData, editing])
 
@@ -254,6 +322,7 @@ export default function CaseDetailPage() {
     try {
       // 1. 更新案件基本信息（不包含当事人信息）
       await caseApi.updateCase(numericCaseId, {
+        user_id: editForm.user_id ? parseInt(editForm.user_id) : undefined,
         loan_amount: loanAmountInput ? parseFloat(loanAmountInput) : undefined,
         case_type: editForm.case_type,
         loan_date: editForm.loan_date ? editForm.loan_date.toISOString() : undefined,
@@ -533,7 +602,74 @@ export default function CaseDetailPage() {
           <div>
             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 border-b border-gray-100 pb-1">基础信息</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* 第一行：案件类型、欠款金额 */}
+                  {/* 第一行：归属用户、案件类型 */}
+                  <div className="space-y-1.5">
+                  <Label htmlFor="user_id" className="text-sm font-medium text-gray-700">
+                    归属用户
+                  </Label>
+                  {editing ? (
+                    <div className="relative">
+                      <Input
+                        placeholder="搜索或选择用户"
+                        value={userSearchTerm}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setUserSearchTerm(value);
+                          setShowUserDropdown(true);
+                          if (users.length === 0) {
+                            loadUsers();
+                          }
+                        }}
+                        onFocus={() => {
+                          setShowUserDropdown(true);
+                          if (users.length === 0) {
+                            loadUsers();
+                          }
+                        }}
+                        className="h-9"
+                      />
+                      
+                      {/* 用户下拉列表 */}
+                      {showUserDropdown && (
+                        <div className="user-dropdown-container absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          {loadingUsers ? (
+                            <div className="px-3 py-2 text-gray-500 text-sm">加载中...</div>
+                          ) : filteredUsers.length > 0 ? (
+                            filteredUsers.map((user) => (
+                              <div
+                                key={user.id}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onClick={() => handleUserSelect(user)}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-medium text-sm">
+                                      {user.name || user.wechat_nickname || `用户${user.id}`}
+                                    </div>
+                                    {user.wechat_number && (
+                                      <div className="text-xs text-gray-500">
+                                        微信号: {user.wechat_number}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-gray-500 text-sm">
+                              {userSearchTerm.trim() ? '未找到匹配的用户' : '开始输入搜索用户...'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                      {caseData.user?.name || caseData.user?.wechat_nickname || `用户${caseData.user_id}` || '未设置'}
+                    </div>
+                  )}
+                </div>
+
                   <div className="space-y-1.5">
                   <Label htmlFor="case_type" className="text-sm font-medium text-gray-700">
                     案由 <span className="text-red-500">*</span>
@@ -562,6 +698,7 @@ export default function CaseDetailPage() {
                   )}
                 </div>
 
+                  {/* 第二行：欠款金额、欠款日期 */}
                   <div className="space-y-1.5">
                   <Label htmlFor="loan_amount" className="text-sm font-medium text-gray-700">
                     欠款金额 <span className="text-red-500">*</span>
@@ -623,7 +760,7 @@ export default function CaseDetailPage() {
                   )}
                 </div>
 
-                  {/* 第二行：欠款日期、开庭法院 */}
+                  {/* 第三行：欠款日期、开庭法院 */}
                   <div className="space-y-1.5">
                     <Label htmlFor="loan_date" className="text-sm font-medium text-gray-700">欠款日期</Label>
                     {editing ? (

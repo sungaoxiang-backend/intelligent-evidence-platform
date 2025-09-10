@@ -13,6 +13,7 @@ from app.staffs.models import Staff
 from app.cases.schemas import Case as CaseSchema, CaseCreate, CaseUpdate, CaseWithUser, AutoProcessRequest, AutoProcessResponse, CaseWithAssociationEvidenceFeaturesResponse, AssociationEvidenceFeatureUpdateRequest, CasePartyResponse, CasePartyUpdate
 from app.cases import services as case_service
 from app.users import services as user_service
+from app.users.schemas import User
 
 router = APIRouter()
 
@@ -312,3 +313,27 @@ async def update_case_party(
         raise HTTPException(status_code=400, detail="当事人不属于指定案件")
     
     return SingleResponse(code=200, message="当事人更新成功", data=party)
+
+
+@router.get("/users", response_model=ListResponse[User])
+async def get_users(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    skip: int = 0,
+    limit: int = 100,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
+):
+    """获取用户列表，用于案件归属用户选择"""
+    users, total = await user_service.get_multi_with_count(
+        db, 
+        skip=skip, 
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    
+    return ListResponse(
+        data=users,
+        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
+    )

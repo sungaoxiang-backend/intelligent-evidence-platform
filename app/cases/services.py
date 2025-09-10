@@ -429,6 +429,16 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
     """更新案件信息"""
     update_data = obj_in.model_dump(exclude_unset=True)
     
+    # 如果更新了用户ID，验证用户是否存在
+    if 'user_id' in update_data and update_data['user_id'] is not None:
+        from app.users.services import get_by_id as get_user_by_id
+        user = await get_user_by_id(db, update_data['user_id'])
+        if not user:
+            raise HTTPException(
+                status_code=400,
+                detail="指定的用户不存在"
+            )
+    
     # 更新基本属性
     for field, value in update_data.items():
         setattr(db_obj, field, value)

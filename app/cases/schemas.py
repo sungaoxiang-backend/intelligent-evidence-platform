@@ -165,6 +165,7 @@ class CaseCreate(BaseModel):
 # 更新时可以修改的属性
 class CaseUpdate(BaseModel):
     """案件更新模型"""
+    user_id: Optional[int] = None
     loan_amount: Optional[float] = None
     case_type: Optional[CaseType] = None
     loan_date: Optional[datetime] = None
