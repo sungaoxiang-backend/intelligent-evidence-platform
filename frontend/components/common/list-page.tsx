@@ -22,6 +22,7 @@ interface ListPageProps<T extends { id: number }> {
   renderTable: (data: T[]) => React.ReactNode;
   emptyMessage?: string;
   emptyAction?: React.ReactNode;
+  additionalContent?: React.ReactNode; // 新增的 prop，用于在标题和表格之间插入内容
 }
 
 export function ListPage<T extends { id: number }>({
@@ -39,6 +40,7 @@ export function ListPage<T extends { id: number }>({
   renderTable,
   emptyMessage = "暂无数据",
   emptyAction,
+  additionalContent, // 解构新的 prop
 }: ListPageProps<T>) {
   return (
     <div className="p-8">
@@ -51,6 +53,9 @@ export function ListPage<T extends { id: number }>({
         </div>
         {headerActions}
       </div>
+
+      {/* 筛选器应该始终显示，不受loading状态影响 */}
+      {additionalContent}
 
       {loading ? (
         <div className="flex justify-center items-center min-h-[200px]">

@@ -16,14 +16,59 @@ function buildApiUrl(path: string): string {
 }
 
 export const caseApi = {
-  async getCases(params: PaginationParams & { user_id?: number; sort_by?: string; sort_order?: string }): Promise<{ data: Case[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "", user_id, sort_by, sort_order } = params
+  async getCases(params: PaginationParams & { 
+    user_id?: number; 
+    party_name?: string;
+    party_type?: string;
+    party_role?: string;
+    min_loan_amount?: number;
+    max_loan_amount?: number;
+    sort_by?: string; 
+    sort_order?: string 
+  }): Promise<{ data: Case[]; pagination?: any }> {
+    const { 
+      page = 1, 
+      pageSize = 20, 
+      search = "", 
+      user_id, 
+      party_name,
+      party_type,
+      party_role,
+      min_loan_amount,
+      max_loan_amount,
+      sort_by, 
+      sort_order 
+    } = params
     const skip = (page - 1) * pageSize
     let url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
     
     // Add user_id parameter if provided
     if (user_id) {
       url += `&user_id=${user_id}`
+    }
+    
+    // Add party name filter if provided
+    if (party_name) {
+      url += `&party_name=${encodeURIComponent(party_name)}`
+    }
+    
+    // Add party type filter if provided
+    if (party_type) {
+      url += `&party_type=${encodeURIComponent(party_type)}`
+    }
+    
+    // Add party role filter if provided
+    if (party_role) {
+      url += `&party_role=${encodeURIComponent(party_role)}`
+    }
+    
+    // Add loan amount range filters if provided
+    if (min_loan_amount !== undefined) {
+      url += `&min_loan_amount=${min_loan_amount}`
+    }
+    
+    if (max_loan_amount !== undefined) {
+      url += `&max_loan_amount=${max_loan_amount}`
     }
     
     // Add sorting parameters if provided

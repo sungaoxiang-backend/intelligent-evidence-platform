@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -29,25 +28,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, X, CheckCircle } from "lucide-react";
+import { Plus } from "lucide-react";
 import { caseApi } from "@/lib/api";
 import { userApi } from "@/lib/user-api";
-import { API_CONFIG } from "@/lib/config";
 
 // Helper functions for API calls
-function getAuthHeader(): Record<string, string> {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || ''
-    return token ? { Authorization: `Bearer ${token}` } : {}
-  }
-  return {}
-}
-
-function buildApiUrl(path: string): string {
-  return API_CONFIG.BASE_URL + path
-}
-
 // 格式化金额，去除尾随零
 function formatAmount(amount: number): string {
   if (Number.isInteger(amount)) {
@@ -58,12 +43,8 @@ function formatAmount(amount: number): string {
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
 import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
+import { CaseFilters } from "@/components/case-filters";
 import type { Case, User, CaseType, PartyType } from "@/lib/types";
-
-const caseTypeLabels = {
-  debt: "民间借贷纠纷",
-  contract: "买卖合同纠纷",
-};
 
 const partyTypeLabels = {
   person: "个人",
@@ -90,7 +71,21 @@ export default function CaseManagement() {
     wechat_number: "",
   });
 
+  // 筛选条件状态
+  const [filters, setFilters] = useState({
+    userId: undefined as string | undefined,
+    partyName: "",
+    partyType: "",
+    partyRole: "",
+    minLoanAmount: undefined as number | undefined,
+    maxLoanAmount: undefined as number | undefined,
+  });
+  
+  // 用户筛选状态（为了保持与用户管理页面的关联）
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  
+  // 筛选器展开状态
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   
   // 从 localStorage 恢复排序状态，避免页面刷新后丢失
   const getInitialSort = () => {
@@ -109,11 +104,35 @@ export default function CaseManagement() {
   
   const [sort, setSort] = useState<{ field: string; direction: SortDirection }>(getInitialSort);
 
-  // Initialize user filter from URL params
+  // 处理筛选条件变化
+  const handleFilterChange = (newFilters: any) => {
+    setFilters(newFilters);
+    // 同步selectedUserId状态以保持与用户管理页面的关联
+    if (newFilters.userId !== undefined) {
+      setSelectedUserId(newFilters.userId);
+    } else {
+      setSelectedUserId(null);
+    }
+    setPage(1); // 重置到第一页
+  };
+
+  // Initialize user filter from URL params and update filters state
   useEffect(() => {
     const userId = searchParams.get('user_id');
     if (userId) {
       setSelectedUserId(userId);
+      // Update filters to apply the user filter
+      setFilters(prev => ({
+        ...prev,
+        userId: userId
+      }));
+    } else {
+      // Clear user filter if not in URL
+      setSelectedUserId(null);
+      setFilters(prev => ({
+        ...prev,
+        userId: undefined
+      }));
     }
   }, [searchParams]);
 
@@ -180,14 +199,17 @@ export default function CaseManagement() {
       const apiParams: any = {
         ...params,
         sort_by: sort.field,
-        sort_order: sort.direction || "desc" // 提供默认值，避免null
+        sort_order: sort.direction || "desc", // 提供默认值，避免null
+        user_id: filters.userId ? parseInt(filters.userId) : undefined,
+        party_name: filters.partyName || undefined,
+        party_type: filters.partyType || undefined,
+        party_role: filters.partyRole || undefined,
+        min_loan_amount: filters.minLoanAmount,
+        max_loan_amount: filters.maxLoanAmount,
       };
-      if (selectedUserId) {
-        apiParams.user_id = parseInt(selectedUserId);
-      }
       return caseApi.getCases(apiParams);
     },
-    [selectedUserId, sort.field, sort.direction], // Add sorting as dependencies
+    [filters], // Add filters as dependency to trigger re-fetch when filters change
     20, // initialPageSize
     {
       // 优化刷新策略：平衡性能和实时性
@@ -208,7 +230,7 @@ export default function CaseManagement() {
   };
 
   // 移除客户端排序逻辑，使用服务端排序
-  const sortedCases = cases || [];
+  // const sortedCases = cases || [];
 
   // Fetch users for dropdown
   const {
@@ -546,22 +568,6 @@ export default function CaseManagement() {
     }
   };
 
-  const handleUserChange = (userId: string) => {
-    const selectedUser = users?.find(u => u.id === parseInt(userId));
-    setAddForm(prev => ({
-      ...prev,
-      user_id: parseInt(userId),
-      case_parties: [
-        {
-          ...prev.case_parties[0],
-          party_name: selectedUser?.name || "",
-          name: selectedUser?.name || "" // 同时设置必要姓名字段
-        },
-        prev.case_parties[1]
-      ]
-    }));
-  };
-
   const handleViewCase = (caseId: number) => {
     router.push(`/cases/${caseId}`);
   };
@@ -570,24 +576,6 @@ export default function CaseManagement() {
     router.push(`/cases/${caseId}/detail`);
   };
 
-  const handleUserFilterChange = (userId: string) => {
-    setSelectedUserId(userId === "all" ? null : userId);
-    setPage(1); // Reset to first page when filter changes
-  };
-
-  const clearUserFilter = () => {
-    setSelectedUserId(null);
-    setPage(1);
-    // Update URL to remove user_id parameter
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.delete('user_id');
-    router.replace(`/cases?${newSearchParams.toString()}`);
-  };
-
-  const getSelectedUserName = () => {
-    if (!selectedUserId) return null;
-    return users?.find(u => u.id === parseInt(selectedUserId))?.name;
-  };
 
   // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => {
@@ -700,49 +688,36 @@ export default function CaseManagement() {
         title="案件管理"
         subtitle="管理和跟踪所有案件信息"
         headerActions={
-          <div className="flex items-center space-x-4">
-            {/* User Filter */}
-            <div className="flex items-center space-x-2">
-              <Label htmlFor="user-filter" className="text-sm font-medium whitespace-nowrap">
-                用户筛选:
-              </Label>
-              <Select
-                value={selectedUserId || "all"}
-                onValueChange={handleUserFilterChange}
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="选择用户" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部用户</SelectItem>
-                  {(users || []).map((user) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      {user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedUserId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearUserFilter}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            {selectedUserId && (
-              <Badge variant="secondary" className="text-sm whitespace-nowrap">
-                筛选: {getSelectedUserName()}
-              </Badge>
-            )}
-            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap">
-              <Plus className="mr-2 h-4 w-4" />
-              新增案件
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant={isFilterExpanded ? "default" : "outline"}
+              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+              className="whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 flex items-center text-sm h-8"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              筛选
+            </Button>
+            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap text-sm h-8">
+              <Plus className="mr-1 h-3 w-3" />
+              新增
             </Button>
           </div>
+        }
+        additionalContent={
+          isFilterExpanded && (
+            <div className="w-full mb-4">
+              <CaseFilters 
+                users={users || []}
+                selectedUserId={selectedUserId}
+                isExpanded={isFilterExpanded}
+                onFilterChange={handleFilterChange}
+                onUserFilterChange={setSelectedUserId}
+                onToggleExpand={() => setIsFilterExpanded(!isFilterExpanded)}
+              />
+            </div>
+          )
         }
         data={cases}
         loading={loading || isRefreshing}
@@ -754,12 +729,6 @@ export default function CaseManagement() {
         onPageSizeChange={setPageSize}
         renderTable={renderTable}
         emptyMessage={selectedUserId ? "该用户暂无案件数据" : "暂无案件数据"}
-        emptyAction={
-          <Button onClick={openAddDialog} variant="outline">
-            <Plus className="mr-2 h-4 w-4" />
-            创建第一个案件
-          </Button>
-        }
       />
 
       {/* Add Case Dialog */}

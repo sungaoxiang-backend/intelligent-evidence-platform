@@ -466,13 +466,17 @@ async def delete(db: AsyncSession, case_id: int) -> bool:
 
 async def get_multi_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100, user_id: Optional[int] = None,
+    party_name: Optional[str] = None, party_type: Optional[str] = None,
+    party_role: Optional[str] = None,
+    min_loan_amount: Optional[float] = None, max_loan_amount: Optional[float] = None,
     sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"
 ) -> Tuple[list[CaseModel], int]:
-    """获取多个案件和总数，支持动态排序"""
+    """获取多个案件和总数，支持动态排序和多种筛选条件"""
     from loguru import logger
     
     # 添加调试日志
     logger.debug(f"Sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
+    logger.debug(f"Filter parameters: user_id={user_id}, party_name={party_name}, party_type={party_type}, party_role={party_role}, min_loan_amount={min_loan_amount}, max_loan_amount={max_loan_amount}")
     
     # 构建基础查询，包含 joinedload
     query = select(CaseModel).options(
@@ -480,8 +484,37 @@ async def get_multi_with_count(
         joinedload(CaseModel.case_parties)
     )
     
+    # 跟踪是否已经join了当事人表
+    has_joined_parties = False
+    
+    # 应用用户ID筛选
     if user_id is not None:
         query = query.where(CaseModel.user_id == user_id)
+    
+    # 如果需要筛选当事人类型或角色，或者需要按当事人姓名筛选，则需要join当事人表
+    needs_party_join = party_name or party_type or party_role
+    if needs_party_join and not has_joined_parties:
+        query = query.join(CaseModel.case_parties)
+        has_joined_parties = True
+    
+    # 应用当事人姓名筛选
+    if party_name:
+        query = query.where(CasePartyModel.party_name.ilike(f"%{party_name}%"))
+    
+    # 应用当事人类型筛选
+    if party_type:
+        query = query.where(CasePartyModel.party_type == party_type)
+    
+    # 应用当事人角色筛选
+    if party_role:
+        query = query.where(CasePartyModel.party_role == party_role)
+    
+    # 应用欠款金额区间筛选
+    if min_loan_amount is not None:
+        query = query.where(CaseModel.loan_amount >= min_loan_amount)
+    
+    if max_loan_amount is not None:
+        query = query.where(CaseModel.loan_amount <= max_loan_amount)
 
     # 查询总数
     total_query = select(func.count()).select_from(query.subquery())

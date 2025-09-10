@@ -25,23 +25,33 @@ async def read_cases(
     skip: int = 0,
     limit: int = 10,
     user_id: Optional[int] = None,
+    party_name: Optional[str] = None,
+    party_type: Optional[str] = None,
+    party_role: Optional[str] = None,
+    min_loan_amount: Optional[float] = None,
+    max_loan_amount: Optional[float] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "desc"
 ):
-    """获取案件列表，支持动态排序"""
+    """获取案件列表，支持动态排序和多种筛选条件"""
     time.sleep(2)
     # 构建查询条件
     filters = {}
     if user_id is not None:
         filters["user_id"] = user_id
 
-    # 获取案件列表，支持排序
+    # 获取案件列表，支持排序和筛选
     cases, total = await case_service.get_multi_with_count(
         db, 
         skip=skip, 
         limit=limit, 
         sort_by=sort_by,
         sort_order=sort_order,
+        party_name=party_name,
+        party_type=party_type,
+        party_role=party_role,
+        min_loan_amount=min_loan_amount,
+        max_loan_amount=max_loan_amount,
         **filters
     )
 
