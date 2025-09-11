@@ -19,6 +19,15 @@ cd /app && alembic upgrade head
 echo "创建超级管理员..."
 python -m app.initial_data
 
-# 启动应用
-echo "启动应用..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8008 --proxy-headers --forwarded-allow-ips=*
+# 根据SERVICE_TYPE环境变量决定启动什么服务
+if [ "$SERVICE_TYPE" = "celery-worker" ]; then
+  echo "启动Celery Worker..."
+  exec celery -A app.core.celery_app.celery_app worker --loglevel=info --hostname=worker1@%h -Q celery,example,document,evidence
+elif [ "$SERVICE_TYPE" = "celery-beat" ]; then
+  echo "启动Celery Beat..."
+  exec celery -A app.core.celery_app.celery_app beat --loglevel=info
+else
+  # 启动应用
+  echo "启动应用..."
+  exec uvicorn app.main:app --host 0.0.0.0 --port 8008 --proxy-headers --forwarded-allow-ips=*
+fi

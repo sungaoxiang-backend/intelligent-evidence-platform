@@ -91,4 +91,8 @@ class Settings(BaseSettings):
     WECOM_ENCODING_AES_KEY: str
     WECOM_CALLBACK_URL: str
 
+    # Celery配置
+    CELERY_BROKER_URL: str = "redis://localhost:6380/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6380/0"
+
 settings = Settings()

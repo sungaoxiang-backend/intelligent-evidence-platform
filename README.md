@@ -13,6 +13,7 @@
 - **数据库驱动**: asyncpg (异步支持)
 - **认证**: JWT
 - **存储**: 腾讯COS云存储
+- **异步任务**: Celery + Redis
 - **依赖管理**: uv
 
 ## 项目结构
@@ -28,10 +29,14 @@
 │   ├── evidences/          # 证据领域模块
 │   ├── integrations/       # 第三方服务集成
 │   ├── staffs/             # 员工领域模块
+│   ├── tasks/              # 异步任务定义
 │   ├── users/              # 用户领域模块
 │   ├── main.py             # 应用入口
 │   └── tests/              # 测试
 ├── alembic/                # 数据库迁移
+├── scripts/                # 脚本目录
+│   ├── start-celery-worker.sh  # Celery Worker启动脚本
+│   └── start-celery-beat.sh    # Celery Beat启动脚本
 ├── .gitignore              # Git忽略文件
 ├── .python-version         # Python版本
 ├── pyproject.toml          # 项目配置
@@ -46,12 +51,58 @@
 3. **case模块**: 管理用户案件信息
 4. **evidence模块**: 管理用户证据信息
 
+## 异步任务 (Celery)
+
+本项目使用 Celery 作为异步任务队列，Redis 作为消息代理。异步任务用于处理耗时操作，如文档处理、AI分析等，避免阻塞主线程。
+
+### 任务类型
+
+- **example_tasks**: 示例任务，用于演示和测试
+- **document_tasks**: 文档处理任务
+- **evidence_tasks**: 证据分析任务
+
+### 启动Celery Worker
+
+在本地开发环境中启动Celery Worker：
+
+```bash
+# 确保在项目根目录
+cd intelligent-evidence-platform
+
+# 启动Celery Worker
+celery -A app.core.celery_app.celery_app worker --loglevel=info
+```
+
+在Docker环境中，Celery Worker会自动启动。
+
+### 使用异步任务
+
+通过API调用异步任务：
+
+```bash
+# 发起一个示例任务
+curl -X POST "http://localhost:8000/api/v1/tasks/example?name=test&seconds=5"
+
+# 获取任务状态
+curl -X GET "http://localhost:8000/api/v1/tasks/status/{task_id}"
+```
+
+### 运行系统测试
+
+可以运行完整的Celery系统测试来验证所有功能是否正常工作：
+
+```bash
+# 在项目根目录运行测试脚本
+python scripts/test_celery_system.py
+```
+
 ## 安装与运行
 
 ### 环境要求
 
 - Python 3.12+
 - PostgreSQL 14+ (支持pgvector扩展)
+- Redis 7+ (用于Celery异步任务)
 - uv (Python包管理工具)
 - Docker & Docker Compose (可选，用于容器化部署)
 
@@ -72,6 +123,8 @@ source .venv/bin/activate  # Linux/macOS
 # 或 .venv\Scripts\activate  # Windows
 uv sync
 ```
+
+> 注意：项目会自动安装Celery和Redis依赖
 
 3. 配置环境变量
 
@@ -227,8 +280,10 @@ docker-compose down
 
 Docker部署会自动：
 1. 创建一个带有pgvector扩展的PostgreSQL数据库
-2. 构建并启动应用服务
-3. 初始化数据库并创建超级管理员账户
+2. 启动Redis服务用于Celery异步任务
+3. 构建并启动应用服务
+4. 启动Celery Worker处理异步任务
+5. 初始化数据库并创建超级管理员账户
 
 访问 http://localhost:8000/docs 查看API文档
 
@@ -239,6 +294,7 @@ Docker部署会自动：
 - `/api/v1/users`: 用户管理接口
 - `/api/v1/cases`: 案件管理接口
 - `/api/v1/evidences`: 证据管理接口
+- `/api/v1/tasks`: 异步任务接口
 
 ## 初始超级管理员
 

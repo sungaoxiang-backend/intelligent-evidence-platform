@@ -8,6 +8,7 @@ from app.agentic.routers import router as agentic_router
 from app.evidence_chains.routers import router as chain_router
 from app.documents.routers import router as documents_router
 from app.ocr import router as ocr_router
+from app.tasks import router as tasks_router
 
 api_router = APIRouter()
 
@@ -20,3 +21,4 @@ api_router.include_router(agentic_router, prefix="/agentic", tags=["agentic"])
 api_router.include_router(chain_router, prefix="/chain", tags=["chain"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(ocr_router, prefix="/ocr", tags=["ocr"])
+api_router.include_router(tasks_router)

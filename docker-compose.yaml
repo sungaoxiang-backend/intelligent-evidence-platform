@@ -49,6 +49,47 @@ services:
       "-c", "timezone=Asia/Shanghai"
     ]
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # 使用6380端口避免与系统已占用的6379端口冲突
+    networks:
+      - app-network
+    restart: always
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  celery-worker:
+    build: .
+    networks:
+      - app-network
+    env_file:
+      - .env.docker
+    environment:
+      - SERVICE_TYPE=celery-worker
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./app:/app/app
+    restart: always
+
+  celery-beat:
+    build: .
+    networks:
+      - app-network
+    env_file:
+      - .env.docker
+    environment:
+      - SERVICE_TYPE=celery-beat
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./app:/app/app
+    restart: always
+
   frontend:
       build:
         context: ./frontend
@@ -69,6 +110,7 @@ services:
         
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   app-network:
