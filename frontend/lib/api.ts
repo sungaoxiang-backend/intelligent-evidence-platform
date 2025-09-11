@@ -723,3 +723,68 @@ export const documentApi = {
     return resp.blob()
   },
 }
+
+// Tasks API (Celery异步任务)
+export const taskApi = {
+  async startAnalyzeEvidence(evidenceId: number | string, evidenceType: string = "smart"): Promise<{ task_id: string; status: string }> {
+    const url = buildApiUrl(`/tasks/analyze-evidence`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ 
+        evidence_id: evidenceId.toString(),
+        evidence_type: evidenceType
+      }),
+    })
+    const result = await resp.json()
+    if (resp.ok) {
+      return result
+    } else {
+      throw new Error(result.detail || "启动证据分析任务失败")
+    }
+  },
+
+  async startBatchAnalyzeEvidences(caseId: number, evidenceIds: number[]): Promise<{ task_ids: string[]; status: string; message: string }> {
+    const url = buildApiUrl(`/tasks/batch-analyze-evidences`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ 
+        case_id: caseId.toString(),
+        evidence_ids: evidenceIds.map(id => id.toString())
+      }),
+    })
+    const result = await resp.json()
+    if (resp.ok) {
+      return result
+    } else {
+      console.error('批量分析任务失败:', result)
+      const errorMessage = result.detail || result.message || "启动批量证据分析任务失败"
+      throw new Error(errorMessage)
+    }
+  },
+
+  async getTaskStatus(taskId: string): Promise<{
+    task_id: string
+    status: string
+    result?: any
+    info?: any
+  }> {
+    const url = buildApiUrl(`/tasks/status/${taskId}`)
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+    const result = await resp.json()
+    if (resp.ok) {
+      return result
+    } else {
+      throw new Error(result.detail || "获取任务状态失败")
+    }
+  },
+}

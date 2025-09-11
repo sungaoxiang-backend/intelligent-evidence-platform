@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, Suspense, useEffect, useRef } from "react"
+import { useState, Suspense, useEffect } from "react"
 import useSWR, { mutate } from "swr"
-import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,11 +16,8 @@ import {
   Download,
   Video,
   ZoomIn,
-  Edit,
   Brain,
   Upload,
-  CheckCircle,
-  XCircle,
   FileText,
 } from "lucide-react"
 import { evidenceApi } from "@/lib/api"
@@ -29,9 +25,11 @@ import { caseApi } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useGlobalTasks } from "@/contexts/global-task-context"
+import { useEvidenceAnalysis } from "@/hooks/use-celery-tasks"
 
 // SWR数据获取函数
-const evidenceFetcher = async ([key, caseId, search, page, pageSize]: [string, string, string, number, number]) => {
+const evidenceFetcher = async ([_key, caseId, search, page, pageSize]: [string, string, string, number, number]) => {
   const response = await evidenceApi.getEvidences({
     page,
     pageSize,
@@ -41,11 +39,6 @@ const evidenceFetcher = async ([key, caseId, search, page, pageSize]: [string, s
     sort_order: "desc",     // 降序，新上传的在上面
   })
   return response
-}
-
-const casesFetcher = async ([key]: [string]) => {
-  const res = await caseApi.getCases({ page: 1, pageSize: 100 })
-  return res.data.map((c: any) => ({ id: c.id, title: c.title })) || []
 }
 
 
@@ -198,8 +191,8 @@ function EvidenceGalleryContent({
   pageSize: number
   selectedEvidence: any
   setSelectedEvidence: (evidence: any) => void
-  selectedIds: number[]
-  setSelectedIds: (ids: number[]) => void
+  selectedIds: string[]
+  setSelectedIds: (ids: string[]) => void
   handleBatchAnalysis: () => void
   handleSave: (editForm: any, setEditing: (v: boolean) => void) => void
   toast: any
@@ -230,7 +223,7 @@ function EvidenceGalleryContent({
     : (groupMap[activeCategory] || []);
 
   const allIds = groupedEvidence.map((e: any) => e.id)
-  const isAllSelected = allIds.length > 0 && allIds.every((id: number) => selectedIds.includes(id))
+  const isAllSelected = allIds.length > 0 && allIds.every((id: string) => selectedIds.includes(id))
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -240,7 +233,7 @@ function EvidenceGalleryContent({
     }
   }
 
-  const handleSelectOne = (id: number, checked: boolean) => {
+  const handleSelectOne = (id: string, checked: boolean) => {
     setSelectedIds(checked ? [...selectedIds, id] : selectedIds.filter((i) => i !== id))
   }
 
@@ -1316,25 +1309,44 @@ function EvidenceGalleryContent({
 export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: string | number; onBack?: () => void; onGoToCaseDetail?: () => void }) {
   const searchTerm = ""
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const { toast } = useToast()
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [page] = useState(1)
+  const [pageSize] = useState(20)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
   const [reviewEvidenceIds, setReviewEvidenceIds] = useState<number[]>([])
   const [reviewing, setReviewing] = useState(false)
-  const [statusAnimation, setStatusAnimation] = useState(false)
-  const [isCompleted, setIsCompleted] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   
   // 获取URL查询参数
   const searchParams = useSearchParams()
 
-  // WebSocket进度管理
-  const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect, clearProgress } = useAutoProcessWebSocket()
+  // 全局任务管理
+  const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
+  const { startEvidenceAnalysis } = useEvidenceAnalysis({ addTask, updateTask, removeTask })
+
+  // 获取当前任务状态 - 简化版本，只用于显示，不用于控制按钮状态
+  const getCurrentTaskStatus = () => {
+    const runningTasks = tasks.filter(task => task.status === 'running')
+    if (runningTasks.length > 0) {
+      return {
+        isProcessing: true,
+        progress: runningTasks[0].progress,
+        status: runningTasks[0].status,
+        message: runningTasks[0].message
+      }
+    }
+    
+    return {
+      isProcessing: false,
+      progress: 0,
+      status: '',
+      message: ''
+    }
+  }
 
   // 获取案件信息
   const { data: caseData } = useSWR(
@@ -1409,11 +1421,7 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
 
   // 计算特征完整率和证据完备率
   const featureCompleteCount = filteredEvidenceList.filter((e: any) => e.features_complete).length
-  const readyForReviewCount = filteredEvidenceList.filter((e: any) => isEvidenceReadyForReview(e)).length
   const evidenceReviewedCount = filteredEvidenceList.filter((e: any) => isEvidenceReadyForReview(e) && e.evidence_status === "checked").length
-  
-  const featureCompleteRate = filteredEvidenceList.length > 0 ? Math.round((featureCompleteCount / filteredEvidenceList.length) * 100) : 0
-  const evidenceCompleteRate = filteredEvidenceList.length > 0 ? Math.round((evidenceReviewedCount / filteredEvidenceList.length) * 100) : 0
 
   // 自动选中第一个证据，但保持当前选中状态
   useEffect(() => {
@@ -1442,62 +1450,13 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
     }
   }, [filteredEvidenceList, selectedEvidence, searchParams, selectedIds]);
 
-  // WebSocket进度监听
-  useEffect(() => {
-    if (wsProgress?.status === 'completed') {
-      toast({ title: "智能分析完成", description: wsProgress.message })
-      setSelectedIds([])
-      setIsCompleted(true)
-      mutate(['/api/evidences', String(caseId), searchTerm, page, pageSize])
-      // 3秒后重置完成状态和清空wsProgress
-      setTimeout(() => {
-        setIsCompleted(false)
-        // 彻底清空wsProgress状态，避免进度状态一直显示
-        clearProgress()
-      }, 3000)
-    } else if (wsProgress?.status === 'error') {
-      toast({ title: "智能分析失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
-      setSelectedIds([])
-      setIsCompleted(false)
-    } else if (wsError) {
-      toast({ title: "智能分析失败", description: wsError, variant: "destructive" })
-      setSelectedIds([])
-      setIsCompleted(false)
-    }
-  }, [wsProgress, wsError, caseId, searchTerm, page, pageSize, toast, mutate, disconnect]);
-
-  // 当选择清空时，重置相关状态
-  useEffect(() => {
-    if (selectedIds.length === 0) {
-      // 如果没有选择，重置完成状态（除非正在处理中）
-      if (!isProcessing) {
-        setIsCompleted(false)
-      }
-    }
-  }, [selectedIds.length, isProcessing]);
-
-  // 状态切换动画
-  useEffect(() => {
-    if (wsProgress?.status) {
-      setStatusAnimation(true)
-      const timer = setTimeout(() => setStatusAnimation(false), 600)
-      return () => clearTimeout(timer)
-    }
-  }, [wsProgress?.status])
-
-
-
-
 
   // 组件卸载时清理
   useEffect(() => {
     return () => {
-      disconnect()
-      // 清理所有状态
-      setIsCompleted(false)
       setSelectedIds([])
     }
-  }, [disconnect])
+  }, [])
 
   // 智能分类功能已注释 - 分类和特征提取合并为一个原子操作
   // const handleBatchClassify = async () => {
@@ -1530,13 +1489,18 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
         return
       }
       
-      // 使用WebSocket进行智能分析
-      startAutoProcess({
+      // 使用Celery异步任务进行智能分析
+      const result = await startEvidenceAnalysis({
         case_id: Number(caseId),
         evidence_ids: selectedIds,
         auto_classification: true,
         auto_feature_extraction: true
       })
+
+      if (result.success) {
+        // 任务启动成功，清空选择
+        setSelectedIds([])
+      }
       
     } catch (e: any) {
       toast({ title: "智能分析失败", description: e?.message || '未知错误', variant: "destructive" })
@@ -1633,7 +1597,7 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
         toast({ title: "提示", description: "请先选择证据", variant: "destructive" });
         return;
       }
-      await evidenceApi.batchDeleteEvidences(selectedIds);
+      await evidenceApi.batchDeleteEvidences(selectedIds.map(id => Number(id)));
       toast({ title: "删除成功", description: `成功删除 ${selectedIds.length} 个证据` });
       setSelectedIds([]);
       setIsDeleteDialogOpen(false);
@@ -1654,6 +1618,50 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
           50% {
             transform: translateY(-2px);
           }
+        }
+        
+        @keyframes shimmer {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(100%);
+          }
+        }
+        
+        @keyframes sparkle {
+          0%, 100% {
+            opacity: 0;
+            transform: scale(0.5);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+        }
+        
+        .animate-sparkle {
+          animation: sparkle 1s infinite;
+        }
+        
+        @keyframes bounce-dots {
+          0%, 20%, 50%, 80%, 100% {
+            transform: translateY(0);
+          }
+          40% {
+            transform: translateY(-2px);
+          }
+          60% {
+            transform: translateY(-1px);
+          }
+        }
+        
+        .animate-bounce-dots {
+          animation: bounce-dots 1.5s infinite;
         }
       `}</style>
       
@@ -1980,60 +1988,24 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
         <Button
           variant="destructive"
           onClick={() => setIsDeleteDialogOpen(true)}
-          disabled={isProcessing || selectedIds.length === 0}
+          disabled={selectedIds.length === 0}
         >
           批量删除
         </Button>
 
-        {/* 标准宽度的智能分析按钮 */}
+        {/* 智能分析按钮 */}
         <Button 
           onClick={handleBatchAnalysis} 
-          disabled={isProcessing && !isCompleted || selectedIds.length === 0} 
-          className={`relative overflow-hidden transition-all duration-300 ${
-            isCompleted
-              ? 'bg-green-500 text-white shadow-md' 
-              : isProcessing 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : selectedIds.length === 0
-              ? 'bg-gray-400 text-white cursor-not-allowed'
-              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-          }`}
+          disabled={selectedIds.length === 0} 
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
         >
-          <span className="relative z-10 flex items-center gap-2">
-            {isCompleted ? (
-              <>
-                <span>100%</span>
-                <span>✓</span>
-                <span className="animate-sparkle">🎆</span>
-              </>
-            ) : isProcessing ? (
-              "分析中..."
-            ) : selectedIds.length === 0 ? (
+          <span className="flex items-center gap-2">
+            {selectedIds.length === 0 ? (
               "请选择证据"
             ) : (
               "智能分析"
             )}
           </span>
-          
-          {/* 水波动画进度条 */}
-          {(isProcessing || isCompleted) && wsProgress && (
-            <div className="absolute inset-0 overflow-hidden">
-              <div 
-                className="absolute inset-0 bg-gradient-to-r from-white/20 via-white/40 to-white/20 animate-shimmer"
-                style={{ 
-                  width: `${isCompleted ? 100 : (wsProgress?.progress || 0)}%`,
-                  transition: 'width 0.8s ease-out'
-                }}
-              />
-              {/* 水波效果 */}
-              <div className="absolute inset-0">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" 
-                     style={{ animationDelay: '0s' }} />
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
-                     style={{ animationDelay: '0.5s' }} />
-              </div>
-            </div>
-          )}
         </Button>
         
         {/* 状态文本 */}
@@ -2048,39 +2020,9 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
           )}
           <span className="flex items-center gap-1">
             <Brain className="h-3 w-3" />
-            {isCompleted ? '分析完成' : isProcessing ? '自动分类 + 特征提取' : '自动分类 + 特征提取'}
+            自动分类 + 特征提取
           </span>
         </div>
-        
-        {/* 进度状态显示 */}
-        {wsProgress && !isCompleted && (
-          <div className="flex items-center gap-2">
-            <div className="bg-muted/30 rounded-lg px-3 py-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-                <div className="min-w-0">
-                  <div className={`text-xs font-medium text-foreground status-text ${statusAnimation ? 'flip-up' : ''}`}>
-                    {wsProgress?.status === 'classifying' ? '证据分类中' :
-                     wsProgress?.status === 'classified' ? '证据分类完成' :
-                     wsProgress?.status === 'extracting' ? '证据特征分析中' :
-                     wsProgress?.status === 'ocr_processing' ? 'OCR处理中' :
-                     wsProgress?.status === 'ocr_success' ? 'OCR处理成功' :
-                     wsProgress?.status === 'ocr_error' ? 'OCR处理失败' :
-                     wsProgress?.status === 'llm_processing' ? 'LLM处理中' :
-                     wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
-                     wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
-                    <span className="animate-bounce-dots">...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* 进度百分比 */}
-            <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
-              {wsProgress?.progress ? Math.round(wsProgress.progress) : 0}%
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 删除确认弹窗 */}
@@ -2098,6 +2040,8 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
           </div>
         </DialogContent>
       </Dialog>
+
+      
 
       <Suspense fallback={<div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div></div>}>
         <EvidenceGalleryContent 

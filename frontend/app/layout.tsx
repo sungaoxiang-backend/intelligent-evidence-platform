@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TopNavigation } from "@/components/top-navigation"
 import { LoginPage } from "@/components/login-page"
+import { GlobalTaskProvider } from "@/contexts/global-task-context"
 import { authService } from "@/lib/auth"
 import type { Staff } from "@/lib/config"
 
@@ -72,16 +73,18 @@ function AppContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen gradient-bg">
-      <TopNavigation
-        userRole={currentUser?.is_superuser ? "admin" : "user"}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
-      <main className="pt-12">
-        <div className="container mx-auto px-4 lg:px-6 py-3 max-w-7xl">{children}</div>
-      </main>
-    </div>
+    <GlobalTaskProvider>
+      <div className="min-h-screen gradient-bg">
+        <TopNavigation
+          userRole={currentUser?.is_superuser ? "admin" : "user"}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+        <main className="pt-12">
+          <div className="container mx-auto px-4 lg:px-6 py-3 max-w-7xl">{children}</div>
+        </main>
+      </div>
+    </GlobalTaskProvider>
   )
 }
 
