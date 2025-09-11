@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
 from app.core.celery_app import celery_app
+from loguru import logger
 
 # 创建任务路由
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -25,6 +26,7 @@ class GenerateEvidenceChainRequest(BaseModel):
 from .example_tasks import example_task, add_numbers, process_document
 from .document_tasks import process_document_task, analyze_document_task
 from .evidence_tasks import analyze_evidence_task, generate_evidence_chain_task
+from .real_evidence_tasks import analyze_evidences_task, batch_analyze_evidences_task
 
 # 注册任务路由端点
 @router.post("/example")
@@ -76,16 +78,46 @@ async def run_generate_evidence_chain(request: GenerateEvidenceChainRequest):
 async def run_batch_analyze_evidences(request: BatchAnalyzeEvidencesRequest):
     """批量分析证据任务 - 用于智能证据分析"""
     try:
-        # 为每个证据创建一个分析任务
-        task_ids = []
-        for evidence_id in request.evidence_ids:
-            task = analyze_evidence_task.delay(evidence_id, "smart")
-            task_ids.append(task.id)
+        # 使用真实的证据分析任务 - 使用完整路径名称
+        task = celery_app.send_task(
+            'app.tasks.real_evidence_tasks.batch_analyze_evidences_task',
+            args=[],
+            kwargs={
+                'case_id': int(request.case_id),
+                'evidence_ids': [int(eid) for eid in request.evidence_ids],
+                'auto_classification': True,
+                'auto_feature_extraction': True
+            }
+        )
         
         return {
-            "task_ids": task_ids, 
+            "task_ids": [task.id], 
             "status": "started", 
-            "message": f"已启动 {len(task_ids)} 个证据分析任务"
+            "message": f"已启动批量证据分析任务，包含 {len(request.evidence_ids)} 个证据"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/real-analyze-evidences")
+async def run_real_analyze_evidences(request: BatchAnalyzeEvidencesRequest):
+    """真实的证据分析任务 - 直接调用auto_process服务"""
+    try:
+        # 使用真实的证据分析任务 - 使用完整路径名称
+        task = celery_app.send_task(
+            'app.tasks.real_evidence_tasks.analyze_evidences_task',
+            args=[],
+            kwargs={
+                'case_id': int(request.case_id),
+                'evidence_ids': [int(eid) for eid in request.evidence_ids],
+                'auto_classification': True,
+                'auto_feature_extraction': True
+            }
+        )
+        
+        return {
+            "task_ids": [task.id], 
+            "status": "started", 
+            "message": f"已启动真实证据分析任务，包含 {len(request.evidence_ids)} 个证据"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -95,11 +127,44 @@ async def get_task_status(task_id: str):
     """获取任务状态"""
     try:
         task = celery_app.AsyncResult(task_id)
+        
+        # 安全地获取任务结果
+        result = None
+        info = None
+        
+        if task.ready():
+            try:
+                result = task.result
+            except Exception as e:
+                # 如果结果无法序列化，返回错误信息
+                result = {
+                    "error": "任务结果无法序列化",
+                    "error_message": str(e)
+                }
+        else:
+            try:
+                info = task.info
+            except Exception as e:
+                # 如果信息无法序列化，返回错误信息
+                info = {
+                    "error": "任务信息无法序列化",
+                    "error_message": str(e)
+                }
+        
         return {
             "task_id": task_id,
             "status": task.status,
-            "result": task.result if task.ready() else None,
-            "info": task.info if not task.ready() else None
+            "result": result,
+            "info": info
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 记录详细错误信息
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"获取任务状态失败: {str(e)}")
+        logger.error(f"错误详情: {error_traceback}")
+        
+        raise HTTPException(
+            status_code=500, 
+            detail=f"获取任务状态失败: {str(e)}"
+        )

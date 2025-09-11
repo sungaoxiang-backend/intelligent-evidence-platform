@@ -412,9 +412,9 @@ export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string) => v
     try {
       console.log('启动智能分析任务，参数:', params)
       
-      // 使用真实的Celery API启动批量证据分析任务
-      const result = await taskApi.startBatchAnalyzeEvidences(params.case_id, params.evidence_ids.map(id => Number(id)))
-      console.log('批量分析任务已启动:', result)
+      // 使用真实的Celery API启动真实证据分析任务
+      const result = await taskApi.startRealAnalyzeEvidences(params.case_id, params.evidence_ids.map(id => Number(id)))
+      console.log('真实证据分析任务已启动:', result)
       
       // 为每个任务ID添加到任务队列
       console.log('准备添加任务到队列，任务IDs:', result.task_ids)

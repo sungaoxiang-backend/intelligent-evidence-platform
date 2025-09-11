@@ -20,6 +20,7 @@ celery_app.conf.update(
         "app.tasks.example_tasks.*": {"queue": "example"},
         "app.tasks.document_tasks.*": {"queue": "document"},
         "app.tasks.evidence_tasks.*": {"queue": "evidence"},
+        "app.tasks.real_evidence_tasks.*": {"queue": "evidence"},
     },
     # 任务结果过期时间（秒）
     result_expires=3600,
@@ -32,8 +33,7 @@ celery_app.conf.update(
 # 自动发现任务
 celery_app.autodiscover_tasks([
     "app.tasks",
-    "app.tasks.example_tasks",
-    "app.tasks.document_tasks",
-    "app.tasks.evidence_tasks",
-    "app.tasks.scheduled_tasks",
 ])
+
+# 显式导入任务模块以确保注册
+from app.tasks import real_evidence_tasks
