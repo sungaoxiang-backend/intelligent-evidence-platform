@@ -34,9 +34,9 @@ export function GlobalTaskButton({ tasks, onRemoveTask, onClearAll, onClearCompl
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
 
-  // 按更新时间排序，最新的在上方
+  // 按创建时间排序，最早添加的在上方（保持稳定顺序）
   const sortedTasks = [...tasks].sort((a, b) => 
-    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   )
   
   const runningTasks = sortedTasks.filter(task => task.status === 'running' || task.status === 'pending')
@@ -401,7 +401,7 @@ export function GlobalTaskButton({ tasks, onRemoveTask, onClearAll, onClearCompl
                     {/* 底部：时间信息 + 证据数量 */}
                     <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                       <div className="flex items-center space-x-2">
-                        <span>{formatDateTime(task.updatedAt)}</span>
+                        <span>{formatDateTime(task.createdAt)}</span>
                         <span>•</span>
                         <span>耗时: {duration}</span>
                       </div>

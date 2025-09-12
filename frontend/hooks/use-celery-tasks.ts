@@ -125,7 +125,12 @@ export function useCeleryTasks(): TaskQueue {
   const updateTask = useCallback((taskId: string, updates: Partial<TaskProgress>) => {
     setTasks(prev => prev.map(task => 
       task.taskId === taskId 
-        ? { ...task, ...updates, updatedAt: new Date() }
+        ? { 
+            ...task, 
+            ...updates, 
+            // 只有在明确提供 updatedAt 时才更新，否则保持原值
+            updatedAt: updates.updatedAt || task.updatedAt
+          }
         : task
     ))
   }, [])
@@ -537,5 +542,73 @@ export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string, cont
 
   return {
     startEvidenceAnalysis
+  }
+}
+
+// 专门用于关联证据分析的Hook
+export function useAssociationEvidenceAnalysis(tasksHook?: { addTask: (taskId: string, context?: TaskProgress['context']) => void; updateTask: (taskId: string, updates: Partial<TaskProgress>) => void; removeTask: (taskId: string) => void }) {
+  const defaultTasksHook = useCeleryTasks()
+  const { addTask, updateTask, removeTask } = tasksHook || defaultTasksHook
+  const { toast } = useToast()
+
+  const startAssociationEvidenceAnalysis = useCallback(async (params: {
+    case_id: number
+    evidence_ids: (number | string)[]
+    caseTitle?: string
+    evidenceTypes?: string[]
+  }) => {
+    try {
+      console.log('启动关联证据分析任务，参数:', params)
+      
+      // 使用关联证据分析API
+      const result = await taskApi.startAssociationAnalyzeEvidences(params.case_id, params.evidence_ids.map(id => Number(id)))
+      console.log('关联证据分析任务已启动:', result)
+      
+      // 构建任务上下文信息
+      const taskContext: TaskProgress['context'] = {
+        type: 'evidence_analysis',
+        title: '关联证据分析',
+        description: `分析 ${params.evidence_ids.length} 个微信聊天记录证据`,
+        caseId: params.case_id,
+        caseTitle: params.caseTitle || `案件 ${params.case_id}`,
+        pagePath: `/cases/${params.case_id}`,
+        pageTitle: '关联证据分析',
+        evidenceCount: params.evidence_ids.length,
+        evidenceTypes: params.evidenceTypes || ['微信聊天记录'],
+        metadata: {
+          analysis_type: 'association',
+          evidence_category: '微信聊天记录'
+        }
+      }
+      
+      // 为每个任务ID添加到任务队列
+      console.log('准备添加关联证据分析任务到队列，任务IDs:', result.task_ids)
+      result.task_ids.forEach(taskId => {
+        console.log('调用 addTask 添加关联证据分析任务:', taskId)
+        addTask(taskId, taskContext)
+      })
+
+      return { taskIds: result.task_ids, success: true }
+
+    } catch (error) {
+      console.error('启动关联证据分析失败:', error)
+      
+      const errorMessage = error instanceof Error ? error.message : '启动关联证据分析任务失败'
+      const errorDetails = error instanceof Error && 'response' in error ? JSON.stringify(error.response) : ''
+      
+      console.error('错误详情:', errorDetails)
+      
+      toast({
+        title: '启动失败',
+        description: errorMessage,
+        variant: 'destructive'
+      })
+
+      return { taskIds: [], success: false }
+    }
+  }, [addTask, toast])
+
+  return {
+    startAssociationEvidenceAnalysis
   }
 }

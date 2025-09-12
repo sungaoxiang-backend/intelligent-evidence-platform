@@ -17,7 +17,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ArrowLeft, Search, Download, Upload, Eye, Edit, Save, X, Brain, Video, ZoomIn, GripVertical, CheckCircle, XCircle, FileText } from "lucide-react"
 import { caseApi, evidenceApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { useAutoProcessWebSocket } from "@/hooks/use-websocket"
+import { useGlobalTasks } from "@/contexts/global-task-context"
+import { useEvidenceAnalysis, useAssociationEvidenceAnalysis } from "@/hooks/use-celery-tasks"
 import {
   DndContext,
   closestCenter,
@@ -377,7 +378,7 @@ function EvidenceReasoningContent({
   setSelectedSlot,
   selectedGroup,
   setSelectedGroup,
-  handleAutoProcess,
+  handleBatchAnalysis,
   handleSave,
   toast,
   editing,
@@ -398,7 +399,7 @@ function EvidenceReasoningContent({
   setSelectedSlot: (slot: any) => void
   selectedGroup: string
   setSelectedGroup: (group: string) => void
-  handleAutoProcess: () => void
+  handleBatchAnalysis: () => void
   handleSave: (editForm: any, setEditing: (v: boolean) => void) => void
   toast: any
   editing: boolean
@@ -1064,11 +1065,33 @@ export function EvidenceReasoning({
   const [reviewing, setReviewing] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null)
+  
+  // 全局任务管理
+  const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
+  const { startEvidenceAnalysis } = useEvidenceAnalysis({ addTask, updateTask, removeTask })
+  const { startAssociationEvidenceAnalysis } = useAssociationEvidenceAnalysis({ addTask, updateTask, removeTask })
+  
+  // 获取当前任务状态 - 简化版本，只用于显示，不用于控制按钮状态
+  const getCurrentTaskStatus = () => {
+    const runningTasks = tasks.filter(task => task.status === 'running')
+    if (runningTasks.length > 0) {
+      return {
+        isProcessing: true,
+        progress: runningTasks[0].progress,
+        status: runningTasks[0].status,
+        message: runningTasks[0].message
+      }
+    }
+    
+    return {
+      isProcessing: false,
+      progress: 0,
+      status: '',
+      message: ''
+    }
+  }
+  
   const [showOptionalFields, setShowOptionalFields] = useState(false)
-  // WebSocket进度管理
-  const { progress: wsProgress, error: wsError, isProcessing, startAutoProcess, disconnect, clearProgress } = useAutoProcessWebSocket()
-
-  const [isCompleted, setIsCompleted] = useState(false)
   const { toast } = useToast()
   
   // 获取URL查询参数
@@ -1184,88 +1207,58 @@ export function EvidenceReasoning({
 
 
 
-  // WebSocket进度监听
-  useEffect(() => {
-    if (wsProgress?.status === 'completed') {
-      toast({ title: "智能推理完成", description: wsProgress.message })
-      setSelectedEvidenceIds([])
-      setIsCompleted(true)
-      mutate(['case', caseId.toString()])
-      // 3秒后重置完成状态和清空wsProgress
-      setTimeout(() => {
-        setIsCompleted(false)
-        // 彻底清空wsProgress状态，避免进度状态一直显示
-        clearProgress()
-      }, 3000)
-    } else if (wsProgress?.status === 'error') {
-      toast({ title: "智能推理失败", description: wsProgress.message || "处理过程中发生错误", variant: "destructive" })
-      setSelectedEvidenceIds([])
-      setIsCompleted(false)
-    } else if (wsError) {
-      toast({ title: "智能推理失败", description: wsError, variant: "destructive" })
-      setSelectedEvidenceIds([])
-      setIsCompleted(false)
-    }
-    
-  }, [wsProgress, wsError, toast, caseId, mutate, disconnect])
-
-  // 当选择清空时，重置相关状态
-  useEffect(() => {
-    if (selectedEvidenceIds.length === 0) {
-      // 如果没有选择，重置完成状态（除非正在处理中）
-      if (!isProcessing) {
-        setIsCompleted(false)
-      }
-    }
-  }, [selectedEvidenceIds.length, isProcessing]);
-
   // 组件卸载时清理
   useEffect(() => {
     return () => {
-      disconnect()
-      // 清理所有状态
-      setIsCompleted(false)
       setSelectedEvidenceIds([])
     }
-  }, [disconnect]);
+  }, []);
 
-  // 智能分析处理 - 使用WebSocket
-  const handleAutoProcess = async () => {
+  // 关联证据分析处理 - 使用Celery异步任务
+  const handleBatchAnalysis = async () => {
     try {
       if (selectedEvidenceIds.length === 0) {
-        toast({ 
-          title: "提示", 
-          description: "请先选择证据", 
-          variant: "destructive" 
-        })
+        toast({ title: "提示", description: "请先选择证据", variant: "destructive" })
         return
       }
+      
+      // 获取案件信息和证据类型
+      const caseTitle = (caseData as any)?.title || `案件 ${caseId}`
+      const evidenceTypes = evidenceList
+        .filter((evidence: any) => selectedEvidenceIds.includes(evidence.id))
+        .map((evidence: any) => evidence.classification_category)
+        .filter(Boolean)
 
-      // 获取选中证据的详细信息，确保都是微信聊天记录类型
-      const evidenceResponse = await evidenceApi.getEvidencesByIds(selectedEvidenceIds)
-      const selectedEvidences = evidenceResponse.data.filter((evidence: any) => 
+      // 检查是否都是微信聊天记录类型
+      const wechatEvidences = evidenceList.filter((evidence: any) => 
+        selectedEvidenceIds.includes(evidence.id) && 
         evidence.classification_category === "微信聊天记录"
       )
 
-      if (selectedEvidences.length === 0) {
+      if (wechatEvidences.length === 0) {
         toast({
           title: "提示",
-          description: "选中的证据中没有微信聊天记录类型",
+          description: "选中的证据中没有微信聊天记录类型，无法进行关联分析",
           variant: "destructive",
         })
         return
       }
 
-      // 使用WebSocket进行智能推理
-      startAutoProcess({
+      // 使用关联证据分析任务
+      const result = await startAssociationEvidenceAnalysis({
         case_id: Number(caseId),
-        evidence_ids: selectedEvidences.map((e: any) => e.id),
-        auto_classification: false,
-        auto_feature_extraction: true
-      }, undefined, '/cases/ws/auto-process')
+        evidence_ids: selectedEvidenceIds,
+        caseTitle,
+        evidenceTypes
+      })
+
+      if (result.success) {
+        // 任务启动成功，清空选择
+        setSelectedEvidenceIds([])
+      }
       
     } catch (e: any) {
-      toast({ title: "智能推理失败", description: e?.message || '未知错误', variant: "destructive" })
+      toast({ title: "关联证据分析失败", description: e?.message || '未知错误', variant: "destructive" })
     }
   }
 
@@ -1631,60 +1624,24 @@ export function EvidenceReasoning({
         <Button
           variant="destructive"
           onClick={handleBatchDelete}
-          disabled={isProcessing || selectedEvidenceIds.length === 0}
+          disabled={selectedEvidenceIds.length === 0}
         >
           批量删除
         </Button>
 
-        {/* 标准宽度的智能推理按钮 */}
+        {/* 关联证据分析按钮 */}
         <Button 
-          onClick={handleAutoProcess} 
-          disabled={isProcessing && !isCompleted || selectedEvidenceIds.length === 0} 
-          className={`relative overflow-hidden transition-all duration-300 ${
-            isCompleted
-              ? 'bg-green-500 text-white shadow-md' 
-              : isProcessing 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : selectedEvidenceIds.length === 0
-              ? 'bg-gray-400 text-white cursor-not-allowed'
-              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-          }`}
+          onClick={handleBatchAnalysis} 
+          disabled={selectedEvidenceIds.length === 0} 
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
         >
-          <span className="relative z-10 flex items-center gap-2">
-            {isCompleted ? (
-              <>
-                <span>100%</span>
-                <span>✓</span>
-                <span className="animate-sparkle">🎆</span>
-              </>
-            ) : isProcessing ? (
-              "推理中..."
-            ) : selectedEvidenceIds.length === 0 ? (
+          <span className="flex items-center gap-2">
+            {selectedEvidenceIds.length === 0 ? (
               "请选择证据"
             ) : (
-              "智能推理"
+              "关联证据分析"
             )}
           </span>
-          
-          {/* 水波动画进度条 */}
-          {(isProcessing || isCompleted) && wsProgress && (
-            <div className="absolute inset-0 overflow-hidden">
-              <div 
-                className="absolute inset-0 bg-gradient-to-r from-white/20 via-white/40 to-white/20 animate-shimmer"
-                style={{ 
-                  width: `${isCompleted ? 100 : (wsProgress?.progress || 0)}%`,
-                  transition: 'width 0.8s ease-out'
-                }}
-              />
-              {/* 水波效果 */}
-              <div className="absolute inset-0">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" 
-                     style={{ animationDelay: '0s' }} />
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
-                     style={{ animationDelay: '0.5s' }} />
-              </div>
-            </div>
-          )}
         </Button>
         
         {/* 状态文本 */}
@@ -1699,39 +1656,9 @@ export function EvidenceReasoning({
           )}
           <span className="flex items-center gap-1">
             <Brain className="h-3 w-3" />
-            {isCompleted ? '推理完成' : isProcessing ? '智能推理' : '智能推理'}
+            关联特征提取
           </span>
         </div>
-        
-        {/* 进度状态显示 */}
-        {wsProgress && !isCompleted && (
-          <div className="flex items-center gap-2">
-            <div className="bg-muted/30 rounded-lg px-3 py-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-foreground status-text">
-                    {wsProgress?.status === 'classifying' ? '证据分类中' :
-                     wsProgress?.status === 'classified' ? '证据分类完成' :
-                     wsProgress?.status === 'extracting' ? '证据特征分析中' :
-                     wsProgress?.status === 'ocr_processing' ? 'OCR处理中' :
-                     wsProgress?.status === 'ocr_success' ? 'OCR处理成功' :
-                     wsProgress?.status === 'ocr_error' ? 'OCR处理失败' :
-                     wsProgress?.status === 'llm_processing' ? 'LLM处理中' :
-                     wsProgress?.status === 'features_extracted' ? '证据特征分析完成' :
-                     wsProgress?.status === 'completed' ? '处理完成' : '处理中'}
-                    <span className="animate-bounce-dots">...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* 进度百分比 */}
-            <div className="text-xs font-bold text-purple-600 dark:text-purple-400">
-              {Math.round(wsProgress?.progress || 0)}%
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 主要内容 */}
@@ -1743,7 +1670,7 @@ export function EvidenceReasoning({
         setSelectedSlot={setSelectedSlot}
         selectedGroup={selectedGroup}
         setSelectedGroup={setSelectedGroup}
-        handleAutoProcess={handleAutoProcess}
+        handleBatchAnalysis={handleBatchAnalysis}
         handleSave={handleSave}
         toast={toast}
         editing={editing}

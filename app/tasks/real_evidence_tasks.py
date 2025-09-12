@@ -7,6 +7,7 @@ from app.db.session import async_session_factory
 from app.evidences.services import auto_process
 from app.evidences.models import Evidence
 from app.cases.models import Case
+from app.cases.services import auto_process as cases_auto_process
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -289,3 +290,118 @@ def batch_analyze_evidences_task(self, case_id: int, evidence_ids: List[int],
         
         # 重新抛出异常，但确保异常类型可以被序列化
         raise Exception(f"批量证据分析任务创建失败: {str(e)}")
+
+
+@celery_app.task(bind=True)
+def analyze_association_evidences_task(self, case_id: int, evidence_ids: List[int]) -> Dict[str, Any]:
+    """
+    关联证据分析任务 - 专门处理微信聊天记录的关联特征提取
+    
+    Args:
+        case_id: 案件ID
+        evidence_ids: 证据ID列表（必须是已分类为"微信聊天记录"的证据）
+        
+    Returns:
+        dict: 分析结果
+    """
+    logger.info(f"开始关联证据分析任务: case_id={case_id}, evidence_ids={evidence_ids}")
+    
+    # 创建进度更新函数
+    def update_progress(status: str, message: str, progress: Optional[int] = None):
+        """更新任务进度"""
+        meta = {
+            "status": status,
+            "message": message
+        }
+        if progress is not None:
+            meta["progress"] = str(progress)
+        
+        self.update_state(
+            state="PROGRESS",
+            meta=meta
+        )
+        logger.info(f"任务进度更新: {status} - {message} ({progress}%)")
+    
+    try:
+        # 更新任务状态为开始
+        update_progress("started", "开始关联证据分析", 0)
+        
+        # 运行异步任务
+        result = asyncio.run(run_association_analysis_async(case_id, evidence_ids, update_progress))
+        
+        if result is None:
+            update_progress("failed", "关联证据分析失败，未获取到有效结果", 0)
+            return {
+                "success": False,
+                "message": "关联证据分析失败，未获取到有效结果",
+                "case_id": case_id,
+                "evidence_ids": evidence_ids
+            }
+        
+        # 更新任务状态为成功
+        update_progress("completed", f"关联证据分析完成，共处理 {len(result)} 个特征组", 100)
+        
+        return {
+            "success": True,
+            "message": f"关联证据分析完成，共处理 {len(result)} 个特征组",
+            "case_id": case_id,
+            "evidence_ids": evidence_ids,
+            "association_features_count": len(result)
+        }
+        
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"关联证据分析任务失败: {str(e)}")
+        logger.error(f"错误堆栈: {error_traceback}")
+        
+        # 更新任务状态为失败
+        self.update_state(
+            state="FAILURE",
+            meta={
+                "status": "failed",
+                "message": f"关联证据分析任务失败: {str(e)}",
+                "error": str(e),
+                "traceback": error_traceback
+            }
+        )
+        
+        # 重新抛出异常
+        raise Exception(f"关联证据分析任务失败: {str(e)}")
+
+
+async def run_association_analysis_async(case_id: int, evidence_ids: List[int], update_progress: Callable) -> Optional[List]:
+    """
+    运行关联证据分析的异步函数
+    
+    Args:
+        case_id: 案件ID
+        evidence_ids: 证据ID列表
+        update_progress: 进度更新函数
+        
+    Returns:
+        List: 关联特征列表
+    """
+    async with async_session_factory() as db:
+        try:
+            # 创建进度发送函数
+            async def send_progress(progress_data: Dict[str, Any]):
+                """发送进度数据"""
+                status = progress_data.get("status", "processing")
+                message = progress_data.get("message", "处理中...")
+                progress = progress_data.get("progress", 0)
+                update_progress(status, message, progress)
+            
+            # 调用 cases 模块的 auto_process 函数
+            result = await cases_auto_process(
+                db=db,
+                case_id=case_id,
+                evidence_ids=evidence_ids,
+                send_progress=send_progress
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"关联证据分析异步执行失败: {str(e)}")
+            raise e

@@ -26,7 +26,7 @@ class GenerateEvidenceChainRequest(BaseModel):
 from .example_tasks import example_task, add_numbers, process_document
 from .document_tasks import process_document_task, analyze_document_task
 from .evidence_tasks import analyze_evidence_task, generate_evidence_chain_task
-from .real_evidence_tasks import analyze_evidences_task, batch_analyze_evidences_task
+from .real_evidence_tasks import analyze_evidences_task, batch_analyze_evidences_task, analyze_association_evidences_task
 
 # 注册任务路由端点
 @router.post("/example")
@@ -118,6 +118,28 @@ async def run_real_analyze_evidences(request: BatchAnalyzeEvidencesRequest):
             "task_ids": [task.id], 
             "status": "started", 
             "message": f"已启动真实证据分析任务，包含 {len(request.evidence_ids)} 个证据"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analyze-association-evidences")
+async def run_analyze_association_evidences(request: BatchAnalyzeEvidencesRequest):
+    """关联证据分析任务 - 专门处理微信聊天记录的关联特征提取"""
+    try:
+        # 使用关联证据分析任务
+        task = celery_app.send_task(
+            'app.tasks.real_evidence_tasks.analyze_association_evidences_task',
+            args=[],
+            kwargs={
+                'case_id': int(request.case_id),
+                'evidence_ids': [int(eid) for eid in request.evidence_ids]
+            }
+        )
+        
+        return {
+            "task_ids": [task.id], 
+            "status": "started", 
+            "message": f"已启动关联证据分析任务，包含 {len(request.evidence_ids)} 个微信聊天记录证据"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

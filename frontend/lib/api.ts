@@ -793,6 +793,29 @@ export const taskApi = {
     }
   },
 
+  async startAssociationAnalyzeEvidences(caseId: number, evidenceIds: number[]): Promise<{ task_ids: string[]; status: string; message: string }> {
+    const url = buildApiUrl(`/tasks/analyze-association-evidences`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ 
+        case_id: caseId.toString(),
+        evidence_ids: evidenceIds.map(id => id.toString())
+      }),
+    })
+    const result = await resp.json()
+    if (resp.ok) {
+      return result
+    } else {
+      console.error('关联证据分析任务失败:', result)
+      const errorMessage = result.detail || result.message || "启动关联证据分析任务失败"
+      throw new Error(errorMessage)
+    }
+  },
+
   async getTaskStatus(taskId: string): Promise<{
     task_id: string
     status: string
