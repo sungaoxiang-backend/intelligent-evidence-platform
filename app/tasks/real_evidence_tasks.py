@@ -48,7 +48,8 @@ def analyze_evidences_task(self, case_id: int, evidence_ids: List[int],
             state="PROGRESS",
             meta=meta
         )
-        logger.info(f"任务进度更新: {status} - {message} ({progress}%)")
+        logger.info(f"🚀 任务进度更新: {status} - {message} ({progress}%)")
+        print(f"🚀 任务进度更新: {status} - {message} ({progress}%)")  # 确保在控制台看到
     
     try:
         # 更新任务状态为开始
@@ -156,23 +157,25 @@ async def _analyze_evidences_async(
                 """发送进度更新"""
                 status = data.get("status", "processing")
                 message = data.get("message", "处理中...")
+                progress = data.get("progress")
+                current = data.get("current")
+                total = data.get("total")
                 
-                # 根据状态映射进度
-                progress_map = {
-                    "uploaded": 15,
-                    "classifying": 20,
-                    "classified": 40,
-                    "extracting": 50,
-                    "ocr_processing": 60,
-                    "llm_processing": 70,
-                    "features_extracted": 80,
-                    "role_annotation": 85,
-                    "role_annotated": 90,
-                    "completed": 95
-                }
+                # 优先使用直接传递的progress值
+                if progress is not None:
+                    final_progress = min(100, max(0, int(progress)))
+                    logger.info(f"📊 直接进度: {progress}%")
+                elif current is not None and total is not None and total > 0:
+                    final_progress = min(100, max(0, int((current / total) * 100)))
+                    logger.info(f"📊 计算进度: {current}/{total} = {final_progress}%")
+                else:
+                    # 如果没有进度数据，不更新进度，只更新状态和消息
+                    logger.warning(f"⚠️ 缺少进度数据: status={status}, progress={progress}, current={current}, total={total}")
+                    # 不调用update_progress，避免进度跳跃
+                    return
                 
-                progress = progress_map.get(status, 50)
-                update_progress(status, message, progress)
+                # 传递原始状态和真实进度
+                update_progress(status, message, final_progress)
             
             # 调用真实的证据分析服务
             update_progress("processing", "开始证据分析处理", 15)

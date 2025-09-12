@@ -669,7 +669,12 @@ async def auto_process(
     if files:
         evidences = await batch_create(db, case_id, files)
         if send_progress:
-            await send_progress({"status": "uploaded", "message": "文件已成功上传"})
+            await send_progress({
+                "status": "uploaded", 
+                "message": "文件已成功上传",
+                "current": len(evidences),
+                "total": len(evidences)
+            })
     elif evidence_ids:
         evidences = []
         for evidence_id in evidence_ids:
@@ -687,7 +692,11 @@ async def auto_process(
     if auto_classification:
         try:
             if send_progress:
-                await send_progress({"status": "classifying", "message": "开始证据分类分析"})
+                await send_progress({
+                    "status": "classifying", 
+                    "message": "开始证据分类分析",
+                    "progress": 10  # 固定进度：10%
+                })
             
             evidence_classifier = EvidenceClassifier()
             # message_parts = ["请对以下证据进行分类："]
@@ -729,22 +738,40 @@ async def auto_process(
                     await db.refresh(evidence)
             
             if send_progress:
-                await send_progress({"status": "classified", "message": "证据分类完成"})
+                await send_progress({
+                    "status": "classified", 
+                    "message": "证据分类完成",
+                    "progress": 25  # 固定进度：25%
+                })
                 
         except asyncio.TimeoutError:
             if send_progress:
-                await send_progress({"status": "error", "message": "证据分类超时，请稍后重试"})
+                await send_progress({
+                    "status": "error", 
+                    "message": "证据分类超时，请稍后重试",
+                    "current": 0,
+                    "total": len(evidences)
+                })
             raise Exception("证据分类超时")
         except Exception as e:
             if send_progress:
-                await send_progress({"status": "error", "message": f"证据分类失败: {str(e)}"})
+                await send_progress({
+                    "status": "error", 
+                    "message": f"证据分类失败: {str(e)}",
+                    "current": 0,
+                    "total": len(evidences)
+                })
             raise
 
     # 3. 证据特征提取（可选，且只能在分类后）
     if auto_feature_extraction:
         try:
             if send_progress:
-                await send_progress({"status": "extracting", "message": "开始证据特征分析"})
+                await send_progress({
+                    "status": "extracting", 
+                    "message": "开始证据特征分析",
+                    "progress": 30  # 固定进度：30%
+                })
             
             # 定义支持OCR的证据类型
             ocr_supported_types = {
@@ -774,13 +801,26 @@ async def auto_process(
             # 处理OCR支持的证据类型
             if ocr_evidences:
                 if send_progress:
-                    await send_progress({"status": "ocr_processing", "message": f"开始OCR处理 {len(ocr_evidences)} 个证据"})
+                    await send_progress({
+                        "status": "ocr_processing", 
+                        "message": f"开始OCR处理 {len(ocr_evidences)} 个证据",
+                        "progress": 40  # OCR阶段开始：40%
+                    })
                 
                 from app.utils.xunfei_ocr import XunfeiOcrService
                 ocr_service = XunfeiOcrService()
                 
-                for evidence in ocr_evidences:
+                for i, evidence in enumerate(ocr_evidences):
                     try:
+                        # 更新进度：OCR阶段内进度 (40% → 60%)
+                        if send_progress:
+                            ocr_progress = 40 + int((i / len(ocr_evidences)) * 20)  # 40% + (i/total) * 20%
+                            await send_progress({
+                                "status": "ocr_processing", 
+                                "message": f"OCR处理中: {evidence.file_name}",
+                                "progress": ocr_progress
+                            })
+                        
                         # 调用OCR服务
                         ocr_result = ocr_service.extract_evidence_features(
                             evidence.file_url, 
@@ -799,10 +839,11 @@ async def auto_process(
                             await db.refresh(evidence)
                             
                             if send_progress:
+                                ocr_progress = 40 + int(((i + 1) / len(ocr_evidences)) * 20)  # 40% + ((i+1)/total) * 20%
                                 await send_progress({
-                                    "status": "ocr_success", 
+                                    "status": "ocr_processing", 
                                     "message": f"OCR处理成功: {evidence.file_name}",
-                                    "evidence_id": evidence.id
+                                    "progress": ocr_progress
                                 })
                         else:
                             # OCR处理失败，记录错误
@@ -810,25 +851,31 @@ async def auto_process(
                             logger.warning(f"OCR处理失败 {evidence.file_name}: {error_msg}")
                             
                             if send_progress:
+                                ocr_progress = 40 + int(((i + 1) / len(ocr_evidences)) * 20)  # 40% + ((i+1)/total) * 20%
                                 await send_progress({
-                                    "status": "ocr_error", 
+                                    "status": "ocr_processing", 
                                     "message": f"OCR处理失败: {evidence.file_name} - {error_msg}",
-                                    "evidence_id": evidence.id
+                                    "progress": ocr_progress
                                 })
                                 
                     except Exception as e:
                         logger.error(f"OCR处理异常 {evidence.file_name}: {str(e)}")
                         if send_progress:
+                            ocr_progress = 40 + int(((i + 1) / len(ocr_evidences)) * 20)  # 40% + ((i+1)/total) * 20%
                             await send_progress({
-                                "status": "ocr_error", 
+                                "status": "ocr_processing", 
                                 "message": f"OCR处理异常: {evidence.file_name} - {str(e)}",
-                                "evidence_id": evidence.id
+                                "progress": ocr_progress
                             })
             
             # 处理需要LLM处理的证据类型
             if llm_evidences:
                 if send_progress:
-                    await send_progress({"status": "llm_processing", "message": f"开始LLM处理 {len(llm_evidences)} 个证据"})
+                    await send_progress({
+                        "status": "llm_processing", 
+                        "message": f"开始LLM处理 {len(llm_evidences)} 个证据",
+                        "progress": 60  # LLM阶段开始：60%
+                    })
                 
                 extractor = EvidenceFeaturesExtractor()
                 images = [
@@ -864,22 +911,40 @@ async def auto_process(
                         await db.refresh(evidence)
                 
                 if send_progress:
-                    await send_progress({"status": "features_extracted", "message": "证据特征分析完成"})
+                    await send_progress({
+                        "status": "features_extracted", 
+                        "message": "证据特征分析完成",
+                        "progress": 80  # LLM阶段完成：80%
+                    })
                 
         except asyncio.TimeoutError:
             if send_progress:
-                await send_progress({"status": "error", "message": "证据特征分析超时，请稍后重试"})
+                await send_progress({
+                    "status": "error", 
+                    "message": "证据特征分析超时，请稍后重试",
+                    "current": 0,
+                    "total": len(evidences)
+                })
             raise Exception("证据特征分析超时")
         except Exception as e:
             if send_progress:
-                await send_progress({"status": "error", "message": f"证据特征分析失败: {str(e)}"})
+                await send_progress({
+                    "status": "error", 
+                    "message": f"证据特征分析失败: {str(e)}",
+                    "current": 0,
+                    "total": len(evidences)
+                })
             raise
 
     # 标注证据的角色类型
     if auto_feature_extraction and evidences:
         try:
             if send_progress:
-                await send_progress({"status": "role_annotation", "message": "开始证据角色自动标注"})
+                await send_progress({
+                    "status": "role_annotation", 
+                    "message": "开始证据角色自动标注",
+                    "progress": 85  # 角色标注阶段开始：85%
+                })
             
             # 获取案件信息，预加载case_parties关系
             case_query = await db.execute(
@@ -1028,17 +1093,30 @@ async def auto_process(
                 await db.refresh(evidence)
             
             if send_progress:
-                await send_progress({"status": "role_annotated", "message": "证据角色标注完成"})
+                await send_progress({
+                    "status": "role_annotated", 
+                    "message": "证据角色标注完成",
+                    "progress": 95  # 角色标注阶段完成：95%
+                })
                 
         except Exception as e:
             logger.error(f"证据角色标注失败: {str(e)}")
             if send_progress:
-                await send_progress({"status": "error", "message": f"证据角色标注失败: {str(e)}"})
+                await send_progress({
+                    "status": "error", 
+                    "message": f"证据角色标注失败: {str(e)}",
+                    "current": 0,
+                    "total": len(evidences)
+                })
             # 不抛出异常，继续执行后续逻辑
 
     # 5. 发送完成状态
     if send_progress:
-        await send_progress({"status": "completed", "message": f"成功处理 {len(evidences)} 个证据"})
+        await send_progress({
+            "status": "completed", 
+            "message": f"成功处理 {len(evidences)} 个证据",
+            "progress": 100  # 任务完成：100%
+        })
     
     # 6. 返回证据列表
     return evidences

@@ -1489,12 +1489,21 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
         return
       }
       
+      // 获取案件信息和证据类型
+      const caseTitle = caseData?.title || `案件 ${caseId}`
+      const evidenceTypes = filteredEvidenceList
+        .filter(evidence => selectedIds.includes(evidence.id))
+        .map(evidence => evidence.classification_category)
+        .filter(Boolean)
+
       // 使用Celery异步任务进行智能分析
       const result = await startEvidenceAnalysis({
         case_id: Number(caseId),
         evidence_ids: selectedIds,
         auto_classification: true,
-        auto_feature_extraction: true
+        auto_feature_extraction: true,
+        caseTitle,
+        evidenceTypes
       })
 
       if (result.success) {

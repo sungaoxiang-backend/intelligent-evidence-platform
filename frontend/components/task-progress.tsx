@@ -59,6 +59,12 @@ function TaskProgressItem({ task, onRemove, isExpanded, onToggle }: TaskProgress
   }
 
   const getStatusText = () => {
+    // 对于运行中的任务，优先使用后端传递的具体状态消息
+    if (task.status === 'running' && task.message) {
+      return task.message
+    }
+    
+    // 对于其他状态，使用默认的状态文本
     switch (task.status) {
       case 'pending':
         return '等待中'
@@ -103,22 +109,13 @@ function TaskProgressItem({ task, onRemove, isExpanded, onToggle }: TaskProgress
       task.status === 'failure' && "border-red-200"
     )}>
       <CardContent className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2 flex-1">
+        {/* 顶部：任务标题 + 操作按钮 */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
             {getStatusIcon()}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium truncate">
-                  智能证据分析 #{task.taskId.slice(-8)}
-                </span>
-                <Badge variant={getStatusBadgeVariant()} className="text-xs">
-                  {getStatusText()}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                {task.message}
-              </p>
-            </div>
+            <span className="text-sm font-medium">
+              智能证据分析 #{task.taskId.slice(-8)}
+            </span>
           </div>
           
           <div className="flex items-center space-x-1">
@@ -147,20 +144,48 @@ function TaskProgressItem({ task, onRemove, isExpanded, onToggle }: TaskProgress
           </div>
         </div>
 
-        {/* 进度条 */}
-        <div className="mb-2">
-          <Progress 
-            value={task.progress} 
-            className={cn("h-1", getProgressColor())}
-          />
-          <div className="flex justify-between items-center mt-1">
-            <span className="text-xs text-muted-foreground">
+        {/* 中间：进度条和状态描述 */}
+        <div className="mb-3">
+          {/* 进度条 */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+              <div 
+                className="h-2 rounded-full transition-all duration-300 ease-out"
+                style={{
+                  width: `${task.progress}%`,
+                  backgroundColor: task.status === 'success' ? '#10b981' : 
+                                task.status === 'failure' ? '#ef4444' : 
+                                task.status === 'running' ? '#3b82f6' : '#6b7280'
+                }}
+              />
+            </div>
+            <div className="text-sm font-bold text-gray-800 dark:text-gray-200 min-w-[3rem] text-right">
               {task.progress}%
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {formatTime(task.updatedAt)}
-            </span>
+            </div>
           </div>
+          
+          {/* 状态描述 - 带动画效果 */}
+          <div className="flex items-center">
+            <div className="flex-1 text-sm text-gray-600 dark:text-gray-400">
+              {task.status === 'running' ? (
+                <div className="flex items-center">
+                  <span className="animate-pulse">{getStatusText()}</span>
+                  <span className="ml-1 flex">
+                    <span className="animate-pulse" style={{ animationDelay: '0ms' }}>.</span>
+                    <span className="animate-pulse" style={{ animationDelay: '200ms' }}>.</span>
+                    <span className="animate-pulse" style={{ animationDelay: '400ms' }}>.</span>
+                  </span>
+                </div>
+              ) : (
+                <span>{getStatusText()}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 底部：时间信息 */}
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+          <span>{formatTime(task.updatedAt)}</span>
         </div>
 
         {/* 展开的详细信息 */}

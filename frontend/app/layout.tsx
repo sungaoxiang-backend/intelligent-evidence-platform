@@ -8,9 +8,32 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TopNavigation } from "@/components/top-navigation"
 import { LoginPage } from "@/components/login-page"
-import { GlobalTaskProvider } from "@/contexts/global-task-context"
+import { GlobalTaskProvider, useGlobalTasks } from "@/contexts/global-task-context"
 import { authService } from "@/lib/auth"
 import type { Staff } from "@/lib/config"
+
+// 包装 TopNavigation 的组件，在 GlobalTaskProvider 内部使用 useGlobalTasks
+function TopNavigationWithTasks({ userRole, currentUser, onLogout }: { 
+  userRole: string
+  currentUser: Staff | null
+  onLogout: () => void
+}) {
+  const { tasks, removeTask, clearAllTasks, clearCompletedTasks, retryTask, refreshTask } = useGlobalTasks()
+  
+  return (
+    <TopNavigation
+      userRole={userRole}
+      currentUser={currentUser}
+      onLogout={onLogout}
+      tasks={tasks}
+      onRemoveTask={removeTask}
+      onClearAll={clearAllTasks}
+      onClearCompleted={clearCompletedTasks}
+      onRetryTask={retryTask}
+      onRefreshTask={refreshTask}
+    />
+  )
+}
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -75,7 +98,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   return (
     <GlobalTaskProvider>
       <div className="min-h-screen gradient-bg">
-        <TopNavigation
+        <TopNavigationWithTasks
           userRole={currentUser?.is_superuser ? "admin" : "user"}
           currentUser={currentUser}
           onLogout={handleLogout}

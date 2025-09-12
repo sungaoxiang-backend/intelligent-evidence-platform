@@ -96,3 +96,28 @@
 
 /* 引入进度条动画 */
 @import '../styles/progress-animations.css';
+
+/* 防止下拉菜单影响主页面滚动条 */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
+[data-radix-dropdown-menu-content] {
+  /* 确保下拉菜单不会影响主页面布局 */
+  position: fixed !important;
+  /* 防止影响滚动条 */
+  transform: none !important;
+  /* 确保在视口内正确定位 */
+  max-height: 80vh !important;
+  overflow: hidden !important;
+}
+
+/* 确保主页面滚动条始终可见 */
+body {
+  overflow-y: scroll !important;
+}
+
+/* 防止下拉菜单展开时改变页面宽度 */
+html {
+  overflow-x: hidden !important;
+}

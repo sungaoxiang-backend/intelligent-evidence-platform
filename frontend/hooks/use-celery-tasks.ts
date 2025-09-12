@@ -26,11 +26,24 @@ export interface TaskProgress {
   error?: string
   createdAt: Date
   updatedAt: Date
+  // 新增业务上下文信息
+  context?: {
+    type: 'evidence_analysis' | 'document_processing' | 'case_analysis' | 'other'
+    title: string // 任务标题，如"证据智能分析"
+    description: string // 任务描述，如"分析3个证据文件"
+    caseId?: number // 关联的案件ID
+    caseTitle?: string // 案件标题
+    pagePath?: string // 启动任务的页面路径
+    pageTitle?: string // 页面标题
+    evidenceCount?: number // 证据数量
+    evidenceTypes?: string[] // 证据类型
+    metadata?: Record<string, any> // 其他元数据
+  }
 }
 
 interface TaskQueue {
   tasks: TaskProgress[]
-  addTask: (taskId: string) => void
+  addTask: (taskId: string, context?: TaskProgress['context']) => void
   removeTask: (taskId: string) => void
   updateTask: (taskId: string, updates: Partial<TaskProgress>) => void
   clearAllTasks: () => void
@@ -73,8 +86,8 @@ export function useCeleryTasks(): TaskQueue {
   }, [tasks])
 
   // 添加任务到队列
-  const addTask = useCallback((taskId: string) => {
-    console.log('添加任务到队列:', taskId)
+  const addTask = useCallback((taskId: string, context?: TaskProgress['context']) => {
+    console.log('添加任务到队列:', taskId, context)
     setTasks(prev => {
       // 避免重复添加相同任务
       if (prev.some(task => task.taskId === taskId)) {
@@ -88,7 +101,8 @@ export function useCeleryTasks(): TaskQueue {
         progress: 0,
         message: '任务已提交，等待开始...',
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        context
       }
       
       console.log('成功添加新任务:', newTask)
@@ -167,6 +181,27 @@ export function useCeleryTasks(): TaskQueue {
       
       const data = await response.json()
       
+      // 添加调试日志
+      console.log('Celery任务状态响应:', {
+        taskId,
+        status: data.status,
+        info: data.info,
+        result: data.result
+      })
+      
+      // 详细显示info对象内容
+      if (data.info) {
+        console.log('🔍 Info对象详情:', {
+          status: data.info.status,
+          message: data.info.message,
+          progress: data.info.progress,
+          current: data.info.current,
+          total: data.info.total
+        })
+      } else {
+        console.log('⚠️ Info对象为空或undefined')
+      }
+      
       // 转换Celery状态到我们的状态系统
       let taskStatus: TaskProgress['status'] = 'pending'
       let progress = 0
@@ -182,8 +217,40 @@ export function useCeleryTasks(): TaskQueue {
         case 'RETRY':
         case 'PROGRESS':
           taskStatus = 'running'
-          progress = data.info?.current ? Math.round((data.info.current / data.info.total) * 100) : 30
-          message = data.info?.status || '任务执行中...'
+          // 优先使用后端传递的精确进度值，支持字符串和数字格式
+          if (data.info?.progress !== undefined) {
+            progress = typeof data.info.progress === 'string' ? parseInt(data.info.progress) : data.info.progress
+          } else if (data.info?.current !== undefined && data.info?.total !== undefined && data.info.total > 0) {
+            progress = Math.round((data.info.current / data.info.total) * 100)
+          } else {
+            // 如果没有进度数据，保持当前进度不变，避免跳跃
+            const currentTask = tasks.find(t => t.taskId === taskId)
+            progress = currentTask?.progress || 0
+            console.warn(`⚠️ 缺少进度数据，保持当前进度: ${progress}%`)
+          }
+          
+          // 根据后端的具体状态显示不同的消息
+          const backendStatus = data.info?.status
+          if (backendStatus) {
+            const statusMessages: Record<string, string> = {
+              'processing': '开始证据分析处理',
+              'uploaded': '文件上传完成',
+              'classifying': '正在分类证据',
+              'classified': '证据分类完成', 
+              'extracting': '正在提取特征',
+              'ocr_processing': 'OCR处理中',
+              'llm_processing': 'AI特征提取中',
+              'features_extracted': '特征提取完成',
+              'role_annotation': '证据角色标注中',
+              'role_annotated': '证据角色标注完成',
+              'completed': '分析完成',
+              'validating': '验证案件信息',
+              'started': '任务已开始'
+            }
+            message = statusMessages[backendStatus] || data.info?.message || '任务执行中...'
+          } else {
+            message = data.info?.message || '任务执行中...'
+          }
           break
         case 'SUCCESS':
           taskStatus = 'success'
@@ -207,7 +274,7 @@ export function useCeleryTasks(): TaskQueue {
       }
       
       // 更新任务状态
-      console.log('更新任务状态:', taskId, '状态:', taskStatus, '进度:', progress)
+      console.log('🔄 更新任务状态:', taskId, '状态:', taskStatus, '进度:', progress, '消息:', message)
       updateTask(taskId, {
         status: taskStatus,
         progress: progress,
@@ -354,15 +421,15 @@ export function useCeleryTasks(): TaskQueue {
   }, [pollTaskStatus, toast])
 
   // 修改 addTask 函数，在 startPolling 定义后添加轮询逻辑
-  const addTaskWithPolling = useCallback((taskId: string) => {
-    console.log('addTaskWithPolling 被调用:', taskId)
+  const addTaskWithPolling = useCallback((taskId: string, context?: TaskProgress['context']) => {
+    console.log('addTaskWithPolling 被调用:', taskId, context)
     // 先添加任务
-    addTask(taskId)
+    addTask(taskId, context)
     // 然后启动轮询
     setTimeout(() => {
       console.log('启动任务轮询:', taskId)
       startPolling(taskId, 2000) // 每2秒轮询一次
-    }, 100)
+    }, 100) // 短暂延迟，避免立即触发状态变化通知
   }, [addTask, startPolling])
 
   // 停止轮询任务状态
@@ -398,7 +465,7 @@ export function useCeleryTasks(): TaskQueue {
 }
 
 // 专门用于证据智能分析的Hook
-export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string) => void; updateTask: (taskId: string, updates: Partial<TaskProgress>) => void; removeTask: (taskId: string) => void }) {
+export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string, context?: TaskProgress['context']) => void; updateTask: (taskId: string, updates: Partial<TaskProgress>) => void; removeTask: (taskId: string) => void }) {
   const defaultTasksHook = useCeleryTasks()
   const { addTask, updateTask, removeTask } = tasksHook || defaultTasksHook
   const { toast } = useToast()
@@ -408,6 +475,8 @@ export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string) => v
     evidence_ids: (number | string)[]
     auto_classification: boolean
     auto_feature_extraction: boolean
+    caseTitle?: string
+    evidenceTypes?: string[]
   }) => {
     try {
       console.log('启动智能分析任务，参数:', params)
@@ -416,17 +485,35 @@ export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string) => v
       const result = await taskApi.startRealAnalyzeEvidences(params.case_id, params.evidence_ids.map(id => Number(id)))
       console.log('真实证据分析任务已启动:', result)
       
+      // 构建任务上下文信息
+      const taskContext: TaskProgress['context'] = {
+        type: 'evidence_analysis',
+        title: '证据智能分析',
+        description: `分析 ${params.evidence_ids.length} 个证据文件`,
+        caseId: params.case_id,
+        caseTitle: params.caseTitle || `案件 ${params.case_id}`,
+        pagePath: `/cases/${params.case_id}`,
+        pageTitle: '独立证据分析',
+        evidenceCount: params.evidence_ids.length,
+        evidenceTypes: params.evidenceTypes || [],
+        metadata: {
+          auto_classification: params.auto_classification,
+          auto_feature_extraction: params.auto_feature_extraction
+        }
+      }
+      
       // 为每个任务ID添加到任务队列
       console.log('准备添加任务到队列，任务IDs:', result.task_ids)
       result.task_ids.forEach(taskId => {
         console.log('调用 addTask 添加任务:', taskId)
-        addTask(taskId)
+        addTask(taskId, taskContext)
       })
       
-      toast({
-        title: '任务已启动',
-        description: result.message || '智能分析任务已成功启动，请稍候...',
-      })
+      // 移除这里的toast通知，让useTaskNotifications统一处理
+      // toast({
+      //   title: '任务已启动',
+      //   description: result.message || '智能分析任务已成功启动，请稍候...',
+      // })
 
       return { taskIds: result.task_ids, success: true }
 
