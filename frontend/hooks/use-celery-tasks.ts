@@ -80,9 +80,8 @@ export function useCeleryTasks(): TaskQueue {
     if (tasks.length > 0) {
       localStorage.setItem('celery-tasks', JSON.stringify(tasks))
       console.log('保存任务到localStorage:', tasks)
-    } else {
-      localStorage.removeItem('celery-tasks')
     }
+    // 注意：不要在这里自动删除localStorage，只有在用户明确操作时才删除
   }, [tasks])
 
   // 添加任务到队列
@@ -133,6 +132,15 @@ export function useCeleryTasks(): TaskQueue {
           }
         : task
     ))
+    
+    // 如果任务状态变为失败、成功或取消，停止轮询
+    if (updates.status && ['failure', 'success', 'revoked'].includes(updates.status)) {
+      console.log(`任务 ${taskId} 状态变为 ${updates.status}，停止轮询`)
+      if (pollingRefs.current[taskId]) {
+        clearInterval(pollingRefs.current[taskId])
+        delete pollingRefs.current[taskId]
+      }
+    }
   }, [])
 
   // 清理所有任务
@@ -155,6 +163,14 @@ export function useCeleryTasks(): TaskQueue {
         task.status === 'pending' || task.status === 'running'
       )
       console.log('已清理已完成的任务，保留运行中任务:', runningTasks.length)
+      
+      // 更新localStorage，只保留运行中的任务
+      if (runningTasks.length > 0) {
+        localStorage.setItem('celery-tasks', JSON.stringify(runningTasks))
+      } else {
+        localStorage.removeItem('celery-tasks')
+      }
+      
       return runningTasks
     })
   }, [])
@@ -445,6 +461,23 @@ export function useCeleryTasks(): TaskQueue {
     }
   }, [])
 
+  // 处理任务加载后的轮询启动
+  useEffect(() => {
+    // 只对运行中的任务重新启动轮询，失败和已完成的任务不轮询
+    tasks.forEach((task: TaskProgress) => {
+      if ((task.status === 'pending' || task.status === 'running') && !pollingRefs.current[task.taskId]) {
+        console.log('重新启动轮询:', task.taskId, task.status)
+        startPolling(task.taskId, 2000)
+      } else if (['failure', 'success', 'revoked'].includes(task.status) && pollingRefs.current[task.taskId]) {
+        console.log('停止已完成/失败任务的轮询:', task.taskId, task.status)
+        if (pollingRefs.current[task.taskId]) {
+          clearInterval(pollingRefs.current[task.taskId])
+          delete pollingRefs.current[task.taskId]
+        }
+      }
+    })
+  }, [tasks, startPolling])
+
   // 组件卸载时清理所有定时器
   useEffect(() => {
     return () => {
@@ -497,7 +530,7 @@ export function useEvidenceAnalysis(tasksHook?: { addTask: (taskId: string, cont
         description: `分析 ${params.evidence_ids.length} 个证据文件`,
         caseId: params.case_id,
         caseTitle: params.caseTitle || `案件 ${params.case_id}`,
-        pagePath: `/cases/${params.case_id}`,
+        pagePath: `/cases/${params.case_id}?tab=evidence`,
         pageTitle: '独立证据分析',
         evidenceCount: params.evidence_ids.length,
         evidenceTypes: params.evidenceTypes || [],
@@ -571,7 +604,7 @@ export function useAssociationEvidenceAnalysis(tasksHook?: { addTask: (taskId: s
         description: `分析 ${params.evidence_ids.length} 个微信聊天记录证据`,
         caseId: params.case_id,
         caseTitle: params.caseTitle || `案件 ${params.case_id}`,
-        pagePath: `/cases/${params.case_id}`,
+        pagePath: `/cases/${params.case_id}?tab=reasoning`,
         pageTitle: '关联证据分析',
         evidenceCount: params.evidence_ids.length,
         evidenceTypes: params.evidenceTypes || ['微信聊天记录'],

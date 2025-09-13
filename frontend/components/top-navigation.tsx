@@ -310,8 +310,19 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                           >
                             {/* 顶部：案件标题 + 操作按钮 */}
                             <div className="flex items-center justify-between mb-3">
-                              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                {task.context?.caseTitle || `案件 ${caseId}`}
+                              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                  {task.context?.caseTitle || `案件 ${caseId}`}
+                                </div>
+                                {/* 任务类型标签 */}
+                                {task.context?.pageTitle && (
+                                  <Badge 
+                                    variant="outline" 
+                                    className="text-xs px-2 py-0.5 shrink-0"
+                                  >
+                                    {task.context.pageTitle}
+                                  </Badge>
+                                )}
                               </div>
                               
                               {/* 操作按钮 */}

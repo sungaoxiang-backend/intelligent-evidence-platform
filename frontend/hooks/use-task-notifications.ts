@@ -39,6 +39,30 @@ export function useTaskNotifications(tasks: TaskProgress[]) {
 
       console.log(`任务通知检查: ${task.taskId}, 当前状态: ${task.status}, 之前状态: ${previousTask?.status}, 已通知: ${hasNotified}`)
 
+      // 如果任务已经失败且已通知过，跳过后续检查
+      if (task.status === 'failure' && hasNotified) {
+        console.log('任务已失败且已通知，跳过:', task.taskId)
+        // 更新之前的任务状态，但跳过通知逻辑
+        previousTasksRef.current[task.taskId] = { ...task }
+        return
+      }
+
+      // 如果任务已经成功且已通知过，也跳过后续检查
+      if (task.status === 'success' && hasNotified) {
+        console.log('任务已成功且已通知，跳过:', task.taskId)
+        // 更新之前的任务状态，但跳过通知逻辑
+        previousTasksRef.current[task.taskId] = { ...task }
+        return
+      }
+
+      // 如果任务已经被取消且已通知过，也跳过后续检查
+      if (task.status === 'revoked' && hasNotified) {
+        console.log('任务已取消且已通知，跳过:', task.taskId)
+        // 更新之前的任务状态，但跳过通知逻辑
+        previousTasksRef.current[task.taskId] = { ...task }
+        return
+      }
+
       // 任务刚开始运行 - 只有在状态真正从pending变为running时才通知
       if (task.status === 'running' && previousTask?.status === 'pending' && !hasNotified) {
         console.log('显示任务开始通知:', task.taskId)
@@ -66,7 +90,11 @@ export function useTaskNotifications(tasks: TaskProgress[]) {
       }
 
       // 任务失败 - 只有在状态真正发生变化时才通知
-      if (task.status === 'failure' && previousTask?.status !== 'failure' && !hasNotified) {
+      if (task.status === 'failure' && 
+          previousTask && 
+          previousTask.status !== 'failure' && 
+          !hasNotified) {
+        console.log('任务失败，显示通知:', task.taskId, task.error)
         notifiedTasksRef.current.add(task.taskId)
         
         toast({

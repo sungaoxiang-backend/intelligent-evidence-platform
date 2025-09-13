@@ -593,7 +593,6 @@ async def auto_process(
     evidence_ids: List[int], 
     send_progress: Any = None) -> Optional[List[AssociationEvidenceFeature]]:
     """自动处理案件"""
-    
     evidence_ids = [int(eid) for eid in evidence_ids]
     evidences = []
     for evidence_id in evidence_ids:
