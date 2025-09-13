@@ -75,20 +75,20 @@ services:
       - ./app:/app/app
     restart: always
 
-  celery-beat:
-    build: .
-    networks:
-      - app-network
-    env_file:
-      - .env.docker
-    environment:
-      - SERVICE_TYPE=celery-beat
-    depends_on:
-      - redis
-      - db
-    volumes:
-      - ./app:/app/app
-    restart: always
+  # celery-beat:
+  #   build: .
+  #   networks:
+  #     - app-network
+  #   env_file:
+  #     - .env.docker
+  #   environment:
+  #     - SERVICE_TYPE=celery-beat
+  #   depends_on:
+  #     - redis
+  #     - db
+  #   volumes:
+  #     - ./app:/app/app
+  #   restart: always
 
   frontend:
       build:
