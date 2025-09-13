@@ -116,7 +116,8 @@ function TaskProgressItemEnhanced({ task, onRemove, isExpanded, onToggle, onRetr
     })
   }
 
-  const formatDuration = (start: Date, end: Date) => {
+  const formatDuration = (start: Date, end?: Date) => {
+    if (!end) return '进行中'
     const duration = end.getTime() - start.getTime()
     const seconds = Math.floor(duration / 1000)
     const minutes = Math.floor(seconds / 60)
@@ -307,11 +308,11 @@ function TaskProgressItemEnhanced({ task, onRemove, isExpanded, onToggle, onRetr
         {/* 底部：时间信息 */}
         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center space-x-2">
-            <span>{formatTime(task.updatedAt)}</span>
+            <span>{formatTime(task.createdAt)}</span>
             {task.status !== 'running' && task.status !== 'pending' && (
               <>
                 <span>•</span>
-                <span>耗时: {formatDuration(task.createdAt, task.updatedAt)}</span>
+                <span>耗时: {formatDuration(task.createdAt, task.status === 'success' || task.status === 'failure' ? task.updatedAt : undefined)}</span>
               </>
             )}
           </div>

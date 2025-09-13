@@ -34,9 +34,9 @@ export function GlobalTaskButton({ tasks, onRemoveTask, onClearAll, onClearCompl
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
 
-  // 按创建时间排序，最早添加的在上方（保持稳定顺序）
+  // 按创建时间排序，最新添加的在上方
   const sortedTasks = [...tasks].sort((a, b) => 
-    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
   
   const runningTasks = sortedTasks.filter(task => task.status === 'running' || task.status === 'pending')

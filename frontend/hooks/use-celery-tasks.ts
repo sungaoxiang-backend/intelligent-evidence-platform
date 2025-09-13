@@ -127,8 +127,8 @@ export function useCeleryTasks(): TaskQueue {
         ? { 
             ...task, 
             ...updates, 
-            // 只有在明确提供 updatedAt 时才更新，否则保持原值
-            updatedAt: updates.updatedAt || task.updatedAt
+            // 每次更新都更新 updatedAt 字段，除非明确提供了新的 updatedAt 值
+            updatedAt: updates.updatedAt || new Date()
           }
         : task
     ))
