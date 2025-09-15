@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_CONFIG } from '@/lib/config';
 
 interface EvidenceTypeConfig {
   type: string;
@@ -17,6 +18,15 @@ interface EvidenceTypesResponse {
   evidence_types: Record<string, EvidenceTypeConfig>;
 }
 
+// 获取认证头
+function getAuthHeader(): Record<string, string> {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+  return {};
+}
+
 export const useEvidenceTypes = () => {
   const [evidenceTypes, setEvidenceTypes] = useState<Record<string, EvidenceTypeConfig>>({});
   const [loading, setLoading] = useState(true);
@@ -26,7 +36,14 @@ export const useEvidenceTypes = () => {
     const fetchEvidenceTypes = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:8008/api/v1/config/evidence-types');
+        const response = await fetch(`${API_CONFIG.BASE_URL}/config/evidence-types`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+            ...getAuthHeader(),
+          },
+        });
         
         if (!response.ok) {
           throw new Error(`获取证据类型配置失败: ${response.status}`);
