@@ -168,6 +168,7 @@ class CaseUpdate(BaseModel):
     user_id: Optional[int] = None
     loan_amount: Optional[float] = None
     case_type: Optional[CaseType] = None
+    case_status: Optional[CaseStatus] = None
     loan_date: Optional[datetime] = None
     court_name: Optional[str] = None
     description: Optional[str] = None
@@ -181,6 +182,7 @@ class Case(BaseSchema):
     case_parties: List[CasePartyResponse]
     loan_amount: float
     case_type: CaseType
+    case_status: CaseStatus
     loan_date: Optional[datetime] = None
     court_name: Optional[str] = None
     description: Optional[str] = None

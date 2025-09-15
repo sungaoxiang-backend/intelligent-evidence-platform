@@ -21,15 +21,34 @@ class CaseType(str, Enum):
 
 class CaseStatus(str, Enum):
     """案件状态枚举"""
-    DRAFT = "draft"  # 草稿，初始创建
-    INFO_ENTERED = "info_entered"  # 基础信息录入完成
-    EVIDENCE_ANNOTATED = "evidence_annotated"  # 证据材料AI智能标注完成
-    DOCUMENTS_GENERATED = "documents_generated"  # 文书生成完成
-    # SUBMITTED = "submitted"  # 案件已提交
-    # FILED = "filed"  # 案件已立案
-    # IN_PROGRESS = "in_progress"  # 进行中（诉中通用）
-    # CLOSED = "closed"  # 案件已结案
-    # ARCHIVED = "archived"  # 已归档
+    
+    # 基础状态
+    DRAFT = "draft"  # 已录入系统：案件基本信息录入了系统，比如案由、债权人名称、债务人名称
+    ACCEPTED = "accepted"  # 业务已受理：业务基本了解清晰，用户支付了业务订单，系统为用户建立了业务处理企微群
+    DOCUMENTS_COMPLETE = "documents_complete"  # 案件文书已完备：经过系统的一系列信息录入和处理，生成了相关文书，并且用户也都全部将文书进行下载签署拍照后回传到了系统
+    
+    # 立案相关状态
+    FILING_SUBMITTED = "filing_submitted"  # 案件立案申请已提交：用户将相关文书提交到了法院，完成立案的申请
+    FILING_APPROVED = "filing_approved"  # 案件立案申请已审核通过：法院审核通过了立案申请，案件正式立案
+    FILING_REJECTED = "filing_rejected"  # 案件立案申请已驳回：法院驳回了立案申请，案件无法立案
+    
+    # 缴费相关状态
+    PAYMENT_NOTIFIED = "payment_notified"  # 案件已通知缴费：案件已经由法院公告缴费通知，等待用户缴费
+    PAYMENT_COMPLETED = "payment_completed"  # 案件已缴费：用户已经缴费，等待法院调解或开庭
+    
+    # 审理相关状态
+    MEDIATION_COMPLETED = "mediation_completed"  # 案件已调解：法院已经调解完成，案件结束
+    SUMMONS_DELIVERED = "summons_delivered"  # 案件传票已送达：法院已经送达传票
+    JUDGMENT_RENDERED = "judgment_rendered"  # 案件已判决：法院已经判决，案件结束
+    
+    # 强制执行相关状态（可选）
+    ENFORCEMENT_APPLIED = "enforcement_applied"  # 案件强制执行申请：用户在系统中表明想要申请强制执行
+    ENFORCEMENT_DOCUMENT_SIGNED = "enforcement_document_signed"  # 案件强制执行申请书已签署：用户已经签署和上传了强执执行申请书
+    ENFORCEMENT_DOCUMENT_SUBMITTED = "enforcement_document_submitted"  # 案件强执执行申请书已提交法院：用户已经上传了强执执行申请书到法院
+    ENFORCEMENT_APPROVED = "enforcement_approved"  # 法院强执执行申请已通过：法院通过了用户提交的强执执行申请
+    ENFORCEMENT_TERMINATED = "enforcement_terminated"  # 法院已终结裁定：用户上传了法院的终结裁定书
+    
+    
 
 class AssociationEvidenceFeatureStatus(str, Enum):
     """关联证据特征状态枚举"""

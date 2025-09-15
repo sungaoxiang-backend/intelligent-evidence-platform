@@ -2,6 +2,24 @@
 export type CaseType = "debt" | "contract";
 export type PartyType = "person" | "company" | "individual";
 
+export type CaseStatus = 
+  | "draft"                    // 已录入系统
+  | "accepted"                 // 业务已受理
+  | "documents_complete"       // 案件文书已完备
+  | "filing_submitted"         // 案件立案申请已提交
+  | "filing_approved"          // 案件立案申请已审核通过
+  | "filing_rejected"          // 案件立案申请已驳回
+  | "payment_notified"         // 案件已通知缴费
+  | "payment_completed"        // 案件已缴费
+  | "mediation_completed"      // 案件已调解
+  | "summons_delivered"        // 案件传票已送达
+  | "judgment_rendered"        // 案件已判决
+  | "enforcement_applied"      // 案件强制执行申请
+  | "enforcement_document_signed"      // 案件强制执行申请书已签署
+  | "enforcement_document_submitted"   // 案件强执执行申请书已提交法院
+  | "enforcement_approved"     // 法院强执执行申请已通过
+  | "enforcement_terminated";  // 法院已终结裁定
+
 export interface AssociationEvidenceFeature {
   id: number;
   slot_group_name: string;
@@ -47,6 +65,7 @@ export interface Case {
   id: number;
   user_id: number;
   case_type: CaseType | null;
+  case_status: CaseStatus;
   case_parties: CaseParty[];
   loan_amount?: number;
   loan_date?: string;

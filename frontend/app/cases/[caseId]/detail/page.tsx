@@ -13,10 +13,11 @@ import { DocumentTemplateSelector } from "@/components/document-template-selecto
 import { DocumentGeneratorNew } from "@/components/document-generator-new"
 import { DocumentGeneratorV2 } from "@/components/document-generator-v2"
 import { DocumentGeneratorSimple } from "@/components/document-generator-simple"
+import { CaseStatusProgress } from "@/components/case-status-progress"
 import { caseApi, userApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR, { mutate } from "swr"
-import type { CaseType, PartyType } from "@/lib/types"
+import type { CaseType, PartyType, CaseStatus } from "@/lib/types"
 
 // 格式化金额，去除尾随零
 function formatAmount(amount: number): string {
@@ -289,6 +290,7 @@ export default function CaseDetailPage() {
         debtor_name: debtor?.party_name || '',
         loan_amount: caseData.loan_amount || '',
         case_type: caseData.case_type || '',
+        case_status: caseData.case_status || 'draft',
         court: caseData.court_name || '',
         creditor_type: creditor?.party_type || '',
         debtor_type: debtor?.party_type || '',
@@ -348,6 +350,7 @@ export default function CaseDetailPage() {
         user_id: editForm.user_id ? parseInt(editForm.user_id) : undefined,
         loan_amount: loanAmountInput ? parseFloat(loanAmountInput) : undefined,
         case_type: editForm.case_type,
+        case_status: editForm.case_status,
         court_name: editForm.court || undefined,
       })
 
@@ -549,6 +552,7 @@ export default function CaseDetailPage() {
                     debtor_name: debtor?.party_name || '',
                     loan_amount: caseData.loan_amount || '',
                     case_type: caseData.case_type || '',
+                    case_status: caseData.case_status || 'draft',
                     court: caseData.court_name || '',
                     creditor_type: creditor?.party_type || '',
                     debtor_type: debtor?.party_type || '',
@@ -616,6 +620,14 @@ export default function CaseDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* 案件状态进度条 */}
+      <CaseStatusProgress
+        currentStatus={caseData.case_status || 'draft'}
+        onStatusChange={(status: CaseStatus) => setEditForm({ ...editForm, case_status: status })}
+        editing={editing}
+        className="mb-6"
+      />
 
       {/* 上半部分：案件概览 + 证据链 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
