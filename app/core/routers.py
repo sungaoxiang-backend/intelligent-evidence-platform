@@ -82,6 +82,47 @@ async def reload_business_config():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"重新加载业务配置失败: {str(e)}")
 
+@router.get("/evidence-types")
+async def get_evidence_types_config():
+    """获取证据类型配置"""
+    try:
+        evidence_types = config_manager.get_all_evidence_types()
+        metadata = config_manager.get_evidence_types_metadata()
+        
+        # 提取每个证据类型的支持角色信息
+        evidence_types_with_roles = {}
+        for key, config in evidence_types.items():
+            evidence_types_with_roles[key] = {
+                "type": config.get("type"),
+                "description": config.get("description"),
+                "category": config.get("category"),
+                "supported_roles": config.get("supported_roles", [])
+            }
+        
+        return {
+            "metadata": metadata,
+            "evidence_types": evidence_types_with_roles
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取证据类型配置失败: {str(e)}")
+
+@router.get("/evidence-types/{evidence_type}/roles")
+async def get_evidence_type_roles(evidence_type: str):
+    """获取特定证据类型支持的角色列表"""
+    try:
+        config = config_manager.get_evidence_type_by_type_name(evidence_type)
+        if not config:
+            raise HTTPException(status_code=404, detail="证据类型不存在")
+        
+        return {
+            "evidence_type": evidence_type,
+            "supported_roles": config.get("supported_roles", [])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取证据类型角色失败: {str(e)}")
+
 # 动态配置相关端点
 @router.get("/dynamic", response_model=List[DynamicConfigResponse])
 async def get_all_dynamic_configs(db: AsyncSession = Depends(get_db)):

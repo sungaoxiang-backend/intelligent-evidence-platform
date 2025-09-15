@@ -1352,6 +1352,8 @@ evidence_types:
       type: "经常居住地证明"
       description: "由社区、派出所等官方机构出具的用于证明居住事实的文件"
       category: "个人身份证明类"
+      supported_roles:
+        - "creditor"
       features:
         decisive:
           - "居住证明"

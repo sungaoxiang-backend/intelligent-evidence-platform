@@ -3,6 +3,7 @@
 import { useState, Suspense, useEffect } from "react"
 import useSWR, { mutate } from "swr"
 import { useSearchParams } from "next/navigation"
+import { useEvidenceTypes } from "@/hooks/use-evidence-types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -59,22 +60,9 @@ const getStatusColor = (status: string) => {
   }
 };
 
-// 获取证据类型支持的角色列表
-const getSupportedRolesForEvidenceType = (evidenceType: string): string[] => {
-  // 这里可以根据evidence_types.yaml的配置来返回支持的角色
-  // 暂时硬编码一些常见的证据类型，后续可以从配置文件或API获取
-  const evidenceTypeRoles: Record<string, string[]> = {
-    "微信个人主页": ["creditor", "debtor"],
-    "身份证": ["creditor", "debtor"],
-    "中华人民共和国居民户籍档案": ["creditor", "debtor"],
-    "公司营业执照": ["creditor", "debtor"],
-    "个体工商户营业执照": ["creditor", "debtor"],
-    "公司全国企业公示系统截图": ["creditor", "debtor"],
-    "个体工商户全国企业公示系统截图": ["creditor", "debtor"],
-    "经常居住地证明": ["creditor", "debtor"],
-  };
-  
-  return evidenceTypeRoles[evidenceType] || [];
+// 获取证据类型支持的角色列表 - 现在从后端API获取
+const getSupportedRolesForEvidenceType = (evidenceType: string, evidenceTypesHook: any): string[] => {
+  return evidenceTypesHook.getSupportedRolesForEvidenceType(evidenceType);
 };
 
 // 检查证据是否真正可以审核（features_complete && 所有需要校对的slot都校对成功）
@@ -184,6 +172,7 @@ function EvidenceGalleryContent({
   handleBatchAnalysis,
   handleSave,
   toast,
+  evidenceTypesHook,
 }: {
   caseId: string | number
   searchTerm: string
@@ -196,6 +185,7 @@ function EvidenceGalleryContent({
   handleBatchAnalysis: () => void
   handleSave: (editForm: any, setEditing: (v: boolean) => void) => void
   toast: any
+  evidenceTypesHook: any
 }) {
   const { data: evidenceData } = useSWR(
     ['/api/evidences', String(caseId), searchTerm, page, pageSize],
@@ -822,7 +812,7 @@ function EvidenceGalleryContent({
                     {(() => {
                       // 检查当前证据类型是否配置了supported_roles
                       const evidenceType = selectedEvidence.classification_category || selectedEvidence.evidence_type;
-                      const supportedRoles = getSupportedRolesForEvidenceType(evidenceType);
+                      const supportedRoles = getSupportedRolesForEvidenceType(evidenceType, evidenceTypesHook);
                       
                       // 添加调试信息
                       console.log('Evidence Role Debug:', {
@@ -1324,6 +1314,9 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
   // 获取URL查询参数
   const searchParams = useSearchParams()
 
+  // 获取证据类型配置
+  const evidenceTypesHook = useEvidenceTypes()
+
   // 全局任务管理
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
   const { startEvidenceAnalysis } = useEvidenceAnalysis({ addTask, updateTask, removeTask })
@@ -1490,10 +1483,10 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
       }
       
       // 获取案件信息和证据类型
-      const caseTitle = caseData?.title || `案件 ${caseId}`
+      const caseTitle = caseData?.data?.description || `案件 ${caseId}`
       const evidenceTypes = filteredEvidenceList
-        .filter(evidence => selectedIds.includes(evidence.id))
-        .map(evidence => evidence.classification_category)
+        .filter((evidence: any) => selectedIds.includes(evidence.id))
+        .map((evidence: any) => evidence.classification_category)
         .filter(Boolean)
 
       // 使用Celery异步任务进行智能分析
@@ -2065,6 +2058,7 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
           handleBatchAnalysis={handleBatchAnalysis}
           handleSave={handleSave}
           toast={toast}
+          evidenceTypesHook={evidenceTypesHook}
         />
       </Suspense>
       </div>
