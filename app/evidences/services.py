@@ -211,6 +211,7 @@ async def enhance_evidence_with_proofreading(evidence: Evidence, db: AsyncSessio
         logger.error(f"错误详情: {traceback.format_exc()}")
         # 校对失败不影响返回，返回原始数据
     
+
     return evidence
 
 
@@ -1156,12 +1157,22 @@ async def _update_party_information_from_evidence(db, case, evidences, send_prog
         
         # 遍历所有证据，更新当事人信息
         updated_parties = set()
+        logger.info(f"开始检查 {len(evidences)} 个证据的当事人信息更新条件")
+        
         for evidence in evidences:
+            logger.info(f"检查证据 {evidence.id}: {evidence.file_name}")
+            logger.info(f"  状态: {evidence.evidence_status}")
+            logger.info(f"  分类: {evidence.classification_category}")
+            logger.info(f"  角色: {evidence.evidence_role}")
+            logger.info(f"  特征数量: {len(evidence.evidence_features) if evidence.evidence_features else 0}")
+            
             # 只有已分类、有特征提取结果且有证据角色的证据才进行当事人信息更新
             if (evidence.evidence_status == EvidenceStatus.FEATURES_EXTRACTED.value and 
                 evidence.classification_category and 
                 evidence.evidence_features and
                 evidence.evidence_role):
+                
+                logger.info(f"证据 {evidence.id} 满足更新条件，开始处理")
                 
                 # 获取证据类型配置
                 evidence_type_config = config_manager.get_evidence_type_by_type_name(evidence.classification_category)
@@ -1169,12 +1180,19 @@ async def _update_party_information_from_evidence(db, case, evidences, send_prog
                     logger.warning(f"未找到证据类型配置: {evidence.classification_category}")
                     continue
                 
+                logger.info(f"找到证据类型配置: {evidence_type_config.get('type')}")
+                
                 # 根据证据类型进行不同的处理
                 if evidence.classification_category == "身份证":
                     await _update_party_from_id_card(db, evidence, case_parties, updated_parties)
-                # 后续可以添加其他证据类型的处理
-                # elif evidence.classification_category == "company_business_license":
-                #     await _update_party_from_business_license(db, evidence, case_parties, updated_parties)
+                elif evidence.classification_category == "个体工商户营业执照":
+                    await _update_party_from_individual_business_license(db, evidence, case_parties, updated_parties)
+                elif evidence.classification_category == "公司营业执照":
+                    await _update_party_from_company_business_license(db, evidence, case_parties, updated_parties)
+                elif evidence.classification_category == "个体工商户全国企业公示系统截图":
+                    await _update_party_from_individual_gsxt_license(db, evidence, case_parties, updated_parties)
+                elif evidence.classification_category == "公司全国企业公示系统截图":
+                    await _update_party_from_company_gsxt_license(db, evidence, case_parties, updated_parties)
         
         # 提交所有更新
         if updated_parties:
@@ -1265,5 +1283,273 @@ async def _update_party_from_id_card(db, evidence, case_parties, updated_parties
         
     except Exception as e:
         logger.error(f"更新身份证当事人信息失败: {str(e)}")
+
+
+async def _update_party_from_individual_business_license(db, evidence, case_parties, updated_parties):
+    """
+    根据个体工商户营业执照证据更新当事人信息
+    
+    Args:
+        db: 数据库会话
+        evidence: 证据对象
+        case_parties: 案件当事人列表
+        updated_parties: 已更新的当事人ID集合
+    """
+    try:
+        # 提取个体工商户营业执照信息
+        business_info = {}
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                slot_name = feature.get("slot_name")
+                slot_value = feature.get("slot_value")
+                if slot_name and slot_value and slot_value != "未知":
+                    business_info[slot_name] = slot_value
+        
+        if not business_info:
+            logger.warning(f"个体工商户营业执照证据 {evidence.file_name} 没有提取到有效信息")
+            return
+        
+        # 根据证据角色找到对应的当事人
+        target_party = None
+        for party in case_parties:
+            if party.party_role == evidence.evidence_role:
+                target_party = party
+                break
+        
+        if not target_party:
+            logger.warning(f"未找到角色为 {evidence.evidence_role} 的当事人")
+            return
+        
+        # 更新当事人信息
+        updated = False
+        
+        # 映射个体工商户营业执照字段到当事人字段
+        field_mapping = {
+            "公司名称": "company_name",
+            "住所地": "company_address", 
+            "统一社会信用代码": "company_code",
+            "经营者姓名": "name"
+        }
+        
+        for business_field, party_field in field_mapping.items():
+            if business_field in business_info:
+                current_value = getattr(target_party, party_field)
+                new_value = business_info[business_field]
+                
+                # 只有当新值不为空且与当前值不同时才更新
+                if new_value and new_value != current_value:
+                    setattr(target_party, party_field, new_value)
+                    updated = True
+                    logger.info(f"更新当事人 {target_party.party_name} 的 {party_field}: {current_value} -> {new_value}")
+        
+        if updated:
+            # 将修改的当事人对象添加到数据库会话中
+            db.add(target_party)
+            updated_parties.add(target_party.id)
+            logger.info(f"成功更新当事人 {target_party.party_name} 的个体工商户营业执照信息")
+        
+    except Exception as e:
+        logger.error(f"更新个体工商户营业执照当事人信息失败: {str(e)}")
+
+
+async def _update_party_from_company_business_license(db, evidence, case_parties, updated_parties):
+    """
+    根据公司营业执照证据更新当事人信息
+    
+    Args:
+        db: 数据库会话
+        evidence: 证据对象
+        case_parties: 案件当事人列表
+        updated_parties: 已更新的当事人ID集合
+    """
+    try:
+        # 提取公司营业执照信息
+        business_info = {}
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                slot_name = feature.get("slot_name")
+                slot_value = feature.get("slot_value")
+                if slot_name and slot_value and slot_value != "未知":
+                    business_info[slot_name] = slot_value
+        
+        if not business_info:
+            logger.warning(f"公司营业执照证据 {evidence.file_name} 没有提取到有效信息")
+            return
+        
+        # 根据证据角色找到对应的当事人
+        target_party = None
+        for party in case_parties:
+            if party.party_role == evidence.evidence_role:
+                target_party = party
+                break
+        
+        if not target_party:
+            logger.warning(f"未找到角色为 {evidence.evidence_role} 的当事人")
+            return
+        
+        # 更新当事人信息
+        updated = False
+        
+        # 映射公司营业执照字段到当事人字段
+        field_mapping = {
+            "公司名称": "company_name",
+            "住所地": "company_address", 
+            "统一社会信用代码": "company_code",
+            "法定代表人": "name"
+        }
+        
+        for business_field, party_field in field_mapping.items():
+            if business_field in business_info:
+                current_value = getattr(target_party, party_field)
+                new_value = business_info[business_field]
+                
+                # 只有当新值不为空且与当前值不同时才更新
+                if new_value and new_value != current_value:
+                    setattr(target_party, party_field, new_value)
+                    updated = True
+                    logger.info(f"更新当事人 {target_party.party_name} 的 {party_field}: {current_value} -> {new_value}")
+        
+        if updated:
+            # 将修改的当事人对象添加到数据库会话中
+            db.add(target_party)
+            updated_parties.add(target_party.id)
+            logger.info(f"成功更新当事人 {target_party.party_name} 的公司营业执照信息")
+        
+    except Exception as e:
+        logger.error(f"更新公司营业执照当事人信息失败: {str(e)}")
+
+
+async def _update_party_from_individual_gsxt_license(db, evidence, case_parties, updated_parties):
+    """
+    根据个体工商户全国企业公示系统截图证据更新当事人信息
+    
+    Args:
+        db: 数据库会话
+        evidence: 证据对象
+        case_parties: 案件当事人列表
+        updated_parties: 已更新的当事人ID集合
+    """
+    try:
+        # 提取个体工商户全国企业公示系统截图信息
+        gsxt_info = {}
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                slot_name = feature.get("slot_name")
+                slot_value = feature.get("slot_value")
+                if slot_name and slot_value and slot_value != "未知":
+                    gsxt_info[slot_name] = slot_value
+        
+        if not gsxt_info:
+            logger.warning(f"个体工商户全国企业公示系统截图证据 {evidence.file_name} 没有提取到有效信息")
+            return
+        
+        # 根据证据角色找到对应的当事人
+        target_party = None
+        for party in case_parties:
+            if party.party_role == evidence.evidence_role:
+                target_party = party
+                break
+        
+        if not target_party:
+            logger.warning(f"未找到角色为 {evidence.evidence_role} 的当事人")
+            return
+        
+        # 更新当事人信息
+        updated = False
+        
+        # 映射个体工商户全国企业公示系统截图字段到当事人字段
+        field_mapping = {
+            "公司名称": "company_name",
+            "住所地": "company_address", 
+            "统一社会信用代码": "company_code",
+            "经营者姓名": "name"
+        }
+        
+        for gsxt_field, party_field in field_mapping.items():
+            if gsxt_field in gsxt_info:
+                current_value = getattr(target_party, party_field)
+                new_value = gsxt_info[gsxt_field]
+                
+                # 只有当新值不为空且与当前值不同时才更新
+                if new_value and new_value != current_value:
+                    setattr(target_party, party_field, new_value)
+                    updated = True
+                    logger.info(f"更新当事人 {target_party.party_name} 的 {party_field}: {current_value} -> {new_value}")
+        
+        if updated:
+            # 将修改的当事人对象添加到数据库会话中
+            db.add(target_party)
+            updated_parties.add(target_party.id)
+            logger.info(f"成功更新当事人 {target_party.party_name} 的个体工商户全国企业公示系统截图信息")
+        
+    except Exception as e:
+        logger.error(f"更新个体工商户全国企业公示系统截图当事人信息失败: {str(e)}")
+
+
+async def _update_party_from_company_gsxt_license(db, evidence, case_parties, updated_parties):
+    """
+    根据公司全国企业公示系统截图证据更新当事人信息
+    
+    Args:
+        db: 数据库会话
+        evidence: 证据对象
+        case_parties: 案件当事人列表
+        updated_parties: 已更新的当事人ID集合
+    """
+    try:
+        # 提取公司全国企业公示系统截图信息
+        gsxt_info = {}
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                slot_name = feature.get("slot_name")
+                slot_value = feature.get("slot_value")
+                if slot_name and slot_value and slot_value != "未知":
+                    gsxt_info[slot_name] = slot_value
+        
+        if not gsxt_info:
+            logger.warning(f"公司全国企业公示系统截图证据 {evidence.file_name} 没有提取到有效信息")
+            return
+        
+        # 根据证据角色找到对应的当事人
+        target_party = None
+        for party in case_parties:
+            if party.party_role == evidence.evidence_role:
+                target_party = party
+                break
+        
+        if not target_party:
+            logger.warning(f"未找到角色为 {evidence.evidence_role} 的当事人")
+            return
+        
+        # 更新当事人信息
+        updated = False
+        
+        # 映射公司全国企业公示系统截图字段到当事人字段
+        field_mapping = {
+            "公司名称": "company_name",
+            "住所地": "company_address", 
+            "统一社会信用代码": "company_code",
+            "法定代表人": "name"
+        }
+        
+        for gsxt_field, party_field in field_mapping.items():
+            if gsxt_field in gsxt_info:
+                current_value = getattr(target_party, party_field)
+                new_value = gsxt_info[gsxt_field]
+                
+                # 只有当新值不为空且与当前值不同时才更新
+                if new_value and new_value != current_value:
+                    setattr(target_party, party_field, new_value)
+                    updated = True
+                    logger.info(f"更新当事人 {target_party.party_name} 的 {party_field}: {current_value} -> {new_value}")
+        
+        if updated:
+            # 将修改的当事人对象添加到数据库会话中
+            db.add(target_party)
+            updated_parties.add(target_party.id)
+            logger.info(f"成功更新当事人 {target_party.party_name} 的公司全国企业公示系统截图信息")
+        
+    except Exception as e:
+        logger.error(f"更新公司全国企业公示系统截图当事人信息失败: {str(e)}")
 
 

@@ -31,7 +31,8 @@ class OCRFieldMapping(str, Enum):
     
     # 营业执照相关字段
     BL_COMPANY_NAME = "bl-company-name"
-    BL_OWNER_NAME = "bl-owner-name"
+    BL_OWNER_NAME = "bl-owner-name"  # 公司营业执照的法定代表人
+    BL_OPERATOR_NAME = "bl-operator-name"  # 个体工商户营业执照的经营者姓名
     BL_CORPORATE_RESIDENCE = "bl-corporate-residence"
     BL_DATE = "bl-date"
     BL_OPERATING_PERIOD = "bl-operating-period"
@@ -67,6 +68,7 @@ class BusinessField(str, Enum):
     # 通用字段
     COMPANY_NAME = "公司名称"
     LEGAL_REPRESENTATIVE = "法定代表人"
+    OPERATOR_NAME = "经营者姓名"  # 个体工商户专用
     CORPORATE_ADDRESS = "住所地"  # 营业执照相关使用
     ESTABLISHMENT_DATE = "成立日期"
     OPERATING_PERIOD = "营业期限"
@@ -185,7 +187,7 @@ class XunfeiOcrClient:
             },
             EvidenceType.INDIVIDUAL_BUSINESS_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
-                OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
+                OCRFieldMapping.BL_OPERATOR_NAME: BusinessField.OPERATOR_NAME,  # 个体工商户使用经营者姓名
                 OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,
@@ -203,7 +205,7 @@ class XunfeiOcrClient:
             },
             EvidenceType.INDIVIDUAL_GSXT_LICENSE: {
                 OCRFieldMapping.BL_COMPANY_NAME: BusinessField.COMPANY_NAME,
-                OCRFieldMapping.BL_OWNER_NAME: BusinessField.LEGAL_REPRESENTATIVE,
+                OCRFieldMapping.BL_OPERATOR_NAME: BusinessField.OPERATOR_NAME,  # 个体工商户使用经营者姓名
                 OCRFieldMapping.BL_CORPORATE_RESIDENCE: BusinessField.CORPORATE_ADDRESS,
                 OCRFieldMapping.BL_DATE: BusinessField.ESTABLISHMENT_DATE,
                 OCRFieldMapping.BL_OPERATING_PERIOD: BusinessField.OPERATING_PERIOD,

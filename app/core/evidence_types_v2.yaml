@@ -1133,7 +1133,7 @@ evidence_types:
       - "公司"
       - "企业"
     extraction_slots:
-      - slot_name: "经营名称"
+      - slot_name: "公司名称"
         slot_desc: "个体工商户的经营名称"
         slot_value_type: "string"
         slot_required: true
@@ -1291,7 +1291,7 @@ evidence_types:
       - "营业执照原件照片"
       - "非网站截图"
     extraction_slots:
-      - slot_name: "经营名称"
+      - slot_name: "公司名称"
         slot_desc: "个体工商户的经营名称"
         slot_value_type: "string"
         slot_required: true

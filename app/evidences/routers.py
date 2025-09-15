@@ -90,6 +90,49 @@ async def read_evidence(
     return SingleResponse(data=evidence)
 
 
+@router.post("/{evidence_id}/update-party-info", response_model=SingleResponse[dict])
+async def update_party_info_from_evidence(
+    evidence_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """手动触发从证据更新当事人信息"""
+    try:
+        # 获取证据
+        evidence = await evidence_service.get_by_id(db, evidence_id)
+        if not evidence:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="证据不存在",
+            )
+        
+        # 获取案件
+        case = evidence.case
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="案件不存在",
+            )
+        
+        # 导入更新函数
+        from app.evidences.services import _update_party_information_from_evidence
+        
+        # 执行当事人信息更新
+        await _update_party_information_from_evidence(db, case, [evidence])
+        
+        return SingleResponse(
+            data={"message": f"成功更新证据 {evidence_id} 的当事人信息"},
+            message="当事人信息更新成功"
+        )
+        
+    except Exception as e:
+        logger.error(f"更新当事人信息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新当事人信息失败: {str(e)}"
+        )
+
+
 @router.post("/batch", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceResponse])
 async def batch_create_evidences(
     db: DBSession,
