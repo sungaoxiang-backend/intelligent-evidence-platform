@@ -24,9 +24,9 @@ const nextConfig = {
   // 开发环境优化
   experimental: {
     optimizePackageImports: ['lucide-react'],
-    // 修复React Server Components bundler问题
-    serverComponentsExternalPackages: [],
   },
+  // 修复React Server Components bundler问题
+  serverExternalPackages: [],
   // 修复模块解析问题
   transpilePackages: [],
   // 确保客户端组件正确识别

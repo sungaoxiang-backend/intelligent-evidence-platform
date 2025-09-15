@@ -2,13 +2,13 @@ import { CaseDetailClient } from "@/components/case-detail-client"
 import { ErrorBoundaryWrapper } from "@/components/error-boundary"
 
 interface CaseDetailPageProps {
-  params: {
+  params: Promise<{
     caseId: string
-  }
+  }>
 }
 
-export default function CaseDetailPage({ params }: CaseDetailPageProps) {
-  const { caseId } = params
+export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
+  const { caseId } = await params
 
   // 验证caseId是否为有效数字
   const numericCaseId = parseInt(caseId, 10)
