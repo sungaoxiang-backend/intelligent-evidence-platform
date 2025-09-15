@@ -1098,6 +1098,10 @@ async def auto_process(
                     "message": "证据角色标注完成",
                     "progress": 95  # 角色标注阶段完成：95%
                 })
+            
+            # 6. 更新当事人信息
+            logger.info(f"开始更新当事人信息")
+            await _update_party_information_from_evidence(db, case, evidences, send_progress)
                 
         except Exception as e:
             logger.error(f"证据角色标注失败: {str(e)}")
@@ -1121,4 +1125,145 @@ async def auto_process(
     # 6. 返回证据列表
     return evidences
 
+
+async def _update_party_information_from_evidence(db, case, evidences, send_progress=None):
+    """
+    根据证据提取的信息更新当事人详细信息
+    
+    Args:
+        db: 数据库会话
+        case: 案件对象
+        evidences: 证据列表
+        send_progress: 进度回调函数
+    """
+    try:
+        logger.info(f"更新当事人信息...")
+        if send_progress:
+            await send_progress({
+                "status": "updating_party_info", 
+                "message": "开始更新当事人信息",
+                "progress": 96  # 当事人信息更新阶段开始：96%
+            })
         
+        # 导入配置管理器
+        from app.core.config_manager import config_manager
+        
+        # 获取案件当事人信息
+        case_parties = case.case_parties
+        if not case_parties:
+            logger.warning(f"案件 {case.id} 没有当事人信息")
+            return
+        
+        # 遍历所有证据，更新当事人信息
+        updated_parties = set()
+        for evidence in evidences:
+            # 只有已分类、有特征提取结果且有证据角色的证据才进行当事人信息更新
+            if (evidence.evidence_status == EvidenceStatus.FEATURES_EXTRACTED.value and 
+                evidence.classification_category and 
+                evidence.evidence_features and
+                evidence.evidence_role):
+                
+                # 获取证据类型配置
+                evidence_type_config = config_manager.get_evidence_type_by_type_name(evidence.classification_category)
+                if not evidence_type_config:
+                    logger.warning(f"未找到证据类型配置: {evidence.classification_category}")
+                    continue
+                
+                # 根据证据类型进行不同的处理
+                if evidence.classification_category == "身份证":
+                    await _update_party_from_id_card(db, evidence, case_parties, updated_parties)
+                # 后续可以添加其他证据类型的处理
+                # elif evidence.classification_category == "company_business_license":
+                #     await _update_party_from_business_license(db, evidence, case_parties, updated_parties)
+        
+        # 提交所有更新
+        if updated_parties:
+            await db.commit()
+            logger.info(f"成功更新了 {len(updated_parties)} 个当事人的信息")
+        
+        if send_progress:
+            await send_progress({
+                "status": "party_info_updated", 
+                "message": f"当事人信息更新完成，共更新 {len(updated_parties)} 个当事人",
+                "progress": 98  # 当事人信息更新阶段完成：98%
+            })
+            
+    except Exception as e:
+        logger.error(f"更新当事人信息失败: {str(e)}")
+        if send_progress:
+            await send_progress({
+                "status": "error", 
+                "message": f"更新当事人信息失败: {str(e)}",
+                "progress": 95
+            })
+
+
+async def _update_party_from_id_card(db, evidence, case_parties, updated_parties):
+    """
+    根据身份证证据更新当事人信息
+    
+    Args:
+        db: 数据库会话
+        evidence: 证据对象
+        case_parties: 案件当事人列表
+        updated_parties: 已更新的当事人ID集合
+    """
+    try:
+        # 提取身份证信息
+        id_card_info = {}
+        for feature in evidence.evidence_features:
+            if isinstance(feature, dict):
+                slot_name = feature.get("slot_name")
+                slot_value = feature.get("slot_value")
+                if slot_name and slot_value and slot_value != "未知":
+                    id_card_info[slot_name] = slot_value
+        
+        if not id_card_info:
+            logger.warning(f"身份证证据 {evidence.file_name} 没有提取到有效信息")
+            return
+        
+        # 根据证据角色找到对应的当事人
+        target_party = None
+        for party in case_parties:
+            if party.party_role == evidence.evidence_role:
+                target_party = party
+                break
+        
+        if not target_party:
+            logger.warning(f"未找到角色为 {evidence.evidence_role} 的当事人")
+            return
+        
+        # 更新当事人信息
+        updated = False
+        
+        # 映射身份证字段到当事人字段
+        field_mapping = {
+            "姓名": "name",
+            "性别": "gender", 
+            "民族": "nation",
+            "出生": "birthday",
+            "住址": "address",
+            "公民身份号码": "id_card"
+        }
+        
+        for id_card_field, party_field in field_mapping.items():
+            if id_card_field in id_card_info:
+                current_value = getattr(target_party, party_field)
+                new_value = id_card_info[id_card_field]
+                
+                # 只有当新值不为空且与当前值不同时才更新
+                if new_value and new_value != current_value:
+                    setattr(target_party, party_field, new_value)
+                    updated = True
+                    logger.info(f"更新当事人 {target_party.party_name} 的 {party_field}: {current_value} -> {new_value}")
+        
+        if updated:
+            # 将修改的当事人对象添加到数据库会话中
+            db.add(target_party)
+            updated_parties.add(target_party.id)
+            logger.info(f"成功更新当事人 {target_party.party_name} 的身份证信息")
+        
+    except Exception as e:
+        logger.error(f"更新身份证当事人信息失败: {str(e)}")
+
+

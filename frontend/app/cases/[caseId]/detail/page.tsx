@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DatePicker } from "@/components/ui/date-picker"
 import { EvidenceChainDashboard } from "@/components/evidence-chain-dashboard"
 import { DocumentTemplateSelector } from "@/components/document-template-selector"
 import { DocumentGeneratorNew } from "@/components/document-generator-new"
@@ -25,6 +24,30 @@ function formatAmount(amount: number): string {
     return amount.toString();
   }
   return amount.toFixed(2).replace(/\.?0+$/, '');
+}
+
+// 安全地创建Date对象，避免无效日期
+function safeCreateDate(dateString: string | undefined): Date | undefined {
+  if (!dateString) return undefined;
+  
+  // 处理中文格式日期 (如: 1963年1月31日)
+  if (dateString.includes('年') && dateString.includes('月') && dateString.includes('日')) {
+    try {
+      // 提取年月日数字
+      const match = dateString.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+      if (match) {
+        const [, year, month, day] = match;
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        return isNaN(date.getTime()) ? undefined : date;
+      }
+    } catch (e) {
+      console.warn('解析中文日期失败:', dateString, e);
+    }
+  }
+  
+  // 处理ISO格式或其他格式
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? undefined : date;
 }
 
 // 案件数据获取函数
@@ -266,7 +289,6 @@ export default function CaseDetailPage() {
         debtor_name: debtor?.party_name || '',
         loan_amount: caseData.loan_amount || '',
         case_type: caseData.case_type || '',
-        loan_date: caseData.loan_date ? new Date(caseData.loan_date) : undefined,
         court: caseData.court_name || '',
         creditor_type: creditor?.party_type || '',
         debtor_type: debtor?.party_type || '',
@@ -277,7 +299,7 @@ export default function CaseDetailPage() {
         // 扩展字段
         creditor_real_name: creditor?.name || '',
         creditor_gender: creditor?.gender || '',
-        creditor_birthday: creditor?.birthday ? new Date(creditor.birthday) : undefined,
+        creditor_birthday: safeCreateDate(creditor?.birthday),
         creditor_nation: creditor?.nation || '',
         creditor_address: creditor?.address || '',
         creditor_id_card: creditor?.id_card || '',
@@ -288,7 +310,7 @@ export default function CaseDetailPage() {
         creditor_bank_phone: creditor?.bank_phone || '',
         debtor_real_name: debtor?.name || '',
         debtor_gender: debtor?.gender || '',
-        debtor_birthday: debtor?.birthday ? new Date(debtor.birthday) : undefined,
+        debtor_birthday: safeCreateDate(debtor?.birthday),
         debtor_nation: debtor?.nation || '',
         debtor_address: debtor?.address || '',
         debtor_id_card: debtor?.id_card || '',
@@ -326,7 +348,6 @@ export default function CaseDetailPage() {
         user_id: editForm.user_id ? parseInt(editForm.user_id) : undefined,
         loan_amount: loanAmountInput ? parseFloat(loanAmountInput) : undefined,
         case_type: editForm.case_type,
-        loan_date: editForm.loan_date ? editForm.loan_date.toISOString() : undefined,
         court_name: editForm.court || undefined,
       })
 
@@ -528,7 +549,6 @@ export default function CaseDetailPage() {
                     debtor_name: debtor?.party_name || '',
                     loan_amount: caseData.loan_amount || '',
                     case_type: caseData.case_type || '',
-                    loan_date: caseData.loan_date ? new Date(caseData.loan_date) : undefined,
                     court: caseData.court_name || '',
                     creditor_type: creditor?.party_type || '',
                     debtor_type: debtor?.party_type || '',
@@ -715,7 +735,7 @@ export default function CaseDetailPage() {
                   )}
                 </div>
 
-                  {/* 第二行：欠款金额、欠款日期 */}
+                  {/* 第二行：欠款金额、开庭法院 */}
                   <div className="space-y-1.5">
                   <Label htmlFor="loan_amount" className="text-sm font-medium text-gray-700">
                     欠款金额 <span className="text-red-500">*</span>
@@ -776,24 +796,6 @@ export default function CaseDetailPage() {
                     <div className="text-red-500 text-xs">{formErrors.loan_amount}</div>
                   )}
                 </div>
-
-                  {/* 第三行：欠款日期、开庭法院 */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="loan_date" className="text-sm font-medium text-gray-700">欠款日期</Label>
-                    {editing ? (
-                      <DatePicker
-                        id="loan_date"
-                        value={editForm.loan_date}
-                        onChange={(date) => setEditForm({ ...editForm, loan_date: date })}
-                        placeholder="选择欠款日期"
-                        className="h-9"
-                      />
-                    ) : (
-                      <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                        {editForm.loan_date ? editForm.loan_date.toLocaleDateString('zh-CN') : '未设置'}
-                      </div>
-                    )}
-            </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="court" className="text-sm font-medium text-gray-700">开庭法院</Label>
@@ -1059,23 +1061,6 @@ export default function CaseDetailPage() {
                               </div>
 
                               <div className="space-y-1.5">
-                                <Label htmlFor="creditor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
-                                {editing ? (
-                                  <DatePicker
-                                    id="creditor_birthday"
-                                    value={editForm.creditor_birthday}
-                                    onChange={(date) => setEditForm({ ...editForm, creditor_birthday: date })}
-                                    placeholder="选择出生日期"
-                                    className="h-9"
-                                  />
-                                ) : (
-                                  <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                                    {creditor?.birthday ? new Date(creditor.birthday).toLocaleDateString('zh-CN') : '未设置'}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5">
                                 <Label htmlFor="creditor_nation" className="text-sm font-medium text-gray-700">民族</Label>
                                 {editing ? (
                                   <Input
@@ -1088,6 +1073,32 @@ export default function CaseDetailPage() {
                                 ) : (
                                   <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
                                     {creditor?.nation || '未设置'}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label htmlFor="creditor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
+                                {editing ? (
+                                  <Input
+                                    id="creditor_birthday"
+                                    value={editForm.creditor_birthday ? editForm.creditor_birthday.toISOString().split('T')[0] : ''}
+                                    onChange={(e) => setEditForm({ ...editForm, creditor_birthday: e.target.value ? new Date(e.target.value) : undefined })}
+                                    type="date"
+                                    placeholder="选择出生日期"
+                                    className="h-9"
+                                  />
+                                ) : (
+                                  <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                                    {creditor?.birthday ? (() => {
+                                      // 如果已经是中文格式，直接显示
+                                      if (creditor.birthday.includes('年') && creditor.birthday.includes('月') && creditor.birthday.includes('日')) {
+                                        return creditor.birthday;
+                                      }
+                                      // 否则转换为中文格式
+                                      const date = safeCreateDate(creditor.birthday);
+                                      return date ? date.toLocaleDateString('zh-CN') : '未设置';
+                                    })() : '未设置'}
                                   </div>
                                 )}
                               </div>
@@ -1238,23 +1249,6 @@ export default function CaseDetailPage() {
                               </div>
 
                               <div className="space-y-1.5">
-                                <Label htmlFor="creditor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
-                                {editing ? (
-                                  <DatePicker
-                                    id="creditor_birthday"
-                                    value={editForm.creditor_birthday}
-                                    onChange={(date) => setEditForm({ ...editForm, creditor_birthday: date })}
-                                    placeholder="选择出生日期"
-                                    className="h-9"
-                                  />
-                                ) : (
-                                  <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                                    {creditor?.birthday ? new Date(creditor.birthday).toLocaleDateString('zh-CN') : '未设置'}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5">
                                 <Label htmlFor="creditor_nation" className="text-sm font-medium text-gray-700">民族</Label>
                                 {editing ? (
                                   <Input
@@ -1267,6 +1261,32 @@ export default function CaseDetailPage() {
                                 ) : (
                                   <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
                                     {creditor?.nation || '未设置'}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label htmlFor="creditor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
+                                {editing ? (
+                                  <Input
+                                    id="creditor_birthday"
+                                    value={editForm.creditor_birthday ? editForm.creditor_birthday.toISOString().split('T')[0] : ''}
+                                    onChange={(e) => setEditForm({ ...editForm, creditor_birthday: e.target.value ? new Date(e.target.value) : undefined })}
+                                    type="date"
+                                    placeholder="选择出生日期"
+                                    className="h-9"
+                                  />
+                                ) : (
+                                  <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                                    {creditor?.birthday ? (() => {
+                                      // 如果已经是中文格式，直接显示
+                                      if (creditor.birthday.includes('年') && creditor.birthday.includes('月') && creditor.birthday.includes('日')) {
+                                        return creditor.birthday;
+                                      }
+                                      // 否则转换为中文格式
+                                      const date = safeCreateDate(creditor.birthday);
+                                      return date ? date.toLocaleDateString('zh-CN') : '未设置';
+                                    })() : '未设置'}
                                   </div>
                                 )}
                               </div>
@@ -1579,16 +1599,25 @@ export default function CaseDetailPage() {
                         <div className="space-y-1.5">
                           <Label htmlFor="debtor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
                           {editing ? (
-                            <DatePicker
+                            <Input
                               id="debtor_birthday"
-                              value={editForm.debtor_birthday}
-                              onChange={(date) => setEditForm({ ...editForm, debtor_birthday: date })}
+                              value={editForm.debtor_birthday ? editForm.debtor_birthday.toISOString().split('T')[0] : ''}
+                              onChange={(e) => setEditForm({ ...editForm, debtor_birthday: e.target.value ? new Date(e.target.value) : undefined })}
+                              type="date"
                               placeholder="选择出生日期"
                               className="h-9"
                             />
                           ) : (
                             <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                              {debtor?.birthday ? new Date(debtor.birthday).toLocaleDateString('zh-CN') : '未设置'}
+                              {debtor?.birthday ? (() => {
+                                // 如果已经是中文格式，直接显示
+                                if (debtor.birthday.includes('年') && debtor.birthday.includes('月') && debtor.birthday.includes('日')) {
+                                  return debtor.birthday;
+                                }
+                                // 否则转换为中文格式
+                                const date = safeCreateDate(debtor.birthday);
+                                return date ? date.toLocaleDateString('zh-CN') : '未设置';
+                              })() : '未设置'}
                             </div>
                           )}
                         </div>
@@ -1824,23 +1853,6 @@ export default function CaseDetailPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <Label htmlFor="debtor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
-                          {editing ? (
-                            <DatePicker
-                              id="debtor_birthday"
-                              value={editForm.debtor_birthday}
-                              onChange={(date) => setEditForm({ ...editForm, debtor_birthday: date })}
-                              placeholder="选择出生日期"
-                              className="h-9"
-                            />
-                          ) : (
-                            <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
-                              {debtor?.birthday ? new Date(debtor.birthday).toLocaleDateString('zh-CN') : '未设置'}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5">
                           <Label htmlFor="debtor_nation" className="text-sm font-medium text-gray-700">民族</Label>
                           {editing ? (
                             <Input
@@ -1853,6 +1865,32 @@ export default function CaseDetailPage() {
                           ) : (
                             <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
                               {debtor?.nation || '未设置'}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="debtor_birthday" className="text-sm font-medium text-gray-700">出生</Label>
+                          {editing ? (
+                            <Input
+                              id="debtor_birthday"
+                              value={editForm.debtor_birthday ? editForm.debtor_birthday.toISOString().split('T')[0] : ''}
+                              onChange={(e) => setEditForm({ ...editForm, debtor_birthday: e.target.value ? new Date(e.target.value) : undefined })}
+                              type="date"
+                              placeholder="选择出生日期"
+                              className="h-9"
+                            />
+                          ) : (
+                            <div className="p-2 bg-gray-50 rounded-md border text-sm h-9 flex items-center">
+                              {debtor?.birthday ? (() => {
+                                // 如果已经是中文格式，直接显示
+                                if (debtor.birthday.includes('年') && debtor.birthday.includes('月') && debtor.birthday.includes('日')) {
+                                  return debtor.birthday;
+                                }
+                                // 否则转换为中文格式
+                                const date = safeCreateDate(debtor.birthday);
+                                return date ? date.toLocaleDateString('zh-CN') : '未设置';
+                              })() : '未设置'}
                             </div>
                           )}
                         </div>
