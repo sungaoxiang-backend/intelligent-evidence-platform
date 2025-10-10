@@ -26,7 +26,7 @@ from app.core.middleware import LoggingMiddleware
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # 明确指定允许的域名
+    allow_origins=["*"],  # 明确指定允许的域名
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

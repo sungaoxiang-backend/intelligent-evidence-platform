@@ -199,6 +199,48 @@ async def get_user_detail(user_id: str):
         logger.error(f"获取成员详情失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/js-sdk/agent-config")
+async def get_js_sdk_agent_config(
+    url: Annotated[str, Query(description="前端当前完整URL，需与地址栏一致（不含hash）")],
+    agent_id: Annotated[Optional[str], Query(description="可选，应用的agentid")]=None,
+    js_api_list: Annotated[Optional[str], Query(description="可选，逗号分隔的jsApiList")]=None,
+    open_tag_list: Annotated[Optional[str], Query(description="可选，逗号分隔的openTagList")]=None,
+):
+    """返回企业微信 wx.agentConfig 所需的签名参数
+
+    - url: 必须为浏览器地址栏可见的完整URL（协议、域名、路径、查询串），不含hash
+    - agent_id: 若不传则使用默认配置中的 agentId
+    - js_api_list/open_tag_list: 逗号分隔即可
+    """
+    try:
+        js_list = [s for s in (js_api_list.split(",") if js_api_list else []) if s]
+        tag_list = [s for s in (open_tag_list.split(",") if open_tag_list else []) if s]
+
+        result = await wecom_service.build_agent_config(
+            url=url,
+            agent_id=agent_id,
+            js_api_list=js_list or None,
+            open_tag_list=tag_list or None,
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"生成agentConfig签名失败: {e}")
+        raise HTTPException(status_code=500, detail="agent_config_sign_failed")
+
+@router.get("/js-sdk/config")
+async def get_js_sdk_config(
+    url: Annotated[str, Query(description="前端当前完整URL，需与地址栏一致（不含hash）")],
+    js_api_list: Annotated[Optional[str], Query(description="可选，逗号分隔的jsApiList")]=None,
+):
+    """返回企业级 ww.register 所需的企业签名参数"""
+    try:
+        js_list = [s for s in (js_api_list.split(",") if js_api_list else []) if s]
+        result = await wecom_service.build_config(url=url, js_api_list=js_list or None)
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"生成config签名失败: {e}")
+        raise HTTPException(status_code=500, detail="config_sign_failed")
+
 
 @router.get("/contact-ways")
 async def get_contact_ways():

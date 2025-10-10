@@ -5,6 +5,7 @@ import base64
 import hashlib
 import os
 import json
+import secrets
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad, pad
@@ -57,6 +58,12 @@ class WeComService:
         self.token_expires_at: float = 0
         self.client = httpx.AsyncClient(timeout=30.0)
 
+        # JS-SDK 相关缓存
+        self.agent_ticket: Optional[str] = None
+        self.agent_ticket_expires_at: float = 0
+        self.jsapi_ticket: Optional[str] = None
+        self.jsapi_ticket_expires_at: float = 0
+
         logger.info(f"WeCom服务初始化完成 - CorpID: {self.corp_id}, AgentID: {self.agent_id}")
 
     async def close(self):
@@ -72,7 +79,7 @@ class WeComService:
         params = {"corpid": self.corp_id, "corpsecret": self.corp_secret}
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.get(url, params=params)
                 data = response.json()
 
@@ -160,6 +167,136 @@ class WeComService:
             error_msg = f"消息解密失败: {e}"
             logger.error(f"消息解密异常: {error_msg}")
             raise Exception(error_msg)
+
+    def _normalize_url(self, url: str) -> str:
+        """规范化签名用URL：去除hash，保留协议/主机/路径/查询串"""
+        try:
+            parsed = urllib.parse.urlsplit(url)
+            # 去除fragment，重建URL
+            normalized = urllib.parse.urlunsplit((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.query,
+                ""
+            ))
+            return normalized
+        except Exception:
+            # 失败时返回原始
+            return url
+
+    def _generate_nonce_str(self, length: int = 16) -> str:
+        """生成随机nonce字符串（URL安全）"""
+        return secrets.token_urlsafe(length)[:length]
+
+    async def get_agent_ticket(self) -> str:
+        """获取并缓存 agent_config 用的 ticket"""
+        if self.agent_ticket and time.time() < self.agent_ticket_expires_at:
+            return self.agent_ticket
+
+        access_token = await self.get_access_token()
+        url = "https://qyapi.weixin.qq.com/cgi-bin/ticket/get"
+        params = {"access_token": access_token, "type": "agent_config"}
+
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.get(url, params=params)
+                data = response.json()
+
+            if data.get("errcode") == 0:
+                self.agent_ticket = data.get("ticket")
+                # 提前刷新留出缓冲
+                self.agent_ticket_expires_at = time.time() + int(data.get("expires_in", 7200)) - 60
+                logger.info("获取agent_ticket成功")
+                return self.agent_ticket
+            else:
+                error_msg = f"获取agent_ticket失败: {data}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+        except Exception as e:
+            error_msg = f"获取agent_ticket异常: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+    async def build_agent_config(self, url: str, agent_id: Optional[str] = None, js_api_list: Optional[list[str]] = None, open_tag_list: Optional[list[str]] = None) -> Dict[str, Any]:
+        """构建 wx.agentConfig 所需签名参数"""
+        normalized_url = self._normalize_url(urllib.parse.unquote(url))
+        timestamp = int(time.time())
+        nonce_str = self._generate_nonce_str()
+        ticket = await self.get_agent_ticket()
+
+        sign_source = f"jsapi_ticket={ticket}&noncestr={nonce_str}&timestamp={timestamp}&url={normalized_url}"
+        signature = hashlib.sha1(sign_source.encode("utf-8")).hexdigest()
+
+        result: Dict[str, Any] = {
+            "corpid": self.corp_id,
+            "agentid": int(agent_id) if agent_id and str(agent_id).isdigit() else (agent_id or self.agent_id),
+            "timestamp": timestamp,
+            "nonceStr": nonce_str,
+            "signature": signature,
+        }
+
+        # 按需返回，避免多余字段
+        if js_api_list:
+            result["jsApiList"] = js_api_list
+        if open_tag_list:
+            result["openTagList"] = open_tag_list
+
+        logger.info(f"生成agentConfig签名成功 - url={normalized_url}")
+        return result
+
+    async def get_jsapi_ticket(self) -> str:
+        """获取并缓存企业级 jsapi_ticket
+
+        注意：企业微信获取企业级 jsapi_ticket 的接口是 /cgi-bin/get_jsapi_ticket，
+        不是 /cgi-bin/ticket/get?type=jsapi。后者只用于 agent_config 等 ticket 类型。
+        """
+        if self.jsapi_ticket and time.time() < self.jsapi_ticket_expires_at:
+            return self.jsapi_ticket
+
+        access_token = await self.get_access_token()
+        url = "https://qyapi.weixin.qq.com/cgi-bin/get_jsapi_ticket"
+        params = {"access_token": access_token}
+
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.get(url, params=params)
+                data = response.json()
+
+            if data.get("errcode") == 0:
+                self.jsapi_ticket = data.get("ticket")
+                self.jsapi_ticket_expires_at = time.time() + int(data.get("expires_in", 7200)) - 60
+                logger.info("获取jsapi_ticket成功")
+                return self.jsapi_ticket
+            else:
+                error_msg = f"获取jsapi_ticket失败: {data}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+        except Exception as e:
+            error_msg = f"获取jsapi_ticket异常: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+    async def build_config(self, url: str, js_api_list: Optional[list[str]] = None) -> Dict[str, Any]:
+        """构建企业级 wx.config/ww.register 企业签名参数"""
+        normalized_url = self._normalize_url(urllib.parse.unquote(url))
+        timestamp = int(time.time())
+        nonce_str = self._generate_nonce_str()
+        ticket = await self.get_jsapi_ticket()
+
+        sign_source = f"jsapi_ticket={ticket}&noncestr={nonce_str}&timestamp={timestamp}&url={normalized_url}"
+        signature = hashlib.sha1(sign_source.encode("utf-8")).hexdigest()
+
+        result: Dict[str, Any] = {
+            "corpid": self.corp_id,
+            "timestamp": timestamp,
+            "nonceStr": nonce_str,
+            "signature": signature,
+        }
+        if js_api_list:
+            result["jsApiList"] = js_api_list
+        logger.info(f"生成config签名成功 - url={normalized_url}")
+        return result
 
     def parse_callback_event(self, decrypted_msg: str) -> Optional[Dict[str, Any]]:
         """解析回调事件 - 增强版本，支持所有事件类型"""
@@ -272,7 +409,7 @@ class WeComService:
             
             logger.info(f"创建联系方式请求参数: {contact_data}")
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.post(url, params=params, json=contact_data)
                 data = response.json()
 
@@ -305,7 +442,7 @@ class WeComService:
         params = {"access_token": access_token}
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.post(url, params=params, json=welcome_data)
                 data = response.json()
 
@@ -329,7 +466,7 @@ class WeComService:
         try:
             logger.info(f"[API_CALL] 获取客户详情 - ExternalUserID: {external_userid}")
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.get(url, params=params)
                 
                 # 检查响应状态
@@ -908,7 +1045,7 @@ class WeComService:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.get(url, params=params)
                 data = response.json()
             
@@ -928,7 +1065,7 @@ class WeComService:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.get(url, params=params)
                 data = response.json()
             
