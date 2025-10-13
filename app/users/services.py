@@ -71,25 +71,34 @@ async def delete(db: AsyncSession, user_id: int) -> bool:
 async def get_multi(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> list[User]:
     """获取多个用户"""
     result = await db.execute(select(User).offset(skip).limit(limit))
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 
 async def get_multi_with_count(
     db: AsyncSession, *, skip: int = 0, limit: int = 100,
-    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc"
+    sort_by: Optional[str] = None, sort_order: Optional[str] = "desc",
+    user_id: Optional[int] = None
 ) -> Tuple[list[User], int]:
     """获取多个用户和总数，支持动态排序"""
     from loguru import logger
     
     # 添加调试日志
-    logger.debug(f"User sorting parameters: sort_by={sort_by}, sort_order={sort_order}")
+    logger.debug(f"User sorting parameters: sort_by={sort_by}, sort_order={sort_order}, user_id={user_id}")
     
     # 查询总数
-    total_result = await db.execute(select(func.count()).select_from(User))
+    count_query = select(func.count()).select_from(User)
+    if user_id is not None:
+        logger.debug(f"Filtering by user_id: {user_id}")
+        count_query = count_query.where(User.id == user_id)
+    total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
     # 构建查询，使用selectinload预加载cases关系
     query = select(User).options(selectinload(User.cases))
+    
+    # 添加user_id筛选
+    if user_id is not None:
+        query = query.where(User.id == user_id)
     
     # 添加排序
     if sort_by:
@@ -122,7 +131,7 @@ async def get_multi_with_count(
     # 获取数据
     query = query.offset(skip).limit(limit)
     items_result = await db.execute(query)
-    items = items_result.scalars().all()
+    items = list(items_result.scalars().all())
 
     return items, total
 

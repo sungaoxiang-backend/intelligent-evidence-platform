@@ -43,7 +43,6 @@ function formatAmount(amount: number): string {
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
 import { SortableHeader, formatDateTime, type SortDirection } from "@/components/common/sortable-header";
-import { CaseFilters } from "@/components/case-filters";
 import type { Case, User, CaseType, PartyType } from "@/lib/types";
 
 const partyTypeLabels = {
@@ -71,21 +70,8 @@ export default function CaseManagement() {
     wechat_number: "",
   });
 
-  // 筛选条件状态
-  const [filters, setFilters] = useState({
-    userId: undefined as string | undefined,
-    partyName: "",
-    partyType: "",
-    partyRole: "",
-    minLoanAmount: undefined as number | undefined,
-    maxLoanAmount: undefined as number | undefined,
-  });
-  
-  // 用户筛选状态（为了保持与用户管理页面的关联）
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  
-  // 筛选器展开状态
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  // 用户ID筛选状态
+  const [userIdFilter, setUserIdFilter] = useState("");
   
   // 从 localStorage 恢复排序状态，避免页面刷新后丢失
   const getInitialSort = () => {
@@ -104,35 +90,17 @@ export default function CaseManagement() {
   
   const [sort, setSort] = useState<{ field: string; direction: SortDirection }>(getInitialSort);
 
-  // 处理筛选条件变化
-  const handleFilterChange = (newFilters: any) => {
-    setFilters(newFilters);
-    // 同步selectedUserId状态以保持与用户管理页面的关联
-    if (newFilters.userId !== undefined) {
-      setSelectedUserId(newFilters.userId);
-    } else {
-      setSelectedUserId(null);
-    }
+  // 处理用户ID筛选
+  const handleUserIdFilterChange = (value: string) => {
+    setUserIdFilter(value);
     setPage(1); // 重置到第一页
   };
 
-  // Initialize user filter from URL params and update filters state
+  // 初始化筛选器状态，从URL参数恢复筛选条件
   useEffect(() => {
     const userId = searchParams.get('user_id');
     if (userId) {
-      setSelectedUserId(userId);
-      // Update filters to apply the user filter
-      setFilters(prev => ({
-        ...prev,
-        userId: userId
-      }));
-    } else {
-      // Clear user filter if not in URL
-      setSelectedUserId(null);
-      setFilters(prev => ({
-        ...prev,
-        userId: undefined
-      }));
+      setUserIdFilter(userId);
     }
   }, [searchParams]);
 
@@ -165,6 +133,8 @@ export default function CaseManagement() {
   // 用户筛选相关状态
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
   
   // 表单验证状态
   const [addFormErrors, setAddFormErrors] = useState({
@@ -200,16 +170,11 @@ export default function CaseManagement() {
         ...params,
         sort_by: sort.field,
         sort_order: sort.direction || "desc", // 提供默认值，避免null
-        user_id: filters.userId ? parseInt(filters.userId) : undefined,
-        party_name: filters.partyName || undefined,
-        party_type: filters.partyType || undefined,
-        party_role: filters.partyRole || undefined,
-        min_loan_amount: filters.minLoanAmount,
-        max_loan_amount: filters.maxLoanAmount,
+        user_id: userIdFilter ? parseInt(userIdFilter) : undefined,
       };
       return caseApi.getCases(apiParams);
     },
-    [filters], // Add filters as dependency to trigger re-fetch when filters change
+    [userIdFilter], // Add userIdFilter as dependency to trigger re-fetch when filters change
     20, // initialPageSize
     {
       // 优化刷新策略：平衡性能和实时性
@@ -232,23 +197,9 @@ export default function CaseManagement() {
   // 移除客户端排序逻辑，使用服务端排序
   // const sortedCases = cases || [];
 
-  // Fetch users for dropdown
-  const {
-    data: users,
-    mutate: mutateUsers
-  } = usePaginatedSWR<User>(
-    "/users",
-    (params) => userApi.getUsers(params),
-    [],
-    100,
-    {
-      // 用户列表不需要频繁刷新
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60000, // 1分钟内重复请求会被去重
-    }
-  );
+  // 用户搜索状态
+  const [searchedUser, setSearchedUser] = useState<User | null>(null);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
 
   // 初始化时设置金额输入值
   useEffect(() => {
@@ -257,58 +208,71 @@ export default function CaseManagement() {
     }
   }, [addForm.loan_amount]);
 
-  // 用户筛选逻辑
-  const filteredUsers = users?.filter(user => {
-    if (!userSearchTerm.trim()) return true;
-    const searchLower = userSearchTerm.toLowerCase();
-    return (
-      user.name?.toLowerCase().includes(searchLower) ||
-      user.wechat_nickname?.toLowerCase().includes(searchLower) ||
-      user.wechat_number?.toLowerCase().includes(searchLower) ||
-      user.id.toString().includes(searchLower)
-    );
-  }) || [];
+  // 搜索用户函数
+  const searchUser = async (userId: string) => {
+    if (!userId.trim()) {
+      setSearchedUser(null);
+      return;
+    }
 
-  // 处理用户选择
-  const handleUserSelect = (user: User) => {
-    console.log('用户选择:', user);
-    setAddForm(prev => ({
-      ...prev,
-      user_id: user.id,
-      case_parties: [
-        {
-          ...prev.case_parties[0],
-          party_name: user.name || "",
-          name: user.name || "" // 同时设置必要姓名字段
-        },
-        prev.case_parties[1]
-      ]
-    }));
-    setUserSearchTerm(user.name || "");
-    setShowUserDropdown(false);
-    setAddFormErrors(prev => ({ ...prev, user_id: "" }));
-    console.log('用户选择完成，user_id:', user.id, 'user_name:', user.name);
+    // 只处理纯数字输入
+    if (!/^\d+$/.test(userId)) {
+      setSearchedUser(null);
+      return;
+    }
+
+    setUserSearchLoading(true);
+    try {
+      console.log("🔍 Searching user by ID:", userId);
+      const result = await userApi.getUsers({ 
+        page: 1, 
+        pageSize: 1, 
+        user_id: parseInt(userId) 
+      });
+      
+      if (result.data && result.data.length > 0) {
+        const user = result.data[0];
+        setSearchedUser(user);
+        console.log("🔍 User found:", user);
+        
+        // 自动应用用户到表单
+        setAddForm(prev => ({
+          ...prev,
+          user_id: user.id,
+          case_parties: [
+            {
+              ...prev.case_parties[0],
+              party_name: user.name || "",
+              name: user.name || ""
+            },
+            prev.case_parties[1]
+          ]
+        }));
+        setAddFormErrors(prev => ({ ...prev, user_id: "" }));
+        console.log("✅ 用户已自动应用到表单");
+      } else {
+        setSearchedUser(null);
+        console.log("🔍 User not found");
+      }
+    } catch (error) {
+      console.error('搜索用户失败:', error);
+      setSearchedUser(null);
+    } finally {
+      setUserSearchLoading(false);
+    }
   };
 
-  // 点击外部关闭下拉列表
+  // 防抖搜索逻辑
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showUserDropdown) {
-        // 检查点击的目标是否在下拉列表容器内
-        const target = event.target as Element;
-        const dropdownContainer = document.querySelector('.user-dropdown-container');
-        
-        if (dropdownContainer && !dropdownContainer.contains(target)) {
-          setShowUserDropdown(false);
-        }
-      }
-    };
+    const timer = setTimeout(() => {
+      searchUser(userSearchTerm);
+    }, 500); // 500ms 防抖
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showUserDropdown]);
+    return () => clearTimeout(timer);
+  }, [userSearchTerm]);
+
+
+
 
   // 重置表单时也要修改
   // 验证函数
@@ -328,9 +292,9 @@ export default function CaseManagement() {
     };
 
     if (!addForm.user_id || addForm.user_id === 0) {
-      errors.user_id = "请选择关联用户";
-    } else if (!userSearchTerm.trim()) {
-      errors.user_id = "请选择关联用户";
+      errors.user_id = "请输入有效的用户ID";
+    } else if (!searchedUser) {
+      errors.user_id = "未找到该用户ID，请检查输入";
     }
     
     const creditor = addForm.case_parties.find(p => p.party_role === "creditor");
@@ -425,7 +389,7 @@ export default function CaseManagement() {
 
     try {
       await caseApi.createCase(addForm);
-      setShowAddDialog(false);
+      closeAddDialog();
       setAddForm({
         user_id: 0,
         loan_amount: 0,
@@ -447,9 +411,9 @@ export default function CaseManagement() {
           }
         ]
       });
-      setLoanAmountInput("");
-      setUserSearchTerm("");
-      setShowUserDropdown(false);
+        setLoanAmountInput("");
+        setUserSearchTerm("");
+        setSearchedUser(null);
       setAddFormErrors({
         user_id: "",
         loan_amount: "",
@@ -489,6 +453,19 @@ export default function CaseManagement() {
 
   const openAddDialog = () => {
     setShowAddDialog(true);
+    
+    // 如果当前有用户ID筛选，预填充到新增案件表单中
+    if (userIdFilter && userIdFilter.trim()) {
+      console.log("🔍 Pre-filling user ID from filter:", userIdFilter);
+      setUserSearchTerm(userIdFilter);
+      // 自动搜索该用户
+      searchUser(userIdFilter);
+    } else {
+      // 清空用户搜索状态
+      setUserSearchTerm("");
+      setSearchedUser(null);
+    }
+    
     // 确保弹窗打开时没有输入框获得焦点
     setTimeout(() => {
       if (document.activeElement instanceof HTMLElement) {
@@ -497,19 +474,13 @@ export default function CaseManagement() {
     }, 0);
   };
 
-  const handleCreateUser = () => {
-    setUserForm({
-      name: "",
-      wechat_nickname: "",
-      wechat_number: "",
-    });
-    setUserFormErrors({
-      name: "",
-      wechat_nickname: "",
-      wechat_number: "",
-    });
-    setShowUserDialog(true);
+  const closeAddDialog = () => {
+    setShowAddDialog(false);
+    // 清空用户搜索状态
+    setUserSearchTerm("");
+    setSearchedUser(null);
   };
+
 
   const validateUserForm = () => {
     const errors = {
@@ -541,8 +512,8 @@ export default function CaseManagement() {
       // 显示刷新loading状态
       setIsRefreshing(true);
       
-      // 刷新用户列表
-      await mutateUsers();
+      // 刷新搜索的用户
+      await searchUser(newUser.data.id.toString());
 
       // 设置新创建的用户为选中用户
       setAddForm(prev => ({
@@ -587,15 +558,13 @@ export default function CaseManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="whitespace-nowrap w-16">ID</TableHead>
+                <TableHead className="whitespace-nowrap w-20 min-w-20">案件ID</TableHead>
                 <TableHead className="whitespace-nowrap">关联用户</TableHead>
                 <TableHead className="whitespace-nowrap">快速查看</TableHead>
                 <TableHead className="whitespace-nowrap">欠款金额</TableHead>
                 <TableHead className="whitespace-nowrap">案由</TableHead>
                 <TableHead className="whitespace-nowrap">债权人</TableHead>
-                <TableHead className="whitespace-nowrap">债权人类型</TableHead>
                 <TableHead className="whitespace-nowrap">债务人</TableHead>
-                <TableHead className="whitespace-nowrap">债务人类型</TableHead>
                 <TableHead className="whitespace-nowrap">
                   <SortableHeader
                     field="created_at"
@@ -658,13 +627,7 @@ export default function CaseManagement() {
                       {creditor?.party_name || "-"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {creditor?.party_type ? partyTypeLabels[creditor.party_type] : "-"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
                       {debtor?.party_name || "-"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {debtor?.party_type ? partyTypeLabels[debtor.party_type] : "-"}
                     </TableCell>
                     <TableCell className="text-sm text-gray-600 whitespace-nowrap">
                       {formatDateTime(caseItem.created_at)}
@@ -688,36 +651,36 @@ export default function CaseManagement() {
         title="案件管理"
         subtitle="管理和跟踪所有案件信息"
         headerActions={
-          <div className="flex items-center space-x-2">
-            <Button 
-              variant={isFilterExpanded ? "default" : "outline"}
-              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-              className="whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 flex items-center text-sm h-8"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              筛选
-            </Button>
-            <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap text-sm h-8">
-              <Plus className="mr-1 h-3 w-3" />
-              新增
-            </Button>
-          </div>
+          <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap text-sm h-8">
+            <Plus className="mr-1 h-3 w-3" />
+            新增
+          </Button>
         }
         additionalContent={
-          isFilterExpanded && (
-            <div className="w-full mb-4">
-              <CaseFilters 
-                users={users || []}
-                selectedUserId={selectedUserId}
-                isExpanded={isFilterExpanded}
-                onFilterChange={handleFilterChange}
-                onUserFilterChange={setSelectedUserId}
-                onToggleExpand={() => setIsFilterExpanded(!isFilterExpanded)}
-              />
+          <div className="w-full mb-4">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">通过用户ID筛选：</label>
+                <Input
+                  type="text"
+                  placeholder="输入用户ID"
+                  value={userIdFilter}
+                  onChange={(e) => handleUserIdFilterChange(e.target.value)}
+                  className="w-48"
+                />
+              </div>
+              {userIdFilter && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleUserIdFilterChange("")}
+                  className="text-gray-600"
+                >
+                  清除
+                </Button>
+              )}
             </div>
-          )
+          </div>
         }
         data={cases}
         loading={loading || isRefreshing}
@@ -728,13 +691,17 @@ export default function CaseManagement() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         renderTable={renderTable}
-        emptyMessage={selectedUserId ? "该用户暂无案件数据" : "暂无案件数据"}
+        emptyMessage={userIdFilter ? "该用户暂无案件数据" : "暂无案件数据"}
       />
 
       {/* Add Case Dialog */}
       <Dialog 
         open={showAddDialog} 
-        onOpenChange={setShowAddDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeAddDialog();
+          }
+        }}
         modal={true}
       >
         <DialogContent 
@@ -758,63 +725,85 @@ export default function CaseManagement() {
               </div>
               <div className="flex space-x-3">
                 <div className="flex-1 relative">
-                  <Input
-                    placeholder="搜索或选择用户"
-                    value={userSearchTerm}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setUserSearchTerm(value);
-                      // 保持下拉列表展开，根据输入内容进行筛选
-                      setShowUserDropdown(true);
-                      if (value.trim()) {
-                        setAddFormErrors(prev => ({ ...prev, user_id: "" }));
-                      }
-                    }}
-                    onFocus={() => {
-                      // 聚焦时展开下拉列表，显示所有用户
-                      setShowUserDropdown(true);
-                    }}
-                    className={`${addFormErrors.user_id ? 'border-red-500' : ''}`}
-                  />
-                  
-                  {/* 用户下拉列表 */}
-                  {showUserDropdown && (
-                    <div className="user-dropdown-container absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                      {filteredUsers.length > 0 ? (
-                        filteredUsers.map((user) => (
-                          <div
-                            key={user.id}
-                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                            onClick={() => handleUserSelect(user)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="font-medium">{user.name || '未命名用户'}</div>
-                              <div className="text-xs text-gray-400 font-mono">#{user.id}</div>
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {user.wechat_nickname && `微信: ${user.wechat_nickname}`}
-                              {user.wechat_number && ` (${user.wechat_number})`}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">
-                          {userSearchTerm.trim() ? '未找到匹配的用户' : '开始输入搜索用户...'}
+                  <div className="relative">
+                    {searchedUser ? (
+                      // 找到用户时的显示
+                      <div className={`flex items-center h-12 px-3 border rounded-md ${addFormErrors.user_id ? 'border-red-500' : 'border-green-500 bg-green-50'}`}>
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3 text-sm font-medium text-gray-600">
+                          {searchedUser.wechat_avatar ? (
+                            <img 
+                              src={searchedUser.wechat_avatar} 
+                              alt={searchedUser.name || '用户头像'} 
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            (searchedUser.name || 'U').charAt(0).toUpperCase()
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <div className="flex-1 text-green-700 font-medium">
+                          {searchedUser.name} (#{searchedUser.id})
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserSearchTerm("");
+                            setSearchedUser(null);
+                            setAddForm(prev => ({
+                              ...prev,
+                              user_id: 0,
+                              case_parties: [
+                                {
+                                  ...prev.case_parties[0],
+                                  party_name: "",
+                                  name: ""
+                                },
+                                prev.case_parties[1]
+                              ]
+                            }));
+                          }}
+                          className="text-gray-400 hover:text-gray-600 p-1"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      // 搜索输入框
+                      <Input
+                        placeholder={
+                          userSearchLoading 
+                            ? "搜索中..." 
+                            : userSearchTerm.trim() && !searchedUser 
+                              ? "未找到对应ID用户" 
+                              : "输入用户ID进行搜索"
+                        }
+                        value={userSearchTerm}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setUserSearchTerm(value);
+                          if (value.trim()) {
+                            setAddFormErrors(prev => ({ ...prev, user_id: "" }));
+                          }
+                        }}
+                        className={`${addFormErrors.user_id ? 'border-red-500' : ''} ${userSearchTerm.trim() && !searchedUser ? 'text-red-500' : ''} h-12 pr-8`}
+                      />
+                    )}
+                    
+                    {/* 搜索图标 */}
+                    {!searchedUser && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        {userSearchLoading ? (
+                          <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-blue-500 rounded-full"></div>
+                        ) : (
+                          <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCreateUser}
-                  className="px-4"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  新建用户
-                </Button>
               </div>
               {addFormErrors.user_id && (
                 <div className="text-red-500 text-sm">{addFormErrors.user_id}</div>

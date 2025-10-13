@@ -17,12 +17,22 @@ async def read_users(
     current_staff: Annotated[Staff, Depends(get_current_staff)],
     skip: int = 0,
     limit: int = 10,
+    user_id: Optional[int] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "desc"
 ):
-    """获取用户列表，支持动态排序"""
+    """获取用户列表，支持动态排序和用户ID筛选"""
+    # 添加调试日志
+    print(f"🔍 Backend received user_id: {user_id}")
+    
+    # 构建筛选条件
+    filters = {}
+    if user_id is not None:
+        filters["user_id"] = user_id
+        print(f"🔍 Applied user_id filter: {user_id}")
+    
     users, total = await user_service.get_multi_with_count(
-        db, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order
+        db, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order, **filters
     )
     return ListResponse(
         data=users,

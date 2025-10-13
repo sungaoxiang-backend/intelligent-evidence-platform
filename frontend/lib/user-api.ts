@@ -9,13 +9,19 @@ interface UserListParams {
   search?: string
   sort_by?: string
   sort_order?: string
+  user_id?: number
 }
 
 export const userApi = {
   async getUsers(params: UserListParams = {}): Promise<{ data: User[]; pagination?: any }> {
-    const { page = 1, pageSize = 20, search = "", sort_by, sort_order } = params
+    const { page = 1, pageSize = 20, search, sort_by, sort_order, user_id } = params
     const skip = (page - 1) * pageSize
-    let url = `${API_CONFIG.BASE_URL}/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+    let url = `${API_CONFIG.BASE_URL}/users?skip=${skip}&limit=${pageSize}`
+    
+    // 只有当search参数存在且不为空时才添加
+    if (search && search.trim()) {
+      url += `&search=${encodeURIComponent(search)}`
+    }
     
     // Add sorting parameters if provided
     if (sort_by) {
@@ -24,13 +30,18 @@ export const userApi = {
     if (sort_order) {
       url += `&sort_order=${encodeURIComponent(sort_order)}`
     }
+    if (user_id) {
+      url += `&user_id=${user_id}`
+    }
     
     // 添加调试日志
     console.log("🔍 User API Request:", {
       url,
       sort_by,
       sort_order,
-      params
+      user_id,
+      params,
+      finalUrl: url
     });
     
     const resp = await fetch(url, {

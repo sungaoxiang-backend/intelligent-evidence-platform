@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,16 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import { userApi } from "@/lib/user-api";
 import { ListPage } from "@/components/common/list-page";
 import { usePaginatedSWR } from "@/hooks/use-paginated-swr";
@@ -30,23 +21,16 @@ import type { User } from "@/lib/types";
 
 export default function UserManagement() {
   const router = useRouter();
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const searchParams = useSearchParams();
   const [sort, setSort] = useState<{ field: string; direction: SortDirection }>({
     field: "created_at",
     direction: "desc"
   });
 
-  const [addForm, setAddForm] = useState({
-    name: "",
-  });
+  // 用户ID筛选状态
+  const [userIdFilter, setUserIdFilter] = useState("");
 
-  const [editForm, setEditForm] = useState({
-    name: "",
-  });
-
-  // Use paginated SWR hook with sorting
+  // Use paginated SWR hook with sorting and filtering
   const {
     data: users,
     loading,
@@ -63,11 +47,13 @@ export default function UserManagement() {
       const apiParams: any = {
         ...params,
         sort_by: sort.field,
-        sort_order: sort.direction || "desc" // 提供默认值，避免null
+        sort_order: sort.direction || "desc", // 提供默认值，避免null
+        user_id: userIdFilter ? parseInt(userIdFilter) : undefined,
       };
+      console.log("🔍 User Management API Params:", apiParams);
       return userApi.getUsers(apiParams);
     },
-    [sort.field, sort.direction], // Add sorting as dependencies
+    [sort.field, sort.direction, userIdFilter], // Add userIdFilter as dependency
     20, // initialPageSize
     {
       // 优化刷新策略：平衡性能和实时性
@@ -78,61 +64,36 @@ export default function UserManagement() {
     }
   );
 
-  const handleAddUser = async () => {
-    try {
-      await userApi.createUser(addForm);
-      setShowAddDialog(false);
-      setAddForm({
-        name: "",
-      });
-      mutate();
-    } catch (error) {
-      console.error("Failed to create user:", error);
-    }
-  };
-
-  const handleEditUser = async () => {
-    if (!editingUser) return;
-    
-    try {
-      await userApi.updateUser(editingUser.id, editForm);
-      setShowEditDialog(false);
-      setEditingUser(null);
-      mutate();
-    } catch (error) {
-      console.error("Failed to update user:", error);
-    }
-  };
-
-  const handleDeleteUser = async (id: number) => {
-    if (!confirm("确定要删除这个用户吗？")) return;
-    
-    try {
-      await userApi.deleteUser(id);
-      mutate();
-    } catch (error) {
-      console.error("Failed to delete user:", error);
-    }
-  };
 
   const handleSort = (field: string, direction: SortDirection) => {
     setSort({ field, direction });
   };
 
+  // 处理用户ID筛选
+  const handleUserIdFilterChange = (value: string) => {
+    console.log("🔍 User ID Filter Change:", value);
+    console.log("🔍 Parsed user_id:", value ? parseInt(value) : undefined);
+    setUserIdFilter(value);
+    setPage(1); // 重置到第一页
+  };
+
+  // 初始化筛选器状态，从URL参数恢复筛选条件
+  useEffect(() => {
+    const userId = searchParams.get('user_id');
+    if (userId) {
+      setUserIdFilter(userId);
+    }
+  }, [searchParams]);
+
   // 移除客户端排序逻辑，使用服务端排序
   const sortedUsers = users || [];
-
-  const openEditDialog = (user: User) => {
-    setEditingUser(user);
-    setEditForm({
-      name: user.name,
-    });
-    setShowEditDialog(true);
-  };
-
-  const openAddDialog = () => {
-    setShowAddDialog(true);
-  };
+  
+  // 调试：显示当前筛选状态
+  console.log("🔍 Current filter state:", {
+    userIdFilter,
+    usersCount: users?.length || 0,
+    total
+  });
 
   const handleViewUserCases = (userId: number) => {
     router.push(`/cases?user_id=${userId}`);
@@ -146,9 +107,9 @@ export default function UserManagement() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16">ID</TableHead>
+              <TableHead className="w-20 min-w-20">用户ID</TableHead>
               <TableHead>头像</TableHead>
-              <TableHead>姓名</TableHead>
+              <TableHead>昵称</TableHead>
               <TableHead>
                 <SortableHeader
                   field="created_at"
@@ -158,15 +119,6 @@ export default function UserManagement() {
                   创建时间
                 </SortableHeader>
               </TableHead>
-              <TableHead>
-                <SortableHeader
-                  field="updated_at"
-                  currentSort={sort}
-                  onSort={handleSort}
-                >
-                  更新时间
-                </SortableHeader>
-              </TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -174,7 +126,7 @@ export default function UserManagement() {
             {users.map((user) => (
               <TableRow key={user.id}>
                 {/* ID */}
-                <TableCell className="font-mono text-sm text-gray-600">
+                <TableCell className="font-mono text-sm text-gray-600 whitespace-nowrap">
                   #{user.id}
                 </TableCell>
                 {/* 头像预览 */}
@@ -208,39 +160,17 @@ export default function UserManagement() {
                   {formatDateTime(user.created_at)}
                 </TableCell>
                 
-                {/* 更新时间 */}
-                <TableCell className="text-sm text-gray-600">
-                  {formatDateTime(user.updated_at)}
-                </TableCell>
-                
                 {/* 操作按钮 */}
                 <TableCell>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewUserCases(user.id)}
-                      className="flex items-center text-blue-600 hover:text-blue-700"
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      查看案件
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditDialog(user)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewUserCases(user.id)}
+                    className="flex items-center text-blue-600 hover:text-blue-700"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    查看案件
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -256,11 +186,31 @@ export default function UserManagement() {
       <ListPage
         title="用户管理"
         subtitle="管理系统中的所有用户信息"
-        headerActions={
-          <Button onClick={openAddDialog} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="mr-2 h-4 w-4" />
-            新增用户
-          </Button>
+        additionalContent={
+          <div className="w-full mb-4">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">通过用户ID筛选：</label>
+                <Input
+                  type="text"
+                  placeholder="输入用户ID"
+                  value={userIdFilter}
+                  onChange={(e) => handleUserIdFilterChange(e.target.value)}
+                  className="w-48"
+                />
+              </div>
+              {userIdFilter && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleUserIdFilterChange("")}
+                  className="text-gray-600"
+                >
+                  清除
+                </Button>
+              )}
+            </div>
+          </div>
         }
         data={users}
         loading={loading}
@@ -272,73 +222,7 @@ export default function UserManagement() {
         onPageSizeChange={setPageSize}
         renderTable={renderTable}
         emptyMessage="暂无用户数据"
-        emptyAction={
-          <Button onClick={openAddDialog} variant="outline">
-            <Plus className="mr-2 h-4 w-4" />
-            创建第一个用户
-          </Button>
-        }
       />
-
-      {/* Add User Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>新增用户</DialogTitle>
-            <DialogDescription>
-              创建一个新的用户记录
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
-                姓名
-              </Label>
-              <Input
-                id="name"
-                value={addForm.name}
-                onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="submit" onClick={handleAddUser}>
-              创建用户
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit User Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>编辑用户</DialogTitle>
-            <DialogDescription>
-              修改用户信息
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-name" className="text-right">
-                姓名
-              </Label>
-              <Input
-                id="edit-name"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="submit" onClick={handleEditUser}>
-              保存修改
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
