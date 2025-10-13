@@ -13,7 +13,7 @@ from app.wecom.models import (
     WeComStaffStatus, ExternalContactStatus, ContactType
 )
 from app.wecom.services import wecom_service
-from app.users.schemas import UserCreate
+from app.users.schemas import UserCreate, UserUpdate
 from app.users import services as user_service
 from app.users.models import User  # 确保User模型被正确导入
 
@@ -50,6 +50,89 @@ class WeComSyncService:
         except Exception as e:
             logger.warning(f"模型导入警告: {e}")
     
+    async def _get_staff_userids(self) -> List[str]:
+        """获取所有员工的userid列表"""
+        try:
+            # 确保模型被正确导入
+            self._ensure_models_imported()
+            
+            async with SessionLocal() as session:
+                stmt = select(WeComStaff.user_id).where(WeComStaff.status == WeComStaffStatus.ACTIVE)
+                result = await session.execute(stmt)
+                userids = [row[0] for row in result.fetchall()]
+                logger.info(f"[GET_STAFF_USERIDS] 获取到 {len(userids)} 个员工userid")
+                return userids
+        except Exception as e:
+            logger.error(f"[GET_STAFF_USERIDS] 获取员工userid列表失败: {e}")
+            return []
+    
+    async def _batch_get_detailed_contacts(self, staff_userids: List[str]) -> List[Dict[str, Any]]:
+        """批量获取客户详情"""
+        all_detailed_contacts = []
+        
+        # 分批处理员工列表（每批最多100个）
+        batch_size = 100
+        for i in range(0, len(staff_userids), batch_size):
+            batch_userids = staff_userids[i:i + batch_size]
+            logger.info(f"[BATCH_GET_DETAILED] 处理第 {i//batch_size + 1} 批员工，共 {len(batch_userids)} 个")
+            
+            cursor = None
+            while True:
+                try:
+                    result = await self.wecom_service.batch_get_external_contacts(
+                        userid_list=batch_userids,
+                        cursor=cursor,
+                        limit=100
+                    )
+                    
+                    if result.get("errcode") == 0:
+                        contact_list = result.get("external_contact_list", [])
+                        all_detailed_contacts.extend(contact_list)
+                        
+                        next_cursor = result.get("next_cursor")
+                        if not next_cursor:
+                            break
+                        cursor = next_cursor
+                    else:
+                        logger.error(f"[BATCH_GET_DETAILED] 批量获取客户详情失败 - 错误码: {result.get('errcode')}, 错误信息: {result.get('errmsg')}")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"[BATCH_GET_DETAILED] 批量获取客户详情异常: {e}")
+                    break
+        
+        logger.info(f"[BATCH_GET_DETAILED] 批量获取完成，共获取到 {len(all_detailed_contacts)} 条详细客户信息")
+        return all_detailed_contacts
+    
+    def _merge_contact_data(self, basic_contacts: List[Dict[str, Any]], detailed_contacts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """合并基础联系人和详细联系人数据"""
+        # 创建详细联系人数据的映射表
+        detailed_map = {}
+        for detailed in detailed_contacts:
+            external_contact = detailed.get("external_contact", {})
+            external_userid = external_contact.get("external_userid")
+            if external_userid:
+                detailed_map[external_userid] = detailed
+        
+        # 合并数据
+        enriched_contacts = []
+        for basic in basic_contacts:
+            external_userid = basic.get("external_userid")
+            if external_userid and external_userid in detailed_map:
+                # 合并基础信息和详细信息
+                detailed = detailed_map[external_userid]
+                enriched = {
+                    **basic,  # 基础信息
+                    "detailed_info": detailed  # 详细信息
+                }
+                enriched_contacts.append(enriched)
+            else:
+                # 只有基础信息
+                enriched_contacts.append(basic)
+        
+        logger.info(f"[MERGE_CONTACT_DATA] 合并完成，共 {len(enriched_contacts)} 条联系人数据")
+        return enriched_contacts
+    
     async def sync_all_contacts(self, force_full_sync: bool = False) -> Dict[str, Any]:
         """
         同步所有已服务的外部联系人
@@ -80,8 +163,20 @@ class WeComSyncService:
             stats["total_fetched"] = len(all_contacts)
             logger.info(f"[SYNC_ALL] 从企微API获取到 {len(all_contacts)} 个外部联系人")
             
-            # 2. 批量处理外部联系人
-            batch_results = await self._process_contacts_batch(all_contacts, force_full_sync)
+            # 2. 获取员工列表用于批量获取客户详情
+            staff_userids = await self._get_staff_userids()
+            logger.info(f"[SYNC_ALL] 获取到 {len(staff_userids)} 个员工，准备批量获取客户详情")
+            
+            # 3. 批量获取客户详情
+            detailed_contacts = await self._batch_get_detailed_contacts(staff_userids)
+            logger.info(f"[SYNC_ALL] 批量获取到 {len(detailed_contacts)} 条详细客户信息")
+            
+            # 4. 合并基础信息和详细信息
+            enriched_contacts = self._merge_contact_data(all_contacts, detailed_contacts)
+            logger.info(f"[SYNC_ALL] 合并后得到 {len(enriched_contacts)} 条完整客户信息")
+            
+            # 5. 批量处理外部联系人
+            batch_results = await self._process_contacts_batch(enriched_contacts, force_full_sync)
             
             # 3. 统计结果
             for batch_result in batch_results:
@@ -258,7 +353,7 @@ class WeComSyncService:
             if is_customer and external_userid:
                 # 处理客户
                 result = await self._process_customer_contact(
-                    session, external_userid, name, staff, add_time, force_full_sync
+                    session, contact_data, staff, add_time, force_full_sync
                 )
             else:
                 # 处理其他外部联系人（非客户）
@@ -302,10 +397,20 @@ class WeComSyncService:
             logger.error(f"[GET_OR_CREATE_STAFF] 获取或创建员工记录失败 - UserID: {user_id}, 错误: {e}")
             return None
     
-    async def _process_customer_contact(self, session: AsyncSession, external_userid: str, name: str, 
+    async def _process_customer_contact(self, session: AsyncSession, contact_data: Dict[str, Any], 
                                       staff: WeComStaff, add_time: int, force_full_sync: bool = False) -> Dict[str, Any]:
         """处理客户联系人"""
         try:
+            external_userid = contact_data.get("external_userid")
+            
+            # 获取详细信息
+            detailed_info = contact_data.get("detailed_info", {})
+            external_contact_info = detailed_info.get("external_contact", {})
+            follow_info = detailed_info.get("follow_info", {})
+            
+            # 优先使用详细信息中的名称，如果没有则使用基础数据中的名称
+            name = external_contact_info.get("name") or contact_data.get("name", "")
+            
             # 查找现有客户记录
             stmt = select(ExternalContact).where(
                 ExternalContact.external_user_id == external_userid,
@@ -316,11 +421,46 @@ class WeComSyncService:
             
             if existing_contact:
                 # 更新现有客户信息
+                updated = False
+                
+                # 更新基本信息
                 if force_full_sync or not existing_contact.name or existing_contact.name != name:
                     existing_contact.name = name
+                    updated = True
+                
+                # 更新详细信息（如果有）
+                if external_contact_info:
+                    if force_full_sync or not existing_contact.avatar or existing_contact.avatar != external_contact_info.get("avatar"):
+                        existing_contact.avatar = external_contact_info.get("avatar")
+                        updated = True
+                    
+                    if force_full_sync or existing_contact.type != external_contact_info.get("type", 1):
+                        existing_contact.type = external_contact_info.get("type", 1)
+                        updated = True
+                    
+                    if force_full_sync or existing_contact.gender != external_contact_info.get("gender"):
+                        existing_contact.gender = external_contact_info.get("gender")
+                        updated = True
+                    
+                    if force_full_sync or existing_contact.union_id != external_contact_info.get("unionid"):
+                        existing_contact.union_id = external_contact_info.get("unionid")
+                        updated = True
+                    
+                    if force_full_sync or existing_contact.corp_name != external_contact_info.get("corp_name"):
+                        existing_contact.corp_name = external_contact_info.get("corp_name")
+                        updated = True
+                    
+                    if force_full_sync or existing_contact.corp_full_name != external_contact_info.get("corp_full_name"):
+                        existing_contact.corp_full_name = external_contact_info.get("corp_full_name")
+                        updated = True
+                
+                if updated:
                     existing_contact.updated_at = datetime.now()
                     session.add(existing_contact)
                     await session.flush()
+                    
+                    # 更新对应的系统用户
+                    await self._update_system_user(session, existing_contact, external_contact_info)
                     
                     logger.info(f"[PROCESS_CUSTOMER] 更新客户信息 - ExternalUserID: {external_userid}, Name: {name}")
                     return {"action": "updated", "contact_id": existing_contact.id}
@@ -332,9 +472,14 @@ class WeComSyncService:
                 contact = ExternalContact(
                     external_user_id=external_userid,
                     name=name,
-                    type=1,  # 微信用户
+                    type=external_contact_info.get("type", 1),  # 微信用户
                     status=ExternalContactStatus.NORMAL,
-                    contact_type=ContactType.FULL
+                    contact_type=ContactType.FULL,
+                    avatar=external_contact_info.get("avatar"),
+                    gender=external_contact_info.get("gender"),
+                    union_id=external_contact_info.get("unionid"),
+                    corp_name=external_contact_info.get("corp_name"),
+                    corp_full_name=external_contact_info.get("corp_full_name")
                 )
                 session.add(contact)
                 await session.flush()
@@ -351,7 +496,7 @@ class WeComSyncService:
                 session.add(session_record)
                 
                 # 创建对应的系统用户
-                await self._create_system_user(session, contact)
+                await self._create_system_user(session, contact, external_contact_info)
                 
                 logger.info(f"[PROCESS_CUSTOMER] 创建新客户 - ExternalUserID: {external_userid}, Name: {name}")
                 return {"action": "created", "contact_id": contact.id}
@@ -392,18 +537,26 @@ class WeComSyncService:
             logger.error(f"[PROCESS_NON_CUSTOMER] 处理非客户外部联系人失败 - tmp_openid: {tmp_openid}, 错误: {e}")
             raise
     
-    async def _create_system_user(self, session: AsyncSession, contact: ExternalContact):
+    async def _create_system_user(self, session: AsyncSession, contact: ExternalContact, external_contact_info: Dict[str, Any] = None):
         """创建对应的系统用户"""
         try:
             if not contact.external_user_id:
                 return
             
-            # 准备用户数据
+            # 准备用户数据，优先使用详细信息
+            user_name = contact.name or contact.external_user_id
+            user_avatar = contact.avatar
+            
+            if external_contact_info:
+                # 如果有详细信息，使用详细信息中的名称和头像
+                user_name = external_contact_info.get("name") or contact.name or contact.external_user_id
+                user_avatar = external_contact_info.get("avatar") or contact.avatar
+            
             user_data = UserCreate(
-                name=contact.name or contact.external_user_id,
-                wechat_nickname=contact.name,
+                name=user_name,
+                wechat_nickname=contact.name,  # 保持原始昵称
                 wechat_number=contact.external_user_id,
-                wechat_avatar=contact.avatar
+                wechat_avatar=user_avatar
             )
             
             # 使用 update-or-create 逻辑
@@ -420,6 +573,50 @@ class WeComSyncService:
                 
         except Exception as e:
             logger.error(f"[CREATE_SYSTEM_USER] 创建系统用户失败 - ExternalUserID: {contact.external_user_id}, 错误: {e}")
+            # 不抛出异常，避免影响主流程
+    
+    async def _update_system_user(self, session: AsyncSession, contact: ExternalContact, external_contact_info: Dict[str, Any] = None):
+        """更新对应的系统用户"""
+        try:
+            if not contact.external_user_id:
+                return
+            
+            # 查找现有用户
+            existing_user = await user_service.get_by_wechat_number(session, contact.external_user_id)
+            if not existing_user:
+                # 如果用户不存在，创建新用户
+                await self._create_system_user(session, contact, external_contact_info)
+                return
+            
+            # 准备更新数据
+            user_name = contact.name or contact.external_user_id
+            user_avatar = contact.avatar
+            
+            if external_contact_info:
+                # 如果有详细信息，使用详细信息中的名称和头像
+                user_name = external_contact_info.get("name") or contact.name or contact.external_user_id
+                user_avatar = external_contact_info.get("avatar") or contact.avatar
+            
+            # 检查是否需要更新
+            if (existing_user.name != user_name or 
+                existing_user.wechat_nickname != contact.name or 
+                existing_user.wechat_avatar != user_avatar):
+                
+                user_data = UserCreate(
+                    name=user_name,
+                    wechat_nickname=contact.name,
+                    wechat_number=contact.external_user_id,
+                    wechat_avatar=user_avatar
+                )
+                
+                # 更新用户
+                updated_user = await user_service.update(session, existing_user, UserUpdate(**user_data.model_dump()))
+                logger.info(f"[UPDATE_SYSTEM_USER] 系统用户更新成功 - UserID: {updated_user.id}, Name: {updated_user.name}")
+            else:
+                logger.info(f"[UPDATE_SYSTEM_USER] 系统用户信息无变化，跳过更新 - UserID: {existing_user.id}")
+                
+        except Exception as e:
+            logger.error(f"[UPDATE_SYSTEM_USER] 更新系统用户失败 - ExternalUserID: {contact.external_user_id}, 错误: {e}")
             # 不抛出异常，避免影响主流程
     
     async def get_sync_status(self) -> Dict[str, Any]:

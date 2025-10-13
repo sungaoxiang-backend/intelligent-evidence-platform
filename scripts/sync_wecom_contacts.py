@@ -122,8 +122,21 @@ class WeComSyncScript:
         logger.info("=" * 60)
         
         try:
-            # 只获取数据，不处理
+            # 1. 获取基础数据
             all_contacts = await self.sync_service._fetch_all_contacts()
+            logger.info(f"从企微API获取到 {len(all_contacts)} 个外部联系人")
+            
+            # 2. 获取员工列表
+            staff_userids = await self.sync_service._get_staff_userids()
+            logger.info(f"获取到 {len(staff_userids)} 个员工，准备批量获取客户详情")
+            
+            # 3. 批量获取客户详情
+            detailed_contacts = await self.sync_service._batch_get_detailed_contacts(staff_userids)
+            logger.info(f"批量获取到 {len(detailed_contacts)} 条详细客户信息")
+            
+            # 4. 合并数据
+            enriched_contacts = self.sync_service._merge_contact_data(all_contacts, detailed_contacts)
+            logger.info(f"合并后得到 {len(enriched_contacts)} 条完整客户信息")
             
             logger.info(f"测试模式完成，共获取到 {len(all_contacts)} 个外部联系人")
             
@@ -134,11 +147,15 @@ class WeComSyncScript:
             logger.info(f"客户数量: {len(customers)}")
             logger.info(f"非客户外部联系人数量: {len(non_customers)}")
             
-            # 显示前几个联系人信息（脱敏）
+            # 显示前几个联系人信息（包含详细信息）
             logger.info("前5个联系人信息示例:")
-            for i, contact in enumerate(all_contacts[:5]):
+            for i, contact in enumerate(enriched_contacts[:5]):
+                detailed_info = contact.get("detailed_info", {})
+                external_contact = detailed_info.get("external_contact", {})
+                real_name = external_contact.get("name", contact.get("name", "N/A"))
+                
                 logger.info(f"  {i+1}. is_customer: {contact.get('is_customer')}, "
-                           f"name: {contact.get('name', 'N/A')}, "
+                           f"name: {real_name}, "
                            f"external_userid: {contact.get('external_userid', 'N/A')[:10]}...")
             
             return 0

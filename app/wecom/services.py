@@ -10,7 +10,7 @@ from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad, pad
 import xml.etree.ElementTree as ET
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 import urllib.parse
 
@@ -541,6 +541,50 @@ class WeComService:
             return {"errcode": -2, "errmsg": f"响应解析失败: {e}"}
         except Exception as e:
             error_msg = f"[API_CALL] 获取外部联系人列表未知异常: {e}"
+            logger.error(error_msg)
+            return {"errcode": -3, "errmsg": f"未知错误: {e}"}
+
+    async def batch_get_external_contacts(self, userid_list: List[str], cursor: str = None, limit: int = 100) -> Dict[str, Any]:
+        """批量获取客户详情 - 遵循官方文档标准实现"""
+        url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/batch/get_by_user"
+        access_token = await self.get_access_token()
+        
+        params = {"access_token": access_token}
+        data = {
+            "userid_list": userid_list,
+            "limit": min(limit, 100)  # 最大值为100
+        }
+        if cursor:
+            data["cursor"] = cursor
+
+        try:
+            logger.info(f"[API_CALL] 批量获取客户详情 - UserIDs: {len(userid_list)}, Cursor: {cursor}, Limit: {limit}")
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.post(url, params=params, json=data)
+                if response.status_code != 200:
+                    logger.error(f"[API_CALL] 批量获取客户详情HTTP错误 - 状态码: {response.status_code}, 响应: {response.text[:200]}")
+                    return {"errcode": response.status_code, "errmsg": f"HTTP {response.status_code}"}
+                result = response.json()
+                if result.get("errcode") == 0:
+                    contact_list = result.get("external_contact_list", [])
+                    next_cursor = result.get("next_cursor")
+                    fail_info = result.get("fail_info", {})
+                    logger.info(f"[API_CALL] 批量获取客户详情成功 - 返回记录数: {len(contact_list)}, NextCursor: {next_cursor}")
+                    if fail_info.get("unlicensed_userid_list"):
+                        logger.warning(f"[API_CALL] 部分用户无有效互通许可: {fail_info.get('unlicensed_userid_list')}")
+                else:
+                    logger.warning(f"[API_CALL] 批量获取客户详情失败 - 错误码: {result.get('errcode')}, 错误信息: {result.get('errmsg')}")
+                return result
+        except httpx.RequestError as e:
+            error_msg = f"[API_CALL] 批量获取客户详情网络异常: {e}"
+            logger.error(error_msg)
+            return {"errcode": -1, "errmsg": f"网络请求失败: {e}"}
+        except json.JSONDecodeError as e:
+            error_msg = f"[API_CALL] 批量获取客户详情JSON解析异常: {e}, 原始响应: {response.text[:200] if 'response' in locals() else '无响应'}"
+            logger.error(error_msg)
+            return {"errcode": -2, "errmsg": f"响应解析失败: {e}"}
+        except Exception as e:
+            error_msg = f"[API_CALL] 批量获取客户详情未知异常: {e}"
             logger.error(error_msg)
             return {"errcode": -3, "errmsg": f"未知错误: {e}"}
 
