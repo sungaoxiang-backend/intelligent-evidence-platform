@@ -1,8 +1,11 @@
 # app/wecom/router.py
 from typing import Annotated, Optional, Dict, Any
+from datetime import datetime
 from fastapi import APIRouter, Query, Request, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 from app.wecom.services import wecom_service
+from app.wecom.sync_service import sync_service
+from app.wecom.monitoring import sync_monitor
 from app.core.logging import logger
 import hashlib
 import urllib.parse
@@ -691,3 +694,164 @@ def format_location(lat: str, lng: str, precision: str) -> str:
         return f"({lat_float:.6f}, {lng_float:.6f}) ±{prec_float}m"
     except (ValueError, TypeError):
         return f"({lat}, {lng}) ±{precision}"
+
+
+# ==================== 数据同步相关接口 ====================
+
+@router.post("/sync/contacts")
+async def sync_contacts(
+    mode: Annotated[str, Query(description="同步模式: full(全量), incremental(增量)")] = "incremental",
+    force: Annotated[bool, Query(description="是否强制同步")] = False
+):
+    """
+    同步企微外部联系人数据
+    
+    Args:
+        mode: 同步模式，full=全量同步，incremental=增量同步
+        force: 是否强制同步（忽略时间戳等条件）
+    """
+    try:
+        logger.info(f"开始同步企微外部联系人 - 模式: {mode}, 强制: {force}")
+        
+        # 执行同步
+        result = await sync_service.sync_all_contacts(force_full_sync=(mode == "full" or force))
+        
+        return {
+            "success": True,
+            "message": "同步完成",
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"同步企微外部联系人失败: {e}")
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+
+
+@router.get("/sync/status")
+async def get_sync_status():
+    """获取同步状态"""
+    try:
+        status = await sync_service.get_sync_status()
+        
+        return {
+            "success": True,
+            "data": status
+        }
+        
+    except Exception as e:
+        logger.error(f"获取同步状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取状态失败: {str(e)}")
+
+
+@router.post("/sync/test")
+async def test_sync():
+    """测试同步功能（只获取数据，不写入数据库）"""
+    try:
+        logger.info("开始测试同步功能")
+        
+        # 只获取数据，不处理
+        all_contacts = await sync_service._fetch_all_contacts()
+        
+        # 统计信息
+        customers = [c for c in all_contacts if c.get("is_customer", False)]
+        non_customers = [c for c in all_contacts if not c.get("is_customer", False)]
+        
+        return {
+            "success": True,
+            "message": "测试完成",
+            "data": {
+                "total_contacts": len(all_contacts),
+                "customers": len(customers),
+                "non_customers": len(non_customers),
+                "sample_data": all_contacts[:5]  # 返回前5个作为示例
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"测试同步功能失败: {e}")
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")
+
+
+# ==================== 监控相关接口 ====================
+
+@router.get("/monitor/health")
+async def get_sync_health():
+    """获取同步健康状态"""
+    try:
+        health_status = await sync_monitor.get_sync_health_status()
+        
+        return {
+            "success": True,
+            "data": health_status
+        }
+        
+    except Exception as e:
+        logger.error(f"获取同步健康状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取健康状态失败: {str(e)}")
+
+
+@router.get("/monitor/metrics")
+async def get_sync_metrics(
+    days: Annotated[int, Query(description="统计天数", ge=1, le=30)] = 7
+):
+    """获取同步指标"""
+    try:
+        metrics = await sync_monitor.get_sync_metrics(days=days)
+        
+        return {
+            "success": True,
+            "data": metrics
+        }
+        
+    except Exception as e:
+        logger.error(f"获取同步指标失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取指标失败: {str(e)}")
+
+
+@router.get("/monitor/alerts")
+async def get_sync_alerts():
+    """获取同步告警信息"""
+    try:
+        # 获取健康状态
+        health_status = await sync_monitor.get_sync_health_status()
+        
+        alerts = []
+        
+        # 检查健康分数
+        if health_status.get("health_score", 0) < 60:
+            alerts.append({
+                "level": "critical",
+                "message": f"同步健康分数过低: {health_status.get('health_score', 0)}",
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        # 检查错误率
+        error_rate = health_status.get("error_rate", {})
+        if error_rate.get("error_rate", 0) > 5:  # 每天超过5个错误
+            alerts.append({
+                "level": "warning",
+                "message": f"错误率过高: {error_rate.get('error_rate', 0)} 错误/天",
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        # 检查同步延迟
+        sync_delay = health_status.get("sync_delay", {})
+        if sync_delay.get("is_delayed", False):
+            alerts.append({
+                "level": "warning",
+                "message": f"同步延迟: {sync_delay.get('delay_hours', 0):.1f} 小时",
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "alerts": alerts,
+                "total_alerts": len(alerts),
+                "health_status": health_status
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"获取同步告警失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取告警失败: {str(e)}")

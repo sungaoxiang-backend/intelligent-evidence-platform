@@ -497,6 +497,53 @@ class WeComService:
             logger.error(error_msg)
             return {"errcode": -3, "errmsg": f"未知错误: {e}"}
 
+    async def get_contact_list(self, cursor: str = None, limit: int = 1000) -> Dict[str, Any]:
+        """获取已服务的外部联系人列表 - 遵循官方文档标准实现"""
+        url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/contact_list"
+        access_token = await self.get_access_token()
+        
+        # 构建请求参数
+        params = {"access_token": access_token}
+        data = {"limit": limit}
+        if cursor:
+            data["cursor"] = cursor
+
+        try:
+            logger.info(f"[API_CALL] 获取已服务外部联系人列表 - Cursor: {cursor}, Limit: {limit}")
+            
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.post(url, params=params, json=data)
+                
+                # 检查响应状态
+                if response.status_code != 200:
+                    logger.error(f"[API_CALL] 获取外部联系人列表HTTP错误 - 状态码: {response.status_code}, 响应: {response.text[:200]}")
+                    return {"errcode": response.status_code, "errmsg": f"HTTP {response.status_code}"}
+                
+                result = response.json()
+                
+                # 记录API调用结果
+                if result.get("errcode") == 0:
+                    info_list = result.get("info_list", [])
+                    next_cursor = result.get("next_cursor")
+                    logger.info(f"[API_CALL] 获取外部联系人列表成功 - 返回记录数: {len(info_list)}, NextCursor: {next_cursor}")
+                else:
+                    logger.warning(f"[API_CALL] 获取外部联系人列表失败 - 错误码: {result.get('errcode')}, 错误信息: {result.get('errmsg')}")
+                
+                return result
+                
+        except httpx.RequestError as e:
+            error_msg = f"[API_CALL] 获取外部联系人列表网络异常: {e}"
+            logger.error(error_msg)
+            return {"errcode": -1, "errmsg": f"网络请求失败: {e}"}
+        except json.JSONDecodeError as e:
+            error_msg = f"[API_CALL] 获取外部联系人列表JSON解析异常: {e}, 原始响应: {response.text[:200] if 'response' in locals() else '无响应'}"
+            logger.error(error_msg)
+            return {"errcode": -2, "errmsg": f"响应解析失败: {e}"}
+        except Exception as e:
+            error_msg = f"[API_CALL] 获取外部联系人列表未知异常: {e}"
+            logger.error(error_msg)
+            return {"errcode": -3, "errmsg": f"未知错误: {e}"}
+
     async def handle_customer_add_event(self, event_data: Dict[str, Any]) -> bool:
         """处理添加企业客户事件 - 增强版本，确保数据持久化"""
         try:

@@ -22,7 +22,7 @@ python -m app.initial_data
 # 根据SERVICE_TYPE环境变量决定启动什么服务
 if [ "$SERVICE_TYPE" = "celery-worker" ]; then
   echo "启动Celery Worker..."
-  exec celery -A app.core.celery_app.celery_app worker --loglevel=info --hostname=worker1@%h -Q celery,example,document,evidence
+  exec celery -A app.core.celery_app.celery_app worker --loglevel=info --hostname=worker1@%h -Q celery,example,document,evidence,wecom_sync
 elif [ "$SERVICE_TYPE" = "celery-beat" ]; then
   echo "启动Celery Beat..."
   exec celery -A app.core.celery_app.celery_app beat --loglevel=info

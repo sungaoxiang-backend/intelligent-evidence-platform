@@ -21,6 +21,7 @@ celery_app.conf.update(
         "app.tasks.document_tasks.*": {"queue": "document"},
         "app.tasks.evidence_tasks.*": {"queue": "evidence"},
         "app.tasks.real_evidence_tasks.*": {"queue": "evidence"},
+        "wecom.*": {"queue": "wecom_sync"},  # 企微同步任务
     },
     # 任务结果过期时间（秒）
     result_expires=3600,
@@ -37,3 +38,4 @@ celery_app.autodiscover_tasks([
 
 # 显式导入任务模块以确保注册
 from app.tasks import real_evidence_tasks
+from app.tasks import wecom_sync_tasks
