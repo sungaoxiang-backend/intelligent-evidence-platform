@@ -450,19 +450,33 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
         party_roles = [party.get('party_role') for party in case_parties_data if party.get('party_role') is not None]
         if party_roles:
             expected_roles = {'creditor', 'debtor'}
-            if set(party_roles) != expected_roles:
+            actual_roles = set(party_roles)
+            
+            # 检查角色数量和类型
+            creditor_count = party_roles.count('creditor')
+            debtor_count = party_roles.count('debtor')
+            
+            if actual_roles != expected_roles or creditor_count != 1 or debtor_count != 1:
+                error_msg = f"当事人配置不符合要求: creditor角色期望1个,实际{creditor_count}个"
                 raise HTTPException(
                     status_code=400,
-                    detail="案件必须包含一个债权人(creditor)和一个债务人(debtor)"
+                    detail=error_msg
                 )
         
-        # 更新或创建当事人
-        for i, party_data in enumerate(case_parties_data):
+        # 更新或创建当事人 - 按角色匹配而不是按索引
+        for party_data in case_parties_data:
             party_update = CasePartyUpdate(**party_data)
+            party_role = party_data.get('party_role')
             
-            if i < len(existing_parties):
+            # 查找相同角色的现有当事人
+            existing_party = None
+            for existing in existing_parties:
+                if existing.party_role == party_role:
+                    existing_party = existing
+                    break
+            
+            if existing_party:
                 # 更新现有当事人
-                existing_party = existing_parties[i]
                 await update_case_party(db, existing_party.id, party_update)
             else:
                 # 创建新当事人

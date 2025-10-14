@@ -174,23 +174,6 @@ class CaseUpdate(BaseModel):
     description: Optional[str] = None
     case_parties: Optional[List[CasePartyUpdate]] = None
     
-    @field_validator('case_parties')
-    @classmethod
-    def validate_case_parties(cls, v):
-        """验证当事人配置：如果提供当事人信息，必须有一个债权人和一个债务人"""
-        if v is None:
-            return v
-            
-        if len(v) != 2:
-            raise ValueError('案件必须包含两个当事人：一个债权人(creditor)和一个债务人(debtor)')
-        
-        party_roles = [party.party_role for party in v if party.party_role is not None]
-        expected_roles = {'creditor', 'debtor'}
-        
-        if set(party_roles) != expected_roles:
-            raise ValueError('案件必须包含一个债权人(creditor)和一个债务人(debtor)')
-        
-        return v
 
 
 # API响应中的案件模型
