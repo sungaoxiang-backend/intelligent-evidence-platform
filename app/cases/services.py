@@ -439,6 +439,35 @@ async def update(db: AsyncSession, db_obj: CaseModel, obj_in: CaseUpdate) -> Cas
                 detail="指定的用户不存在"
             )
     
+    # 处理当事人信息更新
+    if 'case_parties' in update_data and update_data['case_parties'] is not None:
+        case_parties_data = update_data.pop('case_parties')
+        
+        # 获取现有的当事人
+        existing_parties = await get_case_parties_by_case_id(db, db_obj.id)
+        
+        # 验证当事人角色
+        party_roles = [party.get('party_role') for party in case_parties_data if party.get('party_role') is not None]
+        if party_roles:
+            expected_roles = {'creditor', 'debtor'}
+            if set(party_roles) != expected_roles:
+                raise HTTPException(
+                    status_code=400,
+                    detail="案件必须包含一个债权人(creditor)和一个债务人(debtor)"
+                )
+        
+        # 更新或创建当事人
+        for i, party_data in enumerate(case_parties_data):
+            party_update = CasePartyUpdate(**party_data)
+            
+            if i < len(existing_parties):
+                # 更新现有当事人
+                existing_party = existing_parties[i]
+                await update_case_party(db, existing_party.id, party_update)
+            else:
+                # 创建新当事人
+                await create_case_party(db, db_obj.id, CasePartyCreate(**party_data))
+    
     # 更新基本属性
     for field, value in update_data.items():
         setattr(db_obj, field, value)
@@ -627,7 +656,7 @@ async def auto_process(
         timeout=180.0
     )
     
-    results = evidence_extraction_results.content.results
+    results = evidence_extraction_results.results
     if not results:
         logger.error("证据特征提取失败")
         if send_progress:

@@ -65,7 +65,6 @@ async def read_cases(
 async def create_case(
     db: DBSession,
     case_in: CaseCreate,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
     """创建新案件
     
@@ -107,7 +106,6 @@ async def create_case(
 async def read_case(
     case_id: int,
     db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
     """获取案件信息"""
     case = await case_service.get_by_id(db, case_id)
@@ -121,7 +119,6 @@ async def update_case(
     case_id: int,
     case_in: CaseUpdate,
     db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
     """更新案件信息"""
     case = await case_service.get_by_id(db, case_id)

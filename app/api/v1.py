@@ -57,6 +57,31 @@ async def get_external_contact_detail_v1(
             # 4. 构建案件列表数据
             case_list = []
             for case in cases:
+                # 构建当事人列表
+                parties_list = []
+                for party in case.case_parties:
+                    party_data = {
+                        "id": party.id,
+                        "party_name": party.party_name,
+                        "party_role": party.party_role,
+                        "party_type": party.party_type,
+                        "name": party.name,
+                        "gender": party.gender,
+                        "birthday": party.birthday,
+                        "nation": party.nation,
+                        "address": party.address,
+                        "id_card": party.id_card,
+                        "phone": party.phone,
+                        "company_name": party.company_name,
+                        "company_address": party.company_address,
+                        "company_code": party.company_code,
+                        "owner_name": party.owner_name,
+                        "bank_address": party.bank_address,
+                        "bank_account": party.bank_account,
+                        "bank_phone": party.bank_phone
+                    }
+                    parties_list.append(party_data)
+                
                 case_data = {
                     "id": case.id,
                     "case_type": case.case_type.value if case.case_type else None,
@@ -65,6 +90,7 @@ async def get_external_contact_detail_v1(
                     "loan_date": case.loan_date.isoformat() if case.loan_date else None,
                     "court_name": case.court_name,
                     "description": case.description,
+                    "parties": parties_list,
                     "created_at": (
                         case.created_at.isoformat() if case.created_at else None
                     ),
