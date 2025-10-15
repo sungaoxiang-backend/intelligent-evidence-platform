@@ -352,7 +352,7 @@ from app.evidences.models import EvidenceStatus
 @router.post("/auto-process", response_model=ListResponse[EvidenceResponse])
 async def auto_process(
     db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    # current_staff: Annotated[Staff, Depends(get_current_staff)],
     case_id: int = Form(...),
     files: List[UploadFile] = File(None),
     evidence_ids: List[int] = Form(None),
