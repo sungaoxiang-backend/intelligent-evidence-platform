@@ -265,11 +265,11 @@ async def upload_file(
     _, file_extension = os.path.splitext(filename)
     file_extension = file_extension.lower().lstrip(".")
     
-    # 只支持图片格式
-    supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
-    if file_extension not in supported_image_formats:
-        logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
-        raise ValueError(f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}")
+    # # 只支持图片格式
+    # supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp", "pdf", "doc", "docx", "xls", "xlsx", "csv"]
+    # if file_extension not in supported_image_formats:
+    #     logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
+    #     raise ValueError(f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}")
     
     # 所有文件都存储到images文件夹
     folder = "images"
@@ -684,7 +684,13 @@ async def auto_process(
                 evidences.append(evidence)
     else:
         evidences = []
-
+    # 只保留图片格式
+    supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
+    evidences = [
+        evidence
+        for evidence in evidences
+        if evidence.file_extension in supported_image_formats
+    ]
     if not evidences:
         logger.error("没有成功上传或检索到证据")
         return []
