@@ -155,21 +155,51 @@ class COSService:
                 logger.debug(f"处理第{index+1}个文件: {file.filename}, 内容类型={file.content_type}")
                 
                 # 获取文件扩展名
+                if not file.filename:
+                    logger.error(f"文件名为空: {file}")
+                    failed.append({
+                        "file": "unknown",
+                        "error": "文件名为空"
+                    })
+                    continue
+                    
                 _, file_extension = os.path.splitext(file.filename)
                 file_extension = file_extension.lower().lstrip(".")
                 logger.debug(f"文件扩展名: {file_extension}")
                 
-                # 只支持图片格式，所有文件都存储到images文件夹
-                supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
-                if file_extension not in supported_image_formats:
-                    logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
+                # 支持多种文件格式
+                supported_formats = [
+                    # 图片格式
+                    "jpg", "jpeg", "png", "bmp", "webp", "gif", "svg",
+                    # 文档格式
+                    "pdf", "doc", "docx", "txt",
+                    # 表格格式
+                    "xls", "xlsx", "csv",
+                    # 其他格式
+                    "mp3", "mp4", "wav", "m4a", "avi", "mov", "wmv"
+                ]
+                
+                if file_extension not in supported_formats:
+                    logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_formats}")
                     failed.append({
                         "file": file.filename,
-                        "error": f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}"
+                        "error": f"不支持的文件格式: {file_extension}，支持的格式: {', '.join(supported_formats)}"
                     })
                     continue
                 
-                file_folder = "images"
+                # 根据文件类型确定存储文件夹
+                if file_extension in ["jpg", "jpeg", "png", "bmp", "webp", "gif", "svg"]:
+                    file_folder = "images"
+                elif file_extension in ["pdf", "doc", "docx", "txt"]:
+                    file_folder = "documents"
+                elif file_extension in ["xls", "xlsx", "csv"]:
+                    file_folder = "spreadsheets"
+                elif file_extension in ["mp3", "wav", "m4a"]:
+                    file_folder = "audio"
+                elif file_extension in ["mp4", "avi", "mov", "wmv"]:
+                    file_folder = "videos"
+                else:
+                    file_folder = "others"
                 
                 # 使用指定的文件夹或根据文件类型确定的文件夹
                 target_folder = folder if folder else file_folder
@@ -194,7 +224,7 @@ class COSService:
                 
                 # 上传文件到COS
                 logger.debug(f"开始上传文件到COS: {file.filename}")
-                file_url = self.upload_file(file_obj, file.filename, target_folder)
+                file_url = self.upload_file(file_obj, f"{target_folder}/{file.filename}")
                 logger.debug(f"文件上传成功: {file.filename}, URL: {file_url}")
                 
                 # 添加到成功列表

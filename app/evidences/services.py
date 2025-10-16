@@ -265,14 +265,35 @@ async def upload_file(
     _, file_extension = os.path.splitext(filename)
     file_extension = file_extension.lower().lstrip(".")
     
-    # # 只支持图片格式
-    # supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp", "pdf", "doc", "docx", "xls", "xlsx", "csv"]
-    # if file_extension not in supported_image_formats:
-    #     logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_image_formats}")
-    #     raise ValueError(f"不支持的文件格式: {file_extension}，仅支持图片格式: {', '.join(supported_image_formats)}")
+    # 支持多种文件格式
+    supported_formats = [
+        # 图片格式
+        "jpg", "jpeg", "png", "bmp", "webp", "gif", "svg",
+        # 文档格式
+        "pdf", "doc", "docx", "txt",
+        # 表格格式
+        "xls", "xlsx", "csv",
+        # 其他格式
+        "mp3", "mp4", "wav", "m4a", "avi", "mov", "wmv"
+    ]
     
-    # 所有文件都存储到images文件夹
-    folder = "images"
+    if file_extension not in supported_formats:
+        logger.error(f"不支持的文件格式: {file_extension}, 支持格式: {supported_formats}")
+        raise ValueError(f"不支持的文件格式: {file_extension}，支持的格式: {', '.join(supported_formats)}")
+    
+    # 根据文件类型确定存储文件夹
+    if file_extension in ["jpg", "jpeg", "png", "bmp", "webp", "gif", "svg"]:
+        folder = "images"
+    elif file_extension in ["pdf", "doc", "docx", "txt"]:
+        folder = "documents"
+    elif file_extension in ["xls", "xlsx", "csv"]:
+        folder = "spreadsheets"
+    elif file_extension in ["mp3", "wav", "m4a"]:
+        folder = "audio"
+    elif file_extension in ["mp4", "avi", "mov", "wmv"]:
+        folder = "videos"
+    else:
+        folder = "others"
     
     # 获取文件大小
     file.seek(0, os.SEEK_END)
@@ -684,15 +705,30 @@ async def auto_process(
                 evidences.append(evidence)
     else:
         evidences = []
-    # 只保留图片格式
-    supported_image_formats = ["jpg", "jpeg", "png", "bmp", "webp"]
-    evidences = [
+    # 支持多种文件格式，但AI处理可能只支持特定格式
+    # 这里可以根据需要调整支持的文件类型
+    supported_ai_formats = [
+        # 图片格式 - AI可以处理
+        "jpg", "jpeg", "png", "bmp", "webp",
+        # 其他格式暂时不支持AI处理，但可以上传
+        # "doc", "docx", "txt", "xls", "xlsx", "csv", "mp3", "mp4", "wav", "m4a", "avi", "mov", "wmv"
+    ]
+    
+    # 过滤出支持AI处理的文件
+    ai_processable_evidences = [
         evidence
         for evidence in evidences
-        if evidence.file_extension in supported_image_formats
+        if evidence.file_extension in supported_ai_formats
     ]
+    
+    # 如果启用AI处理，只处理支持的文件
+    if auto_classification or auto_feature_extraction:
+        evidences = ai_processable_evidences
+        if not evidences:
+            logger.warning("没有支持AI处理的文件格式")
+            return []
     if not evidences:
-        logger.error("没有成功上传或检索到证据")
+        logger.warning("没有证据要处理")
         return []
     
     # 2. 证据分类（可选）

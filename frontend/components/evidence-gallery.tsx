@@ -44,6 +44,97 @@ const evidenceFetcher = async ([_key, caseId, search, page, pageSize]: [string, 
 
 
 
+// 获取文件类型信息
+const getFileTypeInfo = (fileName: string, fileUrl?: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  
+  // 图片格式
+  if (['jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'svg'].includes(ext)) {
+    return {
+      type: 'image',
+      icon: '🖼️',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+      canPreview: true
+    };
+  }
+  
+  // PDF格式
+  if (ext === 'pdf') {
+    return {
+      type: 'pdf',
+      icon: '📄',
+      color: 'text-red-600',
+      bgColor: 'bg-red-100 dark:bg-red-900/20',
+      canPreview: true
+    };
+  }
+  
+  // Excel格式
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return {
+      type: 'excel',
+      icon: '📊',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/20',
+      canPreview: false
+    };
+  }
+  
+  // Word格式
+  if (['doc', 'docx'].includes(ext)) {
+    return {
+      type: 'word',
+      icon: '📝',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+      canPreview: false
+    };
+  }
+  
+  // 音频格式
+  if (['mp3', 'wav', 'm4a'].includes(ext)) {
+    return {
+      type: 'audio',
+      icon: '🎵',
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100 dark:bg-purple-900/20',
+      canPreview: true
+    };
+  }
+  
+  // 视频格式
+  if (['mp4', 'avi', 'mov', 'wmv'].includes(ext)) {
+    return {
+      type: 'video',
+      icon: '🎬',
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+      canPreview: true
+    };
+  }
+  
+  // 文本格式
+  if (ext === 'txt') {
+    return {
+      type: 'text',
+      icon: '📄',
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-100 dark:bg-gray-900/20',
+      canPreview: false
+    };
+  }
+  
+  // 默认格式
+  return {
+    type: 'unknown',
+    icon: '📁',
+    color: 'text-gray-600',
+    bgColor: 'bg-gray-100 dark:bg-gray-900/20',
+    canPreview: false
+  };
+};
+
 // 获取状态颜色
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -349,40 +440,40 @@ function EvidenceGalleryContent({
                         className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
                       />
                       <div className="flex-shrink-0">
-                        {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
-                          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
-                            <Video className="h-5 w-5 text-purple-600" />
-                          </div>
-                        ) : evidence.file_url ? (
-                          <img
-                            src={evidence.file_url}
-                            alt={evidence.file_name || ''}
-                            className="w-10 h-10 object-cover rounded-md"
-                            onError={(e) => {
-                              // 图片加载失败时，替换为占位符
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = `
-                                  <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                                    <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                    </svg>
-                                  </div>
-                                `;
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                            <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                          </div>
-                        )}
+                        {(() => {
+                          const fileTypeInfo = getFileTypeInfo(evidence.file_name || '');
+                          
+                          // 如果是图片且可以预览，显示图片
+                          if (fileTypeInfo.type === 'image' && evidence.file_url) {
+                            return (
+                              <img
+                                src={evidence.file_url}
+                                alt={evidence.file_name || ''}
+                                className="w-10 h-10 object-cover rounded-md"
+                                onError={(e) => {
+                                  // 图片加载失败时，替换为文件类型图标
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  const parent = target.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = `
+                                      <div class="w-10 h-10 ${fileTypeInfo.bgColor} rounded-md flex items-center justify-center">
+                                        <span class="text-lg">${fileTypeInfo.icon}</span>
+                                      </div>
+                                    `;
+                                  }
+                                }}
+                              />
+                            );
+                          }
+                          
+                          // 其他文件类型显示对应的图标
+                          return (
+                            <div className={`w-10 h-10 ${fileTypeInfo.bgColor} rounded-md flex items-center justify-center`}>
+                              <span className="text-lg">{fileTypeInfo.icon}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="flex-1 min-w-0 ml-2 overflow-hidden">
                         <div className="group relative">
@@ -549,40 +640,40 @@ function EvidenceGalleryContent({
                       className="mr-2 h-4 w-4 rounded border border-primary focus:ring-2 focus:ring-primary"
                     />
                     <div className="flex-shrink-0">
-                      {(evidence.format?.toLowerCase() ?? "") === "mp3" ? (
-                        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-md flex items-center justify-center">
-                          <Video className="h-5 w-5 text-purple-600" />
-                        </div>
-                      ) : evidence.file_url ? (
-                        <img
-                          src={evidence.file_url}
-                          alt={evidence.file_name || ''}
-                          className="w-10 h-10 object-cover rounded-md"
-                          onError={(e) => {
-                            // 图片加载失败时，替换为占位符
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `
-                                <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                                  <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                  </svg>
-                                </div>
-                              `;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-md flex items-center justify-center">
-                          <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                          </svg>
-                        </div>
-                      )}
+                      {(() => {
+                        const fileTypeInfo = getFileTypeInfo(evidence.file_name || '');
+                        
+                        // 如果是图片且可以预览，显示图片
+                        if (fileTypeInfo.type === 'image' && evidence.file_url) {
+                          return (
+                            <img
+                              src={evidence.file_url}
+                              alt={evidence.file_name || ''}
+                              className="w-10 h-10 object-cover rounded-md"
+                              onError={(e) => {
+                                // 图片加载失败时，替换为文件类型图标
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `
+                                    <div class="w-10 h-10 ${fileTypeInfo.bgColor} rounded-md flex items-center justify-center">
+                                      <span class="text-lg">${fileTypeInfo.icon}</span>
+                                    </div>
+                                  `;
+                                }
+                              }}
+                            />
+                          );
+                        }
+                        
+                        // 其他文件类型显示对应的图标
+                        return (
+                          <div className={`w-10 h-10 ${fileTypeInfo.bgColor} rounded-md flex items-center justify-center`}>
+                            <span className="text-lg">{fileTypeInfo.icon}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex-1 min-w-0 ml-2 overflow-hidden">
                       <div className="group relative">
@@ -638,141 +729,302 @@ function EvidenceGalleryContent({
         <CardContent className="p-0 h-[calc(100vh-280px)]">
           {selectedEvidence ? (
             <div className="h-full">
-              {(selectedEvidence?.format?.toLowerCase() ?? "") === "mp3" ? (
-                <div className="h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/10 dark:to-purple-800/10">
-                  <Video className="h-20 w-20 text-purple-600 mb-4" />
-                  <h3 className="text-lg font-medium text-foreground mb-3">{selectedEvidence.file_name || ''}</h3>
-                  <audio controls className="w-full max-w-md">
-                    <source src={selectedEvidence.file_url} type="audio/mpeg" />
-                    您的浏览器不支持音频播放
-                  </audio>
-                  <div className="mt-3 text-sm text-muted-foreground">
-                    时长: {selectedEvidence.metadata?.duration || "未知"}
-                  </div>
-                </div>
-              ) : (
-                <div 
-                  className="relative h-full overflow-hidden"
-                >
-                  {selectedEvidence?.file_url ? (
-                    <img
-                      src={selectedEvidence.file_url}
-                      alt={selectedEvidence?.file_name || ''}
-                      className="w-full h-full object-contain bg-muted/30 cursor-pointer transition-all duration-300"
-                      onClick={() => setIsPreviewOpen(true)}
-                      onError={(e) => {
-                        // 图片加载失败时，替换为占位符
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `
-                            <div class="h-full flex items-center justify-center bg-muted/30">
-                              <div class="text-center">
-                                <svg class="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                </svg>
-                                <p class="text-muted-foreground">暂无预览</p>
-                              </div>
-                            </div>
-                          `;
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center bg-muted/30">
-                      <div className="text-center">
-                        <svg className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                        <p className="text-muted-foreground">暂无预览</p>
+              {(() => {
+                const fileTypeInfo = getFileTypeInfo(selectedEvidence.file_name || '');
+                
+                // 音频文件预览
+                if (fileTypeInfo.type === 'audio') {
+                  return (
+                    <div className="h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/10 dark:to-purple-800/10">
+                      <div className="text-6xl mb-4">{fileTypeInfo.icon}</div>
+                      <h3 className="text-lg font-medium text-foreground mb-3">{selectedEvidence.file_name || ''}</h3>
+                      <audio controls className="w-full max-w-md">
+                        <source src={selectedEvidence.file_url} type="audio/mpeg" />
+                        您的浏览器不支持音频播放
+                      </audio>
+                      <div className="mt-3 text-sm text-muted-foreground">
+                        时长: {selectedEvidence.metadata?.duration || "未知"}
                       </div>
                     </div>
-                  )}
-                  <div className="absolute top-3 right-3 flex space-x-2">
-                    <Button 
-                      size="sm" 
-                      variant="secondary" 
-                      className="bg-background/80 backdrop-blur-sm h-8"
-                      onClick={() => setIsPreviewOpen(true)}
-                    >
-                      <ZoomIn className="h-3.5 w-3.5 mr-1.5" />
-                      放大
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="secondary" 
-                      className="bg-background/80 backdrop-blur-sm h-8"
-                      onClick={handleDownload}
-                    >
-                      <Download className="h-3.5 w-3.5 mr-1.5" />
-                      下载
-                    </Button>
-                  </div>
-                  
-                  {/* 大图弹窗 Dialog */}
-                  <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-                    <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
-                      <DialogTitle className="sr-only">图片预览</DialogTitle>
-                      <div className="relative">
-                        <img
-                          src={selectedEvidence?.file_url}
-                          alt={selectedEvidence?.file_name || ''}
-                          className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
-                        />
-                        
-                        {/* 关闭按钮 */}
-                        <Button 
-                          onClick={() => setIsPreviewOpen(false)} 
-                          className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0"
-                          size="sm"
-                        >
-                          关闭
-                        </Button>
-                        
-                        {/* 上一张按钮 */}
-                        {filteredEvidenceList.length > 1 && (
-                          <Button 
-                            onClick={() => {
-                              const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
-                              const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
-                              setSelectedEvidence(filteredEvidenceList[prevIndex]);
-                            }}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
-                            size="sm"
-                          >
-                            ←
-                          </Button>
-                        )}
-                        
-                        {/* 下一张按钮 */}
-                        {filteredEvidenceList.length > 1 && (
-                          <Button 
-                            onClick={() => {
-                              const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
-                              const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
-                              setSelectedEvidence(filteredEvidenceList[nextIndex]);
-                            }}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
-                            size="sm"
-                          >
-                            →
-                          </Button>
-                        )}
-                        
-                        {/* 图片计数器 */}
-                        {filteredEvidenceList.length > 1 && (
-                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
-                            {filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id) + 1} / {filteredEvidenceList.length}
+                  );
+                }
+                
+                // 视频文件预览
+                if (fileTypeInfo.type === 'video') {
+                  return (
+                    <div className="h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/10 dark:to-orange-800/10">
+                      <div className="text-6xl mb-4">{fileTypeInfo.icon}</div>
+                      <h3 className="text-lg font-medium text-foreground mb-3">{selectedEvidence.file_name || ''}</h3>
+                      <video controls className="w-full max-w-md max-h-64">
+                        <source src={selectedEvidence.file_url} type="video/mp4" />
+                        您的浏览器不支持视频播放
+                      </video>
+                    </div>
+                  );
+                }
+                
+                // PDF文件预览
+                if (fileTypeInfo.type === 'pdf') {
+                  return (
+                    <div className="h-full flex flex-col">
+                      {/* PDF预览头部 */}
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/10 dark:to-red-800/10 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{fileTypeInfo.icon}</span>
+                          <div>
+                            <h3 className="text-sm font-medium text-foreground">{selectedEvidence.file_name || ''}</h3>
+                            <p className="text-xs text-muted-foreground">PDF文档预览</p>
                           </div>
-                        )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            className="bg-background/80 backdrop-blur-sm h-8"
+                            onClick={handleDownload}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载
+                          </Button>
+                        </div>
                       </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              )}
+                      
+                      {/* PDF内容区域 */}
+                      <div className="flex-1 relative">
+                        <iframe
+                          src={`${selectedEvidence.file_url}#toolbar=0&navpanes=0&scrollbar=1&statusbar=0&messages=0&scrollbar=1&view=FitH`}
+                          className="w-full h-full border-0"
+                          title={selectedEvidence.file_name || ''}
+                          style={{ minHeight: '400px' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // 图片文件预览
+                if (fileTypeInfo.type === 'image') {
+                  return (
+                    <div className="relative h-full overflow-hidden">
+                      {selectedEvidence?.file_url ? (
+                        <img
+                          src={selectedEvidence.file_url}
+                          alt={selectedEvidence?.file_name || ''}
+                          className="w-full h-full object-contain bg-muted/30 cursor-pointer transition-all duration-300"
+                          onClick={() => setIsPreviewOpen(true)}
+                          onError={(e) => {
+                            // 图片加载失败时，替换为占位符
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `
+                                <div class="h-full flex items-center justify-center bg-muted/30">
+                                  <div class="text-center">
+                                    <div class="text-6xl mb-3">${fileTypeInfo.icon}</div>
+                                    <p class="text-muted-foreground">图片加载失败</p>
+                                  </div>
+                                </div>
+                              `;
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center bg-muted/30">
+                          <div className="text-center">
+                            <div className="text-6xl mb-3">{fileTypeInfo.icon}</div>
+                            <p className="text-muted-foreground">暂无预览</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="absolute top-3 right-3 flex space-x-2">
+                        <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          className="bg-background/80 backdrop-blur-sm h-8"
+                          onClick={() => setIsPreviewOpen(true)}
+                        >
+                          <ZoomIn className="h-3.5 w-3.5 mr-1.5" />
+                          放大
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          className="bg-background/80 backdrop-blur-sm h-8"
+                          onClick={handleDownload}
+                        >
+                          <Download className="h-3.5 w-3.5 mr-1.5" />
+                          下载
+                        </Button>
+                      </div>
+                      
+                      {/* 大图弹窗 Dialog */}
+                      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                        <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
+                          <DialogTitle className="sr-only">图片预览</DialogTitle>
+                          <div className="relative">
+                            <img
+                              src={selectedEvidence?.file_url}
+                              alt={selectedEvidence?.file_name || ''}
+                              className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+                            />
+                            
+                            {/* 关闭按钮 */}
+                            <Button 
+                              onClick={() => setIsPreviewOpen(false)} 
+                              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0"
+                              size="sm"
+                            >
+                              关闭
+                            </Button>
+                            
+                            {/* 上一张按钮 */}
+                            {filteredEvidenceList.length > 1 && (
+                              <Button 
+                                onClick={() => {
+                                  const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                                  const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredEvidenceList.length - 1;
+                                  setSelectedEvidence(filteredEvidenceList[prevIndex]);
+                                }}
+                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                                size="sm"
+                              >
+                                ←
+                              </Button>
+                            )}
+                            
+                            {/* 下一张按钮 */}
+                            {filteredEvidenceList.length > 1 && (
+                              <Button 
+                                onClick={() => {
+                                  const currentIndex = filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id);
+                                  const nextIndex = currentIndex < filteredEvidenceList.length - 1 ? currentIndex + 1 : 0;
+                                  setSelectedEvidence(filteredEvidenceList[nextIndex]);
+                                }}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                                size="sm"
+                              >
+                                →
+                              </Button>
+                            )}
+                            
+                            {/* 图片计数器 */}
+                            {filteredEvidenceList.length > 1 && (
+                              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+                                {filteredEvidenceList.findIndex((e: any) => e.id === selectedEvidence?.id) + 1} / {filteredEvidenceList.length}
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                }
+                
+                // Word文档预览
+                if (fileTypeInfo.type === 'word') {
+                  return (
+                    <div className="h-full flex flex-col">
+                      {/* Word预览头部 */}
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/10 dark:to-blue-800/10 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{fileTypeInfo.icon}</span>
+                          <div>
+                            <h3 className="text-sm font-medium text-foreground">{selectedEvidence.file_name || ''}</h3>
+                            <p className="text-xs text-muted-foreground">Word文档预览</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            className="bg-background/80 backdrop-blur-sm h-8"
+                            onClick={handleDownload}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {/* Word内容预览区域 */}
+                      <div className="flex-1">
+                        <div className="h-full">
+                          <iframe
+                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(selectedEvidence.file_url)}`}
+                            className="w-full h-full border-0"
+                            title={selectedEvidence.file_name || ''}
+                            style={{ minHeight: '400px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // Excel表格预览
+                if (fileTypeInfo.type === 'excel') {
+                  return (
+                    <div className="h-full flex flex-col">
+                      {/* Excel预览头部 */}
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/10 dark:to-green-800/10 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{fileTypeInfo.icon}</span>
+                          <div>
+                            <h3 className="text-sm font-medium text-foreground">{selectedEvidence.file_name || ''}</h3>
+                            <p className="text-xs text-muted-foreground">Excel表格预览</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            className="bg-background/80 backdrop-blur-sm h-8"
+                            onClick={handleDownload}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {/* Excel内容预览区域 */}
+                      <div className="flex-1">
+                        <div className="h-full">
+                          <iframe
+                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(selectedEvidence.file_url)}`}
+                            className="w-full h-full border-0"
+                            title={selectedEvidence.file_name || ''}
+                            style={{ minHeight: '400px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // 其他文件类型（文本等）
+                return (
+                  <div className={`h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br ${fileTypeInfo.bgColor}`}>
+                    <div className="text-6xl mb-4">{fileTypeInfo.icon}</div>
+                    <h3 className="text-lg font-medium text-foreground mb-3">{selectedEvidence.file_name || ''}</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {fileTypeInfo.type === 'text' && '文本文件'}
+                      {fileTypeInfo.type === 'unknown' && '未知文件类型'}
+                    </p>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={handleDownload}
+                        className="flex items-center gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        下载文件
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -1713,17 +1965,26 @@ export function EvidenceGallery({ caseId, onBack, onGoToCaseDetail }: { caseId: 
               <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 mb-2">点击上传或拖拽文件到此处</p>
-                <p className="text-sm text-gray-500">支持 JPG、PNG、BMP、WEBP 等图片格式，最大 50MB</p>
+                <p className="text-sm text-gray-500">支持图片、PDF、Excel、Word等格式，最大 50MB</p>
                 <Input 
                   type="file" 
                   className="hidden" 
                   id="fileUpload" 
                   multiple 
-                  accept="image/*"
+                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
                   onChange={e => {
                     if (e.target.files) {
                       const files = Array.from(e.target.files)
-                      const supportedFormats = ['jpg', 'jpeg', 'png', 'bmp', 'webp']
+                      const supportedFormats = [
+                        // 图片格式
+                        'jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'svg',
+                        // 文档格式
+                        'pdf', 'doc', 'docx', 'txt',
+                        // 表格格式
+                        'xls', 'xlsx', 'csv',
+                        // 其他格式
+                        'mp3', 'mp4', 'wav'
+                      ]
                       
                       // 验证文件类型
                       const validFiles = files.filter(file => {
