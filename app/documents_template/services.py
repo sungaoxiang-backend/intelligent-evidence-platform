@@ -226,10 +226,8 @@ class DocumentTemplateService:
                     field_id = field.get("field_id", "")
                     field_value = form_data.get(field_id, "")
                     
-                    # 检查必填字段
-                    if field.get("required", False) and not field_value:
-                        errors.append(f"字段 '{field.get('label', field_id)}' 是必填项")
-                        continue
+                    # 不检查必填字段，允许空值
+                    # 移除必填验证，允许空字段生成文档
                     
                     # 字段验证
                     validation = field.get("validation", {})
@@ -267,15 +265,7 @@ class DocumentTemplateService:
         Returns:
             生成结果，包含文件路径
         """
-        # 验证表单数据
-        validation_result = self.validate_form_data(template_id, form_data)
-        if not validation_result["valid"]:
-            return {
-                "success": False,
-                "message": "表单数据验证失败",
-                "errors": validation_result["errors"]
-            }
-        
+        # 不进行必填验证，允许空字段生成文档
         template = self.get_template_detail(template_id)
         if not template:
             return {

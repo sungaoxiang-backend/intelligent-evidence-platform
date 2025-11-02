@@ -44,7 +44,7 @@ templates:
               - field_id: "plaintiff_name"
                 label: "姓名"
                 type: "text"
-                required: true
+                required: false
                 placeholder: "请输入姓名"
               
               - field_id: "plaintiff_gender"
@@ -583,7 +583,7 @@ templates:
               - field_id: "plaintiff_name"
                 label: "姓名"
                 type: "text"
-                required: true
+                required: false
                 placeholder: "请输入姓名"
               
               - field_id: "plaintiff_gender"
@@ -1122,7 +1122,7 @@ templates:
               - field_id: "applicant_name"
                 label: "姓名"
                 type: "text"
-                required: true
+                required: false
                 placeholder: "请输入姓名"
               
               - field_id: "applicant_gender"

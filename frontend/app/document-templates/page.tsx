@@ -358,7 +358,6 @@ export default function DocumentTemplatesPage() {
             value={value}
             onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
             rows={field.rows || 3}
-            required={field.required}
           />
         )
       
@@ -386,7 +385,6 @@ export default function DocumentTemplatesPage() {
           <Select
             value={value}
             onValueChange={(val) => handleFieldChange(field.field_id, val)}
-            required={field.required}
           >
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder={field.placeholder || "请选择"} />
@@ -466,7 +464,6 @@ export default function DocumentTemplatesPage() {
             value={value}
             onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
             placeholder={field.placeholder}
-            required={field.required}
           />
         )
       
@@ -478,7 +475,6 @@ export default function DocumentTemplatesPage() {
             value={value}
             onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
             placeholder={field.placeholder}
-            required={field.required}
           />
         )
       
@@ -490,7 +486,6 @@ export default function DocumentTemplatesPage() {
             value={value}
             onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
             placeholder={field.placeholder}
-            required={field.required}
           />
         )
     }
@@ -636,7 +631,6 @@ export default function DocumentTemplatesPage() {
                                   {/* 字段标签 */}
                                   <td className="align-middle py-3 px-3 text-sm font-normal text-gray-700 text-left border-r border-gray-200 whitespace-nowrap">
                                     {field.label}:
-                                    {field.required && <span className="text-red-500 ml-1">*</span>}
                                   </td>
                                   {/* 输入框（右对齐） */}
                                   <td className="align-middle py-3 px-4">
