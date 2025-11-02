@@ -50,17 +50,41 @@ class WeComSyncService:
         except Exception as e:
             logger.warning(f"模型导入警告: {e}")
     
-    async def _get_staff_userids(self) -> List[str]:
-        """获取所有员工的userid列表"""
+    async def _get_staff_userids(self, filter_userid: Optional[str] = None) -> List[str]:
+        """
+        获取员工的userid列表
+        
+        Args:
+            filter_userid: 如果指定，则只返回该userid（如果存在且活跃）
+            
+        Returns:
+            员工userid列表
+        """
         try:
             # 确保模型被正确导入
             self._ensure_models_imported()
             
             async with SessionLocal() as session:
-                stmt = select(WeComStaff.user_id).where(WeComStaff.status == WeComStaffStatus.ACTIVE)
-                result = await session.execute(stmt)
-                userids = [row[0] for row in result.fetchall()]
-                logger.info(f"[GET_STAFF_USERIDS] 获取到 {len(userids)} 个员工userid")
+                if filter_userid:
+                    # 如果指定了userid，只查询该userid
+                    stmt = select(WeComStaff.user_id).where(
+                        WeComStaff.user_id == filter_userid,
+                        WeComStaff.status == WeComStaffStatus.ACTIVE
+                    )
+                    result = await session.execute(stmt)
+                    userids = [row[0] for row in result.fetchall()]
+                    
+                    if userids:
+                        logger.info(f"[GET_STAFF_USERIDS] 指定同步员工userid: {filter_userid}")
+                    else:
+                        logger.warning(f"[GET_STAFF_USERIDS] 指定的员工userid不存在或未激活: {filter_userid}")
+                else:
+                    # 获取所有活跃员工
+                    stmt = select(WeComStaff.user_id).where(WeComStaff.status == WeComStaffStatus.ACTIVE)
+                    result = await session.execute(stmt)
+                    userids = [row[0] for row in result.fetchall()]
+                    logger.info(f"[GET_STAFF_USERIDS] 获取到 {len(userids)} 个员工userid")
+                
                 return userids
         except Exception as e:
             logger.error(f"[GET_STAFF_USERIDS] 获取员工userid列表失败: {e}")
@@ -133,17 +157,26 @@ class WeComSyncService:
         logger.info(f"[MERGE_CONTACT_DATA] 合并完成，共 {len(enriched_contacts)} 条联系人数据")
         return enriched_contacts
     
-    async def sync_all_contacts(self, force_full_sync: bool = False) -> Dict[str, Any]:
+    async def sync_all_contacts(self, force_full_sync: bool = False, staff_userid: Optional[str] = None) -> Dict[str, Any]:
         """
-        同步所有已服务的外部联系人
+        同步已服务的外部联系人
         
         Args:
             force_full_sync: 是否强制全量同步
+            staff_userid: 如果指定，则只同步该员工的外部联系人；如果为None，则从配置中读取
             
         Returns:
             同步结果统计
         """
-        logger.info(f"[SYNC_ALL] 开始同步所有外部联系人 - 强制全量同步: {force_full_sync}")
+        # 如果未指定staff_userid，尝试从配置中读取
+        if staff_userid is None:
+            from app.core.config import settings
+            staff_userid = getattr(settings, 'WECOM_SYNC_STAFF_USERID', None)
+        
+        if staff_userid:
+            logger.info(f"[SYNC_ALL] 开始同步指定员工的外部联系人 - StaffUserID: {staff_userid}, 强制全量同步: {force_full_sync}")
+        else:
+            logger.info(f"[SYNC_ALL] 开始同步所有外部联系人 - 强制全量同步: {force_full_sync}")
         
         start_time = datetime.now()
         stats = {
@@ -160,11 +193,22 @@ class WeComSyncService:
         try:
             # 1. 获取所有外部联系人数据
             all_contacts = await self._fetch_all_contacts()
+            
+            # 如果指定了员工userid，过滤只属于该员工的外部联系人
+            if staff_userid:
+                filtered_contacts = []
+                for contact in all_contacts:
+                    # 检查follow_userid是否匹配
+                    if contact.get("follow_userid") == staff_userid:
+                        filtered_contacts.append(contact)
+                all_contacts = filtered_contacts
+                logger.info(f"[SYNC_ALL] 过滤后，属于员工 {staff_userid} 的外部联系人: {len(all_contacts)} 个")
+            
             stats["total_fetched"] = len(all_contacts)
             logger.info(f"[SYNC_ALL] 从企微API获取到 {len(all_contacts)} 个外部联系人")
             
             # 2. 获取员工列表用于批量获取客户详情
-            staff_userids = await self._get_staff_userids()
+            staff_userids = await self._get_staff_userids(filter_userid=staff_userid)
             logger.info(f"[SYNC_ALL] 获取到 {len(staff_userids)} 个员工，准备批量获取客户详情")
             
             # 3. 批量获取客户详情

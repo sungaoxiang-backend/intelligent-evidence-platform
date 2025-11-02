@@ -7,6 +7,12 @@
     python scripts/sync_wecom_contacts.py --mode incremental    # 增量同步
     python scripts/sync_wecom_contacts.py --mode status         # 查看同步状态
     python scripts/sync_wecom_contacts.py --mode test           # 测试模式（只获取数据，不写入数据库）
+    python scripts/sync_wecom_contacts.py --mode full --userid zhangsan  # 只同步指定员工的外部联系人
+    python scripts/sync_wecom_contacts.py --mode incremental --userid zhangsan  # 增量同步指定员工
+
+配置说明:
+    - 可以通过环境变量 WECOM_SYNC_STAFF_USERID 设置默认要同步的员工userid
+    - 命令行参数 --userid 的优先级高于环境变量配置
 """
 
 import asyncio
@@ -16,6 +22,7 @@ import sys
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
@@ -43,15 +50,18 @@ class WeComSyncScript:
     def __init__(self):
         self.sync_service = sync_service
     
-    async def run_full_sync(self):
+    async def run_full_sync(self, staff_userid: Optional[str] = None):
         """执行全量同步"""
         logger.info("=" * 60)
-        logger.info("开始执行企微外部联系人全量同步")
+        if staff_userid:
+            logger.info(f"开始执行企微外部联系人全量同步 - 员工: {staff_userid}")
+        else:
+            logger.info("开始执行企微外部联系人全量同步")
         logger.info("=" * 60)
         
         try:
             # 执行全量同步
-            result = await self.sync_service.sync_all_contacts(force_full_sync=True)
+            result = await self.sync_service.sync_all_contacts(force_full_sync=True, staff_userid=staff_userid)
             
             # 输出同步结果
             self._print_sync_result(result)
@@ -67,15 +77,18 @@ class WeComSyncScript:
             logger.error(f"全量同步失败: {e}")
             return 1
     
-    async def run_incremental_sync(self):
+    async def run_incremental_sync(self, staff_userid: Optional[str] = None):
         """执行增量同步"""
         logger.info("=" * 60)
-        logger.info("开始执行企微外部联系人增量同步")
+        if staff_userid:
+            logger.info(f"开始执行企微外部联系人增量同步 - 员工: {staff_userid}")
+        else:
+            logger.info("开始执行企微外部联系人增量同步")
         logger.info("=" * 60)
         
         try:
             # 执行增量同步
-            result = await self.sync_service.sync_all_contacts(force_full_sync=False)
+            result = await self.sync_service.sync_all_contacts(force_full_sync=False, staff_userid=staff_userid)
             
             # 输出同步结果
             self._print_sync_result(result)
@@ -196,6 +209,12 @@ async def main():
         help="同步模式: full(全量), incremental(增量), status(状态), test(测试)"
     )
     parser.add_argument(
+        "--userid",
+        type=str,
+        default=None,
+        help="指定同步的员工userid，如果设置则只同步该员工的外部联系人（优先级高于环境变量配置）"
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="详细输出"
@@ -221,11 +240,14 @@ async def main():
     # 创建脚本实例
     script = WeComSyncScript()
     
+    # 获取指定的员工userid（命令行参数优先级高于环境变量）
+    staff_userid = args.userid
+    
     # 根据模式执行相应操作
     if args.mode == "full":
-        return await script.run_full_sync()
+        return await script.run_full_sync(staff_userid=staff_userid)
     elif args.mode == "incremental":
-        return await script.run_incremental_sync()
+        return await script.run_incremental_sync(staff_userid=staff_userid)
     elif args.mode == "status":
         return await script.show_sync_status()
     elif args.mode == "test":

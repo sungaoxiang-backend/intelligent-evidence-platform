@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     WECOM_TOKEN: str
     WECOM_ENCODING_AES_KEY: str
     WECOM_CALLBACK_URL: str
+    WECOM_SYNC_STAFF_USERID: Optional[str] = None  # 指定同步的员工userid，如果设置则只同步该员工的外部联系人
 
     # Celery配置
     CELERY_BROKER_URL: str = "redis://localhost:6380/0"
