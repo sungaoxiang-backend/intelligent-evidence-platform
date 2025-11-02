@@ -1,0 +1,1651 @@
+# 文书模板数据结构定义
+# 用于支持动态表单渲染和文书生成
+
+# 模板示例：买卖合同纠纷起诉状
+templates:
+  "买卖合同纠纷-起诉状模板":
+    # 基本信息
+    template_id: "sales_contract_complaint"
+    name: "民事起诉状 (买卖合同纠纷)"
+    type: "complaint"
+    category: "买卖合同纠纷"
+    description: "适用于买卖合同纠纷的起诉状模板"
+    file_path: "app/documents_template/买卖合同纠纷-起诉状模板.docx"
+    
+    # 模板说明（页面顶部显示）
+    instructions:
+      title: "说明"
+      content: |
+        为了方便您更好地参加诉讼，保护您的合法权利，请填写本表。
+      items:
+        - "起诉时请一并提交身份证明文件（身份证复印件、营业执照复印件等）"
+        - "请如实填写本表所列内容，对诉讼及法院认定事实至关重要"
+        - "若某一项内容不适用于本案，可以不填写或填\"无\"；选项项请打\"√\"；如有其他重要内容，可以在末尾或其他附页中补充"
+    
+    # 特别提示（页面顶部显示）
+    special_notice:
+      title: "★特别提示★"
+      content: |
+        根据《中华人民共和国民事诉讼法》第十三条第一款的规定，民事诉讼应当遵循诚实信用原则。
+        诉讼参与人在诉讼中提供虚假陈述、恶意诉讼等违反诚实信用原则的行为，将承担相应的法律责任。
+    
+    # 模板块列表（一级标题）
+    blocks:
+      # 第一个块：当事人信息
+      - block_id: "party_info"
+        title: "当事人信息"  # 一级标题，居中显示
+        description: ""  # 可选的块说明
+        rows:  # 模板行列表
+          # 第一行：原告（自然人）
+          - row_id: "plaintiff_natural_person"
+            subtitle: "原告（自然人）"  # 二级标题，左对齐
+            subtitle_width: 150  # 二级标题宽度（px）
+            fields:  # 字段列表
+              - field_id: "plaintiff_name"
+                label: "姓名"
+                type: "text"
+                required: true
+                placeholder: "请输入姓名"
+              
+              - field_id: "plaintiff_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第二行：原告（法人、非法人组织）
+          - row_id: "plaintiff_legal_entity"
+            subtitle: "原告（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "plaintiff_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "plaintiff_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "plaintiff_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "plaintiff_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "plaintiff_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第三行：委托诉讼代理人
+          - row_id: "plaintiff_agent"
+            subtitle: "委托诉讼代理人"
+            subtitle_width: 150
+            fields:
+              - field_id: "plaintiff_agent_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "plaintiff_agent_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_agent_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_agent_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_agent_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_agent_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_agent_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_agent_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第四行：被告（自然人）
+          - row_id: "defendant_natural_person"
+            subtitle: "被告（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "defendant_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "defendant_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "defendant_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "defendant_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "defendant_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "defendant_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "defendant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第五行：被告（法人、非法人组织）
+          - row_id: "defendant_legal_entity"
+            subtitle: "被告（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "defendant_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "defendant_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "defendant_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "defendant_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "defendant_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "defendant_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "defendant_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "defendant_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "defendant_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "defendant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第六行：第三人（自然人）
+          - row_id: "third_party_natural_person"
+            subtitle: "第三人（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "third_party_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "third_party_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第七行：第三人（法人、非法人组织）
+          - row_id: "third_party_legal_entity"
+            subtitle: "第三人（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "third_party_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "third_party_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "third_party_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "third_party_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "third_party_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+      
+      # 第二个块：诉讼请求和依据
+      - block_id: "litigation_claims"
+        title: "诉讼请求和依据"
+        description: ""
+        rows:
+          - row_id: "claims"
+            subtitle: "诉讼请求"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_amount"
+                label: "货款金额"
+                type: "number"
+                required: false
+                placeholder: "请输入货款金额（元）"
+              
+              - field_id: "creditor_name"
+                label: "原告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入原告姓名"
+              
+              - field_id: "debtor_name"
+                label: "被告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被告姓名"
+          
+          - row_id: "facts_reasons"
+            subtitle: "事实和理由"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_amount"
+                label: "货款金额"
+                type: "number"
+                required: false
+                placeholder: "请输入货款金额（元）"
+              
+              - field_id: "creditor_name"
+                label: "原告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入原告姓名"
+              
+              - field_id: "debtor_name"
+                label: "被告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被告姓名"
+  
+  "民间借贷纠纷-起诉状模板":
+    # 基本信息
+    template_id: "private_lending_complaint"
+    name: "民事起诉状 (民间借贷纠纷)"
+    type: "complaint"
+    category: "民间借贷纠纷"
+    description: "适用于民间借贷纠纷的起诉状模板"
+    file_path: "app/documents_template/民间借贷纠纷-起诉状模板.docx"
+    
+    # 模板说明（页面顶部显示）
+    instructions:
+      title: "说明"
+      content: |
+        为了方便您更好地参加诉讼，保护您的合法权利，请填写本表。
+      items:
+        - "起诉时请一并提交身份证明文件（身份证复印件、营业执照复印件等）"
+        - "请如实填写本表所列内容，对诉讼及法院认定事实至关重要"
+        - "若某一项内容不适用于本案，可以不填写或填\"无\"；选项项请打\"√\"；如有其他重要内容，可以在末尾或其他附页中补充"
+    
+    # 特别提示（页面顶部显示）
+    special_notice:
+      title: "★特别提示★"
+      content: |
+        根据《中华人民共和国民事诉讼法》第十三条第一款的规定，民事诉讼应当遵循诚实信用原则。
+        诉讼参与人在诉讼中提供虚假陈述、恶意诉讼等违反诚实信用原则的行为，将承担相应的法律责任。
+    
+    # 模板块列表（一级标题）
+    blocks:
+      # 第一个块：当事人信息
+      - block_id: "party_info"
+        title: "当事人信息"
+        description: ""
+        rows:
+          # 第一行：原告（自然人）
+          - row_id: "plaintiff_natural_person"
+            subtitle: "原告（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "plaintiff_name"
+                label: "姓名"
+                type: "text"
+                required: true
+                placeholder: "请输入姓名"
+              
+              - field_id: "plaintiff_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第二行：原告（法人、非法人组织）
+          - row_id: "plaintiff_legal_entity"
+            subtitle: "原告（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "plaintiff_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "plaintiff_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "plaintiff_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "plaintiff_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "plaintiff_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第三行：委托诉讼代理人
+          - row_id: "plaintiff_agent"
+            subtitle: "委托诉讼代理人"
+            subtitle_width: 150
+            fields:
+              - field_id: "plaintiff_agent_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "plaintiff_agent_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "plaintiff_agent_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "plaintiff_agent_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "plaintiff_agent_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "plaintiff_agent_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "plaintiff_agent_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "plaintiff_agent_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第四行：被告（自然人）
+          - row_id: "defendant_natural_person"
+            subtitle: "被告（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "defendant_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "defendant_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "defendant_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "defendant_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "defendant_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "defendant_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "defendant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第五行：被告（法人、非法人组织）
+          - row_id: "defendant_legal_entity"
+            subtitle: "被告（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "defendant_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "defendant_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "defendant_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "defendant_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "defendant_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "defendant_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "defendant_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "defendant_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "defendant_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "defendant_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "defendant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第六行：第三人（自然人）
+          - row_id: "third_party_natural_person"
+            subtitle: "第三人（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "third_party_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "third_party_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第七行：第三人（法人、非法人组织）
+          - row_id: "third_party_legal_entity"
+            subtitle: "第三人（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "third_party_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "third_party_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "third_party_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "third_party_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "third_party_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+      
+      # 第二个块：诉讼请求和依据
+      - block_id: "litigation_claims"
+        title: "诉讼请求和依据"
+        description: ""
+        rows:
+          - row_id: "claims"
+            subtitle: "诉讼请求"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_amount"
+                label: "借款金额"
+                type: "number"
+                required: false
+                placeholder: "请输入借款金额（元）"
+              
+              - field_id: "creditor_name"
+                label: "原告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入原告姓名"
+              
+              - field_id: "debtor_name"
+                label: "被告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被告姓名"
+          
+          - row_id: "facts_reasons"
+            subtitle: "事实和理由"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_amount"
+                label: "借款金额"
+                type: "number"
+                required: false
+                placeholder: "请输入借款金额（元）"
+              
+              - field_id: "creditor_name"
+                label: "原告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入原告姓名"
+              
+              - field_id: "debtor_name"
+                label: "被告姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被告姓名"
+  
+  "撤诉申请书模板":
+    # 基本信息
+    template_id: "withdrawal_application"
+    name: "撤诉申请书"
+    type: "application"
+    category: "撤诉申请"
+    description: "适用于撤诉申请的申请书模板"
+    file_path: "app/documents_template/撤诉申请书模板.docx"
+    
+    # 模板说明（页面顶部显示）
+    instructions:
+      title: "说明"
+      content: |
+        为了方便您更好地参加诉讼，保护您的合法权利，请填写本表。
+      items:
+        - "申请撤诉时请一并提交身份证明文件（身份证复印件、营业执照复印件等）"
+        - "请如实填写本表所列内容，对法院审查撤诉申请至关重要"
+        - "若某一项内容不适用于本案，可以不填写或填\"无\"；选项项请打\"√\"；如有其他重要内容，可以在末尾或其他附页中补充"
+    
+    # 特别提示（页面顶部显示）
+    special_notice:
+      title: "★特别提示★"
+      content: |
+        根据《中华人民共和国民事诉讼法》的相关规定，当事人申请撤诉应当符合法律规定。
+        撤诉申请一旦被法院准许，案件即告终结，当事人不得就同一诉讼请求再次起诉（法律另有规定的除外）。
+    
+    # 模板块列表（一级标题）
+    blocks:
+      # 第一个块：当事人信息（使用申请人、被申请人）
+      - block_id: "party_info"
+        title: "当事人信息"
+        description: ""
+        rows:
+          # 第一行：申请人（自然人）
+          - row_id: "applicant_natural_person"
+            subtitle: "申请人（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "applicant_name"
+                label: "姓名"
+                type: "text"
+                required: true
+                placeholder: "请输入姓名"
+              
+              - field_id: "applicant_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "applicant_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "applicant_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "applicant_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "applicant_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "applicant_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "applicant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第二行：申请人（法人、非法人组织）
+          - row_id: "applicant_legal_entity"
+            subtitle: "申请人（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "applicant_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "applicant_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "applicant_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "applicant_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "applicant_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "applicant_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "applicant_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "applicant_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "applicant_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "applicant_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "applicant_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "applicant_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第三行：委托诉讼代理人
+          - row_id: "applicant_agent"
+            subtitle: "委托诉讼代理人"
+            subtitle_width: 150
+            fields:
+              - field_id: "applicant_agent_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "applicant_agent_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "applicant_agent_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "applicant_agent_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "applicant_agent_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "applicant_agent_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "applicant_agent_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "applicant_agent_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第四行：被申请人（自然人）
+          - row_id: "respondent_natural_person"
+            subtitle: "被申请人（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "respondent_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "respondent_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "respondent_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "respondent_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "respondent_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "respondent_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "respondent_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "respondent_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第五行：被申请人（法人、非法人组织）
+          - row_id: "respondent_legal_entity"
+            subtitle: "被申请人（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "respondent_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "respondent_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "respondent_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "respondent_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "respondent_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "respondent_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "respondent_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "respondent_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "respondent_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "respondent_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "respondent_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "respondent_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第六行：第三人（自然人）
+          - row_id: "third_party_natural_person"
+            subtitle: "第三人（自然人）"
+            subtitle_width: 150
+            fields:
+              - field_id: "third_party_name"
+                label: "姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入姓名"
+              
+              - field_id: "third_party_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+          
+          # 第七行：第三人（法人、非法人组织）
+          - row_id: "third_party_legal_entity"
+            subtitle: "第三人（法人、非法人组织）"
+            subtitle_width: 180
+            fields:
+              - field_id: "third_party_company_name"
+                label: "名称"
+                type: "text"
+                required: false
+                placeholder: "请输入名称"
+              
+              - field_id: "third_party_company_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_unified_social_credit_code"
+                label: "统一社会信用代码"
+                type: "text"
+                required: false
+                placeholder: "请输入统一社会信用代码"
+              
+              - field_id: "third_party_legal_representative"
+                label: "代表人/负责人名称"
+                type: "text"
+                required: false
+                placeholder: "请输入代表人/负责人名称"
+              
+              - field_id: "third_party_position"
+                label: "代表人/负责人职务"
+                type: "text"
+                required: false
+                placeholder: "请输入职务"
+              
+              - field_id: "third_party_legal_rep_gender"
+                label: "性别"
+                type: "select"
+                required: false
+                options:
+                  - { value: "男", label: "男" }
+                  - { value: "女", label: "女" }
+              
+              - field_id: "third_party_legal_rep_birthday"
+                label: "出生日期"
+                type: "date"
+                required: false
+                format: "YYYY-MM-DD"
+              
+              - field_id: "third_party_legal_rep_nation"
+                label: "民族"
+                type: "text"
+                required: false
+                placeholder: "请输入民族"
+              
+              - field_id: "third_party_legal_rep_address"
+                label: "住所地"
+                type: "text"
+                required: false
+                placeholder: "请输入住所地"
+              
+              - field_id: "third_party_legal_rep_current_residence"
+                label: "经常居住地"
+                type: "text"
+                required: false
+                placeholder: "请输入经常居住地"
+              
+              - field_id: "third_party_legal_rep_id_card"
+                label: "身份证号"
+                type: "text"
+                required: false
+                placeholder: "请输入身份证号"
+              
+              - field_id: "third_party_contact_phone"
+                label: "联系电话"
+                type: "text"
+                required: false
+                placeholder: "请输入联系电话"
+      
+      # 第二个块：诉讼请求和依据
+      - block_id: "litigation_claims"
+        title: "诉讼请求和依据"
+        description: ""
+        rows:
+          - row_id: "claims"
+            subtitle: "诉讼请求"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_cause_type"
+                label: "纠纷类型"
+                type: "text"
+                required: false
+                placeholder: "请输入纠纷类型（如：买卖合同纠纷）"
+              
+              - field_id: "case_number"
+                label: "案号"
+                type: "text"
+                required: false
+                placeholder: "请输入案号"
+              
+              - field_id: "applicant_name"
+                label: "申请人姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入申请人姓名"
+              
+              - field_id: "respondent_name"
+                label: "被申请人姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被申请人姓名"
+          
+          - row_id: "facts_reasons"
+            subtitle: "事实和理由"
+            subtitle_width: 150
+            fields:
+              - field_id: "case_cause_type"
+                label: "纠纷类型"
+                type: "text"
+                required: false
+                placeholder: "请输入纠纷类型（如：买卖合同纠纷）"
+              
+              - field_id: "case_number"
+                label: "案号"
+                type: "text"
+                required: false
+                placeholder: "请输入案号"
+              
+              - field_id: "applicant_name"
+                label: "申请人姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入申请人姓名"
+              
+              - field_id: "respondent_name"
+                label: "被申请人姓名"
+                type: "text"
+                required: false
+                placeholder: "请输入被申请人姓名"
+              
+              - field_id: "reason"
+                label: "撤诉原因"
+                type: "textarea"
+                required: false
+                placeholder: "请输入撤诉原因"
+                rows: 3
+
+# 字段类型说明：
+# - text: 单行文本输入
+# - textarea: 多行文本输入
+# - select: 下拉选择（单选）
+# - radio: 单选按钮组
+# - checkbox: 复选框组（多选）
+# - date: 日期选择器
+# - datetime: 日期时间选择器
+# - number: 数字输入
+# - file: 文件上传
