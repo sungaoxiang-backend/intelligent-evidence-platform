@@ -26,7 +26,7 @@ class SlotExtraction(BaseModel):
     slot_desc: str
     slot_value_type: str
     slot_required: Any
-    slot_value: Any
+    slot_value: Optional[Any]  # 无法提取时输出None
     confidence: float
     reasoning: str  # 提取理由，特别说明来自哪些图片
     
@@ -85,7 +85,7 @@ class EvidenceFeaturesExtractor:
         2. 根据slot_desc中的描述，在图片中定位对应的信息区域
         3. 确保提取的内容符合slot_desc的要求
         4. slot_required原样输出即可，不需要处理
-        5. 对于无法提取的字段，设置为"未知"并说明原因
+        5. 对于无法提取的字段，slot_value必须设置为None，并在reasoning中说明原因（不能使用"未知"、"未提及"等替代字符串）
         </Extraction Strategy>
         
         <Data Type Compliance>
@@ -107,17 +107,18 @@ class EvidenceFeaturesExtractor:
         <Extraction Process>
         1. 根据图片的evidence_type找到对应的提取配置
         2. 按照配置中的extraction_slots进行精确提取
-        3. 确保返回的数据类型与slot_value_type一致
-        4. 如果某个词槽在图片中无法识别，设置为"未知"并说明原因
+        3. 确保返回的数据类型与slot_value_type一致（如果能提取到值）
+        4. 如果某个词槽在图片中无法识别，slot_value必须设置为None，并在reasoning中说明原因（不能使用"未知"、"未提及"等替代字符串）
         </Extraction Process>
         
         <Output Format>
         1. 严格按照配置中指定证据类型的词槽进行提取
         2. 每个词槽都要包含：slot_name, slot_value, confidence, reasoning, slot_desc, slot_value_type, slot_required
-        3. slot_value必须符合指定的数据类型
-        4. reasoning要说明提取的依据和来源
+        3. slot_value必须符合指定的数据类型（如果能提取到值），如果无法提取则必须输出None
+        4. reasoning要说明提取的依据和来源，如果无法提取则说明原因
         5. 永远不要出现extraction_slots之外的词槽
         6. 在提取到number值时，确保不要出现尾随零问题。如1000.00，则输出时需要是1000，而不是1000.00；如1000.50，则输出时需要是1000.5，而不是1000.50；如1000.35，则输出时需要是1000.35，而不是1000.350
+        7. 如果无法提取到值，slot_value必须输出None，不能使用"未知"、"未提及"、"无具体日期"、"无利息约定"等替代字符串
         </Output Format>
         """
     

@@ -303,7 +303,7 @@ class XunfeiOcrClient:
                     
                     # 计算平均置信度
                     if confidence_scores:
-                        confidence = sum(confidence_scores) / len(confidence_scores)
+                        confidence = round(sum(confidence_scores) / len(confidence_scores), 2)
                     
                     # 清理和标准化slot_value
                     cleaned_value = self._clean_slot_value(slot_value, business_field)

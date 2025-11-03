@@ -405,3 +405,167 @@ async def run_association_analysis_async(case_id: int, evidence_ids: List[int], 
         except Exception as e:
             logger.error(f"关联证据分析异步执行失败: {str(e)}")
             raise e
+
+
+@celery_app.task(bind=True)
+def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int]) -> Dict[str, Any]:
+    """
+    证据卡片铸造任务 - 从证据特征中铸造证据卡片
+    
+    Args:
+        case_id: 案件ID
+        evidence_ids: 证据ID列表
+        
+    Returns:
+        dict: 铸造结果，包含创建的卡片信息
+    """
+    logger.info(f"开始证据卡片铸造任务: case_id={case_id}, evidence_ids={evidence_ids}")
+    
+    # 创建进度更新函数
+    def update_progress(status: str, message: str, progress: Optional[int] = None):
+        """更新任务进度"""
+        meta = {
+            "status": status,
+            "message": message
+        }
+        if progress is not None:
+            meta["progress"] = str(progress)
+        
+        self.update_state(
+            state="PROGRESS",
+            meta=meta
+        )
+        logger.info(f"🚀 卡片铸造任务进度更新: {status} - {message} ({progress}%)")
+        print(f"🚀 卡片铸造任务进度更新: {status} - {message} ({progress}%)")  # 确保在控制台看到
+    
+    try:
+        # 更新任务状态为开始
+        update_progress("started", "开始证据卡片铸造任务", 0)
+        
+        # 运行异步任务
+        result = asyncio.run(_cast_evidence_cards_async(
+            case_id=case_id,
+            evidence_ids=evidence_ids,
+            update_progress=update_progress
+        ))
+        
+        # 更新任务状态为完成
+        update_progress("completed", f"成功铸造 {len(result.get('cards', []))} 个证据卡片", 100)
+        
+        logger.info(f"证据卡片铸造任务完成: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"证据卡片铸造任务失败: {str(e)}")
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"错误详情: {error_traceback}")
+        
+        # 更新任务状态为失败，确保异常信息可以被正确序列化
+        self.update_state(
+            state="FAILURE",
+            meta={
+                "status": "failed",
+                "message": f"证据卡片铸造失败: {str(e)}",
+                "error": str(e),
+                "traceback": error_traceback
+            }
+        )
+        
+        # 重新抛出异常，但确保异常类型可以被序列化
+        raise Exception(f"证据卡片铸造失败: {str(e)}")
+
+
+async def _cast_evidence_cards_async(
+    case_id: int,
+    evidence_ids: List[int],
+    update_progress: Callable
+) -> Dict[str, Any]:
+    """
+    异步执行证据卡片铸造
+    
+    Args:
+        case_id: 案件ID
+        evidence_ids: 证据ID列表
+        update_progress: 进度更新函数
+        
+    Returns:
+        dict: 铸造结果
+    """
+    async with async_session_factory() as db:
+        try:
+            from app.evidences.services import evidence_card_casting
+            from sqlalchemy import select
+            
+            # 验证案件是否存在
+            update_progress("validating", "验证案件信息", 5)
+            case_query = await db.execute(
+                select(Case.id).where(Case.id == case_id)
+            )
+            case_result = case_query.first()
+            if not case_result:
+                raise ValueError(f"案件不存在: ID={case_id}")
+            
+            # 验证证据是否存在
+            update_progress("validating", "验证证据信息", 10)
+            evidence_query = await db.execute(
+                select(Evidence.id, Evidence.file_name, Evidence.file_url, Evidence.file_extension)
+                .where(
+                    Evidence.id.in_(evidence_ids),
+                    Evidence.case_id == case_id
+                )
+            )
+            evidence_results = evidence_query.all()
+            if not evidence_results:
+                raise ValueError(f"未找到有效的证据: case_id={case_id}, evidence_ids={evidence_ids}")
+            
+            logger.info(f"找到 {len(evidence_results)} 个证据进行卡片铸造")
+            
+            # 开始卡片铸造
+            update_progress("processing", "开始证据卡片铸造", 15)
+            
+            # 调用卡片铸造服务
+            # 注意：evidence_card_casting 目前不支持进度回调，如果需要可以在服务层添加
+            cards_data = await evidence_card_casting(
+                db=db,
+                case_id=case_id,
+                evidence_ids=evidence_ids
+            )
+            
+            # 更新进度
+            update_progress("completed", f"成功铸造 {len(cards_data)} 个证据卡片", 95)
+            
+            # 准备返回结果
+            result = {
+                "case_id": case_id,
+                "evidence_ids": evidence_ids,
+                "cards_count": len(cards_data),
+                "cards": [
+                    {
+                        "id": card["id"],
+                        "evidence_ids": card["evidence_ids"],
+                        "card_type": card["card_info"].get("card_type") if card.get("card_info") else None,
+                        "card_is_associated": card["card_info"].get("card_is_associated") if card.get("card_info") else False,
+                        "features_count": len(card["card_info"].get("card_features", [])) if card.get("card_info") else 0,
+                        "updated_times": card["updated_times"],
+                        "created_at": card["created_at"],
+                        "updated_at": card["updated_at"],
+                    }
+                    for card in cards_data
+                ],
+                "summary": {
+                    "total_cards": len(cards_data),
+                    "associated_cards": len([c for c in cards_data if c.get("card_info", {}).get("card_is_associated")]),
+                    "single_cards": len([c for c in cards_data if not c.get("card_info", {}).get("card_is_associated")]),
+                }
+            }
+            
+            logger.info(f"证据卡片铸造完成: {result['summary']}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"异步证据卡片铸造失败: {str(e)}")
+            import traceback
+            error_traceback = traceback.format_exc()
+            logger.error(f"异步证据卡片铸造错误详情: {error_traceback}")
+            raise Exception(f"异步证据卡片铸造失败: {str(e)}")

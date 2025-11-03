@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from agno.agent import Agent
 from agno.media import Image
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class SlotExtraction(BaseModel):
     slot_desc: str
     slot_value_type: str
     slot_required: Any
-    slot_value: str
+    slot_value: Optional[Union[str, int, float, bool]]  # 无法提取时输出None
     slot_value_from_url: List[str]
     confidence: float
     reasoning: str
@@ -131,6 +131,7 @@ class AssociationFeaturesExtractor:
            - 每个词槽必须引用其值来源的图片URL
            - 置信度必须基于提取的确定性给出合理评估
            - 推理过程必须清晰说明如何从图片内容得出词槽值
+           - 如果无法从图片中提取到词槽值，slot_value必须输出None，不能使用"未提及"、"无具体日期"、"无利息约定"等替代字符串
         </特征提取数据结构说明>
         
         <关键特征提取说明>
@@ -180,24 +181,23 @@ class AssociationFeaturesExtractor:
              * 债务人发送的无关截图中的数字（如其他应用的截图）
              * 与当前债务纠纷无关的金额信息
              * 无法确定是否与当前债务相关的数字
-           - 如果对话中没有明确提及欠款金额，则标记为"未提及"或"0"
+           - 如果对话中没有明确提及欠款金额，则输出None
            
         4. 约定还款日期 (slot_name: "约定还款日期")
            - 业务规则：约定的还款日期，债务人承诺的还款时间
            - 提取要求：可选提取，如果存在则必须提取
            - 提取范围：
-             * 明确的日期："我下个月15号还"、"我年底还"等
+             * 明确的日期："我下个月15号还"、"我年底还"等（输出具体日期字符串，格式如2024-01-01）
              * 相对时间："我下周还"、"我过几天还"等（需要根据聊天时间推断具体日期）
-             * 时间范围："我尽快还"、"我尽快处理"等（标记为无具体日期）
+           - 如果对话中没有明确提及约定还款日期，则输出None
            
         5. 约定还款利息 (slot_name: "约定还款利息")
            - 业务规则：约定的还款利息率，双方商定的利息计算方式
            - 提取要求：可选提取，如果存在则必须提取
            - 提取范围：
-             * 明确的利率："按年息10%"、"月息2%"等
-             * 利息金额："每天10元利息"、"一个月100元利息"等
-             * 无利息约定："无利息"、"不要利息"等（标记为0）
-             * 默认情况：如果没有明确约定，标记为无利息约定
+             * 明确的利率："按年息10%"、"月息2%"等（输出利率数值或描述字符串）
+
+           - 如果对话中没有明确提及约定还款利息，则输出None
         </目标字段提取说明>
         """
     async def arun(self, image_urls: List[str]) -> AssociationFeaturesExtractionResults:
@@ -226,6 +226,8 @@ class AssociationFeaturesExtractor:
                 })
         
         # 更新session_state
+        if self.agent.session_state is None:
+            self.agent.session_state = {}
         self.agent.session_state["target_slots_to_extract"] = target_slots_to_extract
 
 if __name__ == '__main__':

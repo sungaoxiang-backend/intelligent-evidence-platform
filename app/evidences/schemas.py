@@ -136,14 +136,27 @@ class EvidenceResponse(BaseSchema):
     #     """深度优先搜索，找到连通分量"""
     #     if field_name in visited:
     #         return
-        
+    #     
     #     visited.add(field_name)
     #     group.append(field_name)
-        
+    #     
     #     # 遍历所有相邻字段
     #     for neighbor in graph.get(field_name, []):
     #         if neighbor not in visited:
     #             self._dfs(neighbor, graph, visited, group)
     
 
-    
+class EvidenceCardCastingRequest(BaseModel):
+    """证据卡片铸造请求模型"""
+    case_id: int = Field(..., description="案件ID")
+    evidence_ids: List[int] = Field(..., min_items=1, description="证据ID列表（至少一个）")
+
+
+class EvidenceCardResponse(BaseModel):
+    """证据卡片响应模型"""
+    id: int = Field(..., description="卡片ID")
+    evidence_ids: List[int] = Field(..., description="关联的证据ID列表")
+    card_info: Optional[Dict[str, Any]] = Field(None, description="卡片信息，包含类型、特征等")
+    updated_times: int = Field(..., description="更新次数")
+    created_at: Optional[str] = Field(None, description="创建时间（ISO格式）")
+    updated_at: Optional[str] = Field(None, description="更新时间（ISO格式）")

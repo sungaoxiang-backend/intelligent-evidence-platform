@@ -1,5 +1,5 @@
 import os
-from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable, Any
+from typing import BinaryIO, Dict, List, Optional, Union, Callable, Awaitable, Any, cast
 from datetime import datetime
 from fastapi import UploadFile
 from sqlalchemy import select, func
@@ -8,7 +8,10 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime
 from app.agentic.agents.evidence_classifier_v2 import EvidenceClassifier, EvidenceClassifiResults
 from app.agentic.agents.evidence_extractor_v2 import EvidenceFeaturesExtractor, EvidenceExtractionResults, EvidenceImage
-
+import asyncio
+from urllib.parse import unquote
+from pydantic import BaseModel
+from app.evidences.models import EvidenceCard, Evidence
 
 from loguru import logger
 from agno.media import Image
@@ -1595,3 +1598,605 @@ async def _update_party_from_company_gsxt_license(db, evidence, case_parties, up
         logger.error(f"更新公司全国企业公示系统截图当事人信息失败: {str(e)}")
 
 
+class EvidenceCardSchema(BaseModel):
+    """证据卡片数据模型（用于构建卡片）"""
+    evidence_ids: List[int]  # 关联的证据ID列表（支持1到多个）
+    card_info: Optional[Dict] = None  # 卡片信息，包含类型、特征等
+
+
+async def evidence_card_casting(
+        db: AsyncSession, 
+        case_id: int,
+        evidence_ids: List[int],
+    ):
+    """
+    证据卡片铸造（从证据特征中铸造证据卡片）
+    
+    支持两种场景：
+    1. 单个证据提取：每个证据生成一个卡片
+    2. 关联证据提取：多个证据共同生成一个卡片（未来功能）
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        evidence_ids: 证据ID列表
+    """
+    # 检索证据列表
+    evidences = await get_multi_by_ids(db, evidence_ids)
+
+    # 过滤仅支持的处理类型
+    supported_ai_formats = [
+        # 图片格式 - AI可以处理
+        "jpg", "jpeg", "png", "bmp", "webp",
+        # 其他格式暂时不支持AI处理，但可以上传
+        # "doc", "docx", "txt", "xls", "xlsx", "csv", "mp3", "mp4", "wav", "m4a", "avi", "mov", "wmv"
+    ]
+
+    filtered_evidences = [evidence for evidence in evidences if evidence.file_extension in supported_ai_formats]
+    if not filtered_evidences:
+        return []
+
+    # 建立 evidence_id 到 evidence 的映射，用于后续匹配
+    evidence_map: Dict[int, Evidence] = {ev.id: ev for ev in filtered_evidences}
+    
+    # 初始化卡片数据（当前实现：每个证据一个卡片，后续可扩展为关联提取）
+    card_data = [
+        EvidenceCardSchema(
+            evidence_ids=[evidence.id]  # 单个证据提取，后续可扩展为多个
+        )
+        for evidence in filtered_evidences
+    ]
+
+        
+    # 卡片铸造数据构建
+    # Step1. 证据分类
+    evidence_classifier = EvidenceClassifier()
+    classification_response: RunResponse = await asyncio.wait_for(
+                evidence_classifier.arun([evidence.file_url for evidence in filtered_evidences]),
+                timeout=180.0
+            )
+    if classification_response.content is None:
+        raise ValueError("证据分类结果为空")
+
+    # Step2: 证据分类结果处理
+    evidence_classifi_results = cast(EvidenceClassifiResults, classification_response.content)
+    
+    if not evidence_classifi_results.results:
+        logger.warning("证据分类结果为空，无法构建卡片数据")
+        return []
+
+    # 建立 URL -> evidence_id 映射关系，用于匹配分类结果
+    url_to_evidence_id: Dict[str, int] = {}
+    for evidence in filtered_evidences:
+        normalized_url = unquote(evidence.file_url)
+        url_to_evidence_id[normalized_url] = evidence.id
+        url_to_evidence_id[evidence.file_url] = evidence.id  # 同时保存原始 URL
+    
+    # 建立 evidence_id -> card 映射关系（由于当前是单个证据一个卡片）
+    evidence_id_to_card: Dict[int, EvidenceCardSchema] = {
+        card.evidence_ids[0]: card for card in card_data if len(card.evidence_ids) == 1
+    }
+    
+    # Step2: 证据分类结果处理（使用映射关系匹配）
+    for result in evidence_classifi_results.results:
+        normalized_result_url = unquote(result.image_url)
+        evidence_id = url_to_evidence_id.get(normalized_result_url) or url_to_evidence_id.get(result.image_url)
+        
+        if evidence_id is None:
+            logger.warning(f"无法找到对应的证据ID，image_url: {result.image_url}")
+            continue
+        
+        card = evidence_id_to_card.get(evidence_id)
+        if card:
+            # 初始化 card_info 结构：Dict类型，包含分类信息
+            if card.card_info is None:
+                card.card_info = {
+                    "card_type": result.evidence_type,
+                    "card_is_associated": False,  # 当前是单个证据提取
+                    "card_features": []
+                }
+            else:
+                # 更新 card_type
+                card.card_info["card_type"] = result.evidence_type
+                if "card_is_associated" not in card.card_info:
+                    card.card_info["card_is_associated"] = False
+                if "card_features" not in card.card_info:
+                    card.card_info["card_features"] = []
+        else:
+            logger.warning(f"无法找到对应的卡片，evidence_id: {evidence_id}")
+
+    # Step3: 证据特征提取
+    # 过滤出有 card_type 的卡片（特征提取需要类型）
+    cards_with_type = [
+        card for card in card_data 
+        if card.card_info and card.card_info.get("card_type")
+    ]
+    if not cards_with_type:
+        logger.warning("没有有效的卡片类型，跳过特征提取")
+    else:
+        # 定义 OCR 支持的证据类型（从 xunfei_ocr.py 的 EvidenceType 枚举）
+        ocr_supported_types = {
+            "公司营业执照",
+            "个体工商户营业执照",
+            "身份证",
+            "增值税发票",
+            "公司全国企业公示系统营业执照",
+            "个体工商户全国企业公示系统营业执照",
+        }
+        
+        # 将卡片分组：OCR类型、Agent类型（单个）、关联类型（微信聊天记录，无论证据数量）
+        ocr_cards = []  # OCR处理的卡片（单个证据）
+        agent_cards = []  # Agent处理的卡片（单个证据，非微信聊天记录）
+        association_cards = []  # 关联提取的卡片（微信聊天记录，支持单个或多个证据）
+        
+        # 定义需要关联提取的证据类型（这些类型需要识别分组信息）
+        association_required_types = {"微信聊天记录"}
+        
+        for card in cards_with_type:
+            if not card.card_info:
+                continue
+            card_type = card.card_info.get("card_type")
+            if not card_type:
+                continue
+            
+            # 判断是否为关联提取：微信聊天记录类型无论证据数量都需要关联提取
+            if card_type in association_required_types:
+                association_cards.append(card)
+            elif len(card.evidence_ids) > 1:
+                # 其他类型，多个证据时也需要关联提取
+                association_cards.append(card)
+            elif len(card.evidence_ids) == 1:
+                # 单个证据，判断使用 OCR 还是 Agent
+                if card_type in ocr_supported_types:
+                    ocr_cards.append(card)
+                else:
+                    agent_cards.append(card)
+        
+        # Step3.1: OCR 特征提取
+        if ocr_cards:
+            try:
+                from app.utils.xunfei_ocr import XunfeiOcrService
+                ocr_service = XunfeiOcrService()
+                
+                for card in ocr_cards:
+                    if len(card.evidence_ids) == 1 and card.card_info:
+                        evidence_id = card.evidence_ids[0]
+                        evidence = evidence_map.get(evidence_id)
+                        card_type = card.card_info.get("card_type")
+                        
+                        if evidence and card_type:
+                            # 调用 OCR 服务提取特征
+                            ocr_result = ocr_service.extract_evidence_features(
+                                image_url=evidence.file_url,
+                                evidence_type=card_type
+                            )
+                            
+                            if "error" in ocr_result:
+                                logger.warning(f"OCR识别失败，evidence_id: {evidence_id}, 错误: {ocr_result['error']}")
+                                continue
+                            
+                            # 将 OCR 结果转换为 card_features 格式
+                            evidence_features = ocr_result.get("evidence_features", [])
+                            if evidence_features:
+                                if "card_features" not in card.card_info:
+                                    card.card_info["card_features"] = []
+                                
+                                # OCR 返回的格式已经是字典列表，直接添加 slot_group_info
+                                for feature in evidence_features:
+                                    card.card_info["card_features"].append({
+                                        "slot_name": feature.get("slot_name", ""),
+                                        "slot_value_type": feature.get("slot_value_type", "string"),
+                                        "slot_value": feature.get("slot_value", ""),
+                                        "confidence": feature.get("confidence", 0.0),
+                                        "reasoning": feature.get("reasoning", "OCR识别"),
+                                        "slot_group_info": None  # 单个证据提取，没有关联信息
+                                    })
+            except Exception as e:
+                logger.error(f"OCR特征提取失败: {str(e)}")
+        
+        # Step3.2: Agent 特征提取（单个证据，非微信聊天记录）
+        if agent_cards:
+            try:
+                features_extract_data = []
+                for card in agent_cards:
+                    if len(card.evidence_ids) == 1 and card.card_info:
+                        evidence_id = card.evidence_ids[0]
+                        evidence = evidence_map.get(evidence_id)
+                        card_type = card.card_info.get("card_type")
+                        if evidence and card_type:
+                            features_extract_data.append(
+                                EvidenceImage(
+                                    url=evidence.file_url, 
+                                    evidence_type=card_type
+                                )
+                            )
+                
+                if features_extract_data:
+                    evidence_features_extractor = EvidenceFeaturesExtractor()
+                    features_response: RunResponse = await asyncio.wait_for(
+                        evidence_features_extractor.arun(features_extract_data),
+                        timeout=180.0
+                    )
+                    
+                    if features_response.content is None:
+                        logger.warning("Agent特征提取结果为空")
+                    else:
+                        evidence_features_results = cast(EvidenceExtractionResults, features_response.content)
+                        if evidence_features_results.results:
+                            for result in evidence_features_results.results:
+                                normalized_result_url = unquote(result.image_url)
+                                evidence_id = url_to_evidence_id.get(normalized_result_url) or url_to_evidence_id.get(result.image_url)
+                                
+                                if evidence_id is None:
+                                    logger.warning(f"无法找到对应的证据ID，image_url: {result.image_url}")
+                                    continue
+                                
+                                card = evidence_id_to_card.get(evidence_id)
+                                if card and card.card_info:
+                                    if "card_features" not in card.card_info:
+                                        card.card_info["card_features"] = []
+                                    
+                                    # 将 slot_extraction 转换为 card_features 格式
+                                    for item in result.slot_extraction:
+                                        if hasattr(item, 'model_dump'):
+                                            slot_dict = item.model_dump()
+                                        else:
+                                            slot_dict = {
+                                                "slot_name": item.slot_name,
+                                                "slot_value_type": item.slot_value_type,
+                                                "slot_value": item.slot_value,
+                                                "confidence": item.confidence,
+                                                "reasoning": item.reasoning,
+                                            }
+                                        
+                                        card.card_info["card_features"].append({
+                                            "slot_name": slot_dict["slot_name"],
+                                            "slot_value_type": slot_dict.get("slot_value_type", "string"),
+                                            "slot_value": slot_dict["slot_value"],
+                                            "confidence": slot_dict.get("confidence", 0.0),
+                                            "reasoning": slot_dict.get("reasoning", ""),
+                                            "slot_group_info": None  # 单个证据提取，没有关联信息
+                                        })
+                        else:
+                            logger.warning("Agent特征提取结果列表为空")
+            except Exception as e:
+                logger.error(f"Agent特征提取失败: {str(e)}")
+        
+        # Step3.3: 关联特征提取（多个证据，如微信聊天记录）
+        if association_cards:
+            try:
+                from app.agentic.agents.association_features_extractor_v2 import (
+                    AssociationFeaturesExtractor,
+                    AssociationFeaturesExtractionResults
+                )
+                
+                for card in association_cards:
+                    card_type = card.card_info.get("card_type")
+                    # 微信聊天记录类型（无论证据数量）以及其他多个证据的类型都需要关联提取
+                    if card_type == "微信聊天记录" or len(card.evidence_ids) > 1:
+                        # 获取所有证据的 URL
+                        evidence_urls = []
+                        for evidence_id in card.evidence_ids:
+                            evidence = evidence_map.get(evidence_id)
+                            if evidence:
+                                evidence_urls.append(evidence.file_url)
+                        
+                        if not evidence_urls:
+                            logger.warning(f"关联卡片没有有效的证据URL，evidence_ids: {card.evidence_ids}")
+                            continue
+                        
+                        # 调用关联特征提取器
+                        association_extractor = AssociationFeaturesExtractor()
+                        # 注意：arun 实际上返回 RunResponse，虽然类型签名说是 AssociationFeaturesExtractionResults
+                        association_response = await asyncio.wait_for(
+                            association_extractor.arun(evidence_urls),
+                            timeout=300.0  # 关联提取可能需要更长时间
+                        )
+                        
+                        # 检查返回类型并提取内容
+                        # 注意：arun 实际上返回 RunResponse（从 self.agent.arun），而不是直接返回 AssociationFeaturesExtractionResults
+                        association_results: AssociationFeaturesExtractionResults
+                        if hasattr(association_response, 'content') and hasattr(association_response, 'run_id'):
+                            # 如果返回的是 RunResponse，提取 content
+                            if association_response.content is None:  # type: ignore
+                                logger.warning("关联特征提取结果为空")
+                                continue
+                            association_results = cast(AssociationFeaturesExtractionResults, association_response.content)  # type: ignore
+                        elif hasattr(association_response, 'results'):
+                            # 如果直接返回的是 AssociationFeaturesExtractionResults（有 results 属性）
+                            association_results = association_response  # type: ignore
+                        else:
+                            logger.warning(f"关联特征提取返回了未知类型: {type(association_response)}")
+                            continue
+                        
+                        if association_results and association_results.results:
+                            if "card_features" not in card.card_info:
+                                card.card_info["card_features"] = []
+                            
+                            # 遍历所有分组结果
+                            for result_item in association_results.results:
+                                slot_group_name = result_item.slot_group_name
+                                
+                                # 提取该分组涉及的证据ID
+                                reference_evidence_ids = []
+                                for img_seq in result_item.image_sequence_info:
+                                    # 根据 URL 找到对应的 evidence_id
+                                    normalized_url = unquote(img_seq.url)
+                                    evidence_id = url_to_evidence_id.get(normalized_url) or url_to_evidence_id.get(img_seq.url)
+                                    if evidence_id:
+                                        reference_evidence_ids.append(evidence_id)
+                                
+                                # 为每个 slot_extraction 添加 slot_group_info
+                                for slot_extraction in result_item.slot_extraction:
+                                    if hasattr(slot_extraction, 'model_dump'):
+                                        slot_dict = slot_extraction.model_dump()
+                                    else:
+                                        slot_dict = {
+                                            "slot_name": slot_extraction.slot_name,
+                                            "slot_value_type": slot_extraction.slot_value_type,
+                                            "slot_value": slot_extraction.slot_value,
+                                            "confidence": slot_extraction.confidence,
+                                            "reasoning": slot_extraction.reasoning,
+                                        }
+                                    
+                                    # 构建 slot_group_info
+                                    slot_group_info = [{
+                                        "group_name": slot_group_name,
+                                        "reference_evidence_ids": reference_evidence_ids
+                                    }] if reference_evidence_ids else None
+                                    
+                                    card.card_info["card_features"].append({
+                                        "slot_name": slot_dict["slot_name"],
+                                        "slot_value_type": slot_dict.get("slot_value_type", "string"),
+                                        "slot_value": slot_dict["slot_value"],
+                                        "confidence": slot_dict.get("confidence", 0.0),
+                                        "reasoning": slot_dict.get("reasoning", ""),
+                                        "slot_group_info": slot_group_info
+                                    })
+                            
+                            # 标记为关联提取
+                            card.card_info["card_is_associated"] = True
+            except Exception as e:
+                logger.error(f"关联特征提取失败: {str(e)}")
+                # 关联提取失败不影响卡片的创建
+    
+    # Step4: 证据卡片批量创建（使用 update_or_create 方法）
+    created_cards = []
+    for card in card_data:
+        try:
+            # 只有 card_info 不为空时才创建卡片
+            if not card.card_info:
+                logger.warning(f"跳过卡片创建（缺少信息），evidence_ids: {card.evidence_ids}")
+                continue
+            
+            # 确保 card_info 有 card_type（即使是"未知"）
+            if "card_type" not in card.card_info:
+                card.card_info["card_type"] = "未知"
+            if "card_is_associated" not in card.card_info:
+                card.card_info["card_is_associated"] = len(card.evidence_ids) > 1
+            if "card_features" not in card.card_info:
+                card.card_info["card_features"] = []
+            
+            created_card = await EvidenceCard.update_or_create(
+                db=db,
+                evidence_ids=card.evidence_ids,
+                card_info=card.card_info
+            )
+            created_cards.append(created_card)
+        except Exception as e:
+            logger.error(f"创建卡片失败，evidence_ids: {card.evidence_ids}, 错误: {str(e)}")
+            continue
+    
+    # 返回创建的卡片数据
+    # 需要预先加载 evidences 关系，避免在访问时触发异步操作
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    
+    result_cards = []
+    for card in created_cards:
+        # 重新查询并加载关系
+        card_result = await db.execute(
+            select(EvidenceCard)
+            .options(selectinload(EvidenceCard.evidences))
+            .where(EvidenceCard.id == card.id)
+        )
+        card_with_relations = card_result.scalar_one_or_none()
+        
+        if card_with_relations:
+            result_cards.append({
+                "id": card_with_relations.id,
+                "evidence_ids": [ev.id for ev in card_with_relations.evidences],
+                "card_info": card_with_relations.card_info,
+                "updated_times": card_with_relations.updated_times,
+                "created_at": card_with_relations.created_at.isoformat() if card_with_relations.created_at else None,
+                "updated_at": card_with_relations.updated_at.isoformat() if card_with_relations.updated_at else None,
+            })
+    
+    return result_cards
+
+
+async def get_card_by_id(db: AsyncSession, card_id: int) -> Optional[EvidenceCard]:
+    """根据ID获取证据卡片，包含关联的证据信息"""
+    from sqlalchemy.orm import selectinload
+    
+    result = await db.execute(
+        select(EvidenceCard)
+        .options(selectinload(EvidenceCard.evidences))
+        .where(EvidenceCard.id == card_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_cards_with_count(
+    db: AsyncSession,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    case_id: Optional[int] = None,
+    evidence_ids: Optional[List[int]] = None,
+    card_type: Optional[str] = None,
+    card_is_associated: Optional[bool] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
+) -> tuple[List[EvidenceCard], int]:
+    """获取多个证据卡片，并返回总数，支持筛选和排序"""
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy import cast, Text, and_
+    from app.evidences.models import evidence_card_evidence_association
+    
+    query = select(EvidenceCard).options(selectinload(EvidenceCard.evidences))
+    
+    # 筛选条件
+    conditions = []
+    
+    # 根据案件ID筛选（需要通过关联的证据来筛选）
+    if case_id is not None:
+        query = query.join(
+            evidence_card_evidence_association,
+            EvidenceCard.id == evidence_card_evidence_association.c.evidence_card_id
+        ).join(
+            Evidence,
+            evidence_card_evidence_association.c.evidence_id == Evidence.id
+        ).where(Evidence.case_id == case_id)
+    
+    # 根据证据ID筛选
+    if evidence_ids:
+        query = query.join(
+            evidence_card_evidence_association,
+            EvidenceCard.id == evidence_card_evidence_association.c.evidence_card_id
+        ).where(
+            evidence_card_evidence_association.c.evidence_id.in_(evidence_ids)
+        )
+    
+    # 根据卡片类型筛选（从 card_info JSONB 中提取）
+    if card_type:
+        conditions.append(
+            func.jsonb_extract_path_text(EvidenceCard.card_info, cast('card_type', Text)) == card_type
+        )
+    
+    # 根据是否关联提取筛选（从 card_info JSONB 中提取）
+    if card_is_associated is not None:
+        conditions.append(
+            func.jsonb_extract_path_text(EvidenceCard.card_info, cast('card_is_associated', Text)) == str(card_is_associated).lower()
+        )
+    
+    # 应用筛选条件
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    # 获取总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+    
+    # 排序
+    if sort_by:
+        # 验证排序字段
+        valid_sort_fields = {
+            'created_at': EvidenceCard.created_at,
+            'updated_at': EvidenceCard.updated_at,
+            'updated_times': EvidenceCard.updated_times,
+        }
+        
+        if sort_by in valid_sort_fields:
+            sort_column = valid_sort_fields[sort_by]
+            if sort_order and sort_order.lower() == 'desc':
+                query = query.order_by(sort_column.desc())
+            else:
+                query = query.order_by(sort_column.asc())
+        else:
+            # 默认按创建时间倒序
+            query = query.order_by(EvidenceCard.created_at.desc())
+    else:
+        # 默认按创建时间倒序
+        query = query.order_by(EvidenceCard.created_at.desc())
+    
+    # 分页
+    query = query.offset(skip).limit(limit)
+    
+    # 执行查询
+    result = await db.execute(query)
+    data = list(result.scalars().unique().all())
+    
+    return data, total
+
+
+class SlotExtraction(BaseModel):
+    """单个词槽提取结果"""
+    slot_name: str  # 必须是extraction_slots中的slot_name
+    slot_desc: str
+    slot_value_type: str
+    slot_required: Any
+    slot_value: Any
+    confidence: float
+    reasoning: str  # 提取理由，特别说明来自哪些图片
+
+
+demo_cards_data = [
+    {
+    "evidence_ids": [1],
+    "card_info": {
+        "card_type": "微信个人主页",
+        "card_is_associated": False,
+        "card_features": [{
+            "slot_name": "微信备注名",
+            "slot_value_type": "string",
+            "slot_value": "明天会更好",
+            "confidence": 0.95,
+            "reasoning": "微信个人主页中提取的微信备注名",
+            "slot_group_info": None
+        },
+        {
+            "slot_name": "微信号",
+            "slot_value_type": "string",
+            "slot_value": "1234567890",
+            "confidence": 0.95,
+            "reasoning": "微信个人主页中提取的微信号",
+            "slot_group_info": None,
+        }]
+    }
+},
+{
+    "evidence_ids": [2, 3, 15, 17],
+    "card_info": {
+        "card_type": "微信聊天记录",
+        "card_is_associated": True,
+        "card_features": [
+            {
+                "slot_name": "微信备注名",
+                "slot_value_type": "string",
+                "slot_value": "明天会更好",
+                "confidence": 0.95,
+                "reasoning": "证据2,3种，微信聊天记录中提取的微信备注名",
+                "slot_group_info": [
+                    {
+                        "group_name": "明天会更好",
+                        "reference_evidence_ids": [2, 3],
+                    }
+                ],
+            },
+            {
+                "slot_name": "欠款金额",
+                "slot_value_type": "number",
+                "slot_value": "10000",
+                "confidence": 0.95,
+                "reasoning": "证据15,17中，微信聊天记录中提取的欠款金额",
+                "slot_group_info": [
+                    {
+                        "group_name": "10000",
+                        "reference_evidence_ids": [15, 17],
+                    }
+                ],
+            }
+        ]
+    }
+},
+{
+    "evidence_ids": [33, 56],
+    "card_info": {
+        "card_type": "未知",
+        "card_is_associated": False,
+        "card_features": []
+    }
+}
+]

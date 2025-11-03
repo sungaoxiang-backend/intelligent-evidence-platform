@@ -14,7 +14,9 @@ from app.evidences.schemas import (
     EvidenceResponse,
     BatchDeleteRequest,
     EvidenceEditRequest,
-    BatchCheckEvidenceRequest
+    BatchCheckEvidenceRequest,
+    EvidenceCardCastingRequest,
+    EvidenceCardResponse
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -289,6 +291,198 @@ async def batch_check_evidences(
     """批量检查证据"""
     evidences = await evidence_service.batch_check_evidence(db, request.evidence_ids)
     return ListResponse(data=evidences)
+
+
+@router.post("/evidence-cards/cast")
+async def cast_evidence_cards(
+    request: EvidenceCardCastingRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """
+    证据卡片铸造（异步任务）
+    
+    接收多个证据IDs，创建异步任务进行以下操作：
+    1. 证据分类（使用 EvidenceClassifier）
+    2. 特征提取：
+       - OCR类型证据（如营业执照、身份证、发票等）：使用 XunfeiOcrService
+       - Agent类型证据（单个证据）：使用 EvidenceFeaturesExtractor
+       - 关联证据（如微信聊天记录，多个证据）：使用 AssociationFeaturesExtractor
+    3. 创建或更新证据卡片
+    
+    Args:
+        request: 卡片铸造请求，包含 case_id 和 evidence_ids
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        dict: 包含 task_id 和状态信息的字典
+    """
+    from app.tasks.real_evidence_tasks import cast_evidence_cards_task
+    
+    # 验证案件是否存在
+    case = await case_service.get_by_id(db, request.case_id)
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"案件不存在: ID={request.case_id}",
+        )
+    
+    # 验证证据是否存在
+    evidences = await evidence_service.get_multi_by_ids(db, request.evidence_ids)
+    if len(evidences) != len(request.evidence_ids):
+        found_ids = {ev.id for ev in evidences}
+        missing_ids = set(request.evidence_ids) - found_ids
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"以下证据不存在: {list(missing_ids)}",
+        )
+    
+    try:
+        # 创建异步任务
+        task = cast_evidence_cards_task.delay(
+            case_id=request.case_id,
+            evidence_ids=request.evidence_ids
+        )
+        
+        logger.info(f"创建证据卡片铸造任务: task_id={task.id}, case_id={request.case_id}, evidence_ids={request.evidence_ids}")
+        
+        return {
+            "task_id": task.id,
+            "status": "started",
+            "message": "证据卡片铸造任务已创建",
+            "case_id": request.case_id,
+            "evidence_ids": request.evidence_ids
+        }
+    except Exception as e:
+        logger.error(f"创建证据卡片铸造任务失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建证据卡片铸造任务失败: {str(e)}",
+        )
+
+
+@router.get("/evidence-cards", response_model=ListResponse[EvidenceCardResponse])
+async def list_evidence_cards(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    case_id: int = Query(...),
+    skip: int = 0,
+    limit: int = 100,
+    evidence_ids: Optional[List[int]] = Query(None),
+    card_type: Optional[str] = None,
+    card_is_associated: Optional[bool] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+):
+    """获取证据卡片列表，支持筛选和排序
+    
+    Args:
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        skip: 跳过记录数（分页）
+        limit: 返回记录数限制（分页）
+        case_id: 案件ID（筛选条件）
+        evidence_ids: 证据ID列表（筛选条件）
+        card_type: 卡片类型（筛选条件，从card_info中提取）
+        card_is_associated: 是否关联提取（筛选条件，从card_info中提取）
+        sort_by: 排序字段（created_at, updated_at, updated_times）
+        sort_order: 排序顺序（asc, desc）
+        
+    Returns:
+        ListResponse[EvidenceCardResponse]: 卡片列表
+    """
+    from app.evidences.services import get_cards_with_count
+    from sqlalchemy.orm import selectinload
+    
+    # 获取卡片列表
+    cards, total = await get_cards_with_count(
+        db=db,
+        skip=skip,
+        limit=limit,
+        case_id=case_id,
+        evidence_ids=evidence_ids,
+        card_type=card_type,
+        card_is_associated=card_is_associated,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    
+    # 转换为响应模型
+    card_responses = []
+    for card in cards:
+        # selectinload已确保evidences关系已加载，但我们需要检查
+        if not hasattr(card, 'evidences') or not card.evidences:
+            # 如果关系未加载，重新查询
+            from sqlalchemy import select
+            from app.evidences.models import EvidenceCard
+            result = await db.execute(
+                select(EvidenceCard)
+                .options(selectinload(EvidenceCard.evidences))
+                .where(EvidenceCard.id == card.id)
+            )
+            card = result.scalar_one_or_none()
+            if not card:
+                continue
+        
+        card_responses.append(
+            EvidenceCardResponse(
+                id=card.id,
+                evidence_ids=[ev.id for ev in card.evidences],
+                card_info=card.card_info,
+                updated_times=card.updated_times,
+                created_at=card.created_at.isoformat() if card.created_at else None,
+                updated_at=card.updated_at.isoformat() if card.updated_at else None,
+            )
+        )
+    
+    return ListResponse(
+        data=card_responses,
+        pagination=Pagination(
+            total=total,
+            page=skip // limit + 1 if limit > 0 else 1,
+            size=limit,
+            pages=(total + limit - 1) // limit if limit > 0 else 1
+        )
+    )
+
+
+@router.get("/evidence-cards/{card_id}", response_model=SingleResponse[EvidenceCardResponse])
+async def get_evidence_card(
+    card_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """获取证据卡片详情
+    
+    Args:
+        card_id: 卡片ID
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        SingleResponse[EvidenceCardResponse]: 卡片详情
+    """
+    from app.evidences.services import get_card_by_id
+    
+    card = await get_card_by_id(db, card_id)
+    if not card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"证据卡片不存在: ID={card_id}",
+        )
+    
+    # 转换为响应模型
+    card_response = EvidenceCardResponse(
+        id=card.id,
+        evidence_ids=[ev.id for ev in card.evidences],
+        card_info=card.card_info,
+        updated_times=card.updated_times,
+        created_at=card.created_at.isoformat() if card.created_at else None,
+        updated_at=card.updated_at.isoformat() if card.updated_at else None,
+    )
+    
+    return SingleResponse(data=card_response)
 
 
 @router.post("/batch-with-classification", status_code=status.HTTP_201_CREATED, response_model=ListResponse[EvidenceResponse])
