@@ -34,6 +34,17 @@ class EvidenceChainsConfig(BaseModel):
     class Config:
         extra = "allow"
 
+class EvidenceCardSlotsConfig(BaseModel):
+    """证据卡槽配置模型"""
+    metadata: Dict[str, Any]
+    case_causes: Dict[str, str]
+    key_evidence_types: Dict[str, str]
+    party_types: Dict[str, str]
+    evidence_card_templates: List[Dict[str, Any]]
+    scenario_rules: List[Dict[str, Any]]
+    class Config:
+        extra = "allow"
+
 class DynamicConfig(BaseModel):
     key: str
     value: Any
@@ -47,10 +58,12 @@ class ConfigManager:
         self._business_config: Optional[BusinessConfig] = None
         self._evidence_types_config: Optional[EvidenceTypesConfig] = None
         self._evidence_chains_config: Optional[EvidenceChainsConfig] = None
+        self._evidence_card_slots_config: Optional[EvidenceCardSlotsConfig] = None
         self._config_cache: Dict[str, Any] = {}
         self._business_config_path = "app/core/business_config.yaml"
         self._evidence_types_path = "app/core/evidence_types_v2.yaml"
         self._evidence_chains_path = "app/core/evidence_chains.yaml"
+        self._evidence_card_slots_path = "app/evidences/evidence_card_slots.yaml"
     
     def load_business_config(self) -> BusinessConfig:
         """加载业务逻辑配置（YAML文件）"""
@@ -86,6 +99,19 @@ class ConfigManager:
             else:
                 raise FileNotFoundError(f"证据链配置文件不存在: {self._evidence_chains_path}")
         return self._evidence_chains_config
+    
+    def load_evidence_card_slots_config(self) -> EvidenceCardSlotsConfig:
+        """加载证据卡槽配置（YAML文件）"""
+        if self._evidence_card_slots_config is None:
+            if os.path.exists(self._evidence_card_slots_path):
+                with open(self._evidence_card_slots_path, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f)
+                    if data is None:
+                        raise ValueError(f"证据卡槽配置文件为空: {self._evidence_card_slots_path}")
+                    self._evidence_card_slots_config = EvidenceCardSlotsConfig(**data)
+            else:
+                raise FileNotFoundError(f"证据卡槽配置文件不存在: {self._evidence_card_slots_path}")
+        return self._evidence_card_slots_config
     
     async def get_dynamic_config(self, key: str, db: Optional[AsyncSession] = None) -> Optional[Any]:
         """获取动态配置（数据库）"""

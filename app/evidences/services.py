@@ -25,7 +25,14 @@ from app.evidences.schemas import (
 )
 from app.integrations.cos import cos_service
 from app.agentic.agents.evidence_proofreader import evidence_proofreader
-from app.cases.models import Case
+from app.cases.models import Case, CaseParty, PartyType, CaseType
+from app.core.config_manager import config_manager
+from app.evidences.schemas import (
+    EvidenceCardSlotTemplatesResponse,
+    EvidenceCardSlotTemplate,
+    EvidenceCardTemplate,
+    EvidenceCardSlot
+)
 
 
 def _get_case_field_value(case, case_field: str, role: Optional[str] = None, slot_name: Optional[str] = None) -> Any:
@@ -2580,3 +2587,182 @@ demo_cards_data = [
     }
 }
 ]
+
+
+async def get_evidence_card_slot_templates(db: AsyncSession, case_id: int) -> EvidenceCardSlotTemplatesResponse:
+    """获取案件的证据卡槽模板
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        
+    Returns:
+        EvidenceCardSlotTemplatesResponse: 证据卡槽模板响应
+    """
+    # 获取案件信息
+    result = await db.execute(
+        select(Case)
+        .options(joinedload(Case.case_parties))
+        .where(Case.id == case_id)
+    )
+    case = result.unique().scalar_one_or_none()
+    
+    if not case:
+        raise ValueError(f"案件不存在: {case_id}")
+    
+    # 获取案由
+    case_cause = None
+    if case.case_type:
+        case_cause = case.case_type.value  # "contract" 或 "debt"
+    
+    # 获取债权人和债务人类型
+    creditor_type = None
+    debtor_type = None
+    if case.case_parties:
+        for party in case.case_parties:
+            if party.party_role == "creditor":
+                creditor_type = party.party_type  # "person", "company", "individual"
+            elif party.party_role == "debtor":
+                debtor_type = party.party_type
+    
+    # 加载证据卡槽配置
+    config = config_manager.load_evidence_card_slots_config()
+    
+    # 类型映射（数据库枚举值到配置值）
+    type_mapping = {
+        'person': 'person',
+        'company': 'company',
+        'individual': 'individual'
+    }
+    
+    # 筛选适用的场景规则
+    applicable_rules = []
+    if case_cause:
+        for rule in config.scenario_rules:
+            if rule.get('case_cause') == case_cause:
+                applicable_rules.append(rule)
+    
+    # 如果没有适用的规则，返回空列表
+    if not applicable_rules:
+        return EvidenceCardSlotTemplatesResponse(
+            case_id=case_id,
+            case_cause=config.case_causes.get(case_cause) if case_cause else None,
+            creditor_type=config.party_types.get(creditor_type) if creditor_type else None,
+            debtor_type=config.party_types.get(debtor_type) if debtor_type else None,
+            templates=[]
+        )
+    
+    # 生成模板列表
+    templates = []
+    for rule in applicable_rules:
+        key_evidence = rule.get('key_evidence')  # "wechat_record" 或 "iou_record"
+        key_evidence_name = config.key_evidence_types.get(key_evidence, key_evidence)
+        
+        # 构建模板ID
+        case_cause_name = config.case_causes.get(case_cause, case_cause) if case_cause else "未知"
+        creditor_type_name = config.party_types.get(creditor_type, creditor_type) if creditor_type else "未知"
+        debtor_type_name = config.party_types.get(debtor_type, debtor_type) if debtor_type else "未知"
+        
+        template_id_parts = [
+            case_cause_name,
+            key_evidence_name,
+            creditor_type_name,
+            debtor_type_name
+        ]
+        template_id = "-".join(template_id_parts) + "-卡片槽位模板"
+        
+        # 获取需要的证据类型列表
+        required_evidence_types = rule.get('required_evidence_types', [])
+        
+        # 生成需要的卡片类型列表
+        required_card_types = []
+        
+        for evidence_type_config in required_evidence_types:
+            evidence_type = evidence_type_config.get('evidence_type')
+            if not evidence_type:
+                continue
+            
+            # 判断是否需要这个证据类型
+            role_requirement = evidence_type_config.get('role_requirement')
+            for_creditor_type = evidence_type_config.get('for_creditor_type')
+            for_debtor_type = evidence_type_config.get('for_debtor_type')
+            
+            # 判断是否符合角色要求
+            should_include = False
+            if role_requirement == "ignore":
+                should_include = True
+            elif role_requirement == "all":
+                should_include = True
+            elif role_requirement == "creditor":
+                should_include = creditor_type is not None
+            elif role_requirement == "debtor":
+                should_include = debtor_type is not None
+            else:
+                # 根据for_creditor_type和for_debtor_type动态判断
+                if for_creditor_type and creditor_type == for_creditor_type:
+                    should_include = True
+                if for_debtor_type and debtor_type == for_debtor_type:
+                    should_include = True
+            
+            if not should_include:
+                continue
+            
+            # 查找对应的卡槽模板
+            card_template = None
+            for template in config.evidence_card_templates:
+                if template.get('card_type') == evidence_type:
+                    card_template = template
+                    break
+            
+            if card_template:
+                # 构建卡槽列表
+                required_slots = []
+                for slot_config in card_template.get('required_slots', []):
+                    required_slots.append(EvidenceCardSlot(
+                        slot_name=slot_config.get('slot_name'),
+                        need_proofreading=slot_config.get('need_proofreading', False)
+                    ))
+                
+                # 确定最终的role_requirement
+                final_role_requirement = role_requirement
+                if not final_role_requirement:
+                    # 根据for_creditor_type和for_debtor_type动态决定
+                    creditor_needs = for_creditor_type and creditor_type == for_creditor_type
+                    debtor_needs = for_debtor_type and debtor_type == for_debtor_type
+                    
+                    if creditor_needs and debtor_needs:
+                        final_role_requirement = "all"
+                    elif creditor_needs:
+                        final_role_requirement = "creditor"
+                    elif debtor_needs:
+                        final_role_requirement = "debtor"
+                    else:
+                        final_role_requirement = "ignore"
+                
+                # 获取or_group
+                or_group = evidence_type_config.get('or_group')
+                
+                required_card_types.append(EvidenceCardTemplate(
+                    card_type=evidence_type,
+                    required_slots=required_slots,
+                    role_requirement=final_role_requirement,
+                    or_group=or_group if or_group is not None else None
+                ))
+        
+        templates.append(EvidenceCardSlotTemplate(
+            template_id=template_id,
+            case_cause=case_cause_name,
+            key_evidence=key_evidence or "",
+            key_evidence_name=key_evidence_name or key_evidence or "未知",
+            creditor_type=config.party_types.get(creditor_type) if creditor_type else None,
+            debtor_type=config.party_types.get(debtor_type) if debtor_type else None,
+            required_card_types=required_card_types
+        ))
+    
+    return EvidenceCardSlotTemplatesResponse(
+        case_id=case_id,
+        case_cause=config.case_causes.get(case_cause) if case_cause else None,
+        creditor_type=config.party_types.get(creditor_type) if creditor_type else None,
+        debtor_type=config.party_types.get(debtor_type) if debtor_type else None,
+        templates=templates
+    )

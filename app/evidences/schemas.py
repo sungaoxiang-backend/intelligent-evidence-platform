@@ -179,3 +179,38 @@ class EvidenceCardUpdateRequest(BaseModel):
     card_info: Optional[Dict[str, Any]] = Field(None, description="卡片信息更新（card_info字段）")
     card_features: Optional[List[CardFeatureUpdate]] = Field(None, description="卡片特征更新列表（更新card_info中的card_features）")
     referenced_evidences: Optional[List[ReferencedEvidenceUpdate]] = Field(None, description="引用证据更新列表（更新关联关系和顺序）")
+
+
+# 证据卡槽模板相关模型
+class EvidenceCardSlot(BaseModel):
+    """证据卡槽模型"""
+    slot_name: str = Field(..., description="卡槽名称")
+    need_proofreading: bool = Field(..., description="是否需要校对")
+
+
+class EvidenceCardTemplate(BaseModel):
+    """证据卡片模板模型"""
+    card_type: str = Field(..., description="卡片类型")
+    required_slots: List[EvidenceCardSlot] = Field(default_factory=list, description="需要的卡槽列表")
+    role_requirement: Optional[str] = Field(None, description="角色要求：ignore(忽略角色), all(双方都需要), creditor(仅债权人), debtor(仅债务人)")
+    or_group: Optional[str] = Field(None, description="或关系分组，同组内的证据只需满足一个即可，null表示无分组")
+
+
+class EvidenceCardSlotTemplate(BaseModel):
+    """证据卡槽模板模型"""
+    template_id: str = Field(..., description="模板ID")
+    case_cause: str = Field(..., description="案由")
+    key_evidence: str = Field(..., description="主证据类型")
+    key_evidence_name: str = Field(..., description="主证据类型名称")
+    creditor_type: Optional[str] = Field(None, description="债权人类型")
+    debtor_type: Optional[str] = Field(None, description="债务人类型")
+    required_card_types: List[EvidenceCardTemplate] = Field(default_factory=list, description="需要的卡片类型列表")
+
+
+class EvidenceCardSlotTemplatesResponse(BaseModel):
+    """证据卡槽模板响应模型"""
+    case_id: int = Field(..., description="案件ID")
+    case_cause: Optional[str] = Field(None, description="案由")
+    creditor_type: Optional[str] = Field(None, description="债权人类型")
+    debtor_type: Optional[str] = Field(None, description="债务人类型")
+    templates: List[EvidenceCardSlotTemplate] = Field(default_factory=list, description="卡槽模板列表")

@@ -22,9 +22,11 @@ import {
   Plus,
   GripVertical,
   Save,
-  Upload
+  Upload,
+  AlertCircle,
+  Info
 } from "lucide-react"
-import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard } from "@/lib/api"
+import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import { useGlobalTasks } from "@/contexts/global-task-context"
 import { useCardCasting } from "@/hooks/use-celery-tasks"
@@ -1042,7 +1044,471 @@ function CardDetail({ card, evidenceList }: { card: EvidenceCard | null; evidenc
   )
 }
 
-// 可放置的槽位组件（参考demo设计）
+// 格式化模板标签 - 美化template_id显示
+function formatTemplateLabel(template: EvidenceCardSlotTemplate): string {
+  // 使用key_evidence_name作为主要标识，更简洁
+  // 例如：微信聊天记录主证据、借条欠条主证据
+  return template.key_evidence_name || template.template_id
+}
+
+// 判断卡片类型应该属于哪个角色 - 根据role_requirement
+// 返回一个数组，因为'all'需要在两个区域都显示
+function getCardRoles(cardTemplate: EvidenceCardTemplate): Array<'creditor' | 'debtor' | 'shared'> {
+  const roleRequirement = cardTemplate.role_requirement
+  
+  if (!roleRequirement || roleRequirement === 'ignore') {
+    return ['shared'] // 忽略角色，放在共享区域
+  }
+  
+  if (roleRequirement === 'all') {
+    return ['creditor', 'debtor'] // 双方都需要，在两个区域都显示
+  }
+  
+  if (roleRequirement === 'creditor') {
+    return ['creditor'] // 仅债权人需要
+  }
+  
+  if (roleRequirement === 'debtor') {
+    return ['debtor'] // 仅债务人需要
+  }
+  
+  return ['shared'] // 默认共享
+}
+
+// 渲染卡片槽位
+function renderCardSlots(
+  cardTypes: EvidenceCardTemplate[],
+  role: 'creditor' | 'debtor' | 'shared',
+  slotCards: Record<string, number>,
+  template?: EvidenceCardSlotTemplate,
+  cardList?: EvidenceCard[]
+): React.ReactElement | null {
+  // 过滤出属于当前角色的卡片类型 - 根据role_requirement
+  const filteredCards = cardTypes.filter(cardType => {
+    const cardRoles = getCardRoles(cardType)
+    return cardRoles.includes(role)
+  })
+
+  if (filteredCards.length === 0) {
+    return (
+      <div className="text-xs text-slate-400 text-center py-4">
+        暂无相关槽位
+      </div>
+    )
+  }
+
+  // 按or_group分组，用于显示分组信息
+  const groupedByOrGroup: Record<string, EvidenceCardTemplate[]> = {}
+  const ungroupedCards: EvidenceCardTemplate[] = []
+  
+  filteredCards.forEach(cardType => {
+    if (cardType.or_group) {
+      if (!groupedByOrGroup[cardType.or_group]) {
+        groupedByOrGroup[cardType.or_group] = []
+      }
+      groupedByOrGroup[cardType.or_group].push(cardType)
+    } else {
+      ungroupedCards.push(cardType)
+    }
+  })
+
+  return (
+    <div className="space-y-4">
+      {/* 无分组的卡片 */}
+      {ungroupedCards.map((cardType, index) => {
+        const slotId = `slot::${role}::${cardType.card_type}::${index}`
+        const cardId = slotCards[slotId]
+        const placedCard = cardId ? cardList?.find(c => c.id === cardId) : null
+        
+        return (
+          <CardSlotUnit
+            key={slotId}
+            id={slotId}
+            cardType={cardType.card_type}
+            requiredSlots={cardType.required_slots}
+            cardId={cardId}
+            placedCard={placedCard}
+            side={role}
+            orGroup={null}
+          />
+        )
+      })}
+      
+      {/* 分组的卡片 */}
+      {Object.entries(groupedByOrGroup).map(([orGroupName, groupCards], groupIndex) => {
+        // 检查该组内是否有卡片已被放置
+        const groupPlacedCards = groupCards.filter((cardType, cardIndex) => {
+          const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
+          return slotCards[slotId] !== undefined
+        })
+        const isGroupSatisfied = groupPlacedCards.length > 0
+        
+        return (
+          <OrGroupContainer
+            key={orGroupName}
+            groupName={orGroupName}
+            isSatisfied={isGroupSatisfied}
+            role={role}
+          >
+            {groupCards.map((cardType, cardIndex) => {
+              const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
+              const cardId = slotCards[slotId]
+              const placedCard = cardId ? cardList?.find(c => c.id === cardId) : null
+              const isSelected = cardId !== undefined
+              
+              return (
+                <div key={slotId} className="relative">
+                  {/* OR连接线 - 只在非第一个选项时显示 */}
+                  {cardIndex > 0 && (
+                    <div className="relative mb-3">
+                      {/* 垂直连接线 */}
+                      <div className="absolute left-1/2 top-0 -translate-x-1/2 w-0.5 h-3 bg-purple-300" />
+                      {/* OR标签 */}
+                      <div className="absolute left-1/2 top-3 -translate-x-1/2 -translate-y-1/2">
+                        <div className="bg-white border-2 border-purple-300 rounded-full px-2 py-0.5">
+                          <span className="text-[10px] font-bold text-purple-600">OR</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <CardSlotUnit
+                    id={slotId}
+                    cardType={cardType.card_type}
+                    requiredSlots={cardType.required_slots}
+                    cardId={cardId}
+                    placedCard={placedCard}
+                    side={role}
+                    orGroup={orGroupName}
+                    isInOrGroup={true}
+                    isSelected={isSelected}
+                  />
+                </div>
+              )
+            })}
+          </OrGroupContainer>
+        )
+      })}
+    </div>
+  )
+}
+
+// 或关系组容器组件 - 提供明确的视觉分组和OR关系表达
+function OrGroupContainer({
+  groupName,
+  isSatisfied,
+  role,
+  children
+}: {
+  groupName: string
+  isSatisfied: boolean
+  role: 'creditor' | 'debtor' | 'shared'
+  children: React.ReactNode
+}) {
+  // 根据角色选择不同的边框颜色
+  const getBorderColor = () => {
+    if (isSatisfied) {
+      return "border-green-400"
+    }
+    if (role === "creditor") {
+      return "border-purple-300"
+    }
+    if (role === "debtor") {
+      return "border-purple-300"
+    }
+    return "border-purple-300"
+  }
+
+  const getBackgroundColor = () => {
+    if (isSatisfied) {
+      return "bg-green-50/30"
+    }
+    return "bg-purple-50/20"
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border-2 p-4 space-y-3 transition-all",
+        getBorderColor(),
+        getBackgroundColor(),
+        isSatisfied && "ring-2 ring-green-200"
+      )}
+    >
+      {/* 组标题 */}
+      <div className="flex items-center justify-between pb-2 border-b border-purple-200">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+          <span className="text-xs font-semibold text-purple-700">
+            或关系组: {groupName}
+          </span>
+          <Badge 
+            variant="outline" 
+            className={cn(
+              "h-4 px-1.5 text-[10px]",
+              isSatisfied
+                ? "border-green-400 text-green-700 bg-green-50"
+                : "border-purple-300 text-purple-600 bg-purple-50"
+            )}
+          >
+            {isSatisfied ? "✓ 已满足" : "待选择"}
+          </Badge>
+        </div>
+        <div className="text-[10px] text-purple-500 font-medium">
+          满足其中一个即可
+        </div>
+      </div>
+
+      {/* 组内容 */}
+      <div className="space-y-3">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// 卡片槽位单元组件 - 一个card_type对应一个槽位，槽位内显示required_slots字段列表
+// 样式类似卡片模板，拖入后显示紧凑样式
+function CardSlotUnit({
+  id,
+  cardType,
+  requiredSlots,
+  cardId,
+  placedCard,
+  side,
+  orGroup,
+  isInOrGroup = false,
+  isSelected = false
+}: {
+  id: string
+  cardType: string
+  requiredSlots: Array<{ slot_name: string; need_proofreading: boolean }>
+  cardId?: number
+  placedCard?: EvidenceCard | null
+  side?: "creditor" | "debtor" | "shared"
+  orGroup?: string | null
+  isInOrGroup?: boolean
+  isSelected?: boolean
+}) {
+  const [hoveredSlotName, setHoveredSlotName] = useState<string | null>(null)
+  
+  const { isOver, setNodeRef } = useDroppable({
+    id,
+  })
+
+  // 获取卡片特征值（如果有放置的卡片）
+  const getSlotValue = (slotName: string): string | null => {
+    if (!placedCard) return null
+    
+    const cardFeatures = placedCard.card_info?.card_features || []
+    const feature = cardFeatures.find((f: any) => f.slot_name === slotName)
+    return feature?.slot_value ?? null
+  }
+
+  // 模拟校对结果（实际应该从后端获取）
+  const getProofreadingResult = (slotName: string): { status: 'consistent' | 'inconsistent' | 'pending'; message: string } | null => {
+    if (!placedCard || !cardId) return null
+    
+    // 模拟逻辑：如果有值且需要校对，返回模拟结果
+    const slot = requiredSlots.find(s => s.slot_name === slotName)
+    if (!slot?.need_proofreading) return null
+    
+    const value = getSlotValue(slotName)
+    if (!value) return null
+    
+    // 模拟：根据字段名称和值生成稳定的校对结果（避免每次渲染都变化）
+    // 实际应该从后端获取
+    const hash = (slotName + value).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    const isConsistent = hash % 3 !== 0 // 约67%概率一致
+    
+    return {
+      status: isConsistent ? 'consistent' : 'inconsistent',
+      message: isConsistent 
+        ? `字段值 "${value}" 与案件信息匹配`
+        : `字段值 "${value}" 与案件信息不一致，请检查`
+    }
+  }
+
+  const getSlotBackground = () => {
+    if (isInOrGroup) {
+      if (isSelected) {
+        return "bg-white"
+      }
+      if (isOver) {
+        return "bg-purple-50"
+      }
+      return "bg-white"
+    }
+    
+    // 不在OR组内的逻辑
+    if (cardId) {
+      return "bg-white"
+    }
+    if (isOver) {
+      return "bg-green-50"
+    }
+    if (side === "creditor") {
+      return "bg-blue-50/30 hover:bg-blue-50"
+    }
+    if (side === "debtor") {
+      return "bg-amber-50/30 hover:bg-amber-50"
+    }
+    return "bg-slate-50 hover:bg-slate-100"
+  }
+
+  const getBorderColor = () => {
+    if (isInOrGroup) {
+      if (isSelected) {
+        return "border-green-400"
+      }
+      if (isOver) {
+        return "border-purple-400"
+      }
+      return "border-purple-300 border-dashed"
+    }
+    
+    // 不在OR组内的逻辑
+    if (cardId) {
+      return "border-green-400"
+    }
+    if (isOver) {
+      return "border-green-400"
+    }
+    if (side === "creditor") {
+      return "border-blue-300"
+    }
+    if (side === "debtor") {
+      return "border-amber-300"
+    }
+    return "border-slate-300"
+  }
+
+  const hasCard = cardId !== undefined
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-xl border transition-all duration-200 relative overflow-hidden",
+        "p-3",
+        getSlotBackground(),
+        getBorderColor(),
+        !cardId && !isInOrGroup && "border-dashed",
+        isOver && "scale-[1.02] shadow-lg",
+        hasCard && "shadow-sm", // 有卡片时显示阴影
+      )}
+    >
+      {/* 卡片头部 - 类似证据卡片样式 */}
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          {isInOrGroup && (
+            <div className={cn(
+              "w-2 h-2 rounded-full flex-shrink-0",
+              isSelected ? "bg-green-500" : "bg-purple-300"
+            )} />
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-medium">卡片</span>
+            {cardId ? (
+              <span className="text-xs font-bold text-blue-600">#{cardId}</span>
+            ) : (
+              <span className="text-xs text-slate-400">待放置</span>
+            )}
+          </div>
+        </div>
+        <div className="text-xs font-semibold text-slate-900">{cardType}</div>
+      </div>
+
+      {/* 字段列表 - 紧凑样式 */}
+      <div className={cn(
+        "space-y-1.5",
+        hasCard && "pt-2 border-t border-slate-200"
+      )}>
+        {requiredSlots.map((slot, index) => {
+          const slotValue = getSlotValue(slot.slot_name)
+          const hasValue = slotValue !== null && slotValue !== undefined && slotValue !== ''
+          const proofreadingResult = hasValue ? getProofreadingResult(slot.slot_name) : null
+          
+          return (
+            <div
+              key={`${slot.slot_name}-${index}`}
+              className={cn(
+                "flex items-center justify-between py-1.5 px-2.5 rounded text-xs",
+                hasValue
+                  ? "bg-slate-50/50"
+                  : "bg-transparent"
+              )}
+            >
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className={cn(
+                  "text-xs font-medium flex-shrink-0",
+                  hasValue ? "text-slate-700" : "text-slate-500"
+                )}>
+                  {slot.slot_name}
+                </span>
+                {slot.need_proofreading && !hasValue && (
+                  <Badge variant="outline" className="h-3.5 px-1 text-[9px] border-blue-300 text-blue-600 bg-blue-50">
+                    需校对
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0 ml-2">
+                {hasValue ? (
+                  <>
+                    <span className="text-xs text-slate-900 break-words text-right">
+                      {String(slotValue)}
+                    </span>
+                    {proofreadingResult && (
+                      <div 
+                        className="relative flex-shrink-0"
+                        onMouseEnter={() => setHoveredSlotName(slot.slot_name)}
+                        onMouseLeave={() => setHoveredSlotName(null)}
+                      >
+                        {proofreadingResult.status === 'consistent' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        ) : proofreadingResult.status === 'inconsistent' ? (
+                          <AlertCircle className="h-3.5 w-3.5 text-red-600" />
+                        ) : (
+                          <Info className="h-3.5 w-3.5 text-amber-600" />
+                        )}
+                        {/* 悬浮提示 */}
+                        {hoveredSlotName === slot.slot_name && proofreadingResult && (
+                          <div className="absolute right-0 top-6 z-50 w-56 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none">
+                            <div className="font-semibold mb-1 text-white">
+                              {proofreadingResult.status === 'consistent' ? '✓ 校对通过' : '⚠ 校对异常'}
+                            </div>
+                            <div className="text-slate-300 leading-relaxed">
+                              {proofreadingResult.message}
+                            </div>
+                            {/* 箭头 */}
+                            <div className="absolute -top-1.5 right-4 w-3 h-3 bg-slate-900 rotate-45" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">待填充</span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 拖入提示 - 只在未放置卡片时显示 */}
+      {!cardId && (
+        <div className="mt-2 pt-2 border-t border-slate-200 text-center">
+          <div className="text-[10px] text-slate-400">
+            {isOver ? "松开放置" : "拖入卡片"}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 可放置的槽位组件（参考demo设计）- 保留用于其他可能的场景
 function DroppableSlot({ 
   id, 
   title, 
@@ -1151,6 +1617,7 @@ export function CardFactory({
   const [currentImageIndex, setCurrentImageIndex] = useState<Record<number, number>>({}) // 每个卡片的当前图片索引
   const [dragOverEvidenceId, setDragOverEvidenceId] = useState<number | null>(null) // 当前拖拽悬停的引用证据ID（用于显示插入位置）
   const [dragOverInsertPosition, setDragOverInsertPosition] = useState<'before' | 'after' | null>(null) // 插入位置：之前或之后
+  const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(0) // 当前选中的模板索引
   
   const { toast } = useToast()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
@@ -1207,6 +1674,24 @@ export function CardFactory({
     }
   )
 
+  // 获取证据卡槽模板列表
+  const slotTemplatesFetcher = async ([_key, caseId]: [string, string]) => {
+    const response = await evidenceCardApi.getEvidenceCardSlotTemplates(Number(caseId))
+    return response
+  }
+
+  const { data: slotTemplatesData } = useSWR(
+    ['/api/evidence-card-slot-templates', String(caseId)],
+    slotTemplatesFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
+  )
+
+  const slotTemplates = slotTemplatesData?.data || []
+  const currentTemplate = slotTemplates[selectedTemplateIndex] || null
+
   const evidenceList = evidenceData?.data || []
   const cardList = cardData?.data || []
 
@@ -1216,6 +1701,13 @@ export function CardFactory({
       setEditedCaseInfo(finalCaseData)
     }
   }, [finalCaseData, isEditingCase])
+
+  // 当模板数据变化时，确保索引有效
+  useEffect(() => {
+    if (slotTemplates.length > 0 && selectedTemplateIndex >= slotTemplates.length) {
+      setSelectedTemplateIndex(0)
+    }
+  }, [slotTemplates.length, selectedTemplateIndex])
 
   // 处理证据选择
   const handleEvidenceSelect = (evidenceId: string) => {
@@ -1626,43 +2118,44 @@ export function CardFactory({
     }
 
     // 如果原始证据被拖拽到槽位，直接返回（不允许）
-    if (activeIdStr.startsWith('evidence-') && overIdStr.startsWith('slot-')) {
+    if (activeIdStr.startsWith('evidence-') && overIdStr.startsWith('slot::')) {
       return
     }
     
     // 检查是否是拖拽到槽位（只接受证据卡片，不接受原始证据）
-    if (activeIdStr.startsWith('card-') && overIdStr.startsWith('slot-')) {
+    if (activeIdStr.startsWith('card-') && overIdStr.startsWith('slot::')) {
       const cardId = parseInt(activeIdStr.replace('card-', ''))
-      const slotId = overIdStr.replace('slot-', '')
+      const slotId = overIdStr
       
       // 检查卡片类型是否匹配槽位类型
       const card = cardList.find(c => c.id === cardId)
       const cardType = card?.card_info?.card_type || ''
       
-      // 简单的类型匹配逻辑（可以根据需要扩展）
-      let isValid = true
-      if (slotId.includes('identity') && cardType !== '身份证') {
-        isValid = false
-      } else if (slotId.includes('wechat') && cardType !== '微信聊天记录') {
-        isValid = false
-      }
+      // 从slotId中提取card_type信息
+      // slotId格式: slot::{role}::{cardType}::{index}
+      const slotIdParts = slotId.split('::')
+      if (slotIdParts.length >= 3) {
+        // 提取card_type（第3部分是cardType，第4部分是index）
+        const slotCardType = slotIdParts[2]
+        
+        // 检查卡片类型是否匹配槽位类型
+        if (cardType === slotCardType) {
+          setSlotCards(prev => ({
+            ...prev,
+            [slotId]: cardId,
+          }))
 
-      if (isValid) {
-        setSlotCards(prev => ({
-          ...prev,
-          [slotId]: cardId,
-        }))
-
-        toast({
-          title: "卡片已放置",
-          description: `卡片 #${cardId} 已放置到槽位`,
-        })
-      } else {
-        toast({
-          title: "类型不匹配",
-          description: "卡片类型与槽位类型不匹配",
-          variant: "destructive"
-        })
+          toast({
+            title: "卡片已放置",
+            description: `卡片 #${cardId} 已放置到槽位`,
+          })
+        } else {
+          toast({
+            title: "类型不匹配",
+            description: `卡片类型 "${cardType}" 与槽位类型 "${slotCardType}" 不匹配`,
+            variant: "destructive"
+          })
+        }
       }
     }
   }
@@ -2071,45 +2564,74 @@ export function CardFactory({
 
                   {/* 卡片槽位 */}
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 mb-2">卡片槽位</h3>
-                    <p className="text-sm text-slate-500 mb-6">拖拽证据卡片到对应槽位进行分类整理</p>
-                    
-                    <div className="space-y-5">
-                      {/* 身份证明槽位 */}
+                    <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2.5">身份证明</h4>
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <DroppableSlot
-                            id="slot-creditor-identity"
-                            title="债权人身份证明"
-                            cardId={slotCards['creditor-identity']}
-                            side="creditor"
-                            category="身份证"
-                          />
-                          <DroppableSlot
-                            id="slot-debtor-identity"
-                            title="债务人身份证明"
-                            cardId={slotCards['debtor-identity']}
-                            side="debtor"
-                            category="身份证"
-                          />
-                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 mb-1">卡片槽位</h3>
+                        <p className="text-sm text-slate-500">拖拽证据卡片到对应槽位进行分类整理</p>
                       </div>
-
-                      {/* 聊天记录槽位 */}
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2.5">聊天记录</h4>
-                        <div className="grid grid-cols-1 gap-2.5">
-                          <DroppableSlot
-                            id="slot-wechat-chat"
-                            title="微信聊天记录"
-                            cardId={slotCards['wechat-chat']}
-                            side="shared"
-                            category="微信聊天记录"
-                          />
+                      
+                      {/* 模板切换标签 */}
+                      {slotTemplates.length > 1 && (
+                        <div className="flex items-center gap-2">
+                          {slotTemplates.map((template, index) => (
+                            <button
+                              key={template.template_id}
+                              onClick={() => setSelectedTemplateIndex(index)}
+                              className={cn(
+                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                selectedTemplateIndex === index
+                                  ? "bg-blue-600 text-white shadow-md"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              )}
+                            >
+                              {formatTemplateLabel(template)}
+                            </button>
+                          ))}
                         </div>
-                      </div>
+                      )}
                     </div>
+
+                    {currentTemplate ? (
+                      <div className="space-y-6">
+                        {/* 按债权人和债务人分左右两列展示 */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* 左侧：债权人相关槽位 */}
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-1 h-5 bg-blue-500 rounded-full" />
+                              <h4 className="text-sm font-semibold text-slate-700">
+                                债权人 {currentTemplate.creditor_type ? `(${currentTemplate.creditor_type})` : ''}
+                              </h4>
+                            </div>
+                            {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList)}
+                          </div>
+
+                          {/* 右侧：债务人相关槽位 */}
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-1 h-5 bg-amber-500 rounded-full" />
+                              <h4 className="text-sm font-semibold text-slate-700">
+                                债务人 {currentTemplate.debtor_type ? `(${currentTemplate.debtor_type})` : ''}
+                              </h4>
+                            </div>
+                            {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList)}
+                          </div>
+                        </div>
+
+                        {/* 共享槽位（不分债权人和债务人的） */}
+                        <div className="space-y-4 pt-4 border-t border-slate-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-1 h-5 bg-slate-400 rounded-full" />
+                            <h4 className="text-sm font-semibold text-slate-700">共享证据</h4>
+                          </div>
+                          {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
+                        {slotTemplates.length === 0 ? '暂无槽位模板配置' : '加载中...'}
+                      </div>
+                    )}
                   </div>
                 </div>
               </ScrollArea>

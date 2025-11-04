@@ -1,0 +1,407 @@
+# 证据卡槽配置 - 优化版本
+# 基于场景组合动态生成，避免重复定义
+
+metadata:
+  version: "2.0"
+  last_updated: "2025-01-20"
+
+# 案由类型定义
+case_causes:
+  contract: "买卖合同纠纷"
+  debt: "民间借贷纠纷"
+
+# 主证据类型定义
+key_evidence_types:
+  wechat_record: "微信聊天记录主证据"
+  iou_record: "借条欠条主证据"
+
+# 当事人类型定义
+party_types:
+  person: "个人"
+  company: "公司"
+  individual: "个体工商户"
+
+# 证据卡槽模板定义
+# 定义每种证据类型需要的卡槽和属性
+evidence_card_templates:
+  # 微信聊天记录
+  - card_type: "微信聊天记录"
+    required_slots:
+      - slot_name: "微信备注名"
+        need_proofreading: true
+      - slot_name: "欠款合意"
+        need_proofreading: true
+      - slot_name: "欠款金额"
+        need_proofreading: true
+  
+  # 微信个人主页
+  - card_type: "微信个人主页"
+    required_slots:
+      - slot_name: "微信备注名"
+        need_proofreading: true
+      - slot_name: "微信号"
+        need_proofreading: false
+  
+  # 微信支付转账电子凭证
+  - card_type: "微信支付转账电子凭证"
+    required_slots:
+      - slot_name: "付款方真名"
+        need_proofreading: true
+      - slot_name: "收款方真名"
+        need_proofreading: true
+  
+  # 微信转账页面
+  - card_type: "微信转账页面"
+    required_slots:
+      - slot_name: "债务人脱敏真名"
+        need_proofreading: true
+  
+  # 微信转账记录
+  - card_type: "微信转账记录"
+    required_slots:
+      - slot_name: "转账金额"
+        need_proofreading: true
+  
+  # 货款欠条
+  - card_type: "货款欠条"
+    required_slots:
+      - slot_name: "债务人真名"
+        need_proofreading: true
+      - slot_name: "债务人签字名字"
+        need_proofreading: true
+      - slot_name: "债务人盖章名字"
+        need_proofreading: true
+      - slot_name: "欠款金额"
+        need_proofreading: true
+      - slot_name: "欠款合意"
+        need_proofreading: true
+  
+  # 借款借条
+  - card_type: "借款借条"
+    required_slots:
+      - slot_name: "债务人真名"
+        need_proofreading: true
+      - slot_name: "债务人签字名字"
+        need_proofreading: true
+      - slot_name: "债务人盖章名字"
+        need_proofreading: true
+      - slot_name: "欠款金额"
+        need_proofreading: true
+      - slot_name: "欠款合意"
+        need_proofreading: true
+  
+  # 身份证
+  - card_type: "身份证"
+    required_slots:
+      - slot_name: "姓名"
+        need_proofreading: true
+      - slot_name: "性别"
+        need_proofreading: false
+      - slot_name: "民族"
+        need_proofreading: false
+      - slot_name: "出生"
+        need_proofreading: false
+      - slot_name: "住址"
+        need_proofreading: false
+      - slot_name: "公民身份号码"
+        need_proofreading: false
+  
+  # 中华人民共和国居民户籍档案
+  - card_type: "中华人民共和国居民户籍档案"
+    required_slots:
+      - slot_name: "姓名"
+        need_proofreading: true
+      - slot_name: "性别"
+        need_proofreading: false
+      - slot_name: "民族"
+        need_proofreading: false
+      - slot_name: "出生"
+        need_proofreading: false
+      - slot_name: "住址"
+        need_proofreading: false
+      - slot_name: "公民身份号码"
+        need_proofreading: false
+  
+  # 公司营业执照
+  - card_type: "公司营业执照"
+    required_slots:
+      - slot_name: "公司名称"
+        need_proofreading: true
+      - slot_name: "法定代表人"
+        need_proofreading: true
+  
+  # 公司全国企业公示系统截图
+  - card_type: "公司全国企业公示系统截图"
+    required_slots:
+      - slot_name: "公司名称"
+        need_proofreading: true
+      - slot_name: "法定代表人"
+        need_proofreading: true
+  
+  # 个体工商户营业执照
+  - card_type: "个体工商户营业执照"
+    required_slots:
+      - slot_name: "经营名称"
+        need_proofreading: true
+      - slot_name: "经营者姓名"
+        need_proofreading: true
+  
+  # 个体工商户全国企业公示系统截图
+  - card_type: "个体工商户全国企业公示系统截图"
+    required_slots:
+      - slot_name: "经营名称"
+        need_proofreading: true
+      - slot_name: "经营者姓名"
+        need_proofreading: true
+  
+  # 银行转账记录
+  - card_type: "银行转账记录"
+    required_slots:
+      - slot_name: "转账账户真名"
+        need_proofreading: true
+      - slot_name: "转账金额"
+        need_proofreading: true
+
+# 场景组合规则
+# 定义不同场景组合下需要的证据类型和角色要求
+# 
+# 字段说明:
+# - case_cause: 案由类型(contract/debt)
+# - key_evidence: 主证据类型(wechat_record/iou_record)
+# - required_evidence_types: 该场景下需要的证据类型列表
+#   - evidence_type: 证据类型名称(必须与evidence_card_templates中的card_type匹配)
+#   - role_requirement: (可选)角色要求
+#     * "ignore": 忽略角色,不需要特定角色
+#     * "all": 双方都需要(债权人和债务人都需要)
+#     * "creditor": 仅债权人需要
+#     * "debtor": 仅债务人需要
+#     * 如果未设置,则根据for_creditor_type和for_debtor_type动态决定
+#   - for_creditor_type: (可选)当债权人是该类型时需要该证据(债权人角色)
+#     * "person": 个人类型需要
+#     * "company": 公司类型需要
+#     * "individual": 个体工商户类型需要
+#     * 如果设置,则当债权人是该类型时,该证据需要债权人角色
+#   - for_debtor_type: (可选)当债务人是该类型时需要该证据(债务人角色)
+#     * "person": 个人类型需要
+#     * "company": 公司类型需要
+#     * "individual": 个体工商户类型需要
+#     * 如果设置,则当债务人是该类型时,该证据需要债务人角色
+#     * 如果for_creditor_type和for_debtor_type都匹配,则role_requirement默认为"all"
+#     * 如果只有for_creditor_type匹配,则role_requirement为"creditor"
+#     * 如果只有for_debtor_type匹配,则role_requirement为"debtor"
+#   - or_group: (可选)"或"关系分组,同组内的证据只需满足一个即可
+#     * null: 无分组,必须满足
+#     * 相同字符串值: 同一组,满足其中一个即可
+scenario_rules:
+  # 买卖合同纠纷 - 微信聊天记录主证据
+  - case_cause: "contract"
+    key_evidence: "wechat_record"
+    required_evidence_types:
+      # 主证据 - 微信聊天记录
+      - evidence_type: "微信聊天记录"
+        role_requirement: "ignore"  # ignore: 忽略角色, all: 双方都需要, creditor: 仅债权人, debtor: 仅债务人
+        or_group: null  # 用于"或"关系分组, 同组只需满足一个
+      
+      # 微信相关证据
+      - evidence_type: "微信个人主页"
+        role_requirement: "all"
+        or_group: null
+      
+      - evidence_type: "微信支付转账电子凭证"
+        role_requirement: "ignore"
+        or_group: "转账身份"
+      
+      - evidence_type: "微信转账页面"
+        role_requirement: "ignore"
+        or_group: "转账身份"
+      
+      # 身份证据 - 根据当事人类型动态添加
+      # 个人身份证据
+      # 逻辑：当债权人是个人类型时，需要身份证（债权人角色）
+      #       当债务人是个人类型时，需要身份证（债务人角色）
+      #       如果债权人和债务人都是个人类型，则双方都需要（all）
+      - evidence_type: "身份证"
+        for_creditor_type: "person"  # 当债权人是该类型时需要（债权人角色）
+        for_debtor_type: "person"  # 当债务人是该类型时需要（债务人角色）
+        # 如果for_creditor_type和for_debtor_type都匹配，则role_requirement默认为"all"
+        # 如果只有for_creditor_type匹配，则role_requirement为"creditor"
+        # 如果只有for_debtor_type匹配，则role_requirement为"debtor"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      # 公司身份证据
+      - evidence_type: "公司营业执照"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "公司全国企业公示系统截图"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      # 个体工商户身份证据
+      - evidence_type: "个体工商户营业执照"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+      
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+  
+  # 买卖合同纠纷 - 借条欠条主证据
+  - case_cause: "contract"
+    key_evidence: "iou_record"
+    required_evidence_types:
+      # 主证据 - 货款欠条
+      - evidence_type: "货款欠条"
+        role_requirement: "ignore"
+        or_group: null
+      
+      # 身份证据 - 根据当事人类型动态添加(同上)
+      - evidence_type: "身份证"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "公司营业执照"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "公司全国企业公示系统截图"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "个体工商户营业执照"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+      
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+  
+  # 民间借贷纠纷 - 微信聊天记录主证据
+  - case_cause: "debt"
+    key_evidence: "wechat_record"
+    required_evidence_types:
+      # 主证据 - 微信聊天记录
+      - evidence_type: "微信聊天记录"
+        role_requirement: "ignore"
+        or_group: null
+      
+      # 微信相关证据
+      - evidence_type: "微信个人主页"
+        role_requirement: "all"
+        or_group: null
+      
+      - evidence_type: "微信支付转账电子凭证"
+        role_requirement: "ignore"
+        or_group: "转账身份"
+      
+      - evidence_type: "微信转账页面"
+        role_requirement: "ignore"
+        or_group: "转账身份"
+      
+      # 转账记录证据(或关系)
+      - evidence_type: "银行转账记录"
+        role_requirement: "ignore"
+        or_group: "转账记录"
+      
+      - evidence_type: "微信转账记录"
+        role_requirement: "ignore"
+        or_group: "转账记录"
+      
+      # 身份证据 - 根据当事人类型动态添加(同上)
+      - evidence_type: "身份证"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "公司营业执照"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "公司全国企业公示系统截图"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "个体工商户营业执照"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+      
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+  
+  # 民间借贷纠纷 - 借条欠条主证据
+  - case_cause: "debt"
+    key_evidence: "iou_record"
+    required_evidence_types:
+      # 主证据 - 借款借条
+      - evidence_type: "借款借条"
+        role_requirement: "ignore"
+        or_group: null
+      
+      # 转账记录证据(或关系)
+      - evidence_type: "银行转账记录"
+        role_requirement: "ignore"
+        or_group: "转账记录"
+      
+      - evidence_type: "微信转账记录"
+        role_requirement: "ignore"
+        or_group: "转账记录"
+      
+      # 身份证据 - 根据当事人类型动态添加(同上)
+      - evidence_type: "身份证"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"
+        for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "公司营业执照"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "公司全国企业公示系统截图"
+        for_creditor_type: "company"
+        for_debtor_type: "company"
+        or_group: "企业身份"
+      
+      - evidence_type: "个体工商户营业执照"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"
+      
+      - evidence_type: "个体工商户全国企业公示系统截图"
+        for_creditor_type: "individual"
+        for_debtor_type: "individual"
+        or_group: "个体工商户身份"

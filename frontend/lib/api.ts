@@ -611,6 +611,29 @@ export interface EvidenceCardCastingRequest {
   evidence_ids: number[];
 }
 
+// 证据卡槽模板类型定义
+export interface EvidenceCardSlot {
+  slot_name: string;
+  need_proofreading: boolean;
+}
+
+export interface EvidenceCardTemplate {
+  card_type: string;
+  required_slots: EvidenceCardSlot[];
+  role_requirement?: string; // "ignore" | "all" | "creditor" | "debtor"
+  or_group?: string | null; // 或关系分组，同组内的证据只需满足一个即可
+}
+
+export interface EvidenceCardSlotTemplate {
+  template_id: string;
+  case_cause: string;
+  key_evidence: string;
+  key_evidence_name: string;
+  creditor_type?: string;
+  debtor_type?: string;
+  required_card_types: EvidenceCardTemplate[];
+}
+
 // 证据卡片API
 export const evidenceCardApi = {
   async castEvidenceCards(request: EvidenceCardCastingRequest): Promise<{ task_id: string; status: string; message: string }> {
@@ -695,6 +718,23 @@ export const evidenceCardApi = {
       return { data: result.data };
     } else {
       throw new Error(result.message || "更新卡片失败");
+    }
+  },
+
+  async getEvidenceCardSlotTemplates(caseId: number, params?: {
+    skip?: number;
+    limit?: number;
+  }): Promise<{ data: EvidenceCardSlotTemplate[]; pagination?: any }> {
+    const { skip = 0, limit = 100 } = params || {};
+    const url = buildApiUrl(`/evidences/evidence-card-slot-templates/${caseId}?skip=${skip}&limit=${limit}`);
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data, pagination: result.pagination };
+    } else {
+      throw new Error(result.message || "获取证据卡槽模板失败");
     }
   },
 }

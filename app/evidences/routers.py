@@ -17,7 +17,8 @@ from app.evidences.schemas import (
     BatchCheckEvidenceRequest,
     EvidenceCardCastingRequest,
     EvidenceCardResponse,
-    EvidenceCardUpdateRequest
+    EvidenceCardUpdateRequest,
+    EvidenceCardSlotTemplate
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -707,4 +708,53 @@ async def websocket_auto_process(websocket: WebSocket):
             await websocket.close(code=1011, reason=str(e))
         except:
             pass
+
+
+@router.get("/evidence-card-slot-templates/{case_id}", response_model=ListResponse[EvidenceCardSlotTemplate])
+async def get_evidence_card_slot_templates(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    skip: int = 0,
+    limit: int = 100,
+):
+    """获取案件的证据卡槽模板列表
+    
+    根据案件ID获取对应的证据卡槽模板配置列表，包括：
+    - 案由类型
+    - 案件当事人类型组合（债权人和债务人类型）
+    - 主要证据类型（如果没有确立，至少返回两个槽位模板）
+    
+    Args:
+        case_id: 案件ID
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        skip: 跳过记录数（分页）
+        limit: 返回记录数限制（分页）
+        
+    Returns:
+        ListResponse[EvidenceCardSlotTemplate]: 证据卡槽模板列表响应
+    """
+    try:
+        templates_response = await evidence_service.get_evidence_card_slot_templates(db, case_id)
+        templates = templates_response.templates
+        
+        # 应用分页
+        total = len(templates)
+        paginated_templates = templates[skip:skip + limit]
+        
+        return ListResponse(
+            data=paginated_templates,
+            pagination=Pagination(
+                total=total,
+                page=skip // limit + 1 if limit > 0 else 1,
+                size=len(paginated_templates),
+                pages=(total + limit - 1) // limit if limit > 0 else 1
+            )
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"获取证据卡槽模板失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取证据卡槽模板失败: {str(e)}")
 
