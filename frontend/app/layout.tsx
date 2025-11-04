@@ -104,7 +104,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
           onLogout={handleLogout}
         />
         <main className="pt-12">
-          <div className="container mx-auto px-4 lg:px-6 py-3 max-w-7xl">{children}</div>
+          <div className={pathname?.includes('/card-factory') 
+            ? "w-full px-4 lg:px-6 py-3" 
+            : "container mx-auto px-4 lg:px-6 py-3 max-w-7xl"
+          }>{children}</div>
         </main>
       </div>
     </GlobalTaskProvider>

@@ -592,6 +592,91 @@ export const evidenceApi = {
   },
 }
 
+// 证据卡片接口类型定义
+export interface EvidenceCard {
+  id: number;
+  evidence_ids: number[];
+  card_info?: {
+    card_type?: string;
+    card_is_associated?: boolean;
+    [key: string]: any;
+  };
+  updated_times: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EvidenceCardCastingRequest {
+  case_id: number;
+  evidence_ids: number[];
+}
+
+// 证据卡片API
+export const evidenceCardApi = {
+  async castEvidenceCards(request: EvidenceCardCastingRequest): Promise<{ task_id: string; status: string; message: string }> {
+    const url = buildApiUrl(`/evidences/evidence-cards/cast`);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return result.data;
+    } else {
+      throw new Error(result.message || "卡片铸造失败");
+    }
+  },
+
+  async getEvidenceCards(params: {
+    case_id: number;
+    skip?: number;
+    limit?: number;
+    evidence_ids?: number[];
+    card_type?: string;
+    card_is_associated?: boolean;
+    sort_by?: string;
+    sort_order?: string;
+  }): Promise<{ data: EvidenceCard[]; pagination?: any }> {
+    const { case_id, skip = 0, limit = 100, evidence_ids, card_type, card_is_associated, sort_by, sort_order } = params;
+    let url = buildApiUrl(`/evidences/evidence-cards?case_id=${case_id}&skip=${skip}&limit=${limit}`);
+    
+    if (evidence_ids && evidence_ids.length > 0) {
+      evidence_ids.forEach(id => url += `&evidence_ids=${id}`);
+    }
+    if (card_type) url += `&card_type=${encodeURIComponent(card_type)}`;
+    if (card_is_associated !== undefined) url += `&card_is_associated=${card_is_associated}`;
+    if (sort_by) url += `&sort_by=${encodeURIComponent(sort_by)}`;
+    if (sort_order) url += `&sort_order=${encodeURIComponent(sort_order)}`;
+    
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data, pagination: result.pagination };
+    } else {
+      throw new Error(result.message || "获取卡片列表失败");
+    }
+  },
+
+  async getEvidenceCardById(cardId: number): Promise<{ data: EvidenceCard }> {
+    const url = buildApiUrl(`/evidences/evidence-cards/${cardId}`);
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data };
+    } else {
+      throw new Error(result.message || "获取卡片详情失败");
+    }
+  },
+}
+
 // OCR API
 export const ocrApi = {
   async recognizeEvidence(imageUrl: string, evidenceType: string): Promise<{ data: any }> {

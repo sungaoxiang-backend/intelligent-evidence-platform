@@ -1870,99 +1870,225 @@ async def evidence_card_casting(
                     AssociationFeaturesExtractionResults
                 )
                 
+                # 收集所有需要关联提取的证据URL（微信聊天记录类型）
+                # 重要：关联提取器支持批次处理，应该一次性传入所有微信聊天记录证据的URL
+                # 关联提取器会自动按 slot_group_name 分组，每个分组生成一个 ResultItem
+                all_association_urls = []
+                association_url_to_evidence_id = {}  # 记录URL对应的evidence_id
+                
                 for card in association_cards:
                     card_type = card.card_info.get("card_type")
-                    # 微信聊天记录类型（无论证据数量）以及其他多个证据的类型都需要关联提取
-                    if card_type == "微信聊天记录" or len(card.evidence_ids) > 1:
-                        # 获取所有证据的 URL
-                        evidence_urls = []
+                    # 微信聊天记录类型（无论证据数量）都需要关联提取
+                    if card_type == "微信聊天记录":
                         for evidence_id in card.evidence_ids:
                             evidence = evidence_map.get(evidence_id)
                             if evidence:
-                                evidence_urls.append(evidence.file_url)
-                        
-                        if not evidence_urls:
-                            logger.warning(f"关联卡片没有有效的证据URL，evidence_ids: {card.evidence_ids}")
-                            continue
-                        
-                        # 调用关联特征提取器
-                        association_extractor = AssociationFeaturesExtractor()
-                        # 注意：arun 实际上返回 RunResponse，虽然类型签名说是 AssociationFeaturesExtractionResults
-                        association_response = await asyncio.wait_for(
-                            association_extractor.arun(evidence_urls),
-                            timeout=300.0  # 关联提取可能需要更长时间
-                        )
-                        
-                        # 检查返回类型并提取内容
-                        # 注意：arun 实际上返回 RunResponse（从 self.agent.arun），而不是直接返回 AssociationFeaturesExtractionResults
-                        association_results: AssociationFeaturesExtractionResults
-                        if hasattr(association_response, 'content') and hasattr(association_response, 'run_id'):
-                            # 如果返回的是 RunResponse，提取 content
-                            if association_response.content is None:  # type: ignore
-                                logger.warning("关联特征提取结果为空")
-                                continue
-                            association_results = cast(AssociationFeaturesExtractionResults, association_response.content)  # type: ignore
-                        elif hasattr(association_response, 'results'):
-                            # 如果直接返回的是 AssociationFeaturesExtractionResults（有 results 属性）
-                            association_results = association_response  # type: ignore
+                                all_association_urls.append(evidence.file_url)
+                                # 记录URL到evidence_id的映射（支持原始URL和归一化URL）
+                                association_url_to_evidence_id[evidence.file_url] = evidence_id
+                                normalized_url = unquote(evidence.file_url)
+                                if normalized_url != evidence.file_url:
+                                    association_url_to_evidence_id[normalized_url] = evidence_id
+                
+                if all_association_urls:
+                    logger.info(f"批次关联特征提取：共 {len(all_association_urls)} 个微信聊天记录证据")
+                    
+                    # 批次调用关联特征提取器（一次性处理所有微信聊天记录）
+                    association_extractor = AssociationFeaturesExtractor()
+                    association_response = await asyncio.wait_for(
+                        association_extractor.arun(all_association_urls),
+                        timeout=300.0  # 关联提取可能需要更长时间
+                    )
+                    
+                    # 检查返回类型并提取内容
+                    # 注意：arun 实际上返回 RunResponse（从 self.agent.arun），而不是直接返回 AssociationFeaturesExtractionResults
+                    association_results: AssociationFeaturesExtractionResults
+                    if hasattr(association_response, 'content') and hasattr(association_response, 'run_id'):
+                        # 如果返回的是 RunResponse，提取 content
+                        if association_response.content is None:  # type: ignore
+                            logger.warning("关联特征提取结果为空")
                         else:
-                            logger.warning(f"关联特征提取返回了未知类型: {type(association_response)}")
-                            continue
-                        
-                        if association_results and association_results.results:
-                            if "card_features" not in card.card_info:
-                                card.card_info["card_features"] = []
+                            association_results = cast(AssociationFeaturesExtractionResults, association_response.content)  # type: ignore
                             
-                            # 遍历所有分组结果
-                            for result_item in association_results.results:
-                                slot_group_name = result_item.slot_group_name
+                            if association_results and association_results.results:
+                                # 关联提取器会按 slot_group_name 自动分组
+                                # 每个分组会生成一个 ResultItem，包含该分组的所有特征
+                                # 我们需要为每个分组创建一个新的卡片数据，替换掉原来按单个证据创建的卡片
                                 
-                                # 提取该分组涉及的证据ID
-                                reference_evidence_ids = []
-                                for img_seq in result_item.image_sequence_info:
-                                    # 根据 URL 找到对应的 evidence_id
-                                    normalized_url = unquote(img_seq.url)
-                                    evidence_id = url_to_evidence_id.get(normalized_url) or url_to_evidence_id.get(img_seq.url)
-                                    if evidence_id:
-                                        reference_evidence_ids.append(evidence_id)
+                                # 创建按 slot_group_name 分组的卡片数据
+                                grouped_cards: Dict[str, EvidenceCardSchema] = {}  # group_name -> card
                                 
-                                # 为每个 slot_extraction 添加 slot_group_info
-                                for slot_extraction in result_item.slot_extraction:
-                                    if hasattr(slot_extraction, 'model_dump'):
-                                        slot_dict = slot_extraction.model_dump()
-                                    else:
-                                        slot_dict = {
-                                            "slot_name": slot_extraction.slot_name,
-                                            "slot_value_type": slot_extraction.slot_value_type,
-                                            "slot_value": slot_extraction.slot_value,
-                                            "confidence": slot_extraction.confidence,
-                                            "reasoning": slot_extraction.reasoning,
-                                        }
+                                for result_item in association_results.results:
+                                    slot_group_name = result_item.slot_group_name
                                     
-                                    # 构建 slot_group_info
-                                    slot_group_info = [{
-                                        "group_name": slot_group_name,
-                                        "reference_evidence_ids": reference_evidence_ids
-                                    }] if reference_evidence_ids else None
+                                    # 提取该分组涉及的证据ID
+                                    reference_evidence_ids = []
+                                    for img_seq in result_item.image_sequence_info:
+                                        # 根据 URL 找到对应的 evidence_id
+                                        normalized_url = unquote(img_seq.url)
+                                        evidence_id = association_url_to_evidence_id.get(normalized_url) or association_url_to_evidence_id.get(img_seq.url)
+                                        if evidence_id:
+                                            reference_evidence_ids.append(evidence_id)
                                     
-                                    card.card_info["card_features"].append({
-                                        "slot_name": slot_dict["slot_name"],
-                                        "slot_value_type": slot_dict.get("slot_value_type", "string"),
-                                        "slot_value": slot_dict["slot_value"],
-                                        "confidence": slot_dict.get("confidence", 0.0),
-                                        "reasoning": slot_dict.get("reasoning", ""),
-                                        "slot_group_info": slot_group_info
-                                    })
-                            
-                            # 标记为关联提取
-                            card.card_info["card_is_associated"] = True
+                                    if not reference_evidence_ids:
+                                        logger.warning(f"分组 {slot_group_name} 没有找到对应的证据ID")
+                                        continue
+                                    
+                                    # 初始化或获取该分组的卡片
+                                    if slot_group_name not in grouped_cards:
+                                        # 获取第一个证据的类型（所有同组证据应该是同一类型）
+                                        first_evidence_id = reference_evidence_ids[0]
+                                        first_card = evidence_id_to_card.get(first_evidence_id)
+                                        card_type = first_card.card_info.get("card_type") if first_card and first_card.card_info else "微信聊天记录"
+                                        
+                                        grouped_cards[slot_group_name] = EvidenceCardSchema(
+                                            evidence_ids=sorted(reference_evidence_ids),  # 排序以确保一致性
+                                            card_info={
+                                                "card_type": card_type,
+                                                "card_is_associated": True,
+                                                "card_features": []
+                                            }
+                                        )
+                                    
+                                    card = grouped_cards[slot_group_name]
+                                    
+                                    # 为每个 slot_extraction 添加 slot_group_info
+                                    for slot_extraction in result_item.slot_extraction:
+                                        if hasattr(slot_extraction, 'model_dump'):
+                                            slot_dict = slot_extraction.model_dump()
+                                        else:
+                                            slot_dict = {
+                                                "slot_name": slot_extraction.slot_name,
+                                                "slot_value_type": slot_extraction.slot_value_type,
+                                                "slot_value": slot_extraction.slot_value,
+                                                "confidence": slot_extraction.confidence,
+                                                "reasoning": slot_extraction.reasoning,
+                                            }
+                                        
+                                        # 构建 slot_group_info
+                                        slot_group_info = [{
+                                            "group_name": slot_group_name,
+                                            "reference_evidence_ids": sorted(reference_evidence_ids)  # 排序以确保一致性
+                                        }] if reference_evidence_ids else None
+                                        
+                                        card.card_info["card_features"].append({
+                                            "slot_name": slot_dict["slot_name"],
+                                            "slot_value_type": slot_dict.get("slot_value_type", "string"),
+                                            "slot_value": slot_dict.get("slot_value", ""),
+                                            "confidence": slot_dict.get("confidence", 0.0),
+                                            "reasoning": slot_dict.get("reasoning", ""),
+                                            "slot_group_info": slot_group_info
+                                        })
+                                    
+                                    logger.info(f"创建关联分组卡片: group_name={slot_group_name}, evidence_ids={sorted(reference_evidence_ids)}")
+                                
+                                # 将按 slot_group_name 分组的卡片替换掉原来按单个证据创建的卡片
+                                # 首先移除所有微信聊天记录类型的原始卡片
+                                card_data = [
+                                    card for card in card_data 
+                                    if not (card.card_info and card.card_info.get("card_type") == "微信聊天记录")
+                                ]
+                                
+                                # 添加按 slot_group_name 分组的卡片
+                                for group_card in grouped_cards.values():
+                                    card_data.append(group_card)
+                            else:
+                                logger.warning("关联特征提取结果列表为空")
+                    elif hasattr(association_response, 'results'):
+                        # 如果直接返回的是 AssociationFeaturesExtractionResults（有 results 属性）
+                        association_results = association_response  # type: ignore
+                        # 处理逻辑同上（需要复制上面的处理逻辑）
+                        logger.warning("关联特征提取返回了直接结果类型，需要处理")
+                    else:
+                        logger.warning(f"关联特征提取返回了未知类型: {type(association_response)}")
+                else:
+                    logger.warning("没有找到需要关联提取的证据URL")
             except Exception as e:
                 logger.error(f"关联特征提取失败: {str(e)}")
                 # 关联提取失败不影响卡片的创建
     
-    # Step4: 证据卡片批量创建（使用 update_or_create 方法）
-    created_cards = []
+    # Step4: 按 slot_group_name 重新组织卡片数据
+    # 如果有 slot_group_name，则按 slot_group_name 分组，每个分组生成一张卡片
+    # 如果没有 slot_group_name，则每个证据生成一张卡片（保持原有逻辑）
+    
+    # 收集所有具有 slot_group_name 的特征
+    group_to_features: Dict[str, Dict[str, Any]] = {}  # group_name -> {evidence_ids: set, features: list, card_type: str}
+    group_to_card_info: Dict[str, Dict] = {}  # group_name -> card_info (card_type, card_is_associated)
+    
+    # 收集没有 slot_group_name 的卡片（保持原有逻辑）
+    cards_without_group = []
+    
     for card in card_data:
+        if not card.card_info or not card.card_info.get("card_features"):
+            # 如果没有特征，保持原有逻辑
+            cards_without_group.append(card)
+            continue
+        
+        card_features = card.card_info.get("card_features", [])
+        card_type = card.card_info.get("card_type", "未知")
+        card_is_associated = card.card_info.get("card_is_associated", False)
+        
+        # 检查是否有 slot_group_info
+        has_group = False
+        for feature in card_features:
+            slot_group_info = feature.get("slot_group_info")
+            if slot_group_info and isinstance(slot_group_info, list) and len(slot_group_info) > 0:
+                group_info = slot_group_info[0]
+                group_name = group_info.get("group_name")
+                reference_evidence_ids = group_info.get("reference_evidence_ids", [])
+                
+                if group_name:
+                    has_group = True
+                    # 初始化分组数据
+                    if group_name not in group_to_features:
+                        group_to_features[group_name] = {
+                            "evidence_ids": set(),
+                            "features": [],
+                            "card_type": card_type,
+                            "card_is_associated": True
+                        }
+                        group_to_card_info[group_name] = {
+                            "card_type": card_type,
+                            "card_is_associated": True,
+                            "card_features": []
+                        }
+                    else:
+                        # 如果分组已存在，确保 card_type 一致（如果不同，使用第一个）
+                        if group_to_card_info[group_name]["card_type"] != card_type:
+                            logger.warning(f"分组 {group_name} 的 card_type 不一致: {group_to_card_info[group_name]['card_type']} vs {card_type}, 使用第一个")
+                    
+                    # 添加证据ID
+                    group_to_features[group_name]["evidence_ids"].update(reference_evidence_ids)
+                    # 添加特征（避免重复）
+                    if feature not in group_to_card_info[group_name]["card_features"]:
+                        group_to_card_info[group_name]["card_features"].append(feature)
+        
+        # 如果没有分组信息，保持原有逻辑
+        if not has_group:
+            cards_without_group.append(card)
+    
+    # 重新构建卡片数据：按 slot_group_name 分组的卡片 + 没有分组的卡片
+    final_card_data = []
+    
+    # 添加按 slot_group_name 分组的卡片
+    for group_name, group_data in group_to_features.items():
+        evidence_ids_list = sorted(list(group_data["evidence_ids"]))
+        card_info = group_to_card_info[group_name]
+        
+        final_card_data.append(
+            EvidenceCardSchema(
+                evidence_ids=evidence_ids_list,
+                card_info=card_info
+            )
+        )
+        logger.info(f"创建按 slot_group_name 分组的卡片: group_name={group_name}, evidence_ids={evidence_ids_list}")
+    
+    # 添加没有分组的卡片（保持原有逻辑）
+    final_card_data.extend(cards_without_group)
+    
+    # Step5: 证据卡片批量创建（使用 update_or_create 方法）
+    created_cards = []
+    for card in final_card_data:
         try:
             # 只有 card_info 不为空时才创建卡片
             if not card.card_info:

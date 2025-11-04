@@ -39,6 +39,7 @@ interface TopNavigationProps {
 export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onRemoveTask, onClearAll, onClearCompleted, onRetryTask, onRefreshTask }: TopNavigationProps) {
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
+  const isCardFactoryPage = pathname?.includes('/card-factory')
 
   const getActiveModule = () => {
     if (pathname.startsWith("/cases")) return "cases"
@@ -124,7 +125,10 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-      <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
+      <div className={isCardFactoryPage 
+        ? "w-full px-4 lg:px-6" 
+        : "container mx-auto px-4 lg:px-6 max-w-7xl"
+      }>
         <div className="flex items-center justify-between h-12">
           {/* Logo和导航 */}
           <div className="flex items-center space-x-4">

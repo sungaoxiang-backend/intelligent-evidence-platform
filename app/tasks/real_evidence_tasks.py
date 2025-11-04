@@ -407,7 +407,7 @@ async def run_association_analysis_async(case_id: int, evidence_ids: List[int], 
             raise e
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, name="app.tasks.real_evidence_tasks.cast_evidence_cards_task")
 def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int]) -> Dict[str, Any]:
     """
     证据卡片铸造任务 - 从证据特征中铸造证据卡片

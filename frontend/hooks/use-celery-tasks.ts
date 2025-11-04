@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { evidenceApi, taskApi } from '@/lib/api'
+import { evidenceApi, taskApi, evidenceCardApi } from '@/lib/api'
 import { useToast } from '@/components/ui/use-toast'
 import { API_CONFIG } from '@/lib/config'
 
@@ -643,5 +643,68 @@ export function useAssociationEvidenceAnalysis(tasksHook?: { addTask: (taskId: s
 
   return {
     startAssociationEvidenceAnalysis
+  }
+}
+
+// 专门用于证据卡片铸造的Hook
+export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?: TaskProgress['context']) => void; updateTask: (taskId: string, updates: Partial<TaskProgress>) => void; removeTask: (taskId: string) => void }) {
+  const defaultTasksHook = useCeleryTasks()
+  const { addTask, updateTask, removeTask } = tasksHook || defaultTasksHook
+  const { toast } = useToast()
+
+  const startCardCasting = useCallback(async (params: {
+    case_id: number
+    evidence_ids: (number | string)[]
+    caseTitle?: string
+  }) => {
+    try {
+      console.log('启动卡片铸造任务，参数:', params)
+      
+      // 使用证据卡片API启动卡片铸造任务
+      const result = await evidenceCardApi.castEvidenceCards({
+        case_id: params.case_id,
+        evidence_ids: params.evidence_ids.map(id => Number(id))
+      })
+      
+      console.log('卡片铸造任务已启动:', result)
+      
+      // 构建任务上下文信息
+      const taskContext: TaskProgress['context'] = {
+        type: 'evidence_analysis',
+        title: '证据卡片铸造',
+        description: `铸造 ${params.evidence_ids.length} 个证据的卡片`,
+        caseId: params.case_id,
+        caseTitle: params.caseTitle || `案件 ${params.case_id}`,
+        pagePath: `/cases/${params.case_id}?tab=card-factory`,
+        pageTitle: '卡片工厂',
+        evidenceCount: params.evidence_ids.length,
+        metadata: {
+          operation: 'card_casting'
+        }
+      }
+      
+      // 添加任务到队列
+      console.log('准备添加卡片铸造任务到队列，任务ID:', result.task_id)
+      addTask(result.task_id, taskContext)
+
+      return { taskId: result.task_id, success: true }
+
+    } catch (error) {
+      console.error('启动卡片铸造失败:', error)
+      
+      const errorMessage = error instanceof Error ? error.message : '启动卡片铸造任务失败'
+      
+      toast({
+        title: '启动失败',
+        description: errorMessage,
+        variant: 'destructive'
+      })
+
+      return { taskId: '', success: false }
+    }
+  }, [addTask, toast])
+
+  return {
+    startCardCasting
   }
 }

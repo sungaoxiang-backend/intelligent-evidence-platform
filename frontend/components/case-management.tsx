@@ -547,6 +547,10 @@ export default function CaseManagement() {
     router.push(`/cases/${caseId}/detail`);
   };
 
+  const handleViewCardFactory = (caseId: number) => {
+    router.push(`/cases/${caseId}/card-factory`);
+  };
+
 
   // 修改表格渲染逻辑
   const renderTable = (cases: Case[]) => {
@@ -613,6 +617,14 @@ export default function CaseManagement() {
                           className="text-green-600 hover:text-green-700 hover:bg-green-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
                         >
                           详情
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewCardFactory(caseItem.id)}
+                          className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                        >
+                          卡片工厂
                         </Button>
                       </div>
                     </TableCell>
