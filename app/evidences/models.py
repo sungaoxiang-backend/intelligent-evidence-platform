@@ -132,11 +132,13 @@ class Evidence(Base):
 
 
 # 证据卡片与证据的多对多关联表（证据外键关联卡片）
+# 支持引用证据的顺序管理（sequence_number）
 evidence_card_evidence_association = Table(
     "evidence_card_evidence_association",
     Base.metadata,
     Column("evidence_card_id", Integer, ForeignKey("evidence_cards.id", ondelete="CASCADE"), primary_key=True),
     Column("evidence_id", Integer, ForeignKey("evidences.id", ondelete="CASCADE"), primary_key=True),
+    Column("sequence_number", Integer, nullable=False, default=0, comment="引用证据的顺序序号，从0开始"),
 )
 
 

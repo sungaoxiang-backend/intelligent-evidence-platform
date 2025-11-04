@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import React, { useState, Suspense, useEffect } from "react"
 import useSWR, { mutate } from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,17 +32,28 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   DragEndEvent,
   DragStartEvent,
+  DragOverEvent,
+  CollisionDetection,
 } from '@dnd-kit/core'
 import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { cn } from "@/lib/utils"
 
 // SWR数据获取函数
@@ -117,31 +128,58 @@ function OriginalEvidenceItem({
   isSelected, 
   isCast,
   multiSelectMode,
-  onClick 
+  onClick,
+  isDraggable,
+  dragId
 }: { 
   evidence: any
   isSelected: boolean
   isCast: boolean
   multiSelectMode: boolean
   onClick: () => void
+  isDraggable?: boolean
+  dragId?: string
 }) {
   const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
+  
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: dragId || `evidence-${evidence.id}`,
+    disabled: !isDraggable,
+  })
 
   return (
-    <button
-      onClick={onClick}
+    <div
+      ref={setNodeRef}
+      {...(isDraggable ? { ...attributes, ...listeners } : {})} // 当可拖拽时，将拖拽属性绑定到整个卡片
       className={cn(
         "w-full p-3 rounded-xl border text-left transition-all duration-200 hover:shadow-lg group relative overflow-hidden",
         isSelected
           ? "border-blue-400 shadow-lg ring-2 ring-blue-200 bg-blue-50/50"
           : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30",
+        isDraggable && "cursor-grab active:cursor-grabbing select-none", // 添加 select-none 防止文本选择
+        isDragging && "opacity-30" // 拖拽时降低透明度，但不移动原卡片
       )}
+      onClick={onClick}
+      onMouseDown={(e) => {
+        // 防止在拖动时触发文本选择
+        if (isDraggable && e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
     >
       {isSelected && (
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-blue-600" />
       )}
 
       <div className="flex items-center gap-3">
+        {/* 拖拽句柄 - 仅在可拖拽时显示，放在最左侧，与引用证据列表保持一致 */}
+        {isDraggable && (
+          <div
+            className="flex-shrink-0 text-slate-400 pointer-events-none" // 使用 pointer-events-none 防止图标干扰拖拽
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+        )}
         <div className="relative flex-shrink-0">
           <div
             className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
@@ -195,7 +233,7 @@ function OriginalEvidenceItem({
           </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -207,7 +245,15 @@ function EvidenceCardListItem({
   onClick,
   evidenceList,
   onImageClick,
-  onUpdateCard
+  onUpdateCard,
+  isExpanded,
+  onToggleExpand,
+  currentImageIdx,
+  onImageIndexChange,
+  onUpdateReferencedEvidences,
+  isDragOver,
+  dragOverEvidenceId,
+  dragOverInsertPosition
 }: { 
   card: EvidenceCard
   isSelected: boolean
@@ -216,12 +262,22 @@ function EvidenceCardListItem({
   evidenceList: any[]
   onImageClick: (imageUrl: string, allUrls: string[]) => void
   onUpdateCard?: (cardId: number, updatedFeatures: any[]) => void
+  isExpanded?: boolean
+  onToggleExpand?: () => void
+  currentImageIdx?: number
+  onImageIndexChange?: (index: number) => void
+  onUpdateReferencedEvidences?: (cardId: number, evidenceIds: number[]) => void
+  isDragOver?: boolean
+  dragOverEvidenceId?: number | null
+  dragOverInsertPosition?: 'before' | 'after' | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
+  const [isHoveringImage, setIsHoveringImage] = useState(false)
   
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: `card-${card.id}`,
+    disabled: isExpanded, // 展开时禁用拖拽
   })
 
   const style = transform ? {
@@ -231,7 +287,8 @@ function EvidenceCardListItem({
   const cardInfo = card.card_info || {}
   const cardType = cardInfo.card_type || '未知类型'
   const firstEvidenceId = card.evidence_ids[0]
-  const isCombined = card.evidence_ids.length > 1
+  // 根据 card_is_associated 判断是否是联合证据卡片，而不是根据引用证据数量
+  const isCombined = cardInfo.card_is_associated === true
   const cardFeatures = cardInfo.card_features || []
 
   // 显示所有字段，包括null值（null值会显示为"N/A"）
@@ -244,8 +301,9 @@ function EvidenceCardListItem({
     }
   }, [isEditing, cardFeatures])
 
-  // 获取关联的证据图片URL
+  // 获取关联的证据图片URL（按序号排序）
   const getEvidenceUrls = () => {
+    // card.evidence_ids 已经是按序号排序的
     return card.evidence_ids
       .map(id => {
         const evidence = evidenceList.find((e: any) => e.id === id)
@@ -255,12 +313,29 @@ function EvidenceCardListItem({
   }
 
   const evidenceUrls = getEvidenceUrls()
-  const firstImageUrl = evidenceUrls[0] || null
+  const currentIdx = currentImageIdx ?? 0
+  const currentImageUrl = evidenceUrls[currentIdx] || evidenceUrls[0] || null
 
   const handleImageClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (firstImageUrl) {
-      onImageClick(firstImageUrl, evidenceUrls)
+    if (currentImageUrl) {
+      onImageClick(currentImageUrl, evidenceUrls)
+    }
+  }
+
+  const handlePreviousImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (evidenceUrls.length > 1 && onImageIndexChange) {
+      const newIndex = currentIdx === 0 ? evidenceUrls.length - 1 : currentIdx - 1
+      onImageIndexChange(newIndex)
+    }
+  }
+
+  const handleNextImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (evidenceUrls.length > 1 && onImageIndexChange) {
+      const newIndex = currentIdx === evidenceUrls.length - 1 ? 0 : currentIdx + 1
+      onImageIndexChange(newIndex)
     }
   }
 
@@ -299,7 +374,9 @@ function EvidenceCardListItem({
         isSelected
           ? "border-blue-400 shadow-lg ring-2 ring-blue-200 bg-blue-50/50"
           : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30",
-        isDragging && "opacity-50"
+        isDragging && "opacity-50",
+        // 拖拽悬停时的视觉反馈
+        isDragOver && "ring-2 ring-green-400 border-green-400 bg-green-50/30"
       )}
     >
       {isSelected && (
@@ -319,14 +396,16 @@ function EvidenceCardListItem({
       <div className="space-y-3">
         {/* 缩略图 */}
         {isCombined ? (
-          // 联合证据卡片 - 显示堆叠的图标
+          // 联合证据卡片 - 显示堆叠的图标，支持图片导航
           <div 
-            className="relative w-full aspect-video overflow-hidden rounded-lg bg-slate-50 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+            className="relative w-full aspect-video overflow-hidden rounded-lg bg-slate-50 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all group/image-container"
             onClick={handleImageClick}
+            onMouseEnter={() => setIsHoveringImage(true)}
+            onMouseLeave={() => setIsHoveringImage(false)}
           >
-            {firstImageUrl ? (
+            {currentImageUrl ? (
               <img
-                src={firstImageUrl}
+                src={currentImageUrl}
                 alt={cardType}
                 className="w-full h-full object-cover"
               />
@@ -346,9 +425,30 @@ function EvidenceCardListItem({
               </div>
             )}
             {evidenceUrls.length > 1 && (
-              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-sm font-semibold">
-                1/{evidenceUrls.length}
-              </div>
+              <>
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-sm font-semibold">
+                  {currentIdx + 1}/{evidenceUrls.length}
+                </div>
+                {/* 上一张/下一张按钮 - 悬停时显示 */}
+                {isHoveringImage && (
+                  <>
+                    <button
+                      onClick={handlePreviousImage}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all z-10 backdrop-blur-sm"
+                      aria-label="上一张"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={handleNextImage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all z-10 backdrop-blur-sm"
+                      aria-label="下一张"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -357,9 +457,9 @@ function EvidenceCardListItem({
             className="w-full aspect-video rounded-lg overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
             onClick={handleImageClick}
           >
-            {firstImageUrl ? (
+            {currentImageUrl ? (
               <img
-                src={firstImageUrl}
+                src={currentImageUrl}
                 alt={cardType}
                 className="w-full h-full object-cover"
               />
@@ -463,7 +563,7 @@ function EvidenceCardListItem({
           </div>
         )}
 
-        {/* 联合证据卡片的展开按钮 */}
+        {/* 联合证据卡片的展开/收起按钮 */}
         {isCombined && (
           <Button
             variant="outline"
@@ -471,12 +571,40 @@ function EvidenceCardListItem({
             className="w-full h-9 text-sm border-slate-300 hover:border-blue-400 hover:bg-blue-50 transition-all bg-transparent"
             onClick={(e) => {
               e.stopPropagation()
-              // 展开功能待实现
+              if (onToggleExpand) {
+                onToggleExpand()
+              }
             }}
           >
-            <Plus className="h-4 w-4 mr-2" />
-            展开引用证据 ({card.evidence_ids.length})
+            {isExpanded ? (
+              <>
+                <X className="h-4 w-4 mr-2" />
+                收起引用证据 ({card.evidence_ids.length})
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                展开引用证据 ({card.evidence_ids.length})
+              </>
+            )}
           </Button>
+        )}
+
+        {/* 展开的引用证据列表 */}
+        {isCombined && isExpanded && (
+          <ReferencedEvidenceList
+            card={card}
+            evidenceList={evidenceList}
+            onUpdateReferencedEvidences={onUpdateReferencedEvidences}
+            onRemoveEvidence={(evidenceId) => {
+              if (onUpdateReferencedEvidences) {
+                const newEvidenceIds = card.evidence_ids.filter(id => id !== evidenceId)
+                onUpdateReferencedEvidences(card.id, newEvidenceIds)
+              }
+            }}
+            dragOverEvidenceId={dragOverEvidenceId}
+            dragOverInsertPosition={dragOverInsertPosition}
+          />
         )}
       </div>
     </div>
@@ -502,6 +630,225 @@ function formatFeatureKey(key: string): string {
     registeredAddress: "住所地",
   }
   return keyMap[key] || key
+}
+
+// 引用证据列表组件（支持拖动排序、移除、添加）
+function ReferencedEvidenceList({
+  card,
+  evidenceList,
+  onUpdateReferencedEvidences,
+  onRemoveEvidence,
+  dragOverEvidenceId,
+  dragOverInsertPosition
+}: {
+  card: EvidenceCard
+  evidenceList: any[]
+  onUpdateReferencedEvidences?: (cardId: number, evidenceIds: number[]) => void
+  onRemoveEvidence?: (evidenceId: number) => void
+  dragOverEvidenceId?: number | null
+  dragOverInsertPosition?: 'before' | 'after' | null
+}) {
+  const [hoveredEvidenceId, setHoveredEvidenceId] = useState<number | null>(null)
+  
+  // 使用 useDroppable 使引用证据列表区域可以接收从左侧拖入的证据
+  // 注意：不再使用嵌套的 DndContext，所有拖拽逻辑都在外部处理
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: `referenced-evidence-list-${card.id}`,
+  })
+
+  // 获取引用证据的详细信息（按序号排序）
+  const referencedEvidences = card.evidence_ids
+    .map((evidenceId, index) => {
+      const evidence = evidenceList.find((e: any) => e.id === evidenceId)
+      return evidence ? { ...evidence, sequence_number: index } : null
+    })
+    .filter((e): e is any => e !== null)
+
+  const handleRemove = (evidenceId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onRemoveEvidence) {
+      onRemoveEvidence(evidenceId)
+    }
+  }
+
+  return (
+    // 注意：这里不使用嵌套的 DndContext，所有拖拽逻辑都在外部的 CardFactory 的 DndContext 中处理
+    // 这样可以避免冲突，确保外部拖入的证据能够正确到达引用证据列表
+    <div
+      ref={setDroppableRef}
+      className={cn(
+        "mt-3 pt-3 border-t space-y-3 transition-all",
+          isOver 
+            ? "border-green-400 bg-green-50/30" 
+            : "border-slate-200"
+      )}
+      id={`referenced-evidence-list-${card.id}`}
+    >
+      <div className="text-xs font-medium text-slate-600 mb-2">
+        引用证据列表：
+      </div>
+      <SortableContext
+        items={referencedEvidences.map((e) => e.id)}
+        strategy={verticalListSortingStrategy}
+      >
+          {referencedEvidences.map((evidence, index) => {
+            const isDragOverItem = dragOverEvidenceId === evidence.id
+            const shouldShowInsertLineBefore = isDragOverItem && dragOverInsertPosition === 'before'
+            const shouldShowInsertLineAfter = isDragOverItem && dragOverInsertPosition === 'after'
+            
+            return (
+              <React.Fragment key={evidence.id}>
+                {/* 插入位置指示线 - 在目标项之前显示（当插入位置为 before 时） */}
+                {shouldShowInsertLineBefore && (
+                  <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
+                )}
+                <SortableReferencedEvidenceItem
+                  evidence={evidence}
+                  index={index}
+                  cardId={card.id}
+                  onRemove={handleRemove}
+                  isHovered={hoveredEvidenceId === evidence.id || isDragOverItem} // 当拖拽悬停时也显示悬停效果
+                  onMouseEnter={() => setHoveredEvidenceId(evidence.id)}
+                  onMouseLeave={() => {
+                    // 只有在不是拖拽悬停时才清除悬停状态
+                    if (!isDragOverItem) {
+                      setHoveredEvidenceId(null)
+                    }
+                  }}
+                  isDragOver={isDragOverItem}
+                />
+                {/* 插入位置指示线 - 在目标项之后显示（当插入位置为 after 时） */}
+                {shouldShowInsertLineAfter && (
+                  <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
+                )}
+              </React.Fragment>
+            )
+          })}
+          {/* 插入位置指示线 - 拖拽到列表末尾时显示 */}
+          {isOver && !dragOverEvidenceId && (
+            <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
+          )}
+      </SortableContext>
+    </div>
+  )
+}
+
+// 可排序的引用证据项组件
+function SortableReferencedEvidenceItem({
+  evidence,
+  index,
+  cardId,
+  onRemove,
+  isHovered,
+  onMouseEnter,
+  onMouseLeave,
+  isDragOver
+}: {
+  evidence: any
+  index: number
+  cardId: number
+  onRemove: (evidenceId: number, e: React.MouseEvent) => void
+  isHovered: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  isDragOver?: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: evidence.id })
+  
+  // 使用 useDroppable 使引用证据项可以接收从左侧拖入的证据
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: `referenced-evidence-${evidence.id}`,
+  })
+  
+  // 合并两个 ref
+  const setRefs = (node: HTMLDivElement | null) => {
+    setNodeRef(node)
+    setDroppableRef(node)
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
+
+  return (
+    <div
+      ref={setRefs}
+      style={style}
+      {...attributes} // 将拖拽属性绑定到整个卡片
+      {...listeners}
+      data-evidence-id={evidence.id}
+      className={cn(
+        "relative p-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all group/reference-item cursor-grab active:cursor-grabbing select-none", // 整个卡片可拖拽
+        isDragging && "opacity-50",
+        isOver && "border-blue-400 bg-blue-100",
+        // 拖拽悬停时的视觉反馈
+        isDragOver && "border-green-400 bg-green-100 ring-2 ring-green-300",
+        // 悬停时的视觉反馈
+        isHovered && "border-blue-400 bg-blue-50"
+      )}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="flex items-center gap-2.5">
+        {/* 拖拽句柄 - 仅作为视觉指示 */}
+        <div
+          className="flex-shrink-0 text-slate-400 pointer-events-none" // 使用 pointer-events-none 防止图标干扰拖拽
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+
+        {/* 序号 */}
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-semibold flex items-center justify-center">
+          {index + 1}
+        </div>
+        
+        {/* 缩略图 */}
+        <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden border border-slate-200 bg-white">
+          {fileTypeInfo.type === 'image' && evidence.file_url ? (
+            <img
+              src={evidence.file_url}
+              alt={evidence.file_name || ''}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className={`w-full h-full ${fileTypeInfo.bgColor} flex items-center justify-center`}>
+              <span className="text-lg">{fileTypeInfo.icon}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 证据信息 */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-[10px] text-slate-500">证据ID</span>
+            <span className="text-xs font-semibold text-blue-600">#{evidence.id}</span>
+          </div>
+          <p className="text-xs font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+        </div>
+
+        {/* 移除按钮 - 悬停时显示 */}
+        {isHovered && (
+          <button
+            onClick={(e) => onRemove(evidence.id, e)}
+            className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-all"
+            aria-label="移除"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // 卡片详情显示组件（参考demo设计）
@@ -800,14 +1147,24 @@ export function CardFactory({
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
+  const [expandedCardId, setExpandedCardId] = useState<number | null>(null) // 当前展开的卡片ID
+  const [currentImageIndex, setCurrentImageIndex] = useState<Record<number, number>>({}) // 每个卡片的当前图片索引
+  const [dragOverEvidenceId, setDragOverEvidenceId] = useState<number | null>(null) // 当前拖拽悬停的引用证据ID（用于显示插入位置）
+  const [dragOverInsertPosition, setDragOverInsertPosition] = useState<'before' | 'after' | null>(null) // 插入位置：之前或之后
   
   const { toast } = useToast()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
   const { startCardCasting } = useCardCasting({ addTask, updateTask, removeTask })
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor)
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 适中的拖动激活距离
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
   )
 
   // 获取案件信息（如果外部传入则使用传入的，否则从API获取）
@@ -886,6 +1243,64 @@ export function CardFactory({
     }
   }
 
+  // 处理更新引用证据
+  const handleUpdateReferencedEvidences = async (cardId: number, evidenceIds: number[]) => {
+    try {
+      // 构建引用证据更新列表（带序号）
+      const referencedEvidences = evidenceIds.map((evidenceId, index) => ({
+        evidence_id: evidenceId,
+        sequence_number: index,
+      }))
+
+      await evidenceCardApi.updateCard(cardId, {
+        referenced_evidences: referencedEvidences,
+      })
+
+      toast({
+        title: "更新成功",
+        description: "引用证据已更新",
+      })
+
+      // 刷新卡片列表
+      await mutateCards()
+    } catch (error: any) {
+      toast({
+        title: "更新失败",
+        description: error.message || "更新引用证据失败",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // 处理卡片特征更新
+  const handleUpdateCardFeatures = async (cardId: number, updatedFeatures: any[]) => {
+    try {
+      // 构建特征更新列表
+      const cardFeatures = updatedFeatures.map((feature) => ({
+        slot_name: feature.slot_name,
+        slot_value: feature.slot_value,
+      }))
+
+      await evidenceCardApi.updateCard(cardId, {
+        card_features: cardFeatures,
+      })
+
+      toast({
+        title: "保存成功",
+        description: "卡片信息已更新",
+      })
+
+      // 刷新卡片列表
+      await mutateCards()
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message || "保存卡片信息失败",
+        variant: "destructive",
+      })
+    }
+  }
+
   // 处理卡片铸造
   const handleCast = async () => {
     try {
@@ -924,23 +1339,301 @@ export function CardFactory({
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
     setDraggedCardId(active.id as string)
+    // 清除之前的高亮状态
+    setDragOverEvidenceId(null)
+    setDragOverInsertPosition(null)
+  }
+
+  // 处理拖拽悬停（用于实时显示视觉反馈）
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event
+    
+    if (!over) {
+      // 没有悬停目标，清除所有高亮
+      setDragOverEvidenceId(null)
+      setDragOverInsertPosition(null)
+      return
+    }
+
+    // 统一处理 activeId 和 overId，确保它们是字符串类型（用于判断）
+    const activeId = active.id
+    const overId = over.id
+    const activeIdStr = String(activeId)
+    const overIdStr = String(overId)
+
+    // 如果原始证据被拖拽到槽位，清除高亮并返回（不允许交互）
+    if (activeIdStr.startsWith('evidence-') && overIdStr.startsWith('slot-')) {
+      setDragOverEvidenceId(null)
+      setDragOverInsertPosition(null)
+      return
+    }
+
+    // 检查是否是拖拽原始证据到引用证据列表
+    if (activeIdStr.startsWith('evidence-')) {
+      // 只有真正悬停在引用证据列表区域或某个引用证据项上时，才显示高亮
+      if (overIdStr.startsWith('referenced-evidence-list-')) {
+        // 悬停在引用证据列表容器上
+        const cardId = parseInt(overIdStr.replace('referenced-evidence-list-', ''))
+        const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+        // 确保卡片存在且是关联类型且已展开
+        if (card && card.card_info?.card_is_associated === true && expandedCardId === cardId) {
+          // 获取鼠标位置，尝试找到最近的项
+          const pointer = event.activatorEvent as PointerEvent | undefined
+          const listRect = over.rect
+          
+          if (pointer && listRect && card.evidence_ids.length > 0) {
+            // 计算鼠标相对于列表容器的位置
+            const mouseY = pointer.clientY
+            const listTop = listRect.top
+            
+            // 尝试找到最接近的引用证据项
+            let targetEvidenceId: number | null = null
+            let insertPosition: 'before' | 'after' = 'after'
+            
+            // 遍历所有引用证据项，找到鼠标位置最接近的项
+            for (let i = 0; i < card.evidence_ids.length; i++) {
+              const evidenceId = card.evidence_ids[i]
+              // 尝试通过 DOM 元素获取实际的项位置
+              const evidenceElement = document.querySelector(`[data-evidence-id="${evidenceId}"]`)
+              if (evidenceElement) {
+                const rect = evidenceElement.getBoundingClientRect()
+                // 如果鼠标在这个项的范围内（包括上下边缘的扩展区域）
+                const expandedTop = rect.top - 10 // 扩展检测区域
+                const expandedBottom = rect.bottom + 10
+                if (mouseY >= expandedTop && mouseY <= expandedBottom) {
+                  // 判断应该插入到这个项之前还是之后
+                  const itemCenter = rect.top + rect.height / 2
+                  insertPosition = mouseY < itemCenter ? 'before' : 'after'
+                  targetEvidenceId = evidenceId
+                  break
+                }
+              }
+            }
+            
+            // 如果找不到匹配的项，只有在明确悬停在列表区域内的特定位置时才设置
+            if (!targetEvidenceId && listRect) {
+              // 检查鼠标是否在列表区域内（不是列表外）
+              const listBottom = listRect.top + listRect.height
+              if (mouseY >= listRect.top && mouseY <= listBottom && card.evidence_ids.length > 0) {
+                // 如果鼠标在列表的上半部分，插入到第一个项之前
+                const listCenter = listTop + listRect.height / 2
+                if (mouseY < listCenter) {
+                  targetEvidenceId = card.evidence_ids[0]
+                  insertPosition = 'before'
+                } else {
+                  // 否则插入到最后一个项之后
+                  targetEvidenceId = card.evidence_ids[card.evidence_ids.length - 1]
+                  insertPosition = 'after'
+                }
+              }
+            }
+            
+            // 只有在找到明确的插入位置时才设置高亮
+            if (targetEvidenceId) {
+              setDragOverEvidenceId(targetEvidenceId)
+              setDragOverInsertPosition(insertPosition)
+            } else {
+              // 如果没有找到明确的插入位置，清除高亮（不设置默认值）
+              setDragOverEvidenceId(null)
+              setDragOverInsertPosition(null)
+            }
+          } else {
+            // 如果无法获取鼠标位置，清除高亮（不设置默认值）
+            setDragOverEvidenceId(null)
+            setDragOverInsertPosition(null)
+          }
+        } else {
+          setDragOverEvidenceId(null)
+          setDragOverInsertPosition(null)
+        }
+      } else if (overIdStr.startsWith('referenced-evidence-')) {
+        // 悬停在某个引用证据项上
+        const evidenceId = parseInt(overIdStr.replace('referenced-evidence-', ''))
+        // 找到这个证据所属的卡片
+        const card = cardList.find((c: EvidenceCard) => c.evidence_ids.includes(evidenceId))
+        // 确保卡片存在且是关联类型且已展开
+        if (card && card.card_info?.card_is_associated === true && expandedCardId === card.id) {
+          // 获取鼠标位置，判断插入位置（之前或之后）
+          const rect = over.rect
+          const pointer = event.activatorEvent as PointerEvent | undefined
+          
+          let insertPosition: 'before' | 'after' = 'after' // 默认插入到之后
+          
+          // 使用鼠标的实际位置来判断（最准确）
+          if (pointer && rect) {
+            // 计算鼠标在引用证据项上的相对位置
+            const relativeY = pointer.clientY - rect.top
+            const itemHeight = rect.height
+            // 使用 50% 作为阈值，让插入位置更直观
+            const threshold = itemHeight * 0.5
+            insertPosition = relativeY < threshold ? 'before' : 'after'
+          } else {
+            // 后备方案: 使用 active 和 over 的 rect 中心位置比较
+            const activeRect = active.rect.current.translated
+            if (activeRect && rect) {
+              const activeCenterY = activeRect.top + activeRect.height / 2
+              const overCenterY = rect.top + rect.height / 2
+              // 如果拖动项的中心在目标项的中心之上，插入到之前；否则插入到之后
+              insertPosition = activeCenterY < overCenterY ? 'before' : 'after'
+            }
+          }
+          
+          setDragOverEvidenceId(evidenceId)
+          setDragOverInsertPosition(insertPosition)
+        } else {
+          setDragOverEvidenceId(null)
+          setDragOverInsertPosition(null)
+        }
+      } else {
+        // 没有悬停在引用证据列表区域，清除高亮
+        setDragOverEvidenceId(null)
+        setDragOverInsertPosition(null)
+      }
+    } else {
+      // 不是拖拽原始证据，清除高亮
+      setDragOverEvidenceId(null)
+      setDragOverInsertPosition(null)
+    }
   }
 
   // 处理拖拽结束
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     
+    // 保存当前的高亮状态（在清除之前）
+    const currentDragOverEvidenceId = dragOverEvidenceId
+    const currentDragOverInsertPosition = dragOverInsertPosition
+    
     setDraggedCardId(null)
+    // 清除高亮状态
+    setDragOverEvidenceId(null)
+    setDragOverInsertPosition(null)
 
     if (!over) return
 
-    const activeId = active.id as string
-    const overId = over.id as string
+    // 统一处理 activeId 和 overId，确保它们是字符串类型
+    const activeId = active.id
+    const overId = over.id
+    const activeIdStr = String(activeId)
+    const overIdStr = String(overId)
 
-    // 检查是否是拖拽到槽位
-    if (activeId.startsWith('card-') && overId.startsWith('slot-')) {
-      const cardId = parseInt(activeId.replace('card-', ''))
-      const slotId = overId.replace('slot-', '')
+    // 检查是否是拖拽原始证据到引用证据列表
+    if (activeIdStr.startsWith('evidence-')) {
+      const evidenceId = parseInt(activeIdStr.replace('evidence-', ''))
+      
+      // 严格检查：只有在真正拖动到引用证据列表区域或某个引用证据项时才执行
+      let targetCard: EvidenceCard | undefined = undefined
+      let insertPosition: 'before' | 'after' | 'end' = 'end'
+      let isValidDrop = false
+      
+      if (overIdStr.startsWith('referenced-evidence-list-')) {
+        // 拖动到引用证据列表容器
+        const cardId = parseInt(overIdStr.replace('referenced-evidence-list-', ''))
+        targetCard = cardList.find((c: EvidenceCard) => c.id === cardId)
+        // 只有当目标卡片存在、是关联类型、且已展开时，才认为是有效拖放
+        if (targetCard && targetCard.card_info?.card_is_associated === true && expandedCardId === cardId) {
+          isValidDrop = true
+          // 如果之前有高亮的项，使用之前的位置；否则添加到末尾
+          if (currentDragOverEvidenceId) {
+            const targetIndex = targetCard.evidence_ids.indexOf(currentDragOverEvidenceId)
+            if (targetIndex >= 0) {
+              insertPosition = currentDragOverInsertPosition || 'after'
+            } else {
+              insertPosition = 'end'
+            }
+          } else {
+            insertPosition = 'end'
+          }
+        }
+      } else if (overIdStr.startsWith('referenced-evidence-')) {
+        // 拖动到某个引用证据项
+        const targetEvidenceId = parseInt(overIdStr.replace('referenced-evidence-', ''))
+        targetCard = cardList.find((c: EvidenceCard) => c.evidence_ids.includes(targetEvidenceId))
+        // 确保目标卡片存在、是关联类型、且已展开
+        if (targetCard && targetCard.card_info?.card_is_associated === true && expandedCardId === targetCard.id) {
+          isValidDrop = true
+          // 使用之前保存的插入位置（之前或之后）
+          insertPosition = currentDragOverInsertPosition || 'after'
+        }
+      }
+      
+      // 只有在有效拖放时才执行更新
+      if (!isValidDrop || !targetCard) {
+        // 没有拖动到有效的放置区域，不执行任何操作（取消拖拽）
+        return
+      }
+      
+      const card = targetCard
+      
+      // 确保证据不在列表中（避免重复添加）
+      if (card.evidence_ids.includes(evidenceId)) {
+        return
+      }
+      
+      let newEvidenceIds = [...card.evidence_ids]
+      
+      if (insertPosition === 'end') {
+        // 添加到末尾
+        newEvidenceIds.push(evidenceId)
+      } else if (overIdStr.startsWith('referenced-evidence-')) {
+        // 拖拽到某个引用证据项的位置
+        const targetEvidenceId = parseInt(overIdStr.replace('referenced-evidence-', ''))
+        const targetIndex = card.evidence_ids.indexOf(targetEvidenceId)
+        if (targetIndex >= 0) {
+          // 根据插入位置（之前或之后）插入到相应位置
+          if (insertPosition === 'before') {
+            // 插入到目标项之前
+            newEvidenceIds.splice(targetIndex, 0, evidenceId)
+          } else {
+            // 插入到目标项之后（insertPosition === 'after'）
+            newEvidenceIds.splice(targetIndex + 1, 0, evidenceId)
+          }
+        } else {
+          // 如果找不到目标项，添加到末尾
+          newEvidenceIds.push(evidenceId)
+        }
+      } else {
+        // 拖拽到列表容器但位置不确定，添加到末尾
+        newEvidenceIds.push(evidenceId)
+      }
+      
+      // 更新引用证据（会自动更新 sequence_number）
+      handleUpdateReferencedEvidences(card.id, newEvidenceIds)
+      return
+    }
+
+    // 检查是否是拖拽引用证据列表内的项进行排序（同一卡片内的引用证据重新排序）
+    // 注意：引用证据项使用数字 ID（evidence.id），而不是字符串
+    if (typeof activeId === 'number' && typeof overId === 'number') {
+      // 检查是否都是引用证据项（通过检查它们是否在某个卡片的 evidence_ids 中）
+      const sourceCard = cardList.find((c: EvidenceCard) => c.evidence_ids.includes(activeId))
+      const targetCard = cardList.find((c: EvidenceCard) => c.evidence_ids.includes(overId))
+      
+      // 确保是同一个卡片内的排序，且该卡片是关联类型且已展开
+      if (sourceCard && targetCard && sourceCard.id === targetCard.id && 
+          sourceCard.card_info?.card_is_associated === true && 
+          expandedCardId === sourceCard.id &&
+          activeId !== overId) {
+        const oldIndex = sourceCard.evidence_ids.indexOf(activeId)
+        const newIndex = sourceCard.evidence_ids.indexOf(overId)
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newEvidenceIds = arrayMove(sourceCard.evidence_ids, oldIndex, newIndex)
+          handleUpdateReferencedEvidences(sourceCard.id, newEvidenceIds)
+        }
+        return
+      }
+    }
+
+    // 如果原始证据被拖拽到槽位，直接返回（不允许）
+    if (activeIdStr.startsWith('evidence-') && overIdStr.startsWith('slot-')) {
+      return
+    }
+    
+    // 检查是否是拖拽到槽位（只接受证据卡片，不接受原始证据）
+    if (activeIdStr.startsWith('card-') && overIdStr.startsWith('slot-')) {
+      const cardId = parseInt(activeIdStr.replace('card-', ''))
+      const slotId = overIdStr.replace('slot-', '')
       
       // 检查卡片类型是否匹配槽位类型
       const card = cardList.find(c => c.id === cardId)
@@ -1036,11 +1729,48 @@ export function CardFactory({
     }
   }
 
+  // 自定义碰撞检测函数，对引用证据列表更敏感
+  const customCollisionDetection: CollisionDetection = (args) => {
+    // 首先使用 closestCorners 进行基础检测
+    const cornersCollisions = closestCorners(args)
+    
+    // 如果拖拽的是原始证据，尝试找到最接近的引用证据项
+    const activeId = String(args.active.id)
+    if (activeId.startsWith('evidence-')) {
+      // 获取所有引用证据项
+      const allReferencedEvidenceIds = cardList
+        .filter(card => card.card_info?.card_is_associated === true && expandedCardId === card.id)
+        .flatMap(card => card.evidence_ids)
+        .map(id => `referenced-evidence-${id}`)
+      
+      // 检查是否与引用证据项碰撞
+      const referencedEvidenceCollision = cornersCollisions.find(collision => 
+        allReferencedEvidenceIds.includes(String(collision.id))
+      )
+      
+      if (referencedEvidenceCollision) {
+        return [referencedEvidenceCollision]
+      }
+      
+      // 检查是否与引用证据列表容器碰撞
+      const listCollision = cornersCollisions.find(collision =>
+        String(collision.id).startsWith('referenced-evidence-list-')
+      )
+      
+      if (listCollision) {
+        return [listCollision]
+      }
+    }
+    
+    return cornersCollisions
+  }
+
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-4">
@@ -1120,6 +1850,8 @@ export function CardFactory({
                       isCast={isEvidenceCast(evidence.id)}
                       multiSelectMode={isMultiSelect}
                       onClick={() => handleEvidenceSelect(String(evidence.id))}
+                      isDraggable={!!expandedCardId && cardList.some((c: EvidenceCard) => c.card_info?.card_is_associated === true && expandedCardId === c.id)}
+                      dragId={`evidence-${evidence.id}`}
                     />
                   ))}
                 </div>
@@ -1147,30 +1879,34 @@ export function CardFactory({
                         card={card}
                         isSelected={selectedCard?.id === card.id}
                         isDragging={draggedCardId === `card-${card.id}`}
-                        onClick={() => setSelectedCard(card)}
-                        evidenceList={evidenceList}
-                        onImageClick={(imageUrl, allUrls) => {
-                          const currentIndex = allUrls.indexOf(imageUrl)
-                          setPreviewImage({ url: imageUrl, urls: allUrls, currentIndex })
-                        }}
-                        onUpdateCard={async (cardId, updatedFeatures) => {
-                          try {
-                            // TODO: 调用API更新卡片
-                            // await evidenceCardApi.updateCard(cardId, { card_features: updatedFeatures })
-                            toast({
-                              title: "保存成功",
-                              description: "卡片信息已更新",
-                            })
-                            // 刷新卡片列表
-                            mutateCards()
-                          } catch (error: any) {
-                            toast({
-                              title: "保存失败",
-                              description: error?.message || '未知错误',
-                              variant: "destructive"
-                            })
+                        onClick={() => {
+                          // 如果正在拖拽，不触发选中
+                          if (!draggedCardId) {
+                            setSelectedCard(card)
                           }
                         }}
+                        evidenceList={evidenceList}
+                        isExpanded={expandedCardId === card.id}
+                        isDragOver={false} // 不在整个卡片上显示高亮，只在引用证据列表区域显示
+                        dragOverEvidenceId={dragOverEvidenceId}
+                        dragOverInsertPosition={dragOverInsertPosition}
+                        onToggleExpand={() => {
+                          setExpandedCardId(expandedCardId === card.id ? null : card.id)
+                          // 重置图片索引
+                          if (expandedCardId !== card.id) {
+                            setCurrentImageIndex({ ...currentImageIndex, [card.id]: 0 })
+                          }
+                        }}
+                        currentImageIdx={currentImageIndex[card.id] ?? 0}
+                        onImageIndexChange={(index) => {
+                          setCurrentImageIndex({ ...currentImageIndex, [card.id]: index })
+                        }}
+                        onImageClick={(imageUrl, allUrls) => {
+                          const currentIdx = currentImageIndex[card.id] ?? 0
+                          setPreviewImage({ url: allUrls[currentIdx] || imageUrl, urls: allUrls, currentIndex: currentIdx })
+                        }}
+                        onUpdateCard={handleUpdateCardFeatures}
+                        onUpdateReferencedEvidences={handleUpdateReferencedEvidences}
                       />
                     ))
                   ) : (
@@ -1382,20 +2118,59 @@ export function CardFactory({
         </div>
       </div>
 
-      {/* 拖拽覆盖层 */}
+      {/* 拖拽覆盖层 - 显示拖拽的副本 */}
       <DragOverlay>
         {draggedCardId ? (
           (() => {
-            const cardId = parseInt(draggedCardId.replace('card-', ''))
-            const card = cardList.find(c => c.id === cardId)
-            return card ? (
-              <div className="p-3 rounded-lg border bg-white shadow-lg opacity-90">
-                <div className="text-sm font-medium">卡片ID #{card.id}</div>
-                <div className="text-xs text-gray-600">
-                  {card.card_info?.card_type || '未知类型'}
+            // 确保 draggedCardId 是字符串类型
+            const draggedIdStr = String(draggedCardId)
+            if (draggedIdStr.startsWith('card-')) {
+              const cardId = parseInt(draggedIdStr.replace('card-', ''))
+              const card = cardList.find(c => c.id === cardId)
+              return card ? (
+                <div className="p-3 rounded-lg border bg-white shadow-2xl opacity-95 rotate-2">
+                  <div className="text-sm font-medium">卡片ID #{card.id}</div>
+                  <div className="text-xs text-gray-600">
+                    {card.card_info?.card_type || '未知类型'}
+                  </div>
                 </div>
-              </div>
-            ) : null
+              ) : null
+            } else if (draggedIdStr.startsWith('evidence-')) {
+              const evidenceId = parseInt(draggedIdStr.replace('evidence-', ''))
+              const evidence = evidenceList.find((e: any) => e.id === evidenceId)
+              if (!evidence) return null
+              
+              const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
+              return (
+                <div className="w-full max-w-xs p-3 rounded-xl border bg-white shadow-2xl opacity-95 rotate-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                        {fileTypeInfo.type === 'image' && evidence.file_url ? (
+                          <img
+                            src={evidence.file_url}
+                            alt={evidence.file_name || ''}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className={`w-full h-full ${fileTypeInfo.bgColor} flex items-center justify-center`}>
+                            <span className="text-2xl">{fileTypeInfo.icon}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] text-slate-500 font-medium">证据ID</span>
+                        <span className="text-xs font-mono text-blue-600 font-semibold">#{evidence.id}</span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+            return null
           })()
         ) : null}
       </DragOverlay>

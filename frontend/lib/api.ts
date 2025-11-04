@@ -675,6 +675,28 @@ export const evidenceCardApi = {
       throw new Error(result.message || "获取卡片详情失败");
     }
   },
+
+  async updateCard(cardId: number, updateData: {
+    card_info?: any;
+    card_features?: Array<{ slot_name: string; slot_value: any }>;
+    referenced_evidences?: Array<{ evidence_id: number; sequence_number: number }>;
+  }): Promise<{ data: EvidenceCard }> {
+    const url = buildApiUrl(`/evidences/evidence-cards/${cardId}`);
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(updateData),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data };
+    } else {
+      throw new Error(result.message || "更新卡片失败");
+    }
+  },
 }
 
 // OCR API

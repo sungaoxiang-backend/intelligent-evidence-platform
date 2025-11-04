@@ -155,8 +155,27 @@ class EvidenceCardCastingRequest(BaseModel):
 class EvidenceCardResponse(BaseModel):
     """证据卡片响应模型"""
     id: int = Field(..., description="卡片ID")
-    evidence_ids: List[int] = Field(..., description="关联的证据ID列表")
+    evidence_ids: List[int] = Field(..., description="关联的证据ID列表（按序号排序）")
     card_info: Optional[Dict[str, Any]] = Field(None, description="卡片信息，包含类型、特征等")
     updated_times: int = Field(..., description="更新次数")
     created_at: Optional[str] = Field(None, description="创建时间（ISO格式）")
     updated_at: Optional[str] = Field(None, description="更新时间（ISO格式）")
+
+
+class CardFeatureUpdate(BaseModel):
+    """卡片特征更新模型"""
+    slot_name: str = Field(..., description="特征名称（slot_name）")
+    slot_value: Any = Field(..., description="特征值（slot_value）")
+
+
+class ReferencedEvidenceUpdate(BaseModel):
+    """引用证据更新模型"""
+    evidence_id: int = Field(..., description="证据ID")
+    sequence_number: int = Field(..., description="序号（从0开始）")
+
+
+class EvidenceCardUpdateRequest(BaseModel):
+    """证据卡片更新请求模型"""
+    card_info: Optional[Dict[str, Any]] = Field(None, description="卡片信息更新（card_info字段）")
+    card_features: Optional[List[CardFeatureUpdate]] = Field(None, description="卡片特征更新列表（更新card_info中的card_features）")
+    referenced_evidences: Optional[List[ReferencedEvidenceUpdate]] = Field(None, description="引用证据更新列表（更新关联关系和顺序）")

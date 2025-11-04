@@ -20,7 +20,8 @@ from app.evidences.models import Evidence, EvidenceStatus
 from app.cases.models import Case
 from app.evidences.schemas import (
     EvidenceEditRequest, 
-    UploadFileResponse
+    UploadFileResponse,
+    EvidenceCardUpdateRequest
 )
 from app.integrations.cos import cos_service
 from app.agentic.agents.evidence_proofreader import evidence_proofreader
@@ -2142,15 +2143,268 @@ async def evidence_card_casting(
 
 
 async def get_card_by_id(db: AsyncSession, card_id: int) -> Optional[EvidenceCard]:
-    """根据ID获取证据卡片，包含关联的证据信息"""
+    """根据ID获取证据卡片，包含关联的证据信息（按序号排序）
+    
+    Args:
+        db: 数据库会话
+        card_id: 卡片ID
+        
+    Returns:
+        EvidenceCard: 卡片实例，evidences 已按序号排序
+    """
     from sqlalchemy.orm import selectinload
+    from app.evidences.models import evidence_card_evidence_association
+    from sqlalchemy import select
     
     result = await db.execute(
         select(EvidenceCard)
         .options(selectinload(EvidenceCard.evidences))
         .where(EvidenceCard.id == card_id)
     )
-    return result.scalar_one_or_none()
+    card = result.scalar_one_or_none()
+    
+    if card:
+        # 按序号排序证据
+        evidence_with_seq = []
+        for evidence in card.evidences:
+            # 查询该证据在关联表中的序号
+            seq_result = await db.execute(
+                select(evidence_card_evidence_association.c.sequence_number)
+                .where(
+                    evidence_card_evidence_association.c.evidence_card_id == card_id,
+                    evidence_card_evidence_association.c.evidence_id == evidence.id
+                )
+            )
+            sequence_number = seq_result.scalar_one_or_none() or 0
+            evidence_with_seq.append((sequence_number, evidence))
+        
+        # 按序号排序
+        evidence_with_seq.sort(key=lambda x: x[0])
+        # 重新设置 evidences 关系（按序号排序）
+        card.evidences = [ev for _, ev in evidence_with_seq]
+    
+    return card
+
+
+async def get_card_evidence_ids_sorted(db: AsyncSession, card_id: int) -> List[int]:
+    """获取卡片关联的证据ID列表（按序号排序）
+    
+    Args:
+        db: 数据库会话
+        card_id: 卡片ID
+        
+    Returns:
+        List[int]: 按序号排序的证据ID列表
+    """
+    from app.evidences.models import evidence_card_evidence_association
+    from sqlalchemy import select
+    
+    result = await db.execute(
+        select(
+            evidence_card_evidence_association.c.evidence_id,
+            evidence_card_evidence_association.c.sequence_number
+        )
+        .where(evidence_card_evidence_association.c.evidence_card_id == card_id)
+        .order_by(evidence_card_evidence_association.c.sequence_number)
+    )
+    
+    evidence_records = result.all()
+    return [record.evidence_id for record in evidence_records]
+
+
+async def card_to_response(card: EvidenceCard, db: AsyncSession) -> Any:
+    """将 EvidenceCard 转换为 EvidenceCardResponse
+    
+    Args:
+        card: 卡片实例
+        db: 数据库会话（用于获取按序号排序的证据ID）
+        
+    Returns:
+        EvidenceCardResponse: 响应模型
+    """
+    from app.evidences.schemas import EvidenceCardResponse
+    
+    # 获取按序号排序的证据ID列表
+    evidence_ids = await get_card_evidence_ids_sorted(db, card.id)
+    
+    return EvidenceCardResponse(
+        id=card.id,
+        evidence_ids=evidence_ids,
+        card_info=card.card_info,
+        updated_times=card.updated_times,
+        created_at=card.created_at.isoformat() if card.created_at else None,
+        updated_at=card.updated_at.isoformat() if card.updated_at else None,
+    )
+
+
+async def update_card(
+    db: AsyncSession,
+    card_id: int,
+    update_request: EvidenceCardUpdateRequest
+) -> EvidenceCard:
+    """更新证据卡片
+    
+    支持以下更新操作：
+    1. 更新 card_info（可以部分更新）
+    2. 更新 card_features（更新 card_info 中的 card_features 数组）
+    3. 更新引用证据的关系和顺序（更新关联表）
+    
+    Args:
+        db: 数据库会话
+        card_id: 卡片ID
+        update_request: 更新请求
+        
+    Returns:
+        EvidenceCard: 更新后的卡片实例
+        
+    Raises:
+        ValueError: 如果卡片不存在或更新数据无效
+    """
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import delete, insert, update as sql_update
+    from datetime import datetime
+    import pytz
+    from app.evidences.models import evidence_card_evidence_association, Evidence
+    
+    # 获取卡片
+    result = await db.execute(
+        select(EvidenceCard)
+        .options(selectinload(EvidenceCard.evidences))
+        .where(EvidenceCard.id == card_id)
+    )
+    card = result.scalar_one_or_none()
+    
+    if not card:
+        raise ValueError(f"卡片不存在: ID={card_id}")
+    
+    # 更新 card_info
+    if update_request.card_info is not None:
+        # 如果提供了完整的 card_info，则替换
+        card.card_info = update_request.card_info
+    elif update_request.card_features is not None:
+        # 如果只更新 card_features，则合并到现有的 card_info 中
+        if card.card_info is None:
+            card.card_info = {}
+        
+        # 获取或创建 card_features 数组
+        if "card_features" not in card.card_info:
+            card.card_info["card_features"] = []
+        
+        card_features = card.card_info["card_features"]
+        
+        # 更新每个特征
+        for feature_update in update_request.card_features:
+            # 查找对应的特征
+            found = False
+            for i, feature in enumerate(card_features):
+                if feature.get("slot_name") == feature_update.slot_name:
+                    # 更新特征值
+                    card_features[i]["slot_value"] = feature_update.slot_value
+                    found = True
+                    break
+            
+            if not found:
+                # 如果特征不存在，添加新特征
+                card_features.append({
+                    "slot_name": feature_update.slot_name,
+                    "slot_value": feature_update.slot_value,
+                    "slot_value_type": type(feature_update.slot_value).__name__,
+                    "confidence": 0.0,
+                    "reasoning": "手动更新"
+                })
+        
+        card.card_info["card_features"] = card_features
+    
+    # 更新引用证据的关系和顺序
+    if update_request.referenced_evidences is not None:
+        # 验证所有证据ID是否存在
+        evidence_ids = [ref.evidence_id for ref in update_request.referenced_evidences]
+        evidences_result = await db.execute(
+            select(Evidence).where(Evidence.id.in_(evidence_ids))
+        )
+        evidences = evidences_result.scalars().all()
+        
+        if len(evidences) != len(evidence_ids):
+            found_ids = {ev.id for ev in evidences}
+            missing_ids = set(evidence_ids) - found_ids
+            raise ValueError(f"以下证据不存在: {missing_ids}")
+        
+        # 验证序号是否连续且从0开始
+        sequence_numbers = sorted([ref.sequence_number for ref in update_request.referenced_evidences])
+        if sequence_numbers != list(range(len(sequence_numbers))):
+            raise ValueError(f"序号必须从0开始且连续，当前序号: {sequence_numbers}")
+        
+        # 删除现有的关联关系
+        await db.execute(
+            delete(evidence_card_evidence_association)
+            .where(evidence_card_evidence_association.c.evidence_card_id == card_id)
+        )
+        
+        # 插入新的关联关系（带序号）
+        association_records = [
+            {
+                "evidence_card_id": card_id,
+                "evidence_id": ref.evidence_id,
+                "sequence_number": ref.sequence_number
+            }
+            for ref in update_request.referenced_evidences
+        ]
+        
+        await db.execute(
+            insert(evidence_card_evidence_association).values(association_records)
+        )
+    
+    # 更新时间戳和更新次数
+    shanghai_tz = pytz.timezone('Asia/Shanghai')
+    card.updated_at = datetime.now(shanghai_tz)
+    card.updated_times = (card.updated_times or 0) + 1
+    
+    await db.commit()
+    
+    # 刷新卡片以加载更新后的关联关系
+    await db.refresh(card, ["evidences"])
+    
+    # 按序号排序证据
+    if card.evidences:
+        evidence_with_seq = []
+        for evidence in card.evidences:
+            # 查询该证据在关联表中的序号
+            seq_result = await db.execute(
+                select(evidence_card_evidence_association.c.sequence_number)
+                .where(
+                    evidence_card_evidence_association.c.evidence_card_id == card_id,
+                    evidence_card_evidence_association.c.evidence_id == evidence.id
+                )
+            )
+            sequence_number = seq_result.scalar_one_or_none() or 0
+            evidence_with_seq.append((sequence_number, evidence))
+        
+        # 按序号排序
+        evidence_with_seq.sort(key=lambda x: x[0])
+        card.evidences = [ev for _, ev in evidence_with_seq]
+    
+    return card
+
+
+async def get_cards_with_evidence_ids_sorted(
+    db: AsyncSession,
+    cards: List[EvidenceCard]
+) -> List[tuple[EvidenceCard, List[int]]]:
+    """获取卡片列表及其按序号排序的证据ID列表
+    
+    Args:
+        db: 数据库会话
+        cards: 卡片列表
+        
+    Returns:
+        List[tuple[EvidenceCard, List[int]]]: 卡片及其按序号排序的证据ID列表
+    """
+    result = []
+    for card in cards:
+        evidence_ids = await get_card_evidence_ids_sorted(db, card.id)
+        result.append((card, evidence_ids))
+    
+    return result
 
 
 async def get_cards_with_count(

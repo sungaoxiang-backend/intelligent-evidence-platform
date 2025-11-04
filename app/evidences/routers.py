@@ -16,7 +16,8 @@ from app.evidences.schemas import (
     EvidenceEditRequest,
     BatchCheckEvidenceRequest,
     EvidenceCardCastingRequest,
-    EvidenceCardResponse
+    EvidenceCardResponse,
+    EvidenceCardUpdateRequest
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -123,26 +124,15 @@ async def list_evidence_cards(
     )
     
     # 转换为响应模型
+    from app.evidences.services import get_cards_with_evidence_ids_sorted
+    
+    cards_with_evidence_ids = await get_cards_with_evidence_ids_sorted(db, cards)
     card_responses = []
-    for card in cards:
-        # selectinload已确保evidences关系已加载，但我们需要检查
-        if not hasattr(card, 'evidences') or not card.evidences:
-            # 如果关系未加载，重新查询
-            from sqlalchemy import select
-            from app.evidences.models import EvidenceCard
-            result = await db.execute(
-                select(EvidenceCard)
-                .options(selectinload(EvidenceCard.evidences))
-                .where(EvidenceCard.id == card.id)
-            )
-            card = result.scalar_one_or_none()
-            if not card:
-                continue
-        
+    for card, evidence_ids in cards_with_evidence_ids:
         card_responses.append(
             EvidenceCardResponse(
                 id=card.id,
-                evidence_ids=[ev.id for ev in card.evidences],
+                evidence_ids=evidence_ids,
                 card_info=card.card_info,
                 updated_times=card.updated_times,
                 created_at=card.created_at.isoformat() if card.created_at else None,
@@ -167,7 +157,7 @@ async def get_evidence_card(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
-    """获取证据卡片详情
+    """获取证据卡片详情（包含关联的证据，按序号排序）
     
     Args:
         card_id: 卡片ID
@@ -177,7 +167,7 @@ async def get_evidence_card(
     Returns:
         SingleResponse[EvidenceCardResponse]: 卡片详情
     """
-    from app.evidences.services import get_card_by_id
+    from app.evidences.services import get_card_by_id, card_to_response
     
     card = await get_card_by_id(db, card_id)
     if not card:
@@ -187,16 +177,55 @@ async def get_evidence_card(
         )
     
     # 转换为响应模型
-    card_response = EvidenceCardResponse(
-        id=card.id,
-        evidence_ids=[ev.id for ev in card.evidences],
-        card_info=card.card_info,
-        updated_times=card.updated_times,
-        created_at=card.created_at.isoformat() if card.created_at else None,
-        updated_at=card.updated_at.isoformat() if card.updated_at else None,
-    )
+    card_response = await card_to_response(card, db)
     
     return SingleResponse(data=card_response)
+
+
+@router.put("/evidence-cards/{card_id}", response_model=SingleResponse[EvidenceCardResponse])
+async def update_evidence_card(
+    card_id: int,
+    update_request: EvidenceCardUpdateRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """更新证据卡片
+    
+    支持以下更新操作：
+    1. 更新 card_info（可以部分更新）
+    2. 更新 card_features（更新 card_info 中的 card_features 数组）
+    3. 更新引用证据的关系和顺序（更新关联表）
+    
+    Args:
+        card_id: 卡片ID
+        update_request: 更新请求
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        SingleResponse[EvidenceCardResponse]: 更新后的卡片详情
+    """
+    from app.evidences.services import update_card, card_to_response
+    
+    try:
+        # 更新卡片
+        card = await update_card(db, card_id, update_request)
+        
+        # 转换为响应模型
+        card_response = await card_to_response(card, db)
+        
+        return SingleResponse(data=card_response)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"更新证据卡片失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新证据卡片失败: {str(e)}",
+        )
 
 
 @router.get("/{evidence_id}", response_model=SingleResponse[EvidenceResponse])
