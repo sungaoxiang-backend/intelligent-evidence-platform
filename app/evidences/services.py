@@ -11,7 +11,7 @@ from app.agentic.agents.evidence_extractor_v2 import EvidenceFeaturesExtractor, 
 import asyncio
 from urllib.parse import unquote
 from pydantic import BaseModel
-from app.evidences.models import EvidenceCard, Evidence
+from app.evidences.models import EvidenceCard, Evidence, EvidenceCardSlotAssignment
 
 from loguru import logger
 from agno.media import Image
@@ -2766,3 +2766,68 @@ async def get_evidence_card_slot_templates(db: AsyncSession, case_id: int) -> Ev
         debtor_type=config.party_types.get(debtor_type) if debtor_type else None,
         templates=templates
     )
+
+
+# ==================== 槽位关联快照相关函数 ====================
+
+async def get_slot_assignment_snapshot(
+    db: AsyncSession,
+    case_id: int,
+    template_id: str,
+) -> Dict[str, Optional[int]]:
+    """
+    获取某个案件、某个模板的槽位快照
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        template_id: 模板ID
+        
+    Returns:
+        Dict[str, Optional[int]]: 槽位ID到卡片ID的映射
+    """
+    return await EvidenceCardSlotAssignment.get_snapshot(db, case_id, template_id)
+
+
+async def update_slot_assignment(
+    db: AsyncSession,
+    case_id: int,
+    template_id: str,
+    slot_id: str,
+    card_id: Optional[int],
+) -> EvidenceCardSlotAssignment:
+    """
+    更新或创建槽位关联
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        template_id: 模板ID
+        slot_id: 槽位ID
+        card_id: 卡片ID（None表示移除关联）
+        
+    Returns:
+        EvidenceCardSlotAssignment: 更新或创建的关联记录
+    """
+    return await EvidenceCardSlotAssignment.update_assignment(
+        db, case_id, template_id, slot_id, card_id
+    )
+
+
+async def reset_slot_assignment_snapshot(
+    db: AsyncSession,
+    case_id: int,
+    template_id: str,
+) -> int:
+    """
+    重置某个案件、某个模板的所有槽位关联（删除所有关联记录）
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        template_id: 模板ID
+        
+    Returns:
+        int: 删除的记录数
+    """
+    return await EvidenceCardSlotAssignment.reset_snapshot(db, case_id, template_id)

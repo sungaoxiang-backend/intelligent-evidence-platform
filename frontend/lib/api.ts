@@ -737,6 +737,58 @@ export const evidenceCardApi = {
       throw new Error(result.message || "获取证据卡槽模板失败");
     }
   },
+
+  // 槽位关联快照相关API
+  async getSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<{ case_id: number; template_id: string; assignments: Record<string, number | null> }> {
+    const url = buildApiUrl(`/evidences/evidence-card-slot-assignments/${caseId}/${encodeURIComponent(templateId)}`);
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return result.data;
+    } else {
+      throw new Error(result.message || "获取槽位快照失败");
+    }
+  },
+
+  async updateSlotAssignment(caseId: number, templateId: string, slotId: string, cardId: number | null): Promise<void> {
+    const url = buildApiUrl(`/evidences/evidence-card-slot-assignments/${caseId}`);
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        ...getAuthHeader(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        template_id: templateId,
+        slot_id: slotId,
+        card_id: cardId,
+      }),
+    });
+    const result = await resp.json();
+    if (result.code !== 200) {
+      throw new Error(result.message || "更新槽位关联失败");
+    }
+  },
+
+  async resetSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<void> {
+    const url = buildApiUrl(`/evidences/evidence-card-slot-assignments/${caseId}/reset`);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...getAuthHeader(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        template_id: templateId,
+      }),
+    });
+    const result = await resp.json();
+    if (result.code !== 200) {
+      throw new Error(result.message || "重置槽位快照失败");
+    }
+  },
 }
 
 // OCR API

@@ -18,7 +18,10 @@ from app.evidences.schemas import (
     EvidenceCardCastingRequest,
     EvidenceCardResponse,
     EvidenceCardUpdateRequest,
-    EvidenceCardSlotTemplate
+    EvidenceCardSlotTemplate,
+    SlotAssignmentUpdateRequest,
+    SlotAssignmentSnapshotResponse,
+    SlotAssignmentResetRequest
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -757,4 +760,117 @@ async def get_evidence_card_slot_templates(
     except Exception as e:
         logger.error(f"获取证据卡槽模板失败: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取证据卡槽模板失败: {str(e)}")
+
+
+@router.get("/evidence-card-slot-assignments/{case_id}/{template_id}", response_model=SingleResponse[SlotAssignmentSnapshotResponse])
+async def get_slot_assignment_snapshot(
+    case_id: int,
+    template_id: str,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """获取某个案件、某个模板的槽位快照
+    
+    Args:
+        case_id: 案件ID
+        template_id: 模板ID
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        SingleResponse[SlotAssignmentSnapshotResponse]: 槽位快照响应
+    """
+    try:
+        assignments = await evidence_service.get_slot_assignment_snapshot(
+            db, case_id, template_id
+        )
+        return SingleResponse(
+            data=SlotAssignmentSnapshotResponse(
+                case_id=case_id,
+                template_id=template_id,
+                assignments=assignments
+            ),
+            code=200,
+            message="获取成功"
+        )
+    except Exception as e:
+        logger.error(f"获取槽位快照失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取槽位快照失败: {str(e)}"
+        )
+
+
+@router.put("/evidence-card-slot-assignments/{case_id}", response_model=SingleResponse[dict])
+async def update_slot_assignment(
+    case_id: int,
+    update_request: SlotAssignmentUpdateRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """更新或创建槽位关联
+    
+    Args:
+        case_id: 案件ID
+        update_request: 更新请求
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        SingleResponse[dict]: 更新结果
+    """
+    try:
+        await evidence_service.update_slot_assignment(
+            db,
+            case_id,
+            update_request.template_id,
+            update_request.slot_id,
+            update_request.card_id,
+        )
+        return SingleResponse(
+            data={"message": "槽位关联已更新"},
+            code=200,
+            message="更新成功"
+        )
+    except Exception as e:
+        logger.error(f"更新槽位关联失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新槽位关联失败: {str(e)}"
+        )
+
+
+@router.post("/evidence-card-slot-assignments/{case_id}/reset", response_model=SingleResponse[dict])
+async def reset_slot_assignment_snapshot(
+    case_id: int,
+    reset_request: SlotAssignmentResetRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """重置某个案件、某个模板的所有槽位关联
+    
+    Args:
+        case_id: 案件ID
+        reset_request: 重置请求
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Returns:
+        SingleResponse[dict]: 重置结果
+    """
+    try:
+        deleted_count = await evidence_service.reset_slot_assignment_snapshot(
+            db, case_id, reset_request.template_id
+        )
+        return SingleResponse(
+            data={"message": f"已重置 {deleted_count} 个槽位关联"},
+            code=200,
+            message="重置成功"
+        )
+    except Exception as e:
+        logger.error(f"重置槽位快照失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"重置槽位快照失败: {str(e)}"
+        )
 

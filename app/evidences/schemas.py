@@ -214,3 +214,22 @@ class EvidenceCardSlotTemplatesResponse(BaseModel):
     creditor_type: Optional[str] = Field(None, description="债权人类型")
     debtor_type: Optional[str] = Field(None, description="债务人类型")
     templates: List[EvidenceCardSlotTemplate] = Field(default_factory=list, description="卡槽模板列表")
+
+
+class SlotAssignmentUpdateRequest(BaseModel):
+    """槽位关联更新请求"""
+    template_id: str = Field(..., description="模板ID")
+    slot_id: str = Field(..., description="槽位ID")
+    card_id: Optional[int] = Field(None, description="卡片ID，None表示移除关联")
+
+
+class SlotAssignmentSnapshotResponse(BaseModel):
+    """槽位快照响应"""
+    case_id: int = Field(..., description="案件ID")
+    template_id: str = Field(..., description="模板ID")
+    assignments: Dict[str, Optional[int]] = Field(..., description="槽位ID到卡片ID的映射")
+
+
+class SlotAssignmentResetRequest(BaseModel):
+    """重置快照请求"""
+    template_id: str = Field(..., description="模板ID")

@@ -1229,7 +1229,7 @@ function getCardRoles(cardTemplate: EvidenceCardTemplate): Array<'creditor' | 'd
 function renderCardSlots(
   cardTypes: EvidenceCardTemplate[],
   role: 'creditor' | 'debtor' | 'shared',
-  slotCards: Record<string, number>,
+  slotCards: Record<string, number | null>,
   template?: EvidenceCardSlotTemplate,
   cardList?: EvidenceCard[],
   draggingCardType?: string | null
@@ -1269,7 +1269,7 @@ function renderCardSlots(
       {/* 无分组的卡片 */}
       {ungroupedCards.map((cardType, index) => {
         const slotId = `slot::${role}::${cardType.card_type}::${index}`
-        const cardId = slotCards[slotId]
+        const cardId = slotCards[slotId] ?? undefined
         const placedCard = cardId ? cardList?.find(c => c.id === cardId) : null
         
         return (
@@ -1305,7 +1305,7 @@ function renderCardSlots(
           >
             {groupCards.map((cardType, cardIndex) => {
               const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
-              const cardId = slotCards[slotId]
+              const cardId = slotCards[slotId] ?? undefined
               const placedCard = cardId ? cardList?.find(c => c.id === cardId) : null
               const isSelected = cardId !== undefined
               
@@ -1893,7 +1893,7 @@ export function CardFactory({
   const [selectedCard, setSelectedCard] = useState<EvidenceCard | null>(null)
   const [isMultiSelect, setIsMultiSelect] = useState(false)
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null)
-  const [slotCards, setSlotCards] = useState<Record<string, number>>({})
+  const [slotCards, setSlotCards] = useState<Record<string, number | null>>({})
   const [isEditingCase, setIsEditingCase] = useState(false)
   const [editedCaseInfo, setEditedCaseInfo] = useState<any>(null)
   const [previewImage, setPreviewImage] = useState<{ url: string; urls: string[]; currentIndex: number } | null>(null)
@@ -1907,6 +1907,7 @@ export function CardFactory({
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(0) // 当前选中的模板索引
   const [hoveredTemplateIndex, setHoveredTemplateIndex] = useState<number | null>(null) // 当前悬停的模板索引
   const [templateTooltipPosition, setTemplateTooltipPosition] = useState<{ top: number; left: number } | null>(null) // 模板提示位置
+  const [isSelectOpen, setIsSelectOpen] = useState<boolean>(false) // Select下拉菜单是否打开
   const [draggingCardType, setDraggingCardType] = useState<string | null>(null) // 当前正在拖拽的卡片类型
   
   const { toast } = useToast()
@@ -2048,6 +2049,28 @@ export function CardFactory({
       setSelectedTemplateIndex(0)
     }
   }, [slotTemplates.length, selectedTemplateIndex])
+
+  // 加载槽位快照（当模板切换或模板数据加载时）
+  useEffect(() => {
+    const loadSnapshot = async () => {
+      if (!currentTemplate || !caseId) return
+      
+      try {
+        const snapshot = await evidenceCardApi.getSlotAssignmentSnapshot(
+          Number(caseId),
+          currentTemplate.template_id
+        )
+        // 恢复快照到slotCards状态
+        setSlotCards(snapshot.assignments || {})
+      } catch (error) {
+        // 静默失败，如果快照不存在或获取失败，使用空状态
+        console.log('加载槽位快照失败（首次使用或快照不存在）:', error)
+        setSlotCards({})
+      }
+    }
+    
+    loadSnapshot()
+  }, [currentTemplate?.template_id, caseId])
 
   // 处理证据选择
   const handleEvidenceSelect = (evidenceId: string) => {
@@ -2371,7 +2394,7 @@ export function CardFactory({
   }
 
   // 处理拖拽结束
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     
     // 保存当前的高亮状态（在清除之前）
@@ -2553,67 +2576,110 @@ export function CardFactory({
       return
     }
     
-    // 检查是否是拖拽到槽位（只接受证据卡片，不接受原始证据）
-    if (activeIdStr.startsWith('card-') && overIdStr.startsWith('slot::')) {
+    // 检查是否是拖拽卡片
+    if (activeIdStr.startsWith('card-')) {
       const cardId = parseInt(activeIdStr.replace('card-', ''))
-      const slotId = overIdStr
       
-      console.log('[handleDragEnd] 尝试放置卡片到槽位:', { cardId, slotId, activeIdStr, overIdStr })
-      
-      // 检查卡片类型是否匹配槽位类型
-      const card = cardList.find(c => c.id === cardId)
-      if (!card) {
-        console.error('[handleDragEnd] 找不到卡片:', cardId)
-        toast({
-          title: "错误",
-          description: `找不到卡片 #${cardId}`,
-          variant: "destructive"
-        })
-        return
-      }
-      
-      const cardType = card?.card_info?.card_type || ''
-      console.log('[handleDragEnd] 卡片类型:', cardType)
-      
-      // 从slotId中提取card_type信息
-      // slotId格式: slot::{role}::{cardType}::{index}
-      const slotIdParts = slotId.split('::')
-      console.log('[handleDragEnd] slotIdParts:', slotIdParts)
-      
-      if (slotIdParts.length >= 3) {
-        // 提取card_type（第3部分是cardType，第4部分是index）
-        const slotCardType = slotIdParts[2]
-        console.log('[handleDragEnd] 槽位类型:', slotCardType, '卡片类型:', cardType)
+      // 检查是否是拖拽到槽位
+      if (overIdStr.startsWith('slot::')) {
+        const slotId = overIdStr
+        
+        console.log('[handleDragEnd] 尝试放置卡片到槽位:', { cardId, slotId, activeIdStr, overIdStr })
         
         // 检查卡片类型是否匹配槽位类型
-        if (cardType === slotCardType) {
-          console.log('[handleDragEnd] 类型匹配，执行放置')
-          setSlotCards(prev => {
-            const newSlotCards = {
-              ...prev,
-              [slotId]: cardId,
-            }
-            console.log('[handleDragEnd] 更新 slotCards:', newSlotCards)
-            return newSlotCards
-          })
-
+        const card = cardList.find(c => c.id === cardId)
+        if (!card) {
+          console.error('[handleDragEnd] 找不到卡片:', cardId)
           toast({
-            title: "卡片已放置",
-            description: `卡片 #${cardId} 已放置到槽位`,
-          })
-        } else {
-          console.log('[handleDragEnd] 类型不匹配')
-          toast({
-            title: "类型不匹配",
-            description: `卡片类型 "${cardType}" 与槽位类型 "${slotCardType}" 不匹配`,
+            title: "错误",
+            description: `找不到卡片 #${cardId}`,
             variant: "destructive"
           })
+          return
+        }
+        
+        const cardType = card?.card_info?.card_type || ''
+        console.log('[handleDragEnd] 卡片类型:', cardType)
+        
+        // 从slotId中提取card_type信息
+        // slotId格式: slot::{role}::{cardType}::{index}
+        const slotIdParts = slotId.split('::')
+        console.log('[handleDragEnd] slotIdParts:', slotIdParts)
+        
+        if (slotIdParts.length >= 3) {
+          // 提取card_type（第3部分是cardType，第4部分是index）
+          const slotCardType = slotIdParts[2]
+          console.log('[handleDragEnd] 槽位类型:', slotCardType, '卡片类型:', cardType)
+          
+          // 检查卡片类型是否匹配槽位类型
+          if (cardType === slotCardType) {
+            console.log('[handleDragEnd] 类型匹配，执行放置')
+            const newSlotCards = {
+              ...slotCards,
+              [slotId]: cardId,
+            }
+            setSlotCards(newSlotCards)
+
+            // 静默更新槽位关联（不显示toast，避免干扰用户）
+            if (currentTemplate) {
+              try {
+                await evidenceCardApi.updateSlotAssignment(
+                  Number(caseId),
+                  currentTemplate.template_id,
+                  slotId,
+                  cardId
+                )
+              } catch (error) {
+                console.error('更新槽位关联失败:', error)
+                // 静默失败，不显示错误提示
+              }
+            }
+
+            toast({
+              title: "卡片已放置",
+              description: `卡片 #${cardId} 已放置到槽位`,
+            })
+          } else {
+            console.log('[handleDragEnd] 类型不匹配')
+            toast({
+              title: "类型不匹配",
+              description: `卡片类型 "${cardType}" 与槽位类型 "${slotCardType}" 不匹配`,
+              variant: "destructive"
+            })
+          }
+        } else {
+          console.error('[handleDragEnd] slotId 格式错误:', slotId)
         }
       } else {
-        console.error('[handleDragEnd] slotId 格式错误:', slotId)
+        // 卡片被拖拽到非槽位位置，检查是否从槽位中移除
+        // 查找该卡片当前所在的槽位
+        const currentSlotId = Object.keys(slotCards).find(
+          slotId => slotCards[slotId] === cardId
+        )
+        
+        if (currentSlotId && currentTemplate) {
+          // 从槽位中移除卡片
+          console.log('[handleDragEnd] 从槽位移除卡片:', { cardId, currentSlotId })
+          const newSlotCards = { ...slotCards }
+          delete newSlotCards[currentSlotId]
+          setSlotCards(newSlotCards)
+
+          // 静默更新槽位关联（移除关联）
+          try {
+            await evidenceCardApi.updateSlotAssignment(
+              Number(caseId),
+              currentTemplate.template_id,
+              currentSlotId,
+              null
+            )
+          } catch (error) {
+            console.error('移除槽位关联失败:', error)
+            // 静默失败，不显示错误提示
+          }
+        }
       }
     } else {
-      console.log('[handleDragEnd] 不是卡片到槽位的拖拽:', { activeIdStr, overIdStr })
+      console.log('[handleDragEnd] 不是卡片拖拽:', { activeIdStr, overIdStr })
     }
   }
 
@@ -3152,17 +3218,62 @@ export function CardFactory({
 
                   {/* 卡片槽位 */}
                   <div>
-                    {/* 标题和模板选择器 */}
-                    <div className="flex items-center justify-between mb-4">
+                    {/* 标题 */}
+                    <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-bold text-slate-900">证据卡槽</h3>
-                      {slotTemplates.length > 1 && (
+                      {/* 重置快照按钮 */}
+                      {currentTemplate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await evidenceCardApi.resetSlotAssignmentSnapshot(
+                                Number(caseId),
+                                currentTemplate.template_id
+                              )
+                              // 清空本地状态
+                              setSlotCards({})
+                              toast({
+                                title: "重置成功",
+                                description: "槽位快照已重置到初始状态",
+                              })
+                            } catch (error) {
+                              console.error('重置槽位快照失败:', error)
+                              toast({
+                                title: "重置失败",
+                                description: "重置槽位快照时出错",
+                                variant: "destructive",
+                              })
+                            }
+                          }}
+                          className="h-8 px-3 text-xs border-slate-300 hover:border-red-400 hover:bg-red-50 text-red-600"
+                        >
+                          重置快照
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {/* 模板选择器 */}
+                    {slotTemplates.length > 1 && (
+                      <div className="mb-4">
                         <Select
                           value={String(selectedTemplateIndex)}
                           onValueChange={(value) => setSelectedTemplateIndex(Number(value))}
+                          onOpenChange={(open) => {
+                            setIsSelectOpen(open)
+                            // 当 Select 打开时，隐藏提示框
+                            if (open) {
+                              setHoveredTemplateIndex(null)
+                              setTemplateTooltipPosition(null)
+                            }
+                          }}
                         >
                           <SelectTrigger 
                             className="w-[280px] h-8 text-xs"
                             onMouseEnter={(e) => {
+                              // 如果 Select 已打开，不显示提示框
+                              if (isSelectOpen) return
                               const rect = e.currentTarget.getBoundingClientRect()
                               setTemplateTooltipPosition({
                                 top: rect.bottom + 8,
@@ -3171,6 +3282,8 @@ export function CardFactory({
                               setHoveredTemplateIndex(selectedTemplateIndex)
                             }}
                             onMouseLeave={() => {
+                              // 如果 Select 已打开，不处理鼠标离开
+                              if (isSelectOpen) return
                               setHoveredTemplateIndex(null)
                               setTemplateTooltipPosition(null)
                             }}
@@ -3224,8 +3337,8 @@ export function CardFactory({
                             })}
                           </SelectContent>
                         </Select>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {currentTemplate ? (
                       <div className="space-y-6">
@@ -3342,13 +3455,13 @@ export function CardFactory({
       </DragOverlay>
 
       {/* 模板切换悬停提示 - 使用Portal渲染到body */}
-      {hoveredTemplateIndex !== null && templateTooltipPosition && slotTemplates[hoveredTemplateIndex] && (() => {
+      {!isSelectOpen && hoveredTemplateIndex !== null && templateTooltipPosition && slotTemplates[hoveredTemplateIndex] && (() => {
         const template = slotTemplates[hoveredTemplateIndex]
         const fullDescription = formatTemplateLabel(template)
         
         return createPortal(
           <div 
-            className="fixed z-[9999] w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none"
+            className="fixed z-40 w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none"
             style={{
               top: `${templateTooltipPosition.top}px`,
               left: typeof window !== 'undefined' 

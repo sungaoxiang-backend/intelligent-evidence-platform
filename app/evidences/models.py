@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, List, Dict
 from datetime import datetime
-from sqlalchemy import Enum as SQLAlchemyEnum, ForeignKey, Integer, String, Text, Float, Boolean, JSON, DateTime, Table, Column
+from sqlalchemy import Enum as SQLAlchemyEnum, ForeignKey, Integer, String, Text, Float, Boolean, JSON, DateTime, Table, Column, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB  # 使用JSONB替代JSON以获得更好的性能
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -506,4 +506,123 @@ class EvidenceCard(Base):
         
         return True
 
+
+class EvidenceCardSlotAssignment(Base):
+    """证据卡片槽位关联模型
+    
+    记录某个案件、某个模板、某个槽位与卡片的关联关系。
+    这是一个快照机制，用于保存用户将卡片拖拽到槽位后的状态。
+    """
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False, index=True)
+    template_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True, comment="模板ID，如：民间借贷纠纷-微信聊天记录主证据-个人-个人-卡片槽位模板")
+    slot_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True, comment="槽位ID，格式：slot::{role}::{cardType}::{index}")
+    card_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("evidence_cards.id", ondelete="SET NULL"), nullable=True, comment="关联的卡片ID，null表示该槽位未放置卡片")
+    
+    # 关系
+    case = relationship("Case", backref="card_slot_assignments")
+    card = relationship("EvidenceCard", backref="slot_assignments")
+    
+    # 唯一约束：同一个案件、模板、槽位的组合只能有一个关联记录
+    __table_args__ = (
+        UniqueConstraint('case_id', 'template_id', 'slot_id', name='uq_case_template_slot'),
+        {"comment": "证据卡片槽位关联表，记录卡片在槽位模板中的快照状态"},
+    )
+    
+    @classmethod
+    async def get_snapshot(
+        cls,
+        db,
+        case_id: int,
+        template_id: str,
+    ) -> Dict[str, Optional[int]]:
+        """
+        获取某个案件、某个模板的槽位快照
+        
+        Returns:
+            Dict[str, Optional[int]]: 槽位ID到卡片ID的映射，例如 {"slot::creditor::身份证::0": 123, ...}
+        """
+        from sqlalchemy import select
+        
+        result = await db.execute(
+            select(cls)
+            .where(cls.case_id == case_id)
+            .where(cls.template_id == template_id)
+        )
+        assignments = result.scalars().all()
+        
+        return {assignment.slot_id: assignment.card_id for assignment in assignments}
+    
+    @classmethod
+    async def update_assignment(
+        cls,
+        db,
+        case_id: int,
+        template_id: str,
+        slot_id: str,
+        card_id: Optional[int],
+    ) -> "EvidenceCardSlotAssignment":
+        """
+        更新或创建槽位关联
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            template_id: 模板ID
+            slot_id: 槽位ID
+            card_id: 卡片ID（None表示移除关联）
+            
+        Returns:
+            EvidenceCardSlotAssignment: 更新或创建的关联记录
+        """
+        from sqlalchemy import select
+        
+        # 查找现有记录
+        result = await db.execute(
+            select(cls)
+            .where(cls.case_id == case_id)
+            .where(cls.template_id == template_id)
+            .where(cls.slot_id == slot_id)
+        )
+        assignment = result.scalar_one_or_none()
+        
+        if assignment:
+            # 更新现有记录
+            assignment.card_id = card_id
+        else:
+            # 创建新记录
+            assignment = cls(
+                case_id=case_id,
+                template_id=template_id,
+                slot_id=slot_id,
+                card_id=card_id,
+            )
+            db.add(assignment)
+        
+        await db.commit()
+        await db.refresh(assignment)
+        return assignment
+    
+    @classmethod
+    async def reset_snapshot(
+        cls,
+        db,
+        case_id: int,
+        template_id: str,
+    ) -> int:
+        """
+        重置某个案件、某个模板的所有槽位关联（删除所有关联记录）
+        
+        Returns:
+            int: 删除的记录数
+        """
+        from sqlalchemy import delete
+        
+        result = await db.execute(
+            delete(cls)
+            .where(cls.case_id == case_id)
+            .where(cls.template_id == template_id)
+        )
+        await db.commit()
+        return result.rowcount
     
