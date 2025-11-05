@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, Suspense, useEffect } from "react"
+import React, { useState, Suspense, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import useSWR, { mutate } from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +11,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { 
   Pencil, 
   CheckCircle2, 
@@ -277,14 +285,16 @@ function EvidenceCardListItem({
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
   const [isHoveringImage, setIsHoveringImage] = useState(false)
   
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging: isLocalDragging } = useDraggable({
     id: `card-${card.id}`,
-    disabled: isExpanded, // 展开时禁用拖拽
+    disabled: false, // 始终允许拖拽，不受展开状态影响
   })
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined
+  // 不使用 transform，让原卡片保持原位，使用 DragOverlay 显示拖拽副本
+  const style = undefined
+  
+  // 使用传入的isDragging prop（表示正在拖拽）或本地isLocalDragging
+  const isCurrentlyDragging = isDragging || isLocalDragging
 
   const cardInfo = card.card_info || {}
   const cardType = cardInfo.card_type || '未知类型'
@@ -370,13 +380,22 @@ function EvidenceCardListItem({
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners} // 将拖拽属性绑定到整个卡片
       onClick={onClick}
+      onMouseDown={(e) => {
+        // 防止在拖动时触发文本选择
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
       className={cn(
-        "w-full p-4 rounded-xl border text-left transition-all duration-200 hover:shadow-lg relative overflow-hidden group",
+        "w-full p-4 rounded-xl border text-left transition-all duration-200 hover:shadow-lg group relative overflow-hidden",
         isSelected
           ? "border-blue-400 shadow-lg ring-2 ring-blue-200 bg-blue-50/50"
           : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30",
-        isDragging && "opacity-50",
+        "cursor-grab active:cursor-grabbing select-none", // 整个卡片可拖拽
+        isCurrentlyDragging && "opacity-40", // 拖拽时原卡片降低透明度，保持可见但不干扰
         // 拖拽悬停时的视觉反馈
         isDragOver && "ring-2 ring-green-400 border-green-400 bg-green-50/30"
       )}
@@ -385,13 +404,8 @@ function EvidenceCardListItem({
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-blue-600" />
       )}
 
-      {/* 拖拽句柄 */}
-      <div
-        {...listeners}
-        {...attributes}
-        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* 拖拽句柄 - 放在顶部中央 */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 flex-shrink-0 text-slate-400 pointer-events-none z-10">
         <GripVertical className="h-4 w-4" />
       </div>
 
@@ -592,8 +606,8 @@ function EvidenceCardListItem({
           </Button>
         )}
 
-        {/* 展开的引用证据列表 */}
-        {isCombined && isExpanded && (
+        {/* 展开的引用证据列表 - 拖拽时隐藏 */}
+        {isCombined && isExpanded && !isCurrentlyDragging && (
           <ReferencedEvidenceList
             card={card}
             evidenceList={evidenceList}
@@ -607,6 +621,126 @@ function EvidenceCardListItem({
             dragOverEvidenceId={dragOverEvidenceId}
             dragOverInsertPosition={dragOverInsertPosition}
           />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// 拖拽卡片预览组件（用于 DragOverlay，不含引用证据部分）
+function DraggedCardPreview({ 
+  card, 
+  evidenceList 
+}: { 
+  card: EvidenceCard
+  evidenceList: any[]
+}) {
+  const cardInfo = card.card_info || {}
+  const cardType = cardInfo.card_type || '未知类型'
+  const isCombined = cardInfo.card_is_associated === true
+  const cardFeatures = cardInfo.card_features || []
+  const allFeatures = cardFeatures
+
+  // 获取关联的证据图片URL
+  const getEvidenceUrls = () => {
+    return card.evidence_ids
+      .map(id => {
+        const evidence = evidenceList.find((e: any) => e.id === id)
+        return evidence?.file_url || null
+      })
+      .filter(url => url !== null) as string[]
+  }
+
+  const evidenceUrls = getEvidenceUrls()
+  const currentImageUrl = evidenceUrls[0] || null
+
+  return (
+    <div className="w-full max-w-[240px] p-2.5 rounded-lg border-2 border-blue-400 bg-white shadow-lg opacity-65 ring-2 ring-blue-200 pointer-events-none">
+      <div className="space-y-2">
+        {/* 缩略图 */}
+        {isCombined ? (
+          <div className="relative w-full aspect-video overflow-hidden rounded-lg bg-slate-50 border border-slate-200">
+            {currentImageUrl ? (
+              <img
+                src={currentImageUrl}
+                alt={cardType}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+                <div className="relative">
+                  <div className="w-24 h-24 border-2 border-slate-300 rounded flex items-center justify-center bg-white">
+                    <ImageIcon className="w-12 h-12 text-slate-400" />
+                  </div>
+                  <div className="absolute top-2 left-2 w-24 h-24 border-2 border-slate-300 rounded flex items-center justify-center bg-white">
+                    <ImageIcon className="w-12 h-12 text-slate-400" />
+                  </div>
+                  <div className="absolute top-4 left-4 w-24 h-24 border-2 border-slate-300 rounded flex items-center justify-center bg-white">
+                    <ImageIcon className="w-12 h-12 text-slate-400" />
+                  </div>
+                </div>
+              </div>
+            )}
+            {evidenceUrls.length > 1 && (
+              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-sm font-semibold">
+                1/{evidenceUrls.length}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="w-full aspect-video rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+            {currentImageUrl ? (
+              <img
+                src={currentImageUrl}
+                alt={cardType}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <ImageIcon className="w-12 h-12 text-slate-400" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 卡片信息 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-500 font-medium">卡片ID</span>
+              <span className="text-sm font-bold text-blue-600">#{card.id}</span>
+            </div>
+          </div>
+
+          <p className="text-sm font-semibold text-slate-900">{cardType}</p>
+
+          <p className="text-xs text-slate-500">
+            引用: {card.evidence_ids.map(id => `#${id}`).join(", ")}
+          </p>
+        </div>
+
+        {/* 字段信息 */}
+        {cardInfo && typeof cardInfo === 'object' && cardType !== '未分类' && allFeatures.length > 0 && (
+          <div className="pt-2 border-t border-slate-200">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {allFeatures.map((feature: any, index: number) => {
+                const isNullValue = feature.slot_value === null || feature.slot_value === undefined || feature.slot_value === ''
+                
+                return (
+                  <div key={`${feature.slot_name}-${index}`} className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-slate-500">{feature.slot_name}</Label>
+                    <span className="text-xs text-slate-900 font-medium break-words">
+                      {isNullValue 
+                        ? 'N/A'
+                        : feature.slot_value_type === 'boolean' 
+                          ? (feature.slot_value ? '是' : '否')
+                          : String(feature.slot_value)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1045,10 +1179,26 @@ function CardDetail({ card, evidenceList }: { card: EvidenceCard | null; evidenc
 }
 
 // 格式化模板标签 - 美化template_id显示
-function formatTemplateLabel(template: EvidenceCardSlotTemplate): string {
-  // 使用key_evidence_name作为主要标识，更简洁
-  // 例如：微信聊天记录主证据、借条欠条主证据
-  return template.key_evidence_name || template.template_id
+function formatTemplateLabel(template: EvidenceCardSlotTemplate): React.ReactNode {
+  // 显示案由、当事人类型、核心证据类型
+  const parts: string[] = []
+  
+  // 案由
+  if (template.case_cause) {
+    parts.push(template.case_cause)
+  }
+  
+  // 当事人类型（个人对个人）
+  if (template.creditor_type && template.debtor_type) {
+    parts.push(`${template.creditor_type}对${template.debtor_type}`)
+  }
+  
+  // 核心证据类型
+  if (template.key_evidence_name) {
+    parts.push(template.key_evidence_name)
+  }
+  
+  return parts.join(' • ')
 }
 
 // 判断卡片类型应该属于哪个角色 - 根据role_requirement
@@ -1081,7 +1231,8 @@ function renderCardSlots(
   role: 'creditor' | 'debtor' | 'shared',
   slotCards: Record<string, number>,
   template?: EvidenceCardSlotTemplate,
-  cardList?: EvidenceCard[]
+  cardList?: EvidenceCard[],
+  draggingCardType?: string | null
 ): React.ReactElement | null {
   // 过滤出属于当前角色的卡片类型 - 根据role_requirement
   const filteredCards = cardTypes.filter(cardType => {
@@ -1090,8 +1241,9 @@ function renderCardSlots(
   })
 
   if (filteredCards.length === 0) {
+    const alignClass = role === 'creditor' ? 'text-left' : role === 'debtor' ? 'text-right' : 'text-center'
     return (
-      <div className="text-xs text-slate-400 text-center py-4">
+      <div className={cn("text-xs text-slate-400 py-4", alignClass)}>
         暂无相关槽位
       </div>
     )
@@ -1130,6 +1282,7 @@ function renderCardSlots(
             placedCard={placedCard}
             side={role}
             orGroup={null}
+            draggingCardType={draggingCardType}
           />
         )
       })}
@@ -1157,18 +1310,20 @@ function renderCardSlots(
               const isSelected = cardId !== undefined
               
               return (
-                <div key={slotId} className="relative">
-                  {/* OR连接线 - 只在非第一个选项时显示 */}
+                <React.Fragment key={slotId}>
+                  {/* OR连接器和标签 - 位于两个卡槽之间的间隔中 */}
                   {cardIndex > 0 && (
-                    <div className="relative mb-3">
-                      {/* 垂直连接线 */}
-                      <div className="absolute left-1/2 top-0 -translate-x-1/2 w-0.5 h-3 bg-purple-300" />
+                    <div className="relative flex items-center justify-center my-4 z-50">
+                      {/* 左侧连接线 */}
+                      <div className="flex-1 h-0.5 bg-slate-300" />
                       {/* OR标签 */}
-                      <div className="absolute left-1/2 top-3 -translate-x-1/2 -translate-y-1/2">
-                        <div className="bg-white border-2 border-purple-300 rounded-full px-2 py-0.5">
-                          <span className="text-[10px] font-bold text-purple-600">OR</span>
+                      <div className="mx-3 flex-shrink-0">
+                        <div className="bg-white border-2 border-slate-300 rounded-full px-2.5 py-1 shadow-md">
+                          <span className="text-[10px] font-bold text-slate-600">OR</span>
                         </div>
                       </div>
+                      {/* 右侧连接线 */}
+                      <div className="flex-1 h-0.5 bg-slate-300" />
                     </div>
                   )}
                   
@@ -1182,8 +1337,9 @@ function renderCardSlots(
                     orGroup={orGroupName}
                     isInOrGroup={true}
                     isSelected={isSelected}
+                    draggingCardType={draggingCardType}
                   />
-                </div>
+                </React.Fragment>
               )
             })}
           </OrGroupContainer>
@@ -1205,25 +1361,21 @@ function OrGroupContainer({
   role: 'creditor' | 'debtor' | 'shared'
   children: React.ReactNode
 }) {
-  // 根据角色选择不同的边框颜色
+  // 根据状态选择不同的边框颜色
   const getBorderColor = () => {
     if (isSatisfied) {
       return "border-green-400"
     }
-    if (role === "creditor") {
-      return "border-purple-300"
-    }
-    if (role === "debtor") {
-      return "border-purple-300"
-    }
-    return "border-purple-300"
+    // 未满足时使用灰色（初始状态）
+    return "border-slate-300"
   }
 
   const getBackgroundColor = () => {
     if (isSatisfied) {
       return "bg-green-50/30"
     }
-    return "bg-purple-50/20"
+    // 未满足时使用灰色（初始状态）
+    return "bg-slate-50/30"
   }
 
   return (
@@ -1236,10 +1388,16 @@ function OrGroupContainer({
       )}
     >
       {/* 组标题 */}
-      <div className="flex items-center justify-between pb-2 border-b border-purple-200">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-          <span className="text-xs font-semibold text-purple-700">
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            isSatisfied ? "bg-green-500" : "bg-slate-400"
+          )} />
+          <span className={cn(
+            "text-xs font-semibold",
+            isSatisfied ? "text-green-700" : "text-slate-700"
+          )}>
             或关系组: {groupName}
           </span>
           <Badge 
@@ -1248,13 +1406,16 @@ function OrGroupContainer({
               "h-4 px-1.5 text-[10px]",
               isSatisfied
                 ? "border-green-400 text-green-700 bg-green-50"
-                : "border-purple-300 text-purple-600 bg-purple-50"
+                : "border-slate-300 text-slate-600 bg-slate-50"
             )}
           >
             {isSatisfied ? "✓ 已满足" : "待选择"}
           </Badge>
         </div>
-        <div className="text-[10px] text-purple-500 font-medium">
+        <div className={cn(
+          "text-[10px] font-medium",
+          isSatisfied ? "text-green-600" : "text-slate-500"
+        )}>
           满足其中一个即可
         </div>
       </div>
@@ -1278,7 +1439,8 @@ function CardSlotUnit({
   side,
   orGroup,
   isInOrGroup = false,
-  isSelected = false
+  isSelected = false,
+  draggingCardType = null
 }: {
   id: string
   cardType: string
@@ -1289,8 +1451,11 @@ function CardSlotUnit({
   orGroup?: string | null
   isInOrGroup?: boolean
   isSelected?: boolean
+  draggingCardType?: string | null
 }) {
   const [hoveredSlotName, setHoveredSlotName] = useState<string | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
+  const iconRefs = useRef<Record<string, HTMLDivElement | null>>({})
   
   const { isOver, setNodeRef } = useDroppable({
     id,
@@ -1298,87 +1463,168 @@ function CardSlotUnit({
 
   // 获取卡片特征值（如果有放置的卡片）
   const getSlotValue = (slotName: string): string | null => {
-    if (!placedCard) return null
+    if (!placedCard) {
+      return null
+    }
     
-    const cardFeatures = placedCard.card_info?.card_features || []
-    const feature = cardFeatures.find((f: any) => f.slot_name === slotName)
-    return feature?.slot_value ?? null
+    // 确保 card_info 存在
+    if (!placedCard.card_info) {
+      return null
+    }
+    
+    const cardFeatures = placedCard.card_info.card_features || []
+    
+    // 查找匹配的字段（支持大小写不敏感匹配）
+    const feature = cardFeatures.find((f: any) => {
+      if (!f || !f.slot_name) return false
+      // 精确匹配
+      if (f.slot_name === slotName) return true
+      // 去除空格后匹配
+      if (f.slot_name.trim() === slotName.trim()) return true
+      return false
+    })
+    
+    if (!feature) {
+      return null
+    }
+    
+    const value = feature.slot_value
+    // 处理 null、undefined、空字符串
+    if (value === null || value === undefined || value === '') {
+      return null
+    }
+    
+    return String(value)
   }
 
   // 模拟校对结果（实际应该从后端获取）
-  const getProofreadingResult = (slotName: string): { status: 'consistent' | 'inconsistent' | 'pending'; message: string } | null => {
+  const getProofreadingResult = (slotName: string): { status: 'passed' | 'failed'; message: string; reason: string } | null => {
     if (!placedCard || !cardId) return null
     
-    // 模拟逻辑：如果有值且需要校对，返回模拟结果
     const slot = requiredSlots.find(s => s.slot_name === slotName)
-    if (!slot?.need_proofreading) return null
+    if (!slot) return null
     
     const value = getSlotValue(slotName)
     if (!value) return null
     
+    // 情况1: 无需校对 - 自动通过
+    if (!slot.need_proofreading) {
+      return {
+        status: 'passed',
+        message: '✓ 无需校对，自动通过',
+        reason: `该字段 "${slotName}" 无需校对，字段值 "${value}" 已自动验证通过`
+      }
+    }
+    
+    // 情况2: 需要校对 - 模拟校对结果
     // 模拟：根据字段名称和值生成稳定的校对结果（避免每次渲染都变化）
     // 实际应该从后端获取
     const hash = (slotName + value).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
     const isConsistent = hash % 3 !== 0 // 约67%概率一致
     
-    return {
-      status: isConsistent ? 'consistent' : 'inconsistent',
-      message: isConsistent 
-        ? `字段值 "${value}" 与案件信息匹配`
-        : `字段值 "${value}" 与案件信息不一致，请检查`
+    if (isConsistent) {
+      // 需要校对且通过
+      return {
+        status: 'passed',
+        message: '✓ 校对通过',
+        reason: `字段值 "${value}" 已通过校对验证，与案件信息匹配一致`
+      }
+    } else {
+      // 需要校对但失败
+      return {
+        status: 'failed',
+        message: '✗ 校对失败',
+        reason: `字段值 "${value}" 与案件信息不一致，可能存在以下问题：\n1. 姓名拼写不匹配\n2. 金额数值不符\n3. 日期格式错误\n请检查并修正`
+      }
     }
   }
 
+  // 检查当前拖拽的卡片类型是否匹配此槽位
+  // 只要有拖拽就显示反馈，不依赖 isOver（这样所有卡槽都会高亮）
+  const isDragging = draggingCardType !== null
+  const isTypeMatch = isDragging && draggingCardType === cardType
+  const isRejecting = isDragging && draggingCardType !== cardType
+
   const getSlotBackground = () => {
+    // 如果有卡片已放置，正常显示
+    if (cardId) {
+      return "bg-white"
+    }
+    
+    // 如果正在拖拽，所有卡槽都应该有反馈
+    if (isDragging) {
+      // 如果类型不匹配，显示拒绝样式（红色）
+      if (isRejecting) {
+        // 悬停时显示更明显的红色背景
+        return isOver ? "bg-red-100" : "bg-red-50/50"
+      }
+      // 如果类型匹配，显示接受样式（绿色）
+      if (isTypeMatch) {
+        // 悬停时显示更明显的绿色背景
+        if (isInOrGroup) {
+          return isOver ? "bg-blue-100" : "bg-blue-50"
+        }
+        return isOver ? "bg-green-100" : "bg-green-50"
+      }
+      // 如果类型不明确，也显示红色（拒绝）
+      return isOver ? "bg-red-100" : "bg-red-50/50"
+    }
+    
     if (isInOrGroup) {
       if (isSelected) {
         return "bg-white"
       }
-      if (isOver) {
-        return "bg-purple-50"
-      }
       return "bg-white"
     }
     
-    // 不在OR组内的逻辑
-    if (cardId) {
-      return "bg-white"
-    }
-    if (isOver) {
-      return "bg-green-50"
-    }
+    // 默认状态（不在拖拽时）
     if (side === "creditor") {
       return "bg-blue-50/30 hover:bg-blue-50"
     }
     if (side === "debtor") {
-      return "bg-amber-50/30 hover:bg-amber-50"
+      return "bg-slate-50/30 hover:bg-slate-50"
     }
     return "bg-slate-50 hover:bg-slate-100"
   }
 
   const getBorderColor = () => {
+    // 如果有卡片已放置，正常显示
+    if (cardId) {
+      return "border-green-400"
+    }
+    
+    // 如果正在拖拽，所有卡槽都应该有反馈
+    if (isDragging) {
+      // 如果类型不匹配，显示拒绝样式（红色虚线）
+      if (isRejecting) {
+        // 悬停时显示更粗的红色边框，更明显的禁止效果
+        return isOver ? "border-red-600 border-4 border-dashed" : "border-red-400 border-dashed"
+      }
+      // 如果类型匹配，显示接受样式（绿色实线）
+      if (isTypeMatch) {
+        // 悬停时显示更粗的绿色边框
+        if (isInOrGroup) {
+          return isOver ? "border-blue-600 border-4" : "border-blue-400"
+        }
+        return isOver ? "border-green-600 border-4" : "border-green-400"
+      }
+      // 如果类型不明确，也显示红色（拒绝）
+      return isOver ? "border-red-600 border-4 border-dashed" : "border-red-400 border-dashed"
+    }
+    
     if (isInOrGroup) {
       if (isSelected) {
         return "border-green-400"
       }
-      if (isOver) {
-        return "border-purple-400"
-      }
-      return "border-purple-300 border-dashed"
+      return "border-slate-300 border-dashed"
     }
     
-    // 不在OR组内的逻辑
-    if (cardId) {
-      return "border-green-400"
-    }
-    if (isOver) {
-      return "border-green-400"
-    }
+    // 默认状态（不在拖拽时）
     if (side === "creditor") {
       return "border-blue-300"
     }
     if (side === "debtor") {
-      return "border-amber-300"
+      return "border-slate-300"
     }
     return "border-slate-300"
   }
@@ -1388,23 +1634,37 @@ function CardSlotUnit({
   return (
     <div
       ref={setNodeRef}
+      data-dnd-kit-droppable-id={id} // 确保元素有正确的 data 属性用于查找
       className={cn(
         "rounded-xl border transition-all duration-200 relative overflow-hidden",
         "p-3",
         getSlotBackground(),
         getBorderColor(),
         !cardId && !isInOrGroup && "border-dashed",
-        isOver && "scale-[1.02] shadow-lg",
+        // 悬停时显示明显的视觉反馈，根据类型匹配情况显示不同颜色的 ring
+        isOver && isRejecting && "ring-4 ring-red-500 scale-[1.02] shadow-lg cursor-not-allowed", // 拒绝时显示红色 ring 和禁止光标
+        isOver && isTypeMatch && "ring-4 ring-green-500 scale-[1.02] shadow-lg", // 匹配时显示绿色 ring
+        isOver && !isRejecting && !isTypeMatch && "ring-4 ring-blue-400 scale-[1.02] shadow-lg", // 其他情况显示蓝色 ring
         hasCard && "shadow-sm", // 有卡片时显示阴影
       )}
     >
+      {/* 禁止覆盖层 - 当悬停且类型不匹配时显示 */}
+      {isOver && isRejecting && (
+        <div className="absolute inset-0 bg-red-500/10 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+          <div className="flex flex-col items-center gap-2">
+            <AlertCircle className="w-8 h-8 text-red-600 animate-pulse" />
+            <span className="text-sm font-semibold text-red-700">类型不匹配</span>
+          </div>
+        </div>
+      )}
+
       {/* 卡片头部 - 类似证据卡片样式 */}
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">
           {isInOrGroup && (
             <div className={cn(
               "w-2 h-2 rounded-full flex-shrink-0",
-              isSelected ? "bg-green-500" : "bg-purple-300"
+              isSelected ? "bg-green-500" : "bg-slate-300"
             )} />
           )}
           <div className="flex items-center gap-1.5">
@@ -1446,11 +1706,6 @@ function CardSlotUnit({
                 )}>
                   {slot.slot_name}
                 </span>
-                {slot.need_proofreading && !hasValue && (
-                  <Badge variant="outline" className="h-3.5 px-1 text-[9px] border-blue-300 text-blue-600 bg-blue-50">
-                    需校对
-                  </Badge>
-                )}
               </div>
               <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0 ml-2">
                 {hasValue ? (
@@ -1458,34 +1713,33 @@ function CardSlotUnit({
                     <span className="text-xs text-slate-900 break-words text-right">
                       {String(slotValue)}
                     </span>
-                    {proofreadingResult && (
+                    {/* 只要有值且有卡片，就应该显示校对结果图标 */}
+                    {cardId && proofreadingResult ? (
                       <div 
-                        className="relative flex-shrink-0"
-                        onMouseEnter={() => setHoveredSlotName(slot.slot_name)}
-                        onMouseLeave={() => setHoveredSlotName(null)}
+                        ref={(el) => {
+                          iconRefs.current[slot.slot_name] = el
+                        }}
+                        className="relative flex-shrink-0 cursor-help"
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTooltipPosition({
+                            top: rect.bottom + 8,
+                            left: rect.right - 256 // 256px = 64 * 4 (w-64)
+                          })
+                          setHoveredSlotName(slot.slot_name)
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredSlotName(null)
+                          setTooltipPosition(null)
+                        }}
                       >
-                        {proofreadingResult.status === 'consistent' ? (
+                        {proofreadingResult.status === 'passed' ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                        ) : proofreadingResult.status === 'inconsistent' ? (
-                          <AlertCircle className="h-3.5 w-3.5 text-red-600" />
                         ) : (
-                          <Info className="h-3.5 w-3.5 text-amber-600" />
-                        )}
-                        {/* 悬浮提示 */}
-                        {hoveredSlotName === slot.slot_name && proofreadingResult && (
-                          <div className="absolute right-0 top-6 z-50 w-56 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none">
-                            <div className="font-semibold mb-1 text-white">
-                              {proofreadingResult.status === 'consistent' ? '✓ 校对通过' : '⚠ 校对异常'}
-                            </div>
-                            <div className="text-slate-300 leading-relaxed">
-                              {proofreadingResult.message}
-                            </div>
-                            {/* 箭头 */}
-                            <div className="absolute -top-1.5 right-4 w-3 h-3 bg-slate-900 rotate-45" />
-                          </div>
+                          <X className="h-3.5 w-3.5 text-red-600" />
                         )}
                       </div>
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <span className="text-xs text-slate-400 italic">待填充</span>
@@ -1504,6 +1758,39 @@ function CardSlotUnit({
           </div>
         </div>
       )}
+
+      {/* 悬浮提示 - 使用Portal渲染到body */}
+      {hoveredSlotName && tooltipPosition && (() => {
+        const slot = requiredSlots.find(s => s.slot_name === hoveredSlotName)
+        if (!slot) return null
+        const proofreadingResult = getProofreadingResult(hoveredSlotName)
+        if (!proofreadingResult) return null
+
+        return createPortal(
+          <div 
+            className="fixed z-[9999] w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none"
+            style={{
+              top: `${tooltipPosition.top}px`,
+              left: typeof window !== 'undefined' 
+                ? `${Math.max(8, Math.min(tooltipPosition.left, window.innerWidth - 272))}px` 
+                : `${tooltipPosition.left}px`,
+            }}
+          >
+            <div className={cn(
+              "font-semibold mb-2",
+              proofreadingResult.status === 'passed' ? 'text-green-400' : 'text-red-400'
+            )}>
+              {proofreadingResult.message}
+            </div>
+            <div className="text-slate-300 leading-relaxed whitespace-pre-line">
+              {proofreadingResult.reason}
+            </div>
+            {/* 箭头 */}
+            <div className="absolute -top-1.5 right-4 w-3 h-3 bg-slate-900 rotate-45" />
+          </div>,
+          document.body
+        )
+      })()}
     </div>
   )
 }
@@ -1537,7 +1824,7 @@ function DroppableSlot({
       return "bg-blue-50/50 hover:bg-blue-100/70"
     }
     if (side === "debtor") {
-      return "bg-amber-50/50 hover:bg-amber-100/70"
+      return "bg-slate-50/50 hover:bg-slate-100/70"
     }
     return "bg-slate-50 hover:bg-slate-100"
   }
@@ -1553,7 +1840,7 @@ function DroppableSlot({
       return "border-blue-300"
     }
     if (side === "debtor") {
-      return "border-amber-300"
+      return "border-slate-300"
     }
     return "border-slate-300"
   }
@@ -1618,6 +1905,9 @@ export function CardFactory({
   const [dragOverEvidenceId, setDragOverEvidenceId] = useState<number | null>(null) // 当前拖拽悬停的引用证据ID（用于显示插入位置）
   const [dragOverInsertPosition, setDragOverInsertPosition] = useState<'before' | 'after' | null>(null) // 插入位置：之前或之后
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(0) // 当前选中的模板索引
+  const [hoveredTemplateIndex, setHoveredTemplateIndex] = useState<number | null>(null) // 当前悬停的模板索引
+  const [templateTooltipPosition, setTemplateTooltipPosition] = useState<{ top: number; left: number } | null>(null) // 模板提示位置
+  const [draggingCardType, setDraggingCardType] = useState<string | null>(null) // 当前正在拖拽的卡片类型
   
   const { toast } = useToast()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
@@ -1626,13 +1916,63 @@ export function CardFactory({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 适中的拖动激活距离
+        distance: 8, // 适中的拖动激活距离，允许在ScrollArea内滚动
       },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   )
+  
+  // 在拖拽时允许滚动：通过CSS样式确保滚动不被锁定
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'dnd-scroll-fix'
+    style.textContent = `
+      /* 允许ScrollArea在拖拽时滚动 */
+      [data-radix-scroll-area-viewport] {
+        touch-action: pan-y !important;
+        pointer-events: auto !important;
+        overscroll-behavior: contain;
+        /* 允许在拖拽时滚动 */
+        -webkit-overflow-scrolling: touch;
+        /* 确保滚动条可以交互 */
+        overflow-y: auto !important;
+      }
+      /* 确保拖拽时ScrollArea的子元素不会阻止滚动 */
+      [data-radix-scroll-area-viewport] > * {
+        pointer-events: auto !important;
+        /* 允许子元素滚动 */
+        touch-action: pan-y !important;
+      }
+      /* 允许拖拽元素在ScrollArea上时仍然可以滚动 */
+      [data-dnd-kit-droppable-id] {
+        touch-action: pan-y !important;
+        /* 确保可放置区域不阻止滚动 */
+        pointer-events: auto !important;
+      }
+      /* 拖拽句柄不应该阻止滚动 */
+      [data-dnd-kit-drag-handle] {
+        touch-action: none;
+      }
+      /* 确保拖拽覆盖层不阻止滚动 */
+      [data-dnd-kit-drag-overlay] {
+        pointer-events: none !important;
+      }
+      /* 确保槽位在拖拽时可以滚动 */
+      [data-dnd-kit-droppable-id][id^="slot::"] {
+        touch-action: pan-y !important;
+        pointer-events: auto !important;
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      const existingStyle = document.getElementById('dnd-scroll-fix')
+      if (existingStyle) {
+        document.head.removeChild(existingStyle)
+      }
+    }
+  }, [])
 
   // 获取案件信息（如果外部传入则使用传入的，否则从API获取）
   const { data: fetchedCaseData, mutate: mutateCase } = useSWR(
@@ -1834,16 +2174,31 @@ export function CardFactory({
     // 清除之前的高亮状态
     setDragOverEvidenceId(null)
     setDragOverInsertPosition(null)
+    
+    // 如果是拖拽卡片，获取卡片类型
+    const activeIdStr = String(active.id)
+    if (activeIdStr.startsWith('card-')) {
+      const cardId = parseInt(activeIdStr.replace('card-', ''))
+      const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      const cardType = card?.card_info?.card_type || null
+      setDraggingCardType(cardType)
+    } else {
+      setDraggingCardType(null)
+    }
   }
 
   // 处理拖拽悬停（用于实时显示视觉反馈）
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event
     
+    console.log('[handleDragOver] 拖拽悬停:', { active: active.id, over: over?.id })
+    
     if (!over) {
       // 没有悬停目标，清除所有高亮
       setDragOverEvidenceId(null)
       setDragOverInsertPosition(null)
+      // 不清除 draggingCardType，因为它在拖拽开始时已设置，需要在整个拖拽过程中保持
+      // 这样可以在滚动时正确匹配类型
       return
     }
 
@@ -1852,12 +2207,39 @@ export function CardFactory({
     const overId = over.id
     const activeIdStr = String(activeId)
     const overIdStr = String(overId)
+    
+    console.log('[handleDragOver] 处理拖拽:', { activeIdStr, overIdStr })
 
     // 如果原始证据被拖拽到槽位，清除高亮并返回（不允许交互）
     if (activeIdStr.startsWith('evidence-') && overIdStr.startsWith('slot-')) {
       setDragOverEvidenceId(null)
       setDragOverInsertPosition(null)
       return
+    }
+
+    // 处理卡片拖拽到槽位的情况 - 只有在真正悬停在槽位上时才设置高亮
+    if (activeIdStr.startsWith('card-') && overIdStr.startsWith('slot::')) {
+      // 确保卡片类型已设置（用于槽位匹配检查）
+      const cardId = parseInt(activeIdStr.replace('card-', ''))
+      const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      const cardType = card?.card_info?.card_type || null
+      // 只有在真正悬停在槽位上时才更新拖拽卡片类型（用于显示高亮）
+      if (cardType) {
+        setDraggingCardType(cardType)
+      }
+      // 清除引用证据相关的高亮
+      setDragOverEvidenceId(null)
+      setDragOverInsertPosition(null)
+      return
+    }
+
+    // 如果拖拽卡片但不在槽位上，清除槽位相关的高亮（但保持拖拽卡片类型）
+    if (activeIdStr.startsWith('card-') && !overIdStr.startsWith('slot::')) {
+      // 不清除 draggingCardType，因为我们需要在滚动时保持它
+      // 但清除引用证据相关的高亮
+      setDragOverEvidenceId(null)
+      setDragOverInsertPosition(null)
+      // 不更新 draggingCardType，让它保持当前值
     }
 
     // 检查是否是拖拽原始证据到引用证据列表
@@ -1997,16 +2379,65 @@ export function CardFactory({
     const currentDragOverInsertPosition = dragOverInsertPosition
     
     setDraggedCardId(null)
+    setDraggingCardType(null) // 清除拖拽卡片类型
     // 清除高亮状态
     setDragOverEvidenceId(null)
     setDragOverInsertPosition(null)
 
-    if (!over) return
-
     // 统一处理 activeId 和 overId，确保它们是字符串类型
     const activeId = active.id
-    const overId = over.id
     const activeIdStr = String(activeId)
+    
+    // 如果 over 为 null，尝试通过鼠标位置找到目标槽位（后备方案）
+    let finalOver = over
+    if (!finalOver && activeIdStr.startsWith('card-')) {
+      // 尝试获取鼠标位置
+      // 方法1：从 event.activatorEvent 获取（如果可用）
+      const activatorEvent = event.activatorEvent as PointerEvent | undefined
+      let mouseX = 0
+      let mouseY = 0
+      
+      if (activatorEvent) {
+        mouseX = activatorEvent.clientX
+        mouseY = activatorEvent.clientY
+      } else {
+        // 方法2：从 active 的 rect 获取（作为后备）
+        const activeRect = active.rect.current.translated
+        if (activeRect) {
+          mouseX = activeRect.left + activeRect.width / 2
+          mouseY = activeRect.top + activeRect.height / 2
+        }
+      }
+      
+      if (mouseX > 0 && mouseY > 0) {
+        // 查找鼠标位置下的所有槽位元素
+        const elementsAtPoint = document.elementsFromPoint(mouseX, mouseY)
+        const slotElement = elementsAtPoint.find(el => {
+          const droppableId = el.getAttribute('data-dnd-kit-droppable-id')
+          return droppableId && droppableId.startsWith('slot::')
+        })
+        
+        if (slotElement) {
+          const slotId = slotElement.getAttribute('data-dnd-kit-droppable-id')
+          if (slotId) {
+            // 创建一个模拟的 over 对象
+            finalOver = {
+              id: slotId,
+              rect: {
+                current: {
+                  initial: slotElement.getBoundingClientRect(),
+                  translated: slotElement.getBoundingClientRect(),
+                }
+              }
+            } as any
+          }
+        }
+      }
+    }
+
+    if (!finalOver) return
+
+    const overId = finalOver.id
     const overIdStr = String(overId)
 
     // 检查是否是拖拽原始证据到引用证据列表
@@ -2127,36 +2558,62 @@ export function CardFactory({
       const cardId = parseInt(activeIdStr.replace('card-', ''))
       const slotId = overIdStr
       
+      console.log('[handleDragEnd] 尝试放置卡片到槽位:', { cardId, slotId, activeIdStr, overIdStr })
+      
       // 检查卡片类型是否匹配槽位类型
       const card = cardList.find(c => c.id === cardId)
+      if (!card) {
+        console.error('[handleDragEnd] 找不到卡片:', cardId)
+        toast({
+          title: "错误",
+          description: `找不到卡片 #${cardId}`,
+          variant: "destructive"
+        })
+        return
+      }
+      
       const cardType = card?.card_info?.card_type || ''
+      console.log('[handleDragEnd] 卡片类型:', cardType)
       
       // 从slotId中提取card_type信息
       // slotId格式: slot::{role}::{cardType}::{index}
       const slotIdParts = slotId.split('::')
+      console.log('[handleDragEnd] slotIdParts:', slotIdParts)
+      
       if (slotIdParts.length >= 3) {
         // 提取card_type（第3部分是cardType，第4部分是index）
         const slotCardType = slotIdParts[2]
+        console.log('[handleDragEnd] 槽位类型:', slotCardType, '卡片类型:', cardType)
         
         // 检查卡片类型是否匹配槽位类型
         if (cardType === slotCardType) {
-          setSlotCards(prev => ({
-            ...prev,
-            [slotId]: cardId,
-          }))
+          console.log('[handleDragEnd] 类型匹配，执行放置')
+          setSlotCards(prev => {
+            const newSlotCards = {
+              ...prev,
+              [slotId]: cardId,
+            }
+            console.log('[handleDragEnd] 更新 slotCards:', newSlotCards)
+            return newSlotCards
+          })
 
           toast({
             title: "卡片已放置",
             description: `卡片 #${cardId} 已放置到槽位`,
           })
         } else {
+          console.log('[handleDragEnd] 类型不匹配')
           toast({
             title: "类型不匹配",
             description: `卡片类型 "${cardType}" 与槽位类型 "${slotCardType}" 不匹配`,
             variant: "destructive"
           })
         }
+      } else {
+        console.error('[handleDragEnd] slotId 格式错误:', slotId)
       }
+    } else {
+      console.log('[handleDragEnd] 不是卡片到槽位的拖拽:', { activeIdStr, overIdStr })
     }
   }
 
@@ -2222,7 +2679,7 @@ export function CardFactory({
     }
   }
 
-  // 自定义碰撞检测函数，对引用证据列表更敏感
+  // 自定义碰撞检测函数，对引用证据列表更敏感，避免锁定第一个槽位
   const customCollisionDetection: CollisionDetection = (args) => {
     // 首先使用 closestCorners 进行基础检测
     const cornersCollisions = closestCorners(args)
@@ -2255,8 +2712,111 @@ export function CardFactory({
       }
     }
     
+    // 对于卡片拖拽到槽位的情况，使用基于鼠标位置的精确检测
+    const activeIdStr = String(activeId)
+    if (activeIdStr.startsWith('card-')) {
+      const { pointerCoordinates } = args
+      
+      // 如果没有指针坐标，直接返回 closestCorners 的结果（确保有反馈）
+      if (!pointerCoordinates) {
+        console.log('[collisionDetection] 没有指针坐标，返回 closestCorners:', cornersCollisions)
+        return cornersCollisions
+      }
+      
+      console.log('[collisionDetection] 检查碰撞，activeId:', activeIdStr, 'pointerCoordinates:', pointerCoordinates)
+      
+      // 过滤槽位碰撞：只返回鼠标真正悬停的槽位
+      const filteredCollisions = cornersCollisions.filter(collision => {
+        const collisionId = String(collision.id)
+        
+        // 只处理槽位
+        if (!collisionId.startsWith('slot::')) {
+          return true // 保留其他类型的碰撞
+        }
+        
+        // 获取槽位元素的 DOM 位置
+        let element = document.querySelector(`[data-dnd-kit-droppable-id="${collisionId}"]`)
+        if (!element) {
+          element = document.getElementById(collisionId)
+        }
+        
+        if (!element) {
+          console.log('[collisionDetection] 找不到元素:', collisionId)
+          return false // 找不到元素，不返回
+        }
+        
+        const rect = element.getBoundingClientRect()
+        
+        // 检查鼠标是否真正在元素内部（使用合理的容差，确保可以触发）
+        const tolerance = 20 // 增加容差，确保可以触发
+        const isPointerInside = 
+          pointerCoordinates.x >= rect.left - tolerance &&
+          pointerCoordinates.x <= rect.right + tolerance &&
+          pointerCoordinates.y >= rect.top - tolerance &&
+          pointerCoordinates.y <= rect.bottom + tolerance
+        
+        console.log('[collisionDetection] 检查槽位:', collisionId, 'isPointerInside:', isPointerInside, 'rect:', rect, 'pointer:', pointerCoordinates)
+        return isPointerInside
+      })
+      
+      console.log('[collisionDetection] 过滤后的碰撞结果:', filteredCollisions)
+      
+      // 如果过滤后没有结果，返回空数组（不锁定任何槽位）
+      return filteredCollisions.length > 0 ? filteredCollisions : []
+    }
+    
+    // 其他情况使用 closestCorners
     return cornersCollisions
   }
+
+  // 在拖拽过程中监听滚轮事件，手动触发滚动
+  useEffect(() => {
+    if (!draggedCardId) return
+    
+    const handleWheel = (e: WheelEvent) => {
+      // 查找鼠标位置下的 ScrollArea viewport
+      const elementsAtPoint = document.elementsFromPoint(e.clientX, e.clientY)
+      const scrollArea = elementsAtPoint.find(el => 
+        el.closest('[data-radix-scroll-area-viewport]')
+      )?.closest('[data-radix-scroll-area-viewport]') as HTMLElement
+      
+      if (scrollArea) {
+        // 检查鼠标是否在 ScrollArea 内
+        const scrollRect = scrollArea.getBoundingClientRect()
+        const isPointerInScrollArea = 
+          e.clientX >= scrollRect.left &&
+          e.clientX <= scrollRect.right &&
+          e.clientY >= scrollRect.top &&
+          e.clientY <= scrollRect.bottom
+        
+        if (isPointerInScrollArea) {
+          // 阻止默认行为，手动滚动（高优先级）
+          e.preventDefault()
+          e.stopPropagation()
+          e.stopImmediatePropagation()
+          
+          // 计算滚动距离
+          const scrollAmount = e.deltaY * 0.5
+          const currentScroll = scrollArea.scrollTop
+          const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight
+          
+          // 确保不会滚动超出边界
+          const newScroll = Math.max(0, Math.min(maxScroll, currentScroll + scrollAmount))
+          scrollArea.scrollTop = newScroll
+          
+          // 触发 scroll 事件
+          scrollArea.dispatchEvent(new Event('scroll', { bubbles: true }))
+        }
+      }
+    }
+
+    // 添加滚轮事件监听（捕获阶段，确保在拖拽系统之前处理）
+    window.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+    
+    return () => {
+      window.removeEventListener('wheel', handleWheel, { capture: true })
+    }
+  }, [draggedCardId])
 
   return (
     <DndContext
@@ -2270,66 +2830,68 @@ export function CardFactory({
         <div className="grid grid-cols-12 gap-4">
           {/* 左侧：原始证据列表 */}
           <Card className="col-span-3">
-            <CardHeader className="pb-2 pt-3 px-3 flex flex-col items-start gap-2">
-              <CardTitle className="text-base flex items-center gap-2 w-full">
-                <span>原始证据</span>
-                <Badge variant="secondary" className="text-xs">
-                  {evidenceList.length}
-                </Badge>
-              </CardTitle>
-              <div className="flex items-center gap-2 w-full flex-wrap">
-                <Button
-                  variant={isMultiSelect ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setIsMultiSelect(!isMultiSelect)
-                    if (!isMultiSelect) {
-                      setSelectedEvidenceIds(new Set())
-                    }
-                  }}
-                  className={cn(
-                    "h-7 px-3 text-xs font-medium transition-all",
-                    isMultiSelect
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "border-slate-300 hover:border-blue-400 hover:bg-blue-50"
+            <CardHeader className="pb-2 pt-3 px-3">
+              <div className="flex items-center justify-between w-full gap-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span>原始证据</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {evidenceList.length}
+                  </Badge>
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isMultiSelect ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setIsMultiSelect(!isMultiSelect)
+                      if (!isMultiSelect) {
+                        setSelectedEvidenceIds(new Set())
+                      }
+                    }}
+                    className={cn(
+                      "h-7 px-3 text-xs font-medium transition-all",
+                      isMultiSelect
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : "border-slate-300 hover:border-blue-400 hover:bg-blue-50"
+                    )}
+                  >
+                    {isMultiSelect ? "取消" : "多选"}
+                  </Button>
+                  {isMultiSelect && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                        onClick={handleSelectAll}
+                      >
+                        全选
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                        onClick={() => {
+                          const allIds = evidenceList.map((e: any) => String(e.id)) as string[]
+                          const inverted = new Set<string>(
+                            allIds.filter((id) => !selectedEvidenceIds.has(id))
+                          )
+                          setSelectedEvidenceIds(inverted)
+                        }}
+                      >
+                        反选
+                      </Button>
+                    </>
                   )}
-                >
-                  {isMultiSelect ? "取消" : "多选"}
-                </Button>
-                {isMultiSelect && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
-                      onClick={handleSelectAll}
-                    >
-                      全选
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
-                      onClick={() => {
-                        const allIds = evidenceList.map((e: any) => String(e.id)) as string[]
-                        const inverted = new Set<string>(
-                          allIds.filter((id) => !selectedEvidenceIds.has(id))
-                        )
-                        setSelectedEvidenceIds(inverted)
-                      }}
-                    >
-                      反选
-                    </Button>
-                  </>
-                )}
-                <Button
-                  onClick={handleCast}
-                  disabled={selectedEvidenceIds.size === 0}
-                  size="sm"
-                  className="h-7 px-3 text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
-                >
-                  铸造 {selectedEvidenceIds.size > 0 && `(${selectedEvidenceIds.size})`}
-                </Button>
+                  <Button
+                    onClick={handleCast}
+                    disabled={selectedEvidenceIds.size === 0}
+                    size="sm"
+                    className="h-7 px-3 text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  >
+                    铸造 {selectedEvidenceIds.size > 0 && `(${selectedEvidenceIds.size})`}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -2451,8 +3013,22 @@ export function CardFactory({
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(100vh-280px)]">
-                <div className="space-y-6">
+              <ScrollArea 
+                className="h-[calc(100vh-280px)]" 
+                style={{ 
+                  touchAction: 'pan-y',
+                  // 允许在拖拽时滚动
+                  pointerEvents: 'auto',
+                } as React.CSSProperties}
+              >
+                <div 
+                  className="space-y-6" 
+                  style={{ 
+                    touchAction: 'pan-y',
+                    // 确保内容可以滚动
+                    pointerEvents: 'auto',
+                  } as React.CSSProperties}
+                >
                   {/* 案件基本信息 */}
                   {finalCaseData && editedCaseInfo && (
                     <div>
@@ -2496,65 +3072,77 @@ export function CardFactory({
                         </div>
                       </div>
 
-                      {/* 债权人信息 */}
-                      {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") && (
-                        <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100 mb-4">
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-5 bg-blue-500 rounded-full" />
-                            <h4 className="font-bold text-slate-900 text-sm">债权人</h4>
-                          </div>
-                          {(() => {
-                            const creditor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "creditor")
-                            return (
-                              <div className="space-y-3">
-                                <div className="space-y-1">
-                                  <span className="text-xs text-slate-500">类型</span>
-                                  <div className="text-sm font-medium text-slate-900">{creditor.party_type || 'N/A'}</div>
-                                </div>
-                                <div className="space-y-1">
-                                  <span className="text-xs text-slate-500">姓名</span>
-                                  <div className="text-sm font-medium text-slate-900">{creditor.party_name || 'N/A'}</div>
-                                </div>
-                                {creditor.id_number && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs text-slate-500">身份证号</span>
-                                    <div className="text-xs font-mono text-slate-700 break-all">{creditor.id_number}</div>
-                                  </div>
-                                )}
+                      {/* 债权人和债务人信息 - 左右分布，中间VS图标 */}
+                      {(editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") || editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor")) && (
+                        <div className="relative grid grid-cols-[1fr_auto_1fr] gap-4 mb-4 items-start">
+                          {/* 债权人信息 - 左对齐 */}
+                          {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") && (
+                            <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100 text-left">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-1 h-5 bg-blue-500 rounded-full" />
+                                <h4 className="font-bold text-slate-900 text-sm">债权人</h4>
                               </div>
-                            )
-                          })()}
-                        </div>
-                      )}
+                              {(() => {
+                                const creditor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "creditor")
+                                return (
+                                  <div className="space-y-3">
+                                    <div className="space-y-1">
+                                      <span className="text-xs text-slate-500">类型</span>
+                                      <div className="text-sm font-medium text-slate-900">{creditor.party_type || 'N/A'}</div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <span className="text-xs text-slate-500">姓名</span>
+                                      <div className="text-sm font-medium text-slate-900">{creditor.party_name || 'N/A'}</div>
+                                    </div>
+                                    {creditor.id_number && (
+                                      <div className="space-y-1">
+                                        <span className="text-xs text-slate-500">身份证号</span>
+                                        <div className="text-xs font-mono text-slate-700 break-all">{creditor.id_number}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
 
-                      {/* 债务人信息 */}
-                      {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor") && (
-                        <div className="bg-amber-50/50 rounded-lg p-4 border border-amber-100">
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-5 bg-amber-500 rounded-full" />
-                            <h4 className="font-bold text-slate-900 text-sm">债务人</h4>
+                          {/* VS图标 - 居中 */}
+                          <div className="flex items-center justify-center h-full pt-4">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-300 shadow-sm">
+                              <span className="text-xs font-bold text-slate-600">VS</span>
+                            </div>
                           </div>
-                          {(() => {
-                            const debtor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "debtor")
-                            return (
-                              <div className="space-y-3">
-                                <div className="space-y-1">
-                                  <span className="text-xs text-slate-500">类型</span>
-                                  <div className="text-sm font-medium text-slate-900">{debtor.party_type || 'N/A'}</div>
-                                </div>
-                                <div className="space-y-1">
-                                  <span className="text-xs text-slate-500">姓名</span>
-                                  <div className="text-sm font-medium text-slate-900">{debtor.party_name || 'N/A'}</div>
-                                </div>
-                                {debtor.id_number && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs text-slate-500">身份证号</span>
-                                    <div className="text-xs font-mono text-slate-700 break-all">{debtor.id_number}</div>
-                                  </div>
-                                )}
+
+                          {/* 债务人信息 - 右对齐 */}
+                          {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor") && (
+                            <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200 text-right">
+                              <div className="flex items-center justify-end gap-2 mb-4">
+                                <h4 className="font-bold text-slate-900 text-sm">债务人</h4>
+                                <div className="w-1 h-5 bg-slate-400 rounded-full" />
                               </div>
-                            )
-                          })()}
+                              {(() => {
+                                const debtor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "debtor")
+                                return (
+                                  <div className="space-y-3">
+                                    <div className="space-y-1">
+                                      <span className="text-xs text-slate-500">类型</span>
+                                      <div className="text-sm font-medium text-slate-900">{debtor.party_type || 'N/A'}</div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <span className="text-xs text-slate-500">姓名</span>
+                                      <div className="text-sm font-medium text-slate-900">{debtor.party_name || 'N/A'}</div>
+                                    </div>
+                                    {debtor.id_number && (
+                                      <div className="space-y-1">
+                                        <span className="text-xs text-slate-500">身份证号</span>
+                                        <div className="text-xs font-mono text-slate-700 break-all">{debtor.id_number}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2564,67 +3152,129 @@ export function CardFactory({
 
                   {/* 卡片槽位 */}
                   <div>
+                    {/* 标题和模板选择器 */}
                     <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900 mb-1">卡片槽位</h3>
-                        <p className="text-sm text-slate-500">拖拽证据卡片到对应槽位进行分类整理</p>
-                      </div>
-                      
-                      {/* 模板切换标签 */}
+                      <h3 className="text-lg font-bold text-slate-900">证据卡槽</h3>
                       {slotTemplates.length > 1 && (
-                        <div className="flex items-center gap-2">
-                          {slotTemplates.map((template, index) => (
-                            <button
-                              key={template.template_id}
-                              onClick={() => setSelectedTemplateIndex(index)}
-                              className={cn(
-                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                selectedTemplateIndex === index
-                                  ? "bg-blue-600 text-white shadow-md"
-                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                              )}
-                            >
-                              {formatTemplateLabel(template)}
-                            </button>
-                          ))}
-                        </div>
+                        <Select
+                          value={String(selectedTemplateIndex)}
+                          onValueChange={(value) => setSelectedTemplateIndex(Number(value))}
+                        >
+                          <SelectTrigger 
+                            className="w-[280px] h-8 text-xs"
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setTemplateTooltipPosition({
+                                top: rect.bottom + 8,
+                                left: rect.left + (rect.width / 2) - 128
+                              })
+                              setHoveredTemplateIndex(selectedTemplateIndex)
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredTemplateIndex(null)
+                              setTemplateTooltipPosition(null)
+                            }}
+                          >
+                            <SelectValue>
+                              {(() => {
+                                const template = slotTemplates[selectedTemplateIndex]
+                                if (!template) return '选择模板'
+                                
+                                // 生成label名称：案由-聊天记录核心卡槽或案由-欠条借条核心卡槽
+                                const caseCause = template.case_cause || ''
+                                let evidenceType = ''
+                                if (template.key_evidence_name) {
+                                  if (template.key_evidence_name.includes('聊天记录') || template.key_evidence_name.includes('微信')) {
+                                    evidenceType = '聊天记录核心卡槽'
+                                  } else if (template.key_evidence_name.includes('借条') || template.key_evidence_name.includes('欠条')) {
+                                    evidenceType = '欠条借条核心卡槽'
+                                  } else {
+                                    evidenceType = template.key_evidence_name.replace('主证据', '核心卡槽')
+                                  }
+                                }
+                                return caseCause && evidenceType ? `${caseCause}-${evidenceType}` : template.key_evidence_name || template.template_id
+                              })()}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {slotTemplates.map((template, index) => {
+                              // 生成label名称
+                              const caseCause = template.case_cause || ''
+                              let evidenceType = ''
+                              if (template.key_evidence_name) {
+                                if (template.key_evidence_name.includes('聊天记录') || template.key_evidence_name.includes('微信')) {
+                                  evidenceType = '聊天记录核心卡槽'
+                                } else if (template.key_evidence_name.includes('借条') || template.key_evidence_name.includes('欠条')) {
+                                  evidenceType = '欠条借条核心卡槽'
+                                } else {
+                                  evidenceType = template.key_evidence_name.replace('主证据', '核心卡槽')
+                                }
+                              }
+                              const labelName = caseCause && evidenceType ? `${caseCause}-${evidenceType}` : template.key_evidence_name || template.template_id
+                              
+                              return (
+                                <SelectItem 
+                                  key={template.template_id} 
+                                  value={String(index)}
+                                  title={String(formatTemplateLabel(template))}
+                                >
+                                  {labelName}
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
                       )}
                     </div>
 
                     {currentTemplate ? (
                       <div className="space-y-6">
-                        {/* 按债权人和债务人分左右两列展示 */}
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* 左侧：债权人相关槽位 */}
+                        {/* 按债权人和债务人分左右两列展示，中间VS图标 */}
+                        <div className="relative grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+                          {/* 左侧：债权人相关槽位 - 左对齐 */}
                           <div className="space-y-4">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-1 h-5 bg-blue-500 rounded-full" />
-                              <h4 className="text-sm font-semibold text-slate-700">
+                              <h4 className="text-sm font-semibold text-slate-700 text-left">
                                 债权人 {currentTemplate.creditor_type ? `(${currentTemplate.creditor_type})` : ''}
                               </h4>
                             </div>
-                            {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList)}
+                            <div className="text-left">
+                              {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList, draggingCardType)}
+                            </div>
                           </div>
 
-                          {/* 右侧：债务人相关槽位 */}
+                          {/* VS图标 - 居中 */}
+                          <div className="flex items-center justify-center h-full pt-8">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-300 shadow-sm sticky top-4">
+                              <span className="text-xs font-bold text-slate-600">VS</span>
+                            </div>
+                          </div>
+
+                          {/* 右侧：债务人相关槽位 - 右对齐 */}
                           <div className="space-y-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-1 h-5 bg-amber-500 rounded-full" />
-                              <h4 className="text-sm font-semibold text-slate-700">
+                            <div className="flex items-center justify-end gap-2 mb-3">
+                              <h4 className="text-sm font-semibold text-slate-700 text-right">
                                 债务人 {currentTemplate.debtor_type ? `(${currentTemplate.debtor_type})` : ''}
                               </h4>
+                              <div className="w-1 h-5 bg-slate-400 rounded-full" />
                             </div>
-                            {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList)}
+                            <div className="text-right">
+                              {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList, draggingCardType)}
+                            </div>
                           </div>
                         </div>
 
-                        {/* 共享槽位（不分债权人和债务人的） */}
+                        {/* 共享槽位（不分债权人和债务人的） - 居中对齐 */}
                         <div className="space-y-4 pt-4 border-t border-slate-200">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-1 h-5 bg-slate-400 rounded-full" />
+                          <div className="flex items-center justify-center mb-3">
                             <h4 className="text-sm font-semibold text-slate-700">共享证据</h4>
                           </div>
-                          {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList)}
+                          <div className="flex justify-center">
+                            <div className="max-w-2xl w-full">
+                              {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList, draggingCardType)}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -2640,22 +3290,16 @@ export function CardFactory({
         </div>
       </div>
 
-      {/* 拖拽覆盖层 - 显示拖拽的副本 */}
+      {/* 拖拽覆盖层 - 显示放大后的卡片副本 */}
       <DragOverlay>
         {draggedCardId ? (
           (() => {
-            // 确保 draggedCardId 是字符串类型
             const draggedIdStr = String(draggedCardId)
             if (draggedIdStr.startsWith('card-')) {
               const cardId = parseInt(draggedIdStr.replace('card-', ''))
               const card = cardList.find(c => c.id === cardId)
               return card ? (
-                <div className="p-3 rounded-lg border bg-white shadow-2xl opacity-95 rotate-2">
-                  <div className="text-sm font-medium">卡片ID #{card.id}</div>
-                  <div className="text-xs text-gray-600">
-                    {card.card_info?.card_type || '未知类型'}
-                  </div>
-                </div>
+                <DraggedCardPreview card={card} evidenceList={evidenceList} />
               ) : null
             } else if (draggedIdStr.startsWith('evidence-')) {
               const evidenceId = parseInt(draggedIdStr.replace('evidence-', ''))
@@ -2664,10 +3308,10 @@ export function CardFactory({
               
               const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
               return (
-                <div className="w-full max-w-xs p-3 rounded-xl border bg-white shadow-2xl opacity-95 rotate-2">
-                  <div className="flex items-center gap-3">
+                <div className="w-full max-w-[200px] p-2.5 rounded-lg border-2 border-blue-400 bg-white shadow-lg opacity-65 ring-2 ring-blue-200 pointer-events-none">
+                  <div className="flex items-center gap-2">
                     <div className="flex-shrink-0">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                      <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-blue-300 bg-slate-100 shadow-md">
                         {fileTypeInfo.type === 'image' && evidence.file_url ? (
                           <img
                             src={evidence.file_url}
@@ -2676,7 +3320,7 @@ export function CardFactory({
                           />
                         ) : (
                           <div className={`w-full h-full ${fileTypeInfo.bgColor} flex items-center justify-center`}>
-                            <span className="text-2xl">{fileTypeInfo.icon}</span>
+                            <span className="text-3xl">{fileTypeInfo.icon}</span>
                           </div>
                         )}
                       </div>
@@ -2686,7 +3330,7 @@ export function CardFactory({
                         <span className="text-[10px] text-slate-500 font-medium">证据ID</span>
                         <span className="text-xs font-mono text-blue-600 font-semibold">#{evidence.id}</span>
                       </div>
-                      <p className="text-sm font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+                      <p className="text-sm font-bold text-slate-900 truncate">{evidence.file_name || ''}</p>
                     </div>
                   </div>
                 </div>
@@ -2696,6 +3340,34 @@ export function CardFactory({
           })()
         ) : null}
       </DragOverlay>
+
+      {/* 模板切换悬停提示 - 使用Portal渲染到body */}
+      {hoveredTemplateIndex !== null && templateTooltipPosition && slotTemplates[hoveredTemplateIndex] && (() => {
+        const template = slotTemplates[hoveredTemplateIndex]
+        const fullDescription = formatTemplateLabel(template)
+        
+        return createPortal(
+          <div 
+            className="fixed z-[9999] w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none"
+            style={{
+              top: `${templateTooltipPosition.top}px`,
+              left: typeof window !== 'undefined' 
+                ? `${Math.max(8, Math.min(templateTooltipPosition.left, window.innerWidth - 272))}px` 
+                : `${templateTooltipPosition.left}px`,
+            }}
+          >
+            <div className="font-semibold mb-2 text-white">
+              {template.case_cause || '案由未设置'}
+            </div>
+            <div className="text-slate-300 leading-relaxed whitespace-pre-line">
+              {fullDescription}
+            </div>
+            {/* 箭头 */}
+            <div className="absolute -top-1.5 right-4 w-3 h-3 bg-slate-900 rotate-45" />
+          </div>,
+          document.body
+        )
+      })()}
 
       {/* 图片预览弹窗 */}
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
