@@ -2795,7 +2795,7 @@ async def update_slot_assignment(
     template_id: str,
     slot_id: str,
     card_id: Optional[int],
-) -> EvidenceCardSlotAssignment:
+) -> Optional[EvidenceCardSlotAssignment]:
     """
     更新或创建槽位关联
     
@@ -2804,10 +2804,10 @@ async def update_slot_assignment(
         case_id: 案件ID
         template_id: 模板ID
         slot_id: 槽位ID
-        card_id: 卡片ID（None表示移除关联）
+        card_id: 卡片ID（None表示删除关联记录）
         
     Returns:
-        EvidenceCardSlotAssignment: 更新或创建的关联记录
+        Optional[EvidenceCardSlotAssignment]: 更新或创建的关联记录，如果删除则返回None
     """
     return await EvidenceCardSlotAssignment.update_assignment(
         db, case_id, template_id, slot_id, card_id

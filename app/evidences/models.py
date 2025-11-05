@@ -541,6 +541,7 @@ class EvidenceCardSlotAssignment(Base):
         
         Returns:
             Dict[str, Optional[int]]: 槽位ID到卡片ID的映射，例如 {"slot::creditor::身份证::0": 123, ...}
+            只返回 card_id 不为 null 的记录
         """
         from sqlalchemy import select
         
@@ -548,6 +549,7 @@ class EvidenceCardSlotAssignment(Base):
             select(cls)
             .where(cls.case_id == case_id)
             .where(cls.template_id == template_id)
+            .where(cls.card_id.isnot(None))  # 只返回 card_id 不为 null 的记录
         )
         assignments = result.scalars().all()
         
@@ -561,7 +563,7 @@ class EvidenceCardSlotAssignment(Base):
         template_id: str,
         slot_id: str,
         card_id: Optional[int],
-    ) -> "EvidenceCardSlotAssignment":
+    ) -> Optional["EvidenceCardSlotAssignment"]:
         """
         更新或创建槽位关联
         
@@ -570,12 +572,12 @@ class EvidenceCardSlotAssignment(Base):
             case_id: 案件ID
             template_id: 模板ID
             slot_id: 槽位ID
-            card_id: 卡片ID（None表示移除关联）
+            card_id: 卡片ID（None表示删除关联记录）
             
         Returns:
-            EvidenceCardSlotAssignment: 更新或创建的关联记录
+            Optional[EvidenceCardSlotAssignment]: 更新或创建的关联记录，如果删除则返回None
         """
-        from sqlalchemy import select
+        from sqlalchemy import select, delete
         
         # 查找现有记录
         result = await db.execute(
@@ -586,22 +588,35 @@ class EvidenceCardSlotAssignment(Base):
         )
         assignment = result.scalar_one_or_none()
         
-        if assignment:
-            # 更新现有记录
-            assignment.card_id = card_id
+        if card_id is None:
+            # 如果 card_id 为 None，删除关联记录
+            if assignment:
+                await db.delete(assignment)
+                await db.commit()
+                return None
+            else:
+                # 记录不存在，无需删除
+                return None
         else:
-            # 创建新记录
-            assignment = cls(
-                case_id=case_id,
-                template_id=template_id,
-                slot_id=slot_id,
-                card_id=card_id,
-            )
-            db.add(assignment)
-        
-        await db.commit()
-        await db.refresh(assignment)
-        return assignment
+            # card_id 不为 None，创建或更新关联
+            if assignment:
+                # 更新现有记录
+                assignment.card_id = card_id
+                await db.commit()
+                await db.refresh(assignment)
+                return assignment
+            else:
+                # 创建新记录
+                assignment = cls(
+                    case_id=case_id,
+                    template_id=template_id,
+                    slot_id=slot_id,
+                    card_id=card_id,
+                )
+                db.add(assignment)
+                await db.commit()
+                await db.refresh(assignment)
+                return assignment
     
     @classmethod
     async def reset_snapshot(

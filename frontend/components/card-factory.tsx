@@ -1232,7 +1232,8 @@ function renderCardSlots(
   slotCards: Record<string, number | null>,
   template?: EvidenceCardSlotTemplate,
   cardList?: EvidenceCard[],
-  draggingCardType?: string | null
+  draggingCardType?: string | null,
+  onRemoveCard?: (slotId: string) => void
 ): React.ReactElement | null {
   // 过滤出属于当前角色的卡片类型 - 根据role_requirement
   const filteredCards = cardTypes.filter(cardType => {
@@ -1283,16 +1284,18 @@ function renderCardSlots(
             side={role}
             orGroup={null}
             draggingCardType={draggingCardType}
+            onRemoveCard={onRemoveCard}
           />
         )
       })}
       
       {/* 分组的卡片 */}
       {Object.entries(groupedByOrGroup).map(([orGroupName, groupCards], groupIndex) => {
-        // 检查该组内是否有卡片已被放置
+        // 检查该组内是否有卡片已被放置（card_id 不为 null 且不为 undefined）
         const groupPlacedCards = groupCards.filter((cardType, cardIndex) => {
           const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
-          return slotCards[slotId] !== undefined
+          const cardId = slotCards[slotId]
+          return cardId !== undefined && cardId !== null
         })
         const isGroupSatisfied = groupPlacedCards.length > 0
         
@@ -1338,6 +1341,7 @@ function renderCardSlots(
                     isInOrGroup={true}
                     isSelected={isSelected}
                     draggingCardType={draggingCardType}
+                    onRemoveCard={onRemoveCard}
                   />
                 </React.Fragment>
               )
@@ -1440,7 +1444,8 @@ function CardSlotUnit({
   orGroup,
   isInOrGroup = false,
   isSelected = false,
-  draggingCardType = null
+  draggingCardType = null,
+  onRemoveCard
 }: {
   id: string
   cardType: string
@@ -1452,6 +1457,7 @@ function CardSlotUnit({
   isInOrGroup?: boolean
   isSelected?: boolean
   draggingCardType?: string | null
+  onRemoveCard?: (slotId: string) => void
 }) {
   const [hoveredSlotName, setHoveredSlotName] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
@@ -1676,7 +1682,24 @@ function CardSlotUnit({
             )}
           </div>
         </div>
-        <div className="text-xs font-semibold text-slate-900">{cardType}</div>
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-semibold text-slate-900">{cardType}</div>
+          {/* 移除按钮 - 只在有卡片时显示 */}
+          {cardId && onRemoveCard && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 hover:bg-red-100 hover:text-red-600 text-slate-400"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemoveCard(id)
+              }}
+              title="移除卡片"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 字段列表 - 紧凑样式 */}
@@ -2688,6 +2711,29 @@ export function CardFactory({
     return cardList.some(card => card.evidence_ids.includes(evidenceId))
   }
 
+  // 处理从槽位移除卡片
+  const handleRemoveCardFromSlot = async (slotId: string) => {
+    if (!currentTemplate) return
+    
+    try {
+      // 静默更新槽位关联（移除关联）
+      await evidenceCardApi.updateSlotAssignment(
+        Number(caseId),
+        currentTemplate.template_id,
+        slotId,
+        null
+      )
+      
+      // 更新本地状态
+      const newSlotCards = { ...slotCards }
+      delete newSlotCards[slotId]
+      setSlotCards(newSlotCards)
+    } catch (error) {
+      console.error('移除槽位关联失败:', error)
+      // 静默失败，不显示错误提示
+    }
+  }
+
   // 保存案件信息编辑
   const handleSaveCaseInfo = async () => {
     try {
@@ -3353,7 +3399,7 @@ export function CardFactory({
                               </h4>
                             </div>
                             <div className="text-left">
-                              {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList, draggingCardType)}
+                              {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
                             </div>
                           </div>
 
@@ -3373,7 +3419,7 @@ export function CardFactory({
                               <div className="w-1 h-5 bg-slate-400 rounded-full" />
                             </div>
                             <div className="text-right">
-                              {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList, draggingCardType)}
+                              {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
                             </div>
                           </div>
                         </div>
@@ -3385,7 +3431,7 @@ export function CardFactory({
                           </div>
                           <div className="flex justify-center">
                             <div className="max-w-2xl w-full">
-                              {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList, draggingCardType)}
+                              {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
                             </div>
                           </div>
                         </div>
