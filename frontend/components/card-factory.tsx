@@ -18,6 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DatePicker } from "@/components/ui/date-picker"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { format, parse } from "date-fns"
 import { 
   Pencil, 
   CheckCircle2, 
@@ -32,9 +36,10 @@ import {
   Save,
   Upload,
   AlertCircle,
-  Info
+  Info,
+  Calendar as CalendarIcon
 } from "lucide-react"
-import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate } from "@/lib/api"
+import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate, type ProofreadRule } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import { useGlobalTasks } from "@/contexts/global-task-context"
 import { useCardCasting } from "@/hooks/use-celery-tasks"
@@ -140,7 +145,8 @@ function OriginalEvidenceItem({
   multiSelectMode,
   onClick,
   isDraggable,
-  dragId
+  dragId,
+  onImageClick
 }: { 
   evidence: any
   isSelected: boolean
@@ -149,6 +155,7 @@ function OriginalEvidenceItem({
   onClick: () => void
   isDraggable?: boolean
   dragId?: string
+  onImageClick?: (url: string, alt: string) => void
 }) {
   const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
   
@@ -193,6 +200,13 @@ function OriginalEvidenceItem({
         <div className="relative flex-shrink-0">
           <div
             className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+            onClick={(e) => {
+              e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+              if (fileTypeInfo.type === 'image' && evidence.file_url && onImageClick) {
+                // 打开图片预览对话框
+                onImageClick(evidence.file_url, evidence.file_name || '')
+              }
+            }}
           >
             {fileTypeInfo.type === 'image' && evidence.file_url ? (
               <img
@@ -309,7 +323,16 @@ function EvidenceCardListItem({
   // 初始化编辑数据
   useEffect(() => {
     if (isEditing && cardFeatures.length > 0) {
-      setEditedFeatures(JSON.parse(JSON.stringify(cardFeatures)))
+      // 深拷贝特征数据，保持原始结构和类型信息
+      const cloned = cardFeatures.map((f: any) => ({
+        ...f,
+        slot_value: f.slot_value, // 保持原始值
+        slot_value_type: f.slot_value_type || 'string', // 确保有类型信息
+      }))
+      setEditedFeatures(cloned)
+    } else if (!isEditing) {
+      // 退出编辑模式时，清空编辑数据
+      setEditedFeatures([])
     }
   }, [isEditing, cardFeatures])
 
@@ -370,14 +393,120 @@ function EvidenceCardListItem({
     setEditedFeatures([])
   }
 
-  const handleFeatureChange = (index: number, newValue: string) => {
-    const updated = [...editedFeatures]
-    updated[index] = { ...updated[index], slot_value: newValue }
+  // 根据字段名和类型获取合适的输入控件
+  const getFieldInputType = (slotName: string, slotValueType: string): 'text' | 'number' | 'date' | 'select' | 'boolean' => {
+    // 日期类型字段
+    if (slotValueType === 'date' || slotName.includes('日期') || slotName === '出生') {
+      return 'date'
+    }
+    
+    // 布尔类型字段
+    if (slotValueType === 'boolean') {
+      return 'boolean'
+    }
+    
+    // 数字类型字段
+    if (slotValueType === 'number' || slotName.includes('金额') || slotName.includes('代码') || slotName.includes('号码')) {
+      return 'number'
+    }
+    
+    // 需要下拉选择的字段
+    if (slotName === '性别') {
+      return 'select'
+    }
+    if (slotName === '民族') {
+      return 'select'
+    }
+    if (slotName === '公司类型' || slotName === '经营类型') {
+      return 'select'
+    }
+    
+    // 默认文本输入
+    return 'text'
+  }
+  
+  // 获取下拉选项
+  const getSelectOptions = (slotName: string): Array<{ value: string; label: string }> => {
+    if (slotName === '性别') {
+      return [
+        { value: '男', label: '男' },
+        { value: '女', label: '女' }
+      ]
+    }
+    if (slotName === '民族') {
+      return [
+        { value: '汉', label: '汉' },
+        { value: '回', label: '回' },
+        { value: '维吾尔', label: '维吾尔' },
+        { value: '藏', label: '藏' },
+        { value: '蒙古', label: '蒙古' },
+        { value: '满', label: '满' },
+        { value: '其他', label: '其他' }
+      ]
+    }
+    if (slotName === '公司类型' || slotName === '经营类型') {
+      return [
+        { value: '个体工商户', label: '个体工商户' },
+        { value: '有限责任公司', label: '有限责任公司' },
+        { value: '股份有限公司', label: '股份有限公司' },
+        { value: '其他', label: '其他' }
+      ]
+    }
+    return []
+  }
+  
+  // 解析日期字符串为 Date 对象
+  const parseDateValue = (value: any): Date | undefined => {
+    if (!value) return undefined
+    if (value instanceof Date) return value
+    
+    const strValue = String(value)
+    // 尝试解析常见日期格式
+    const formats = [
+      'yyyy年MM月dd日',
+      'yyyy-MM-dd',
+      'yyyy/MM/dd',
+      'yyyyMMdd'
+    ]
+    
+    for (const fmt of formats) {
+      try {
+        const parsed = parse(strValue, fmt, new Date())
+        if (!isNaN(parsed.getTime())) {
+          return parsed
+        }
+      } catch (e) {
+        // 继续尝试下一个格式
+      }
+    }
+    
+    // 如果都失败，尝试使用 Date 构造函数
+    const date = new Date(strValue)
+    return isNaN(date.getTime()) ? undefined : date
+  }
+  
+  // 格式化日期为字符串
+  const formatDateValue = (date: Date | undefined): string => {
+    if (!date) return ''
+    try {
+      return format(date, 'yyyy年MM月dd日')
+    } catch (e) {
+      return String(date)
+    }
+  }
+
+  const handleFeatureChange = (slotName: string, newValue: any) => {
+    const updated = editedFeatures.map((f: any) => {
+      if (f.slot_name === slotName) {
+        return { ...f, slot_value: newValue }
+      }
+      return f
+    })
     setEditedFeatures(updated)
   }
 
   return (
-    <div
+    <Card
       ref={setNodeRef}
       style={style}
       {...attributes}
@@ -390,26 +519,28 @@ function EvidenceCardListItem({
         }
       }}
       className={cn(
-        "w-full p-4 rounded-xl border text-left transition-all duration-200 hover:shadow-lg group relative overflow-hidden",
-        isSelected
-          ? "border-blue-400 shadow-lg ring-2 ring-blue-200 bg-blue-50/50"
-          : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30",
+        "w-full p-4 text-left transition-all duration-200 group relative overflow-hidden",
+        "shadow-lg hover:shadow-2xl border-2", // 使用 shadcn Card 的默认样式，增强阴影
         "cursor-grab active:cursor-grabbing select-none", // 整个卡片可拖拽
-        isCurrentlyDragging && "opacity-40", // 拖拽时原卡片降低透明度，保持可见但不干扰
+        isSelected
+          ? "border-blue-400 shadow-2xl ring-2 ring-blue-200 bg-blue-50/50" // 选中时增强阴影
+          : "border-slate-300 hover:border-blue-400 hover:bg-blue-50/30 hover:shadow-xl", // 默认边框更明显，hover时更突出
+        isCurrentlyDragging && "opacity-40 shadow-2xl scale-105", // 拖拽时增强阴影和轻微放大
         // 拖拽悬停时的视觉反馈
-        isDragOver && "ring-2 ring-green-400 border-green-400 bg-green-50/30"
+        isDragOver && "ring-2 ring-green-400 border-green-400 bg-green-50/30 shadow-xl"
       )}
     >
       {isSelected && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-blue-600" />
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-blue-500 to-blue-600 rounded-l-lg" />
       )}
 
-      {/* 拖拽句柄 - 放在顶部中央 */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 flex-shrink-0 text-slate-400 pointer-events-none z-10">
-        <GripVertical className="h-4 w-4" />
-      </div>
+      {/* 顶部高光效果 - 增强卡片层次感 */}
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none rounded-t-lg" />
 
-      <div className="space-y-3">
+      {/* 底部阴影渐变 - 增强立体感 */}
+      <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-black/5 to-transparent pointer-events-none rounded-b-lg" />
+
+      <div className="space-y-3 relative z-10">
         {/* 缩略图 */}
         {isCombined ? (
           // 联合证据卡片 - 显示堆叠的图标，支持图片导航
@@ -490,16 +621,66 @@ function EvidenceCardListItem({
         {/* 卡片信息 */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-500 font-medium">卡片ID</span>
-              <span className="text-sm font-bold text-blue-600">#{card.id}</span>
+            <div className="flex items-center gap-2">
+              {/* 拖拽句柄 - 移到卡片信息区域左侧 */}
+              <div className="flex-shrink-0 text-slate-400 pointer-events-none">
+                <GripVertical className="h-4 w-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-500 font-medium">卡片ID</span>
+                <span className="text-sm font-bold text-blue-600">#{card.id}</span>
+              </div>
+              {/* 卡片元属性信息 - 通过提示图标显示，放在卡片ID旁边，不占用额外高度 */}
+              {(card.created_at || card.updated_at || (card.updated_times !== undefined && card.updated_times > 0)) && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div 
+                        className="flex items-center cursor-help hover:text-slate-600 transition-colors text-slate-400 ml-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <div className="space-y-1.5 text-xs">
+                        {card.created_at && (
+                          <div>
+                            <span className="font-medium text-slate-600">创建时间:</span>
+                            <span className="ml-2 text-slate-700">
+                              {new Date(card.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                            </span>
+                          </div>
+                        )}
+                        {card.updated_at && (
+                          <div>
+                            <span className="font-medium text-slate-600">更新时间:</span>
+                            <span className="ml-2 text-slate-700">
+                              {new Date(card.updated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                            </span>
+                          </div>
+                        )}
+                        {card.updated_times !== undefined && card.updated_times > 0 && (
+                          <div>
+                            <span className="font-medium text-slate-600">更新次数:</span>
+                            <span className="ml-2 text-slate-700">{card.updated_times} 次</span>
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
             {!isEditing ? (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-blue-100"
-                onClick={handleEditClick}
+                onClick={(e) => {
+                  e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                  handleEditClick(e)
+                }}
               >
                 <Pencil className="h-3.5 w-3.5 text-slate-600" />
               </Button>
@@ -509,7 +690,10 @@ function EvidenceCardListItem({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 hover:bg-green-100"
-                  onClick={handleSave}
+                  onClick={(e) => {
+                    e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                    handleSave(e)
+                  }}
                 >
                   <Save className="h-3.5 w-3.5 text-green-600" />
                 </Button>
@@ -517,7 +701,10 @@ function EvidenceCardListItem({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 hover:bg-red-100"
-                  onClick={handleCancel}
+                  onClick={(e) => {
+                    e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                    handleCancel(e)
+                  }}
                 >
                   <X className="h-3.5 w-3.5 text-red-600" />
                 </Button>
@@ -552,17 +739,100 @@ function EvidenceCardListItem({
                 // 判断值是否为null或undefined
                 const isNullValue = displayFeature.slot_value === null || displayFeature.slot_value === undefined || displayFeature.slot_value === ''
 
+                const inputType = getFieldInputType(displayFeature.slot_name, displayFeature.slot_value_type || 'string')
+                const selectOptions = getSelectOptions(displayFeature.slot_name)
+
                 return (
                   <div key={`${displayFeature.slot_name}-${index}`} className="flex flex-col gap-1">
                     <Label className="text-xs font-medium text-slate-500">{displayFeature.slot_name}</Label>
                     {isEditing ? (
-                      <Input
-                        value={displayFeature.slot_value === null || displayFeature.slot_value === undefined ? '' : String(displayFeature.slot_value)}
-                        onChange={(e) => handleFeatureChange(originalIndex, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-7 text-xs"
-                        placeholder={`请输入${displayFeature.slot_name}`}
-                      />
+                      <>
+                        {/* 日期选择器 */}
+                        {inputType === 'date' ? (
+                          <Popover>
+                            <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "h-7 text-xs justify-start text-left font-normal",
+                                  !displayFeature.slot_value && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-3 w-3" />
+                                {displayFeature.slot_value 
+                                  ? formatDateValue(parseDateValue(displayFeature.slot_value))
+                                  : <span>选择日期</span>
+                                }
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                              <DatePicker
+                                value={parseDateValue(displayFeature.slot_value)}
+                                onChange={(date) => {
+                                  if (date) {
+                                    handleFeatureChange(displayFeature.slot_name, formatDateValue(date))
+                                  } else {
+                                    handleFeatureChange(displayFeature.slot_name, '')
+                                  }
+                                }}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        ) : inputType === 'boolean' ? (
+                          /* 布尔值选择器 */
+                          <Select
+                            value={displayFeature.slot_value === true || displayFeature.slot_value === 'true' ? 'true' : 'false'}
+                            onValueChange={(value) => handleFeatureChange(displayFeature.slot_name, value === 'true')}
+                          >
+                            <SelectTrigger className="h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">是</SelectItem>
+                              <SelectItem value="false">否</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : inputType === 'select' && selectOptions.length > 0 ? (
+                          /* 下拉选择器 */
+                          <Select
+                            value={displayFeature.slot_value || ''}
+                            onValueChange={(value) => handleFeatureChange(displayFeature.slot_name, value)}
+                          >
+                            <SelectTrigger className="h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                              <SelectValue placeholder={`请选择${displayFeature.slot_name}`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {selectOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : inputType === 'number' ? (
+                          /* 数字输入框 */
+                          <Input
+                            type="number"
+                            value={displayFeature.slot_value === null || displayFeature.slot_value === undefined ? '' : String(displayFeature.slot_value)}
+                            onChange={(e) => {
+                              const numValue = e.target.value === '' ? null : Number(e.target.value)
+                              handleFeatureChange(displayFeature.slot_name, numValue)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-7 text-xs"
+                            placeholder={`请输入${displayFeature.slot_name}`}
+                          />
+                        ) : (
+                          /* 文本输入框 */
+                          <Input
+                            value={displayFeature.slot_value === null || displayFeature.slot_value === undefined ? '' : String(displayFeature.slot_value)}
+                            onChange={(e) => handleFeatureChange(displayFeature.slot_name, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-7 text-xs"
+                            placeholder={`请输入${displayFeature.slot_name}`}
+                          />
+                        )}
+                      </>
                     ) : (
                       <span className="text-xs text-slate-900 font-medium break-words">
                         {isNullValue 
@@ -623,7 +893,7 @@ function EvidenceCardListItem({
           />
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -1114,7 +1384,47 @@ function CardDetail({ card, evidenceList }: { card: EvidenceCard | null; evidenc
           <Pencil className="h-3 w-3 text-gray-400" />
         </div>
       </div>
-      <div className="text-xs text-gray-600 mb-1">{cardType}</div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs text-gray-600">{cardType}</div>
+        {/* 卡片元属性信息 - 通过提示图标显示 */}
+        {(card.created_at || card.updated_at || (card.updated_times !== undefined && card.updated_times > 0)) && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center cursor-help hover:text-gray-600 transition-colors text-gray-400">
+                  <Info className="h-3.5 w-3.5" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <div className="space-y-1.5 text-xs">
+                  {card.created_at && (
+                    <div>
+                      <span className="font-medium text-slate-600">创建时间:</span>
+                      <span className="ml-2 text-slate-700">
+                        {new Date(card.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                      </span>
+                    </div>
+                  )}
+                  {card.updated_at && (
+                    <div>
+                      <span className="font-medium text-slate-600">更新时间:</span>
+                      <span className="ml-2 text-slate-700">
+                        {new Date(card.updated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                      </span>
+                    </div>
+                  )}
+                  {card.updated_times !== undefined && card.updated_times > 0 && (
+                    <div>
+                      <span className="font-medium text-slate-600">更新次数:</span>
+                      <span className="ml-2 text-slate-700">{card.updated_times} 次</span>
+                    </div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
       <div className="text-xs text-gray-500 mb-4">引用: {card.evidence_ids.map(id => `#${id}`).join(", ")}</div>
 
       {/* 关联的证据图片 */}
@@ -1233,7 +1543,11 @@ function renderCardSlots(
   template?: EvidenceCardSlotTemplate,
   cardList?: EvidenceCard[],
   draggingCardType?: string | null,
-  onRemoveCard?: (slotId: string) => void
+  onRemoveCard?: (slotId: string) => void,
+  caseId?: string | number,
+  currentTemplate?: EvidenceCardSlotTemplate,
+  proofreadResults?: Record<string, Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>>,
+  slotConsistency?: Record<string, boolean>
 ): React.ReactElement | null {
   // 过滤出属于当前角色的卡片类型 - 根据role_requirement
   const filteredCards = cardTypes.filter(cardType => {
@@ -1242,9 +1556,8 @@ function renderCardSlots(
   })
 
   if (filteredCards.length === 0) {
-    const alignClass = role === 'creditor' ? 'text-left' : role === 'debtor' ? 'text-right' : 'text-center'
     return (
-      <div className={cn("text-xs text-slate-400 py-4", alignClass)}>
+      <div className="text-xs text-slate-400 py-4 text-center">
         暂无相关槽位
       </div>
     )
@@ -1285,6 +1598,10 @@ function renderCardSlots(
             orGroup={null}
             draggingCardType={draggingCardType}
             onRemoveCard={onRemoveCard}
+            caseId={Number(caseId || 0)}
+            templateId={currentTemplate?.template_id || ''}
+            proofreadResults={proofreadResults?.[slotId]}
+            slotConsistency={slotConsistency?.[slotId]}
           />
         )
       })}
@@ -1299,12 +1616,31 @@ function renderCardSlots(
         })
         const isGroupSatisfied = groupPlacedCards.length > 0
         
+        // 计算组的一致性状态：如果组内有卡片，检查所有卡片的整体一致性
+        // OR关系组：只要有一个卡片通过，组就通过；如果所有卡片都失败，组就失败
+        let groupConsistency: boolean | null = null
+        if (isGroupSatisfied && slotConsistency) {
+          const groupConsistencyValues: boolean[] = []
+          groupCards.forEach((cardType, cardIndex) => {
+            const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
+            const cardId = slotCards[slotId]
+            if (cardId !== undefined && cardId !== null && slotConsistency[slotId] !== undefined) {
+              groupConsistencyValues.push(slotConsistency[slotId])
+            }
+          })
+          // OR关系：只要有一个通过，组就通过；如果所有都失败，组就失败
+          if (groupConsistencyValues.length > 0) {
+            groupConsistency = groupConsistencyValues.some(consistency => consistency === true)
+          }
+        }
+        
         return (
           <OrGroupContainer
             key={orGroupName}
             groupName={orGroupName}
             isSatisfied={isGroupSatisfied}
             role={role}
+            groupConsistency={groupConsistency}
           >
             {groupCards.map((cardType, cardIndex) => {
               const slotId = `slot::${role}::${cardType.card_type}::${groupIndex}-${cardIndex}`
@@ -1342,6 +1678,10 @@ function renderCardSlots(
                     isSelected={isSelected}
                     draggingCardType={draggingCardType}
                     onRemoveCard={onRemoveCard}
+                    caseId={Number(caseId || 0)}
+                    templateId={currentTemplate?.template_id || ''}
+                    proofreadResults={proofreadResults?.[slotId]}
+                    slotConsistency={slotConsistency?.[slotId]}
                   />
                 </React.Fragment>
               )
@@ -1358,15 +1698,22 @@ function OrGroupContainer({
   groupName,
   isSatisfied,
   role,
-  children
+  children,
+  groupConsistency
 }: {
   groupName: string
   isSatisfied: boolean
   role: 'creditor' | 'debtor' | 'shared'
   children: React.ReactNode
+  groupConsistency?: boolean | null // null表示未确定，true表示全部通过，false表示有失败
 }) {
   // 根据状态选择不同的边框颜色
   const getBorderColor = () => {
+    // 如果组内有卡片，根据校对一致性状态显示
+    if (groupConsistency !== null && groupConsistency !== undefined) {
+      return groupConsistency ? "border-green-500 border-2" : "border-red-500 border-2"
+    }
+    // 如果组已满足（有卡片），但还没有校对结果，显示绿色
     if (isSatisfied) {
       return "border-green-400"
     }
@@ -1375,6 +1722,11 @@ function OrGroupContainer({
   }
 
   const getBackgroundColor = () => {
+    // 如果组内有卡片，根据校对一致性状态显示
+    if (groupConsistency !== null && groupConsistency !== undefined) {
+      return groupConsistency ? "bg-green-50/30" : "bg-red-50/30"
+    }
+    // 如果组已满足（有卡片），但还没有校对结果，显示绿色
     if (isSatisfied) {
       return "bg-green-50/30"
     }
@@ -1388,7 +1740,9 @@ function OrGroupContainer({
         "rounded-lg border-2 p-4 space-y-3 transition-all",
         getBorderColor(),
         getBackgroundColor(),
-        isSatisfied && "ring-2 ring-green-200"
+        groupConsistency !== null && groupConsistency !== undefined
+          ? groupConsistency ? "ring-2 ring-green-200" : "ring-2 ring-red-200"
+          : isSatisfied && "ring-2 ring-green-200"
       )}
     >
       {/* 组标题 */}
@@ -1396,11 +1750,15 @@ function OrGroupContainer({
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-1.5 h-1.5 rounded-full",
-            isSatisfied ? "bg-green-500" : "bg-slate-400"
+            groupConsistency !== null && groupConsistency !== undefined
+              ? groupConsistency ? "bg-green-500" : "bg-red-500"
+              : isSatisfied ? "bg-green-500" : "bg-slate-400"
           )} />
           <span className={cn(
             "text-xs font-semibold",
-            isSatisfied ? "text-green-700" : "text-slate-700"
+            groupConsistency !== null && groupConsistency !== undefined
+              ? groupConsistency ? "text-green-700" : "text-red-700"
+              : isSatisfied ? "text-green-700" : "text-slate-700"
           )}>
             或关系组: {groupName}
           </span>
@@ -1408,17 +1766,25 @@ function OrGroupContainer({
             variant="outline" 
             className={cn(
               "h-4 px-1.5 text-[10px]",
-              isSatisfied
-                ? "border-green-400 text-green-700 bg-green-50"
-                : "border-slate-300 text-slate-600 bg-slate-50"
+              groupConsistency !== null && groupConsistency !== undefined
+                ? groupConsistency 
+                  ? "border-green-500 text-green-700 bg-green-50"
+                  : "border-red-500 text-red-700 bg-red-50"
+                : isSatisfied
+                  ? "border-green-400 text-green-700 bg-green-50"
+                  : "border-slate-300 text-slate-600 bg-slate-50"
             )}
           >
-            {isSatisfied ? "✓ 已满足" : "待选择"}
+            {groupConsistency !== null && groupConsistency !== undefined
+              ? groupConsistency ? "✓ 校对通过" : "✗ 校对失败"
+              : isSatisfied ? "✓ 已满足" : "待选择"}
           </Badge>
         </div>
         <div className={cn(
           "text-[10px] font-medium",
-          isSatisfied ? "text-green-600" : "text-slate-500"
+          groupConsistency !== null && groupConsistency !== undefined
+            ? groupConsistency ? "text-green-600" : "text-red-600"
+            : isSatisfied ? "text-green-600" : "text-slate-500"
         )}>
           满足其中一个即可
         </div>
@@ -1445,11 +1811,15 @@ function CardSlotUnit({
   isInOrGroup = false,
   isSelected = false,
   draggingCardType = null,
-  onRemoveCard
+  onRemoveCard,
+  caseId,
+  templateId,
+  proofreadResults,
+  slotConsistency
 }: {
   id: string
   cardType: string
-  requiredSlots: Array<{ slot_name: string; need_proofreading: boolean }>
+  requiredSlots: Array<{ slot_name: string; proofread_rules: ProofreadRule[] }>
   cardId?: number
   placedCard?: EvidenceCard | null
   side?: "creditor" | "debtor" | "shared"
@@ -1458,6 +1828,10 @@ function CardSlotUnit({
   isSelected?: boolean
   draggingCardType?: string | null
   onRemoveCard?: (slotId: string) => void
+  caseId: number
+  templateId: string
+  proofreadResults?: Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>
+  slotConsistency?: boolean
 }) {
   const [hoveredSlotName, setHoveredSlotName] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
@@ -1503,7 +1877,7 @@ function CardSlotUnit({
     return String(value)
   }
 
-  // 模拟校对结果（实际应该从后端获取）
+  // 获取校对结果（从后端获取的结果）
   const getProofreadingResult = (slotName: string): { status: 'passed' | 'failed'; message: string; reason: string } | null => {
     if (!placedCard || !cardId) return null
     
@@ -1514,7 +1888,7 @@ function CardSlotUnit({
     if (!value) return null
     
     // 情况1: 无需校对 - 自动通过
-    if (!slot.need_proofreading) {
+    if (!slot.proofread_rules || slot.proofread_rules.length === 0) {
       return {
         status: 'passed',
         message: '✓ 无需校对，自动通过',
@@ -1522,26 +1896,16 @@ function CardSlotUnit({
       }
     }
     
-    // 情况2: 需要校对 - 模拟校对结果
-    // 模拟：根据字段名称和值生成稳定的校对结果（避免每次渲染都变化）
-    // 实际应该从后端获取
-    const hash = (slotName + value).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const isConsistent = hash % 3 !== 0 // 约67%概率一致
+    // 情况2: 需要校对 - 从后端获取的结果
+    if (proofreadResults && proofreadResults[slotName]) {
+      return proofreadResults[slotName]
+    }
     
-    if (isConsistent) {
-      // 需要校对且通过
-      return {
-        status: 'passed',
-        message: '✓ 校对通过',
-        reason: `字段值 "${value}" 已通过校对验证，与案件信息匹配一致`
-      }
-    } else {
-      // 需要校对但失败
-      return {
-        status: 'failed',
-        message: '✗ 校对失败',
-        reason: `字段值 "${value}" 与案件信息不一致，可能存在以下问题：\n1. 姓名拼写不匹配\n2. 金额数值不符\n3. 日期格式错误\n请检查并修正`
-      }
+    // 情况3: 有校对规则但还没有结果（可能正在加载中）
+    return {
+      status: 'passed',
+      message: '⏳ 校对中...',
+      reason: `该字段 "${slotName}" 需要校对，正在验证中...`
     }
   }
 
@@ -1594,8 +1958,19 @@ function CardSlotUnit({
   }
 
   const getBorderColor = () => {
-    // 如果有卡片已放置，正常显示
+    // 如果有卡片已放置，根据校对一致性状态显示边框颜色
     if (cardId) {
+      // 如果后端提供了整体一致性状态，优先使用
+      if (slotConsistency !== undefined) {
+        return slotConsistency ? "border-green-500 border-2" : "border-red-500 border-2"
+      }
+      // 如果没有后端状态，但前端有校对结果，根据结果判断
+      if (proofreadResults && Object.keys(proofreadResults).length > 0) {
+        // 检查是否所有字段都通过
+        const allPassed = Object.values(proofreadResults).every(result => result.status === 'passed')
+        return allPassed ? "border-green-500 border-2" : "border-red-500 border-2"
+      }
+      // 默认：有卡片但还没有校对结果，显示绿色（等待校对）
       return "border-green-400"
     }
     
@@ -1675,10 +2050,8 @@ function CardSlotUnit({
           )}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-slate-500 font-medium">卡片</span>
-            {cardId ? (
+            {cardId && (
               <span className="text-xs font-bold text-blue-600">#{cardId}</span>
-            ) : (
-              <span className="text-xs text-slate-400">待放置</span>
             )}
           </div>
         </div>
@@ -1702,9 +2075,9 @@ function CardSlotUnit({
         </div>
       </div>
 
-      {/* 字段列表 - 紧凑样式 */}
+      {/* 字段列表 - 垂直布局，title在上，值在下 */}
       <div className={cn(
-        "space-y-1.5",
+        "space-y-2",
         hasCard && "pt-2 border-t border-slate-200"
       )}>
         {requiredSlots.map((slot, index) => {
@@ -1712,61 +2085,81 @@ function CardSlotUnit({
           const hasValue = slotValue !== null && slotValue !== undefined && slotValue !== ''
           const proofreadingResult = hasValue ? getProofreadingResult(slot.slot_name) : null
           
+          // 根据校对结果设置背景色
+          const getBackgroundColor = () => {
+            if (!hasValue) {
+              return "bg-transparent" // 未填充
+            }
+            // 如果有卡片但还没有校对结果，使用灰色背景
+            if (cardId && !proofreadingResult) {
+              return "bg-slate-100" // 有值但未校对
+            }
+            // 如果有校对结果，根据结果设置颜色
+            if (proofreadingResult) {
+              if (proofreadingResult.status === 'passed') {
+                return "bg-green-50" // 校对通过 - 绿色背景
+              }
+              return "bg-red-50" // 校对失败 - 红色背景
+            }
+            // 默认使用灰色背景（有值但没有卡片）
+            return "bg-slate-100"
+          }
+
           return (
             <div
               key={`${slot.slot_name}-${index}`}
               className={cn(
-                "flex items-center justify-between py-1.5 px-2.5 rounded text-xs",
-                hasValue
-                  ? "bg-slate-50/50"
-                  : "bg-transparent"
+                "flex flex-col gap-1.5 py-2 px-3 rounded-lg text-xs",
+                getBackgroundColor()
               )}
             >
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {/* 字段名称 - 在上方 */}
+              <div className="flex items-center gap-1.5">
                 <span className={cn(
-                  "text-xs font-medium flex-shrink-0",
+                  "text-xs font-medium",
                   hasValue ? "text-slate-700" : "text-slate-500"
                 )}>
                   {slot.slot_name}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0 ml-2">
-                {hasValue ? (
-                  <>
-                    <span className="text-xs text-slate-900 break-words text-right">
+              {/* 字段值 - 在下方，支持换行，校对图标在右侧 */}
+              <div className="flex items-start justify-between gap-2 min-w-0">
+                <div className="flex-1 min-w-0">
+                  {hasValue ? (
+                    <span className="text-xs text-slate-900 break-words break-all leading-relaxed">
                       {String(slotValue)}
                     </span>
-                    {/* 只要有值且有卡片，就应该显示校对结果图标 */}
-                    {cardId && proofreadingResult ? (
-                      <div 
-                        ref={(el) => {
-                          iconRefs.current[slot.slot_name] = el
-                        }}
-                        className="relative flex-shrink-0 cursor-help"
-                        onMouseEnter={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTooltipPosition({
-                            top: rect.bottom + 8,
-                            left: rect.right - 256 // 256px = 64 * 4 (w-64)
-                          })
-                          setHoveredSlotName(slot.slot_name)
-                        }}
-                        onMouseLeave={() => {
-                          setHoveredSlotName(null)
-                          setTooltipPosition(null)
-                        }}
-                      >
-                        {proofreadingResult.status === 'passed' ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                        ) : (
-                          <X className="h-3.5 w-3.5 text-red-600" />
-                        )}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <span className="text-xs text-slate-400 italic">待填充</span>
-                )}
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">待填充</span>
+                  )}
+                </div>
+                {/* 校对结果图标 - 统一对齐到右侧，调大尺寸 */}
+                {hasValue && cardId && proofreadingResult ? (
+                  <div 
+                    ref={(el) => {
+                      iconRefs.current[slot.slot_name] = el
+                    }}
+                    className="relative flex-shrink-0 cursor-help"
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setTooltipPosition({
+                        top: rect.bottom + 8,
+                        left: rect.right - 256 // 256px = 64 * 4 (w-64)
+                      })
+                      setHoveredSlotName(slot.slot_name)
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredSlotName(null)
+                      setTooltipPosition(null)
+                    }}
+                  >
+                    {proofreadingResult.status === 'passed' ? (
+                      <CheckCircle2 className="h-4.5 w-4.5 text-green-600" />
+                    ) : (
+                      <X className="h-4.5 w-4.5 text-red-600" />
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           )
@@ -1920,6 +2313,7 @@ export function CardFactory({
   const [isEditingCase, setIsEditingCase] = useState(false)
   const [editedCaseInfo, setEditedCaseInfo] = useState<any>(null)
   const [previewImage, setPreviewImage] = useState<{ url: string; urls: string[]; currentIndex: number } | null>(null)
+  const [previewEvidenceImage, setPreviewEvidenceImage] = useState<{ url: string; alt: string } | null>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
@@ -1932,20 +2326,21 @@ export function CardFactory({
   const [templateTooltipPosition, setTemplateTooltipPosition] = useState<{ top: number; left: number } | null>(null) // 模板提示位置
   const [isSelectOpen, setIsSelectOpen] = useState<boolean>(false) // Select下拉菜单是否打开
   const [draggingCardType, setDraggingCardType] = useState<string | null>(null) // 当前正在拖拽的卡片类型
+  const [proofreadResults, setProofreadResults] = useState<Record<string, Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>>>({}) // 校对结果：{slotId: {slotName: result}}
+  const [slotConsistency, setSlotConsistency] = useState<Record<string, boolean>>({}) // 槽位整体一致性：{slotId: overall_consistency}
   
   const { toast } = useToast()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
   const { startCardCasting } = useCardCasting({ addTask, updateTask, removeTask })
 
+  // 只使用鼠标拖拽，完全禁用键盘拖拽（包括空格键）
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8, // 适中的拖动激活距离，允许在ScrollArea内滚动
       },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
     })
+    // 移除 KeyboardSensor，拖拽仅通过鼠标操作
   )
   
   // 在拖拽时允许滚动：通过CSS样式确保滚动不被锁定
@@ -2085,10 +2480,31 @@ export function CardFactory({
         )
         // 恢复快照到slotCards状态
         setSlotCards(snapshot.assignments || {})
+        
+        // 保存槽位整体一致性状态
+        setSlotConsistency(snapshot.slot_consistency || {})
+        
+        // 转换校对结果为前端需要的格式
+        const formattedProofreadResults: Record<string, Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>> = {}
+        if (snapshot.proofread_results) {
+          for (const [slotId, results] of Object.entries(snapshot.proofread_results)) {
+            const formatted: Record<string, { status: 'passed' | 'failed'; message: string; reason: string }> = {}
+            for (const result of results) {
+              formatted[result.slot_name] = {
+                status: result.is_consistent ? 'passed' : 'failed',
+                message: result.is_consistent ? '✓ 校对通过' : '✗ 校对失败',
+                reason: result.proofread_reasoning || (result.is_consistent ? '校对通过' : '校对失败')
+              }
+            }
+            formattedProofreadResults[slotId] = formatted
+          }
+        }
+        setProofreadResults(formattedProofreadResults)
       } catch (error) {
         // 静默失败，如果快照不存在或获取失败，使用空状态
         console.log('加载槽位快照失败（首次使用或快照不存在）:', error)
         setSlotCards({})
+        setProofreadResults({})
       }
     }
     
@@ -2097,7 +2513,13 @@ export function CardFactory({
 
   // 处理证据选择
   const handleEvidenceSelect = (evidenceId: string) => {
-    if (isMultiSelect) {
+    // 点击任意原始证据记录时，自动激活多选模式并选中该记录
+    if (!isMultiSelect) {
+      // 首次点击：激活多选模式并选中该记录
+      setIsMultiSelect(true)
+      setSelectedEvidenceIds(new Set([evidenceId]))
+    } else {
+      // 已在多选模式下：切换选中状态
       setSelectedEvidenceIds(prev => {
         const next = new Set(prev)
         if (next.has(evidenceId)) {
@@ -2107,8 +2529,6 @@ export function CardFactory({
         }
         return next
       })
-    } else {
-      setSelectedEvidenceIds(new Set([evidenceId]))
     }
   }
 
@@ -2133,14 +2553,16 @@ export function CardFactory({
       await evidenceCardApi.updateCard(cardId, {
         referenced_evidences: referencedEvidences,
       })
+      
+      // 刷新页面，确保所有状态（案件信息、卡槽快照、校对结果等）都是最新的
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // 延迟500ms，让用户看到成功提示
 
       toast({
         title: "更新成功",
-        description: "引用证据已更新",
+        description: "引用证据已更新，页面即将刷新",
       })
-
-      // 刷新卡片列表
-      await mutateCards()
     } catch (error: any) {
       toast({
         title: "更新失败",
@@ -2153,23 +2575,67 @@ export function CardFactory({
   // 处理卡片特征更新
   const handleUpdateCardFeatures = async (cardId: number, updatedFeatures: any[]) => {
     try {
-      // 构建特征更新列表
-      const cardFeatures = updatedFeatures.map((feature) => ({
-        slot_name: feature.slot_name,
-        slot_value: feature.slot_value,
-      }))
+      // 构建特征更新列表，确保数据类型正确
+      const cardFeatures = updatedFeatures.map((feature) => {
+        let slotValue = feature.slot_value
+        
+        // 根据 slot_value_type 转换数据类型
+        if (feature.slot_value_type === 'number') {
+          // 数字类型：转换为数字或 null
+          if (slotValue === null || slotValue === undefined || slotValue === '') {
+            slotValue = null
+          } else {
+            slotValue = Number(slotValue)
+            if (isNaN(slotValue)) {
+              slotValue = null
+            }
+          }
+        } else if (feature.slot_value_type === 'boolean') {
+          // 布尔类型：转换为布尔值
+          if (slotValue === 'true' || slotValue === true) {
+            slotValue = true
+          } else if (slotValue === 'false' || slotValue === false) {
+            slotValue = false
+          } else {
+            slotValue = null
+          }
+        } else if (feature.slot_value_type === 'date') {
+          // 日期类型：保持字符串格式（yyyy年MM月dd日 或 yyyy-MM-dd）
+          if (slotValue === null || slotValue === undefined) {
+            slotValue = null
+          } else {
+            // 确保是字符串格式
+            slotValue = String(slotValue)
+          }
+        } else {
+          // 字符串类型：转换为字符串或 null
+          if (slotValue === null || slotValue === undefined || slotValue === '') {
+            slotValue = null
+          } else {
+            slotValue = String(slotValue)
+          }
+        }
+        
+        return {
+          slot_name: feature.slot_name,
+          slot_value: slotValue,
+        }
+      })
 
+      // 调用后端 API 更新卡片特征
       await evidenceCardApi.updateCard(cardId, {
         card_features: cardFeatures,
       })
-
+      
       toast({
         title: "保存成功",
-        description: "卡片信息已更新",
+        description: "卡片信息已更新，页面即将刷新",
       })
-
-      // 刷新卡片列表
-      await mutateCards()
+      
+      // 刷新页面，确保所有状态（案件信息、卡槽快照、校对结果等）都是最新的
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // 延迟500ms，让用户看到成功提示
     } catch (error: any) {
       toast({
         title: "保存失败",
@@ -2652,6 +3118,41 @@ export function CardFactory({
                   slotId,
                   cardId
                 )
+                
+                // 更新关联后，立即调用校对端点获取该槽位的校对结果
+                try {
+                  const proofreadResult = await evidenceCardApi.proofreadCardSlot(
+                    Number(caseId),
+                    currentTemplate.template_id,
+                    slotId,
+                    cardId
+                  )
+                  
+                  // 转换校对结果为前端需要的格式
+                  const formattedResults: Record<string, { status: 'passed' | 'failed'; message: string; reason: string }> = {}
+                  for (const result of proofreadResult.data.proofread_results) {
+                    formattedResults[result.slot_name] = {
+                      status: result.is_consistent ? 'passed' : 'failed',
+                      message: result.is_consistent ? '✓ 校对通过' : '✗ 校对失败',
+                      reason: result.proofread_reasoning || (result.is_consistent ? '校对通过' : '校对失败')
+                    }
+                  }
+                  
+                  // 更新校对结果状态（只更新当前槽位）
+                  setProofreadResults(prev => ({
+                    ...prev,
+                    [slotId]: formattedResults
+                  }))
+                  
+                  // 更新槽位整体一致性状态（使用后端的overall_consistency）
+                  setSlotConsistency(prev => ({
+                    ...prev,
+                    [slotId]: proofreadResult.data.overall_consistency
+                  }))
+                } catch (error) {
+                  console.error('校对卡槽失败:', error)
+                  // 静默失败，不显示错误提示
+                }
               } catch (error) {
                 console.error('更新槽位关联失败:', error)
                 // 静默失败，不显示错误提示
@@ -2724,26 +3225,88 @@ export function CardFactory({
         null
       )
       
-      // 更新本地状态
-      const newSlotCards = { ...slotCards }
-      delete newSlotCards[slotId]
-      setSlotCards(newSlotCards)
+      // 更新本地状态：移除该槽位的卡片关联
+      setSlotCards(prev => {
+        const newSlotCards = { ...prev }
+        delete newSlotCards[slotId]
+        return newSlotCards
+      })
+      
+      // 清除该槽位的校对结果（因为卡片已被移除）
+      setProofreadResults(prev => {
+        const newResults = { ...prev }
+        delete newResults[slotId]
+        return newResults
+      })
+      
+      // 清除该槽位的一致性状态
+      setSlotConsistency(prev => {
+        const newConsistency = { ...prev }
+        delete newConsistency[slotId]
+        return newConsistency
+      })
     } catch (error) {
       console.error('移除槽位关联失败:', error)
       // 静默失败，不显示错误提示
     }
   }
 
+  // 更新当事人信息（在 editedCaseInfo 中）
+  const updatePartyInfo = (partyRole: 'creditor' | 'debtor', field: string, value: any) => {
+    if (!editedCaseInfo) return
+    
+    const updatedParties = editedCaseInfo.case_parties?.map((p: any) => {
+      if (p.party_role === partyRole) {
+        return { ...p, [field]: value }
+      }
+      return p
+    }) || []
+    
+    setEditedCaseInfo({
+      ...editedCaseInfo,
+      case_parties: updatedParties
+    })
+  }
+
   // 保存案件信息编辑
   const handleSaveCaseInfo = async () => {
     try {
-      await caseApi.updateCase(Number(caseId), editedCaseInfo)
+      // 准备更新数据
+      const updateData: any = {
+        description: editedCaseInfo?.description,
+        loan_amount: editedCaseInfo?.loan_amount,
+      }
+      
+      // 更新当事人信息（后端支持通过 updateCase 同时更新当事人）
+      if (editedCaseInfo?.case_parties) {
+        const updatedParties = editedCaseInfo.case_parties.map((party: any) => ({
+          party_role: party.party_role, // 必须包含 party_role，后端通过这个匹配当事人
+          party_name: party.party_name,
+          party_type: party.party_type,
+          name: party.name,
+          id_card: party.id_number || party.id_card, // 后端使用 id_card 字段
+          phone: party.phone,
+          address: party.address,
+          company_name: party.company_name,
+          company_code: party.company_code,
+        }))
+        updateData.case_parties = updatedParties
+      }
+      
+      // 调用后端 API 更新案件信息（包括当事人信息）
+      await caseApi.updateCase(Number(caseId), updateData)
+      
       setIsEditingCase(false)
-      await mutateCase()
+      
       toast({
         title: "保存成功",
-        description: "案件信息已更新",
+        description: "案件信息已更新，页面即将刷新",
       })
+      
+      // 刷新页面，确保所有状态（案件信息、卡槽快照、校对结果等）都是最新的
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // 延迟500ms，让用户看到成功提示
     } catch (error: any) {
       toast({
         title: "保存失败",
@@ -2755,7 +3318,8 @@ export function CardFactory({
 
   // 取消案件信息编辑
   const handleCancelCaseInfo = () => {
-    setEditedCaseInfo(finalCaseData)
+    // 恢复原始数据，不刷新页面
+    setEditedCaseInfo(finalCaseData ? JSON.parse(JSON.stringify(finalCaseData)) : null)
     setIsEditingCase(false)
   }
 
@@ -2944,57 +3508,13 @@ export function CardFactory({
           <Card className="col-span-3">
             <CardHeader className="pb-2 pt-3 px-3">
               <div className="flex items-center justify-between w-full gap-2">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="text-base flex items-center gap-2 flex-shrink-0">
                   <span>原始证据</span>
                   <Badge variant="secondary" className="text-xs">
                     {evidenceList.length}
                   </Badge>
                 </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={isMultiSelect ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      setIsMultiSelect(!isMultiSelect)
-                      if (!isMultiSelect) {
-                        setSelectedEvidenceIds(new Set())
-                      }
-                    }}
-                    className={cn(
-                      "h-7 px-3 text-xs font-medium transition-all",
-                      isMultiSelect
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : "border-slate-300 hover:border-blue-400 hover:bg-blue-50"
-                    )}
-                  >
-                    {isMultiSelect ? "取消" : "多选"}
-                  </Button>
-                  {isMultiSelect && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
-                        onClick={handleSelectAll}
-                      >
-                        全选
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
-                        onClick={() => {
-                          const allIds = evidenceList.map((e: any) => String(e.id)) as string[]
-                          const inverted = new Set<string>(
-                            allIds.filter((id) => !selectedEvidenceIds.has(id))
-                          )
-                          setSelectedEvidenceIds(inverted)
-                        }}
-                      >
-                        反选
-                      </Button>
-                    </>
-                  )}
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <Button
                     onClick={handleCast}
                     disabled={selectedEvidenceIds.size === 0}
@@ -3006,6 +3526,47 @@ export function CardFactory({
                 </div>
               </div>
             </CardHeader>
+            {/* 多选操作栏 - 仅在多选时显示 */}
+            {isMultiSelect && (
+              <div className="px-3 pb-2 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                    onClick={handleSelectAll}
+                  >
+                    全选
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                    onClick={() => {
+                      const allIds = evidenceList.map((e: any) => String(e.id)) as string[]
+                      const inverted = new Set<string>(
+                        allIds.filter((id) => !selectedEvidenceIds.has(id))
+                      )
+                      setSelectedEvidenceIds(inverted)
+                    }}
+                  >
+                    反选
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-3 text-xs text-slate-600 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      // 取消多选模式时，清空所有选择
+                      setIsMultiSelect(false)
+                      setSelectedEvidenceIds(new Set())
+                    }}
+                  >
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
             <CardContent className="p-0">
               <ScrollArea className="h-[calc(100vh-280px)]">
                 <div className="p-3 space-y-2.5">
@@ -3019,6 +3580,9 @@ export function CardFactory({
                       onClick={() => handleEvidenceSelect(String(evidence.id))}
                       isDraggable={!!expandedCardId && cardList.some((c: EvidenceCard) => c.card_info?.card_is_associated === true && expandedCardId === c.id)}
                       dragId={`evidence-${evidence.id}`}
+                      onImageClick={(url, alt) => {
+                        setPreviewEvidenceImage({ url, alt })
+                      }}
                     />
                   ))}
                 </div>
@@ -3184,33 +3748,157 @@ export function CardFactory({
                         </div>
                       </div>
 
-                      {/* 债权人和债务人信息 - 左右分布，中间VS图标 */}
+                      {/* 债权人和债务人信息 - 左右分布 */}
                       {(editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") || editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor")) && (
-                        <div className="relative grid grid-cols-[1fr_auto_1fr] gap-4 mb-4 items-start">
-                          {/* 债权人信息 - 左对齐 */}
+                        <div className="relative grid grid-cols-2 gap-4 mb-4 items-start">
+                          {/* 债权人信息 */}
                           {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") && (
-                            <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100 text-left">
+                            <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100">
                               <div className="flex items-center gap-2 mb-4">
                                 <div className="w-1 h-5 bg-blue-500 rounded-full" />
                                 <h4 className="font-bold text-slate-900 text-sm">债权人</h4>
                               </div>
                               {(() => {
                                 const creditor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "creditor")
+                                if (!creditor) return null
+                                
                                 return (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
-                                      <span className="text-xs text-slate-500">类型</span>
-                                      <div className="text-sm font-medium text-slate-900">{creditor.party_type || 'N/A'}</div>
+                                      <Label className="text-xs text-slate-500">类型</Label>
+                                      {isEditingCase ? (
+                                        <Select
+                                          value={creditor.party_type || 'person'}
+                                          onValueChange={(value) => updatePartyInfo('creditor', 'party_type', value)}
+                                        >
+                                          <SelectTrigger className="h-8 text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="person">个人</SelectItem>
+                                            <SelectItem value="company">公司</SelectItem>
+                                            <SelectItem value="individual">个体工商户</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <div className="text-sm font-medium text-slate-900">
+                                          {creditor.party_type === 'person' ? '个人' : 
+                                           creditor.party_type === 'company' ? '公司' : 
+                                           creditor.party_type === 'individual' ? '个体工商户' : 
+                                           creditor.party_type || 'N/A'}
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="space-y-1">
-                                      <span className="text-xs text-slate-500">姓名</span>
-                                      <div className="text-sm font-medium text-slate-900">{creditor.party_name || 'N/A'}</div>
+                                      <Label className="text-xs text-slate-500">姓名</Label>
+                                      {isEditingCase ? (
+                                        <Input
+                                          value={creditor.party_name || ''}
+                                          onChange={(e) => updatePartyInfo('creditor', 'party_name', e.target.value)}
+                                          className="h-8 text-sm"
+                                          placeholder="请输入姓名"
+                                        />
+                                      ) : (
+                                        <div className="text-sm font-medium text-slate-900">{creditor.party_name || 'N/A'}</div>
+                                      )}
                                     </div>
-                                    {creditor.id_number && (
+                                    {(creditor.name || isEditingCase) && (
                                       <div className="space-y-1">
-                                        <span className="text-xs text-slate-500">身份证号</span>
-                                        <div className="text-xs font-mono text-slate-700 break-all">{creditor.id_number}</div>
+                                        <Label className="text-xs text-slate-500">自然人姓名</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={creditor.name || ''}
+                                            onChange={(e) => updatePartyInfo('creditor', 'name', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入自然人姓名"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{creditor.name || 'N/A'}</div>
+                                        )}
                                       </div>
+                                    )}
+                                    {(creditor.id_number || creditor.id_card || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">身份证号</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={creditor.id_number || creditor.id_card || ''}
+                                            onChange={(e) => updatePartyInfo('creditor', 'id_number', e.target.value)}
+                                            className="h-8 text-sm font-mono"
+                                            placeholder="请输入身份证号"
+                                          />
+                                        ) : (
+                                          <div className="text-xs font-mono text-slate-700 break-all">
+                                            {creditor.id_number || creditor.id_card || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(creditor.phone || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">电话</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={creditor.phone || ''}
+                                            onChange={(e) => updatePartyInfo('creditor', 'phone', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入电话"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{creditor.phone || 'N/A'}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(creditor.address || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">地址</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={creditor.address || ''}
+                                            onChange={(e) => updatePartyInfo('creditor', 'address', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入地址"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{creditor.address || 'N/A'}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(creditor.party_type === 'company' || creditor.party_type === 'individual') && (
+                                      <>
+                                        {(creditor.company_name || isEditingCase) && (
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-slate-500">公司名称</Label>
+                                            {isEditingCase ? (
+                                              <Input
+                                                value={creditor.company_name || ''}
+                                                onChange={(e) => updatePartyInfo('creditor', 'company_name', e.target.value)}
+                                                className="h-8 text-sm"
+                                                placeholder="请输入公司名称"
+                                              />
+                                            ) : (
+                                              <div className="text-sm font-medium text-slate-900">{creditor.company_name || 'N/A'}</div>
+                                            )}
+                                          </div>
+                                        )}
+                                        {(creditor.company_code || isEditingCase) && (
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-slate-500">统一社会信用代码</Label>
+                                            {isEditingCase ? (
+                                              <Input
+                                                value={creditor.company_code || ''}
+                                                onChange={(e) => updatePartyInfo('creditor', 'company_code', e.target.value)}
+                                                className="h-8 text-sm font-mono"
+                                                placeholder="请输入统一社会信用代码"
+                                              />
+                                            ) : (
+                                              <div className="text-xs font-mono text-slate-700 break-all">
+                                                {creditor.company_code || 'N/A'}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 )
@@ -3218,37 +3906,154 @@ export function CardFactory({
                             </div>
                           )}
 
-                          {/* VS图标 - 居中 */}
-                          <div className="flex items-center justify-center h-full pt-4">
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-300 shadow-sm">
-                              <span className="text-xs font-bold text-slate-600">VS</span>
-                            </div>
-                          </div>
-
-                          {/* 债务人信息 - 右对齐 */}
+                          {/* 债务人信息 */}
                           {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor") && (
-                            <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200 text-right">
-                              <div className="flex items-center justify-end gap-2 mb-4">
-                                <h4 className="font-bold text-slate-900 text-sm">债务人</h4>
+                            <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200">
+                              <div className="flex items-center gap-2 mb-4">
                                 <div className="w-1 h-5 bg-slate-400 rounded-full" />
+                                <h4 className="font-bold text-slate-900 text-sm">债务人</h4>
                               </div>
                               {(() => {
                                 const debtor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "debtor")
+                                if (!debtor) return null
+                                
                                 return (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
-                                      <span className="text-xs text-slate-500">类型</span>
-                                      <div className="text-sm font-medium text-slate-900">{debtor.party_type || 'N/A'}</div>
+                                      <Label className="text-xs text-slate-500">类型</Label>
+                                      {isEditingCase ? (
+                                        <Select
+                                          value={debtor.party_type || 'person'}
+                                          onValueChange={(value) => updatePartyInfo('debtor', 'party_type', value)}
+                                        >
+                                          <SelectTrigger className="h-8 text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="person">个人</SelectItem>
+                                            <SelectItem value="company">公司</SelectItem>
+                                            <SelectItem value="individual">个体工商户</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <div className="text-sm font-medium text-slate-900">
+                                          {debtor.party_type === 'person' ? '个人' : 
+                                           debtor.party_type === 'company' ? '公司' : 
+                                           debtor.party_type === 'individual' ? '个体工商户' : 
+                                           debtor.party_type || 'N/A'}
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="space-y-1">
-                                      <span className="text-xs text-slate-500">姓名</span>
-                                      <div className="text-sm font-medium text-slate-900">{debtor.party_name || 'N/A'}</div>
+                                      <Label className="text-xs text-slate-500">姓名</Label>
+                                      {isEditingCase ? (
+                                        <Input
+                                          value={debtor.party_name || ''}
+                                          onChange={(e) => updatePartyInfo('debtor', 'party_name', e.target.value)}
+                                          className="h-8 text-sm"
+                                          placeholder="请输入姓名"
+                                        />
+                                      ) : (
+                                        <div className="text-sm font-medium text-slate-900">{debtor.party_name || 'N/A'}</div>
+                                      )}
                                     </div>
-                                    {debtor.id_number && (
+                                    {(debtor.name || isEditingCase) && (
                                       <div className="space-y-1">
-                                        <span className="text-xs text-slate-500">身份证号</span>
-                                        <div className="text-xs font-mono text-slate-700 break-all">{debtor.id_number}</div>
+                                        <Label className="text-xs text-slate-500">自然人姓名</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={debtor.name || ''}
+                                            onChange={(e) => updatePartyInfo('debtor', 'name', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入自然人姓名"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{debtor.name || 'N/A'}</div>
+                                        )}
                                       </div>
+                                    )}
+                                    {(debtor.id_number || debtor.id_card || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">身份证号</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={debtor.id_number || debtor.id_card || ''}
+                                            onChange={(e) => updatePartyInfo('debtor', 'id_number', e.target.value)}
+                                            className="h-8 text-sm font-mono"
+                                            placeholder="请输入身份证号"
+                                          />
+                                        ) : (
+                                          <div className="text-xs font-mono text-slate-700 break-all">
+                                            {debtor.id_number || debtor.id_card || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(debtor.phone || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">电话</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={debtor.phone || ''}
+                                            onChange={(e) => updatePartyInfo('debtor', 'phone', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入电话"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{debtor.phone || 'N/A'}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(debtor.address || isEditingCase) && (
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-slate-500">地址</Label>
+                                        {isEditingCase ? (
+                                          <Input
+                                            value={debtor.address || ''}
+                                            onChange={(e) => updatePartyInfo('debtor', 'address', e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="请输入地址"
+                                          />
+                                        ) : (
+                                          <div className="text-sm font-medium text-slate-900">{debtor.address || 'N/A'}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(debtor.party_type === 'company' || debtor.party_type === 'individual') && (
+                                      <>
+                                        {(debtor.company_name || isEditingCase) && (
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-slate-500">公司名称</Label>
+                                            {isEditingCase ? (
+                                              <Input
+                                                value={debtor.company_name || ''}
+                                                onChange={(e) => updatePartyInfo('debtor', 'company_name', e.target.value)}
+                                                className="h-8 text-sm"
+                                                placeholder="请输入公司名称"
+                                              />
+                                            ) : (
+                                              <div className="text-sm font-medium text-slate-900">{debtor.company_name || 'N/A'}</div>
+                                            )}
+                                          </div>
+                                        )}
+                                        {(debtor.company_code || isEditingCase) && (
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-slate-500">统一社会信用代码</Label>
+                                            {isEditingCase ? (
+                                              <Input
+                                                value={debtor.company_code || ''}
+                                                onChange={(e) => updatePartyInfo('debtor', 'company_code', e.target.value)}
+                                                className="h-8 text-sm font-mono"
+                                                placeholder="请输入统一社会信用代码"
+                                              />
+                                            ) : (
+                                              <div className="text-xs font-mono text-slate-700 break-all">
+                                                {debtor.company_code || 'N/A'}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 )
@@ -3282,20 +4087,20 @@ export function CardFactory({
                               setSlotCards({})
                               toast({
                                 title: "重置成功",
-                                description: "槽位快照已重置到初始状态",
+                                description: "证据卡槽已重置到初始状态",
                               })
                             } catch (error) {
-                              console.error('重置槽位快照失败:', error)
+                              console.error('重置证据卡槽失败:', error)
                               toast({
                                 title: "重置失败",
-                                description: "重置槽位快照时出错",
+                                description: "重置证据卡槽时出错",
                                 variant: "destructive",
                               })
                             }
                           }}
                           className="h-8 px-3 text-xs border-slate-300 hover:border-red-400 hover:bg-red-50 text-red-600"
                         >
-                          重置快照
+                          重置卡槽
                         </Button>
                       )}
                     </div>
@@ -3388,50 +4193,43 @@ export function CardFactory({
 
                     {currentTemplate ? (
                       <div className="space-y-6">
-                        {/* 按债权人和债务人分左右两列展示，中间VS图标 */}
-                        <div className="relative grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
-                          {/* 左侧：债权人相关槽位 - 左对齐 */}
+                        {/* 按债权人和债务人分左右两列展示 */}
+                        <div className="relative grid grid-cols-2 gap-4 items-start">
+                          {/* 左侧：债权人相关槽位 */}
                           <div className="space-y-4">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-1 h-5 bg-blue-500 rounded-full" />
-                              <h4 className="text-sm font-semibold text-slate-700 text-left">
+                              <h4 className="text-sm font-semibold text-slate-700">
                                 债权人 {currentTemplate.creditor_type ? `(${currentTemplate.creditor_type})` : ''}
                               </h4>
                             </div>
-                            <div className="text-left">
-                              {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
+                            <div>
+                              {renderCardSlots(currentTemplate.required_card_types, 'creditor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot, caseId, currentTemplate, proofreadResults, slotConsistency)}
                             </div>
                           </div>
 
-                          {/* VS图标 - 居中 */}
-                          <div className="flex items-center justify-center h-full pt-8">
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-300 shadow-sm sticky top-4">
-                              <span className="text-xs font-bold text-slate-600">VS</span>
-                            </div>
-                          </div>
-
-                          {/* 右侧：债务人相关槽位 - 右对齐 */}
+                          {/* 右侧：债务人相关槽位 */}
                           <div className="space-y-4">
-                            <div className="flex items-center justify-end gap-2 mb-3">
-                              <h4 className="text-sm font-semibold text-slate-700 text-right">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-1 h-5 bg-slate-400 rounded-full" />
+                              <h4 className="text-sm font-semibold text-slate-700">
                                 债务人 {currentTemplate.debtor_type ? `(${currentTemplate.debtor_type})` : ''}
                               </h4>
-                              <div className="w-1 h-5 bg-slate-400 rounded-full" />
                             </div>
-                            <div className="text-right">
-                              {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
+                            <div>
+                              {renderCardSlots(currentTemplate.required_card_types, 'debtor', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot, caseId, currentTemplate, proofreadResults, slotConsistency)}
                             </div>
                           </div>
                         </div>
 
-                        {/* 共享槽位（不分债权人和债务人的） - 居中对齐 */}
+                        {/* 共享槽位（不分债权人和债务人的） */}
                         <div className="space-y-4 pt-4 border-t border-slate-200">
                           <div className="flex items-center justify-center mb-3">
                             <h4 className="text-sm font-semibold text-slate-700">共享证据</h4>
                           </div>
                           <div className="flex justify-center">
                             <div className="max-w-2xl w-full">
-                              {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot)}
+                              {renderCardSlots(currentTemplate.required_card_types, 'shared', slotCards, currentTemplate, cardList, draggingCardType, handleRemoveCardFromSlot, caseId, currentTemplate, proofreadResults, slotConsistency)}
                             </div>
                           </div>
                         </div>
@@ -3528,7 +4326,32 @@ export function CardFactory({
         )
       })()}
 
-      {/* 图片预览弹窗 */}
+      {/* 原始证据图片预览弹窗 */}
+      <Dialog open={!!previewEvidenceImage} onOpenChange={(open) => !open && setPreviewEvidenceImage(null)}>
+        <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
+          <DialogTitle className="sr-only">原始证据图片预览</DialogTitle>
+          {previewEvidenceImage && (
+            <div className="relative">
+              <img
+                src={previewEvidenceImage.url}
+                alt={previewEvidenceImage.alt || "原始证据图片预览"}
+                className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+              />
+              
+              {/* 关闭按钮 */}
+              <Button 
+                onClick={() => setPreviewEvidenceImage(null)} 
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0"
+                size="sm"
+              >
+                关闭
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 证据卡片图片预览弹窗 */}
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
           <DialogTitle className="sr-only">图片预览</DialogTitle>

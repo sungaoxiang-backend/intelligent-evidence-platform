@@ -614,7 +614,25 @@ export interface EvidenceCardCastingRequest {
 // 证据卡槽模板类型定义
 export interface EvidenceCardSlot {
   slot_name: string;
-  need_proofreading: boolean;
+  proofread_rules: ProofreadRule[];
+}
+
+// 校对规则类型定义
+export interface ProofreadRule {
+  rule_name: string;
+  target_type: "case" | "case_party";
+  party_role?: string[];
+  conditions?: ProofreadCondition[];
+  target_fields?: string[];
+  match_strategy?: string;
+  match_condition?: string;
+}
+
+export interface ProofreadCondition {
+  party_type: string;
+  target_fields: string[];
+  match_strategy: string;
+  match_condition: string;
 }
 
 export interface EvidenceCardTemplate {
@@ -739,7 +757,20 @@ export const evidenceCardApi = {
   },
 
   // 槽位关联快照相关API
-  async getSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<{ case_id: number; template_id: string; assignments: Record<string, number | null> }> {
+  async getSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<{ 
+    case_id: number; 
+    template_id: string; 
+    assignments: Record<string, number | null>;
+    proofread_results: Record<string, Array<{
+      slot_name: string;
+      slot_value: any;
+      is_consistent: boolean;
+      expected_value?: string;
+      proofread_reasoning: string;
+      has_proofread_rules: boolean;
+    }>>;
+    slot_consistency: Record<string, boolean>;
+  }> {
     const url = buildApiUrl(`/evidences/evidence-card-slot-assignments/${caseId}/${encodeURIComponent(templateId)}`);
     const resp = await fetch(url, {
       headers: getAuthHeader(),
@@ -787,6 +818,46 @@ export const evidenceCardApi = {
     const result = await resp.json();
     if (result.code !== 200) {
       throw new Error(result.message || "重置槽位快照失败");
+    }
+  },
+
+  async proofreadCardSlot(caseId: number, templateId: string, slotId: string, cardId: number): Promise<{
+    data: {
+      case_id: number;
+      template_id: string;
+      slot_id: string;
+      card_id: number;
+      card_type: string;
+      proofread_results: Array<{
+        slot_name: string;
+        slot_value: any;
+        is_consistent: boolean;
+        expected_value?: string;
+        proofread_reasoning: string;
+        has_proofread_rules: boolean;
+      }>;
+      overall_consistency: boolean;
+    };
+  }> {
+    const url = buildApiUrl(`/evidences/card-slots/proofread`);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        case_id: caseId,
+        template_id: templateId,
+        slot_id: slotId,
+        card_id: cardId,
+      }),
+    });
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data };
+    } else {
+      throw new Error(result.message || "校对卡槽失败");
     }
   },
 }

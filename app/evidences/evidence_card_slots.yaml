@@ -2,7 +2,7 @@
 # 基于场景组合动态生成，避免重复定义
 
 metadata:
-  version: "2.0"
+  version: "2.1"
   last_updated: "2025-01-20"
 
 # 案由类型定义
@@ -28,139 +28,516 @@ evidence_card_templates:
   - card_type: "微信聊天记录"
     required_slots:
       - slot_name: "微信备注名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人真名校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "欠款合意"
-        need_proofreading: true
+        proofread_rules: []
       - slot_name: "欠款金额"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "欠款金额校对"
+            target_type: "case"
+            target_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
   
   # 微信个人主页
   - card_type: "微信个人主页"
     required_slots:
       - slot_name: "微信备注名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "当事人名称校对"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "微信号"
-        need_proofreading: false
+        proofread_rules: []
   
   # 微信支付转账电子凭证
   - card_type: "微信支付转账电子凭证"
     required_slots:
       - slot_name: "付款方真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "当事人名称校对"
+            target_type: "case_party"
+            party_role: ["creditor", "debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "收款方真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "当事人名称校对"
+            target_type: "case_party"
+            party_role: ["creditor", "debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
   
   # 微信转账页面
   - card_type: "微信转账页面"
     required_slots:
       - slot_name: "债务人脱敏真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人脱敏真名校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "fuzzy"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "fuzzy"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "fuzzy"
+                match_condition: "any"
   
   # 微信转账记录
   - card_type: "微信转账记录"
     required_slots:
       - slot_name: "转账金额"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "欠款金额匹配"
+            target_type: "case"
+            target_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
   
   # 货款欠条
   - card_type: "货款欠条"
     required_slots:
       - slot_name: "债务人真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人真名校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "债务人签字名字"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人签字名字校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "债务人盖章名字"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人盖章名字校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "欠款金额"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "欠款金额校对"
+            target_type: "case"
+            target_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款合意"
-        need_proofreading: true
+        proofread_rules: []
   
   # 借款借条
   - card_type: "借款借条"
     required_slots:
       - slot_name: "债务人真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人真名校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "债务人签字名字"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人签字名字校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "债务人盖章名字"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人盖章名字校对"
+            target_type: "case_party"
+            party_role: ["debtor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "欠款金额"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "欠款金额校对"
+            target_type: "case"
+            target_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
       - slot_name: "欠款合意"
-        need_proofreading: true
+        proofread_rules: []
   
   # 身份证
   - card_type: "身份证"
     required_slots:
       - slot_name: "姓名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人真名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "性别"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "民族"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "出生"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "住址"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "公民身份号码"
-        need_proofreading: false
+        proofread_rules: []
   
   # 中华人民共和国居民户籍档案
   - card_type: "中华人民共和国居民户籍档案"
     required_slots:
       - slot_name: "姓名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人真名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "性别"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "民族"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "出生"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "住址"
-        need_proofreading: false
+        proofread_rules: []
       - slot_name: "公民身份号码"
-        need_proofreading: false
+        proofread_rules: []
   
   # 公司营业执照
   - card_type: "公司营业执照"
     required_slots:
       - slot_name: "公司名称"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人名称匹配匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "法定代表人"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "法定代表人姓名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
   
   # 公司全国企业公示系统截图
   - card_type: "公司全国企业公示系统截图"
     required_slots:
       - slot_name: "公司名称"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人公司名称匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "法定代表人"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人真名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
   
   # 个体工商户营业执照
   - card_type: "个体工商户营业执照"
     required_slots:
       - slot_name: "经营名称"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人个体工商名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "经营者姓名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人真名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
   
   # 个体工商户全国企业公示系统截图
   - card_type: "个体工商户全国企业公示系统截图"
     required_slots:
       - slot_name: "经营名称"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人个体工商户名称匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "经营者姓名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债务人或债权人真名匹配"
+            target_type: "case_party"
+            party_role: []
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
   
   # 银行转账记录
   - card_type: "银行转账记录"
     required_slots:
       - slot_name: "转账账户真名"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "债权人"
+            target_type: "case_party"
+            party_role: ["creditor"]
+            conditions:
+              - party_type: "person"
+                target_fields: ["party_name", "name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "company"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
+              - party_type: "individual"
+                target_fields: ["party_name", "name", "company_name"]
+                match_strategy: "exact"
+                match_condition: "any"
       - slot_name: "转账金额"
-        need_proofreading: true
+        proofread_rules:
+          - rule_name: "欠款金额匹配"
+            target_type: "case"
+            target_fields: ["loan_amount"]
+            match_strategy: "exact"
+            match_condition: "all"
 
 # 场景组合规则
 # 定义不同场景组合下需要的证据类型和角色要求

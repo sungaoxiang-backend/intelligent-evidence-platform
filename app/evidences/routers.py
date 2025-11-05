@@ -21,7 +21,9 @@ from app.evidences.schemas import (
     EvidenceCardSlotTemplate,
     SlotAssignmentUpdateRequest,
     SlotAssignmentSnapshotResponse,
-    SlotAssignmentResetRequest
+    SlotAssignmentResetRequest,
+    SlotProofreadRequest,
+    CardSlotProofreadResponse
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
@@ -781,14 +783,16 @@ async def get_slot_assignment_snapshot(
         SingleResponse[SlotAssignmentSnapshotResponse]: 槽位快照响应
     """
     try:
-        assignments = await evidence_service.get_slot_assignment_snapshot(
+        snapshot_data = await evidence_service.get_slot_assignment_snapshot(
             db, case_id, template_id
         )
         return SingleResponse(
             data=SlotAssignmentSnapshotResponse(
                 case_id=case_id,
                 template_id=template_id,
-                assignments=assignments
+                assignments=snapshot_data["assignments"],
+                proofread_results=snapshot_data["proofread_results"],
+                slot_consistency=snapshot_data["slot_consistency"]
             ),
             code=200,
             message="获取成功"
@@ -873,4 +877,34 @@ async def reset_slot_assignment_snapshot(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"重置槽位快照失败: {str(e)}"
         )
+
+@router.post("/card-slots/proofread", response_model=SingleResponse[CardSlotProofreadResponse])
+async def proofread_card_slot(
+    request: SlotProofreadRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """校对卡槽中的卡片"""
+    try:
+        result = await evidence_service.proofread_card_slot(
+            db=db,
+            case_id=request.case_id,
+            template_id=request.template_id,
+            slot_id=request.slot_id,
+            card_id=request.card_id
+        )
+        return SingleResponse(data=result)
+    except ValueError as e:
+        logger.error(f"校对卡槽失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"校对卡槽失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"校对卡槽失败: {str(e)}"
+        )
+
 

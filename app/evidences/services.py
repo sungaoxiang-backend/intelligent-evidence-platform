@@ -31,7 +31,9 @@ from app.evidences.schemas import (
     EvidenceCardSlotTemplatesResponse,
     EvidenceCardSlotTemplate,
     EvidenceCardTemplate,
-    EvidenceCardSlot
+    EvidenceCardSlot,
+    CardSlotProofreadResponse,
+    SlotProofreadResult
 )
 
 
@@ -2268,6 +2270,7 @@ async def update_card(
         ValueError: 如果卡片不存在或更新数据无效
     """
     from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm.attributes import flag_modified
     from sqlalchemy import delete, insert, update as sql_update
     from datetime import datetime
     import pytz
@@ -2288,6 +2291,8 @@ async def update_card(
     if update_request.card_info is not None:
         # 如果提供了完整的 card_info，则替换
         card.card_info = update_request.card_info
+        # 标记 JSONB 字段已修改
+        flag_modified(card, 'card_info')
     elif update_request.card_features is not None:
         # 如果只更新 card_features，则合并到现有的 card_info 中
         if card.card_info is None:
@@ -2321,6 +2326,8 @@ async def update_card(
                 })
         
         card.card_info["card_features"] = card_features
+        # 标记 JSONB 字段已修改（重要：修改 JSONB 字段内部内容后必须标记）
+        flag_modified(card, 'card_info')
     
     # 更新引用证据的关系和顺序
     if update_request.referenced_evidences is not None:
@@ -2718,9 +2725,10 @@ async def get_evidence_card_slot_templates(db: AsyncSession, case_id: int) -> Ev
                 # 构建卡槽列表
                 required_slots = []
                 for slot_config in card_template.get('required_slots', []):
+                    proofread_rules = slot_config.get('proofread_rules', [])
                     required_slots.append(EvidenceCardSlot(
                         slot_name=slot_config.get('slot_name'),
-                        need_proofreading=slot_config.get('need_proofreading', False)
+                        proofread_rules=proofread_rules
                     ))
                 
                 # 确定最终的role_requirement
@@ -2774,9 +2782,9 @@ async def get_slot_assignment_snapshot(
     db: AsyncSession,
     case_id: int,
     template_id: str,
-) -> Dict[str, Optional[int]]:
+) -> Dict[str, Any]:
     """
-    获取某个案件、某个模板的槽位快照
+    获取某个案件、某个模板的槽位快照（包含校对结果）
     
     Args:
         db: 数据库会话
@@ -2784,9 +2792,44 @@ async def get_slot_assignment_snapshot(
         template_id: 模板ID
         
     Returns:
-        Dict[str, Optional[int]]: 槽位ID到卡片ID的映射
+        Dict包含:
+            - assignments: Dict[str, Optional[int]] - 槽位ID到卡片ID的映射
+            - proofread_results: Dict[str, List[SlotProofreadResult]] - 校对结果：{slotId: [校对结果列表]}
     """
-    return await EvidenceCardSlotAssignment.get_snapshot(db, case_id, template_id)
+    # 获取槽位关联
+    assignments = await EvidenceCardSlotAssignment.get_snapshot(db, case_id, template_id)
+    
+    # 为每个有卡片的槽位获取校对结果
+    proofread_results: Dict[str, List[SlotProofreadResult]] = {}
+    slot_consistency: Dict[str, bool] = {}
+    
+    for slot_id, card_id in assignments.items():
+        if card_id is not None:
+            try:
+                # 调用校对函数获取校对结果
+                proofread_response = await proofread_card_slot(
+                    db=db,
+                    case_id=case_id,
+                    template_id=template_id,
+                    slot_id=slot_id,
+                    card_id=card_id
+                )
+                # 将校对结果存入字典
+                proofread_results[slot_id] = proofread_response.proofread_results
+                # 保存整体一致性状态
+                slot_consistency[slot_id] = proofread_response.overall_consistency
+            except Exception as e:
+                logger.error(f"获取槽位 {slot_id} 的校对结果失败: {e}")
+                # 校对失败时，不添加校对结果（空列表表示无校对结果）
+                proofread_results[slot_id] = []
+                # 校对失败时，视为不一致
+                slot_consistency[slot_id] = False
+    
+    return {
+        "assignments": assignments,
+        "proofread_results": proofread_results,
+        "slot_consistency": slot_consistency
+    }
 
 
 async def update_slot_assignment(
@@ -2831,3 +2874,198 @@ async def reset_slot_assignment_snapshot(
         int: 删除的记录数
     """
     return await EvidenceCardSlotAssignment.reset_snapshot(db, case_id, template_id)
+
+
+# ==================== 卡槽校对相关函数 ====================
+
+async def proofread_card_slot(
+    db: AsyncSession,
+    case_id: int,
+    template_id: str,
+    slot_id: str,
+    card_id: int,
+) -> CardSlotProofreadResponse:
+    """
+    校对卡槽中的卡片
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        template_id: 模板ID
+        slot_id: 槽位ID，格式：slot::{role}::{cardType}::{index}
+        card_id: 卡片ID
+        
+    Returns:
+        CardSlotProofreadResponse: 校对结果
+    """
+    from app.agentic.agents.evidence_proofreader import EvidenceProofreader, ProofreadRule, ProofreadResult, EvidenceFeatureItem
+    from sqlalchemy.orm import joinedload
+    from sqlalchemy import select
+    
+    # 获取案件信息（包含当事人信息）
+    case_result = await db.execute(
+        select(Case)
+        .options(joinedload(Case.case_parties))
+        .where(Case.id == case_id)
+    )
+    case = case_result.unique().scalar_one_or_none()
+    if not case:
+        raise ValueError(f"案件不存在: {case_id}")
+    
+    # 获取卡片信息
+    card_result = await db.execute(
+        select(EvidenceCard).where(EvidenceCard.id == card_id)
+    )
+    card = card_result.scalar_one_or_none()
+    if not card:
+        raise ValueError(f"卡片不存在: {card_id}")
+    
+    # 从slot_id中提取card_type信息
+    # slot_id格式: slot::{role}::{cardType}::{index}
+    slot_id_parts = slot_id.split('::')
+    if len(slot_id_parts) < 3:
+        raise ValueError(f"槽位ID格式错误: {slot_id}")
+    
+    card_type = slot_id_parts[2]
+    
+    # 验证卡片类型是否匹配
+    card_info = card.card_info or {}
+    actual_card_type = card_info.get('card_type', '')
+    if actual_card_type != card_type:
+        raise ValueError(f"卡片类型不匹配: 期望 {card_type}, 实际 {actual_card_type}")
+    
+    # 加载证据卡槽配置
+    config = config_manager.load_evidence_card_slots_config()
+    
+    # 查找对应的卡槽模板配置
+    card_template = None
+    for template in config.evidence_card_templates:
+        if template.get('card_type') == card_type:
+            card_template = template
+            break
+    
+    if not card_template:
+        raise ValueError(f"未找到卡片类型 {card_type} 的配置")
+    
+    # 获取卡片的特征列表
+    card_features = card_info.get('card_features', [])
+    if not card_features:
+        # 如果没有特征，返回空结果
+        return CardSlotProofreadResponse(
+            case_id=case_id,
+            template_id=template_id,
+            slot_id=slot_id,
+            card_id=card_id,
+            card_type=card_type,
+            proofread_results=[],
+            overall_consistency=True
+        )
+    
+    # 创建校对器实例
+    proofreader = EvidenceProofreader()
+    
+    # 构建校对任务列表
+    proofread_results = []
+    required_slots = card_template.get('required_slots', [])
+    
+    for slot_config in required_slots:
+        slot_name = slot_config.get('slot_name')
+        proofread_rules_config = slot_config.get('proofread_rules', [])
+        
+        # 如果没有校对规则，跳过
+        if not proofread_rules_config:
+            continue
+        
+        # 查找对应的卡片特征值
+        slot_value = None
+        for feature in card_features:
+            if isinstance(feature, dict) and feature.get('slot_name') == slot_name:
+                slot_value = feature.get('slot_value')
+                break
+        
+        # 如果没有找到值，跳过
+        if slot_value is None or slot_value == '':
+            continue
+        
+        # 解析校对规则
+        rules = []
+        for rule_data in proofread_rules_config:
+            try:
+                rule = ProofreadRule(**rule_data)
+                rules.append(rule)
+            except Exception as e:
+                logger.error(f"解析校对规则失败: {e}")
+                continue
+        
+        if not rules:
+            continue
+        
+        # 创建特征项（模拟EvidenceFeatureItem，用于校对）
+        feature_item = EvidenceFeatureItem(
+            slot_name=slot_name,
+            slot_value=slot_value,
+            confidence=1.0,
+            reasoning="",
+            slot_desc="",
+            slot_value_type="string",
+            slot_required=True
+        )
+        
+        # 创建最小化的Evidence对象（用于校对器API）
+        # 从slot_id中提取role信息（格式：slot::{role}::{cardType}::{index}）
+        # slot_id_parts 已在前面定义
+        evidence_role = slot_id_parts[1] if len(slot_id_parts) > 1 else None
+        
+        # 创建最小化的Evidence对象
+        class MinimalEvidence:
+            def __init__(self, evidence_role):
+                self.evidence_role = evidence_role
+        
+        minimal_evidence = MinimalEvidence(evidence_role)
+        
+        # 应用校对规则
+        for rule in rules:
+            try:
+                # 使用cast来绕过类型检查，因为校对器只需要evidence_role属性
+                result = await proofreader._apply_proofread_rule(
+                    slot_name=slot_name,
+                    rule=rule,
+                    evidence_features=[feature_item],
+                    case=case,
+                    evidence=cast(Evidence, minimal_evidence)  # type: ignore
+                )
+                
+                if result:
+                    proofread_results.append(SlotProofreadResult(
+                        slot_name=slot_name,
+                        slot_value=slot_value,
+                        is_consistent=result.is_consistent,
+                        expected_value=result.expected_value,
+                        proofread_reasoning=result.proofread_reasoning,
+                        has_proofread_rules=True
+                    ))
+                    break  # 找到第一个适用的规则后停止
+            except Exception as e:
+                logger.error(f"应用校对规则失败: {e}")
+                # 校对失败时，标记为不一致
+                proofread_results.append(SlotProofreadResult(
+                    slot_name=slot_name,
+                    slot_value=slot_value,
+                    is_consistent=False,
+                    expected_value=None,
+                    proofread_reasoning=f"校对过程出错: {str(e)}",
+                    has_proofread_rules=True
+                ))
+    
+    # 计算整体一致性
+    overall_consistency = all(r.is_consistent for r in proofread_results) if proofread_results else True
+    
+    return CardSlotProofreadResponse(
+        case_id=case_id,
+        template_id=template_id,
+        slot_id=slot_id,
+        card_id=card_id,
+        card_type=card_type,
+        proofread_results=proofread_results,
+        overall_consistency=overall_consistency
+    )

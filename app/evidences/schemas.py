@@ -185,7 +185,7 @@ class EvidenceCardUpdateRequest(BaseModel):
 class EvidenceCardSlot(BaseModel):
     """证据卡槽模型"""
     slot_name: str = Field(..., description="卡槽名称")
-    need_proofreading: bool = Field(..., description="是否需要校对")
+    proofread_rules: List[Dict[str, Any]] = Field(default_factory=list, description="校对规则列表")
 
 
 class EvidenceCardTemplate(BaseModel):
@@ -228,8 +228,40 @@ class SlotAssignmentSnapshotResponse(BaseModel):
     case_id: int = Field(..., description="案件ID")
     template_id: str = Field(..., description="模板ID")
     assignments: Dict[str, Optional[int]] = Field(..., description="槽位ID到卡片ID的映射")
+    proofread_results: Dict[str, List["SlotProofreadResult"]] = Field(default_factory=dict, description="校对结果：{slotId: [校对结果列表]}")
+    slot_consistency: Dict[str, bool] = Field(default_factory=dict, description="槽位整体一致性：{slotId: overall_consistency}")
 
 
 class SlotAssignmentResetRequest(BaseModel):
     """重置快照请求"""
     template_id: str = Field(..., description="模板ID")
+
+
+# 卡槽校对相关模型
+class SlotProofreadRequest(BaseModel):
+    """卡槽校对请求"""
+    case_id: int = Field(..., description="案件ID")
+    template_id: str = Field(..., description="模板ID")
+    slot_id: str = Field(..., description="槽位ID")
+    card_id: int = Field(..., description="卡片ID")
+
+
+class SlotProofreadResult(BaseModel):
+    """单个槽位的校对结果"""
+    slot_name: str = Field(..., description="槽位名称")
+    slot_value: Optional[Any] = Field(None, description="槽位值")
+    is_consistent: bool = Field(..., description="是否一致")
+    expected_value: Optional[str] = Field(None, description="期待值")
+    proofread_reasoning: str = Field(..., description="校对推理说明")
+    has_proofread_rules: bool = Field(..., description="是否有校对规则")
+
+
+class CardSlotProofreadResponse(BaseModel):
+    """卡槽校对响应"""
+    case_id: int = Field(..., description="案件ID")
+    template_id: str = Field(..., description="模板ID")
+    slot_id: str = Field(..., description="槽位ID")
+    card_id: int = Field(..., description="卡片ID")
+    card_type: str = Field(..., description="卡片类型")
+    proofread_results: List[SlotProofreadResult] = Field(default_factory=list, description="校对结果列表")
+    overall_consistency: bool = Field(..., description="整体是否一致")
