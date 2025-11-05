@@ -188,6 +188,35 @@ async def get_evidence_card(
     return SingleResponse(data=card_response)
 
 
+@router.delete("/evidence-cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_evidence_card(
+    card_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """删除证据卡片
+    
+    Args:
+        card_id: 卡片ID
+        db: 数据库会话
+        current_staff: 当前员工（认证）
+        
+    Note:
+        - 删除卡片时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+        - 删除卡片时，关联表 EvidenceCardSlotAssignment 中的 card_id 会通过 SET NULL 自动设置为 NULL
+        - 引用该卡片的槽位关联状态会自动更新
+    """
+    from app.evidences.services import delete_card
+    
+    success = await delete_card(db, card_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"证据卡片不存在: ID={card_id}",
+        )
+    return
+
+
 @router.put("/evidence-cards/{card_id}", response_model=SingleResponse[EvidenceCardResponse])
 async def update_evidence_card(
     card_id: int,

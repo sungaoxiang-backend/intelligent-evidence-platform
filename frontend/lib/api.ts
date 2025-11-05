@@ -739,6 +739,20 @@ export const evidenceCardApi = {
     }
   },
 
+  async deleteCard(cardId: number): Promise<void> {
+    const url = buildApiUrl(`/evidences/evidence-cards/${cardId}`);
+    const resp = await fetch(url, {
+      method: "DELETE",
+      headers: getAuthHeader(),
+    });
+    if (resp.status === 204) {
+      return;
+    } else {
+      const result = await resp.json();
+      throw new Error(result.message || "删除卡片失败");
+    }
+  },
+
   async getEvidenceCardSlotTemplates(caseId: number, params?: {
     skip?: number;
     limit?: number;

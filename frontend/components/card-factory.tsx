@@ -37,7 +37,8 @@ import {
   Upload,
   AlertCircle,
   Info,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Trash2
 } from "lucide-react"
 import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate, type ProofreadRule } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
@@ -277,7 +278,8 @@ function EvidenceCardListItem({
   onUpdateReferencedEvidences,
   isDragOver,
   dragOverEvidenceId,
-  dragOverInsertPosition
+  dragOverInsertPosition,
+  onDeleteCard
 }: { 
   card: EvidenceCard
   isSelected: boolean
@@ -294,6 +296,7 @@ function EvidenceCardListItem({
   isDragOver?: boolean
   dragOverEvidenceId?: number | null
   dragOverInsertPosition?: 'before' | 'after' | null
+  onDeleteCard?: (cardId: number) => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
@@ -673,17 +676,34 @@ function EvidenceCardListItem({
               )}
             </div>
             {!isEditing ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 hover:bg-blue-100"
-                onClick={(e) => {
-                  e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
-                  handleEditClick(e)
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5 text-slate-600" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-blue-100"
+                  onClick={(e) => {
+                    e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                    handleEditClick(e)
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                </Button>
+                {onDeleteCard && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-red-100"
+                    onClick={(e) => {
+                      e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                      if (window.confirm(`确定要删除卡片 #${card.id} 吗？\n\n删除后，引用该卡片的槽位关联状态会自动更新。`)) {
+                        onDeleteCard(card.id)
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="flex items-center gap-1">
                 <Button
@@ -2572,6 +2592,29 @@ export function CardFactory({
     }
   }
 
+  // 处理删除证据卡片
+  const handleDeleteCard = async (cardId: number) => {
+    try {
+      await evidenceCardApi.deleteCard(cardId)
+      
+      toast({
+        title: "删除成功",
+        description: `已成功删除卡片 #${cardId}`,
+      })
+      
+      // 刷新页面，确保所有状态（卡片列表、槽位关联、校对结果等）都是最新的
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // 延迟500ms，让用户看到成功提示
+    } catch (error: any) {
+      toast({
+        title: "删除失败",
+        description: error.message || "删除卡片失败",
+        variant: "destructive",
+      })
+    }
+  }
+
   // 处理卡片特征更新
   const handleUpdateCardFeatures = async (cardId: number, updatedFeatures: any[]) => {
     try {
@@ -3564,6 +3607,51 @@ export function CardFactory({
                   >
                     取消
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={selectedEvidenceIds.size === 0}
+                    onClick={async () => {
+                      if (selectedEvidenceIds.size === 0) return
+                      
+                      // 确认删除
+                      const confirmMessage = `确定要删除选中的 ${selectedEvidenceIds.size} 个证据吗？\n\n删除后，引用这些证据的证据卡片将自动更新引用列表。`
+                      if (!window.confirm(confirmMessage)) {
+                        return
+                      }
+                      
+                      try {
+                        // 转换为数字ID列表
+                        const evidenceIds = Array.from(selectedEvidenceIds).map(id => Number(id))
+                        
+                        // 调用批量删除API
+                        await evidenceApi.batchDeleteEvidences(evidenceIds)
+                        
+                        toast({
+                          title: "删除成功",
+                          description: `已成功删除 ${evidenceIds.length} 个证据`,
+                        })
+                        
+                        // 清空选择并退出多选模式
+                        setIsMultiSelect(false)
+                        setSelectedEvidenceIds(new Set())
+                        
+                        // 刷新页面，确保所有状态（证据列表、证据卡片、引用列表等）都是最新的
+                        setTimeout(() => {
+                          window.location.reload()
+                        }, 500) // 延迟500ms，让用户看到成功提示
+                      } catch (error: any) {
+                        toast({
+                          title: "删除失败",
+                          description: error.message || "删除证据失败",
+                          variant: "destructive",
+                        })
+                      }
+                    }}
+                  >
+                    删除 {selectedEvidenceIds.size > 0 && `(${selectedEvidenceIds.size})`}
+                  </Button>
                 </div>
               </div>
             )}
@@ -3638,6 +3726,7 @@ export function CardFactory({
                         }}
                         onUpdateCard={handleUpdateCardFeatures}
                         onUpdateReferencedEvidences={handleUpdateReferencedEvidences}
+                        onDeleteCard={handleDeleteCard}
                       />
                     ))
                   ) : (

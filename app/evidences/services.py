@@ -555,17 +555,25 @@ async def batch_delete(
         
     Returns:
         包含成功和失败删除的字典
+        
+    Note:
+        - 删除证据时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+        - 证据卡片引用该证据的关联关系会自动解除，前端查询时会自动反映最新状态
     """
     successful = []
     failed = []
     object_keys = []
+    deleted_evidences = []  # 保存被删除的证据信息，用于后续处理
     
-    # 先获取所有证据
+    # 先获取所有证据信息（在删除前）
     for evidence_id in evidence_ids:
         evidence = await get_by_id(db, evidence_id)
         if not evidence:
             failed.append(f"证据ID {evidence_id} 不存在")
             continue
+        
+        # 保存证据信息用于后续处理
+        deleted_evidences.append(evidence)
         
         # 从URL中提取对象键
         file_url = evidence.file_url
@@ -579,21 +587,18 @@ async def batch_delete(
     # 删除关联的association_evidence_features记录
     # 检查是否包含"微信聊天记录"类型的证据
     from app.cases.models import AssociationEvidenceFeature
-    from sqlalchemy import func
+    from sqlalchemy import select
     
-    # 获取被删除的证据信息，检查是否包含"微信聊天记录"类型
-    deleted_evidences = []
-    for evidence_id in evidence_ids:
-        evidence = await get_by_id(db, evidence_id)
-        if evidence and evidence.classification_category == "微信聊天记录":
-            deleted_evidences.append(evidence)
+    # 获取被删除的"微信聊天记录"类型的证据ID
+    wechat_evidence_ids = [
+        e.id for e in deleted_evidences 
+        if e.classification_category == "微信聊天记录"
+    ]
     
     # 如果包含"微信聊天记录"类型的证据，删除所有相关的association_evidence_features记录
-    if deleted_evidences:
-        deleted_evidence_ids = [e.id for e in deleted_evidences]
-        
+    if wechat_evidence_ids:
         # 查找所有包含被删除证据ID的关联特征记录
-        for evidence_id in deleted_evidence_ids:
+        for evidence_id in wechat_evidence_ids:
             # 使用正确的 JSONB 操作符来检查数组是否包含特定值
             # association_evidence_ids 存储的是整数列表，所以我们需要检查是否包含整数
             association_features = await db.execute(
@@ -613,6 +618,7 @@ async def batch_delete(
             cos_service.delete_file(object_key)
     
     # 提交数据库事务
+    # 注意：关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
     await db.commit()
     
     return {"successful": successful, "failed": failed}
@@ -2244,6 +2250,55 @@ async def card_to_response(card: EvidenceCard, db: AsyncSession) -> Any:
         created_at=card.created_at.isoformat() if card.created_at else None,
         updated_at=card.updated_at.isoformat() if card.updated_at else None,
     )
+
+
+async def delete_card(
+    db: AsyncSession,
+    card_id: int,
+) -> bool:
+    """删除证据卡片
+    
+    Args:
+        db: 数据库会话
+        card_id: 卡片ID
+        
+    Returns:
+        bool: 删除是否成功
+        
+    Note:
+        - 删除卡片时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+        - 删除卡片时，关联表 EvidenceCardSlotAssignment 中的 card_id 会通过 SET NULL 自动设置为 NULL
+        - 为了保持数据一致性，我们显式地将所有引用该卡片的槽位关联的 card_id 设置为 NULL
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    
+    # 获取卡片
+    result = await db.execute(
+        select(EvidenceCard)
+        .where(EvidenceCard.id == card_id)
+    )
+    card = result.scalar_one_or_none()
+    
+    if not card:
+        return False
+    
+    # 显式地将所有引用该卡片的槽位关联的 card_id 设置为 NULL
+    # 虽然数据库会自动 SET NULL，但显式处理更清晰
+    slot_assignments_result = await db.execute(
+        select(EvidenceCardSlotAssignment)
+        .where(EvidenceCardSlotAssignment.card_id == card_id)
+    )
+    slot_assignments = slot_assignments_result.scalars().all()
+    
+    for assignment in slot_assignments:
+        assignment.card_id = None
+    
+    # 删除卡片（关联表会自动处理）
+    await db.delete(card)
+    await db.commit()
+    
+    return True
 
 
 async def update_card(
