@@ -37,17 +37,15 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['evidence_id'], ['evidences.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('evidence_card_id', 'evidence_id')
     )
-    # 使用 IF EXISTS 删除索引（如果索引不存在则忽略错误）
-    op.execute("DROP INDEX IF EXISTS ix_template_fields_id")
-    op.drop_table('template_fields')
-    op.drop_index(op.f('ix_document_templates_id'), table_name='document_templates')
-    op.drop_index(op.f('ix_document_templates_name'), table_name='document_templates')
-    op.drop_table('document_templates')
-    op.drop_index(op.f('ix_generated_documents_id'), table_name='generated_documents')
-    op.drop_table('generated_documents')
-    sa.Enum('lawsuit', 'withdrawal', 'evidence_application', 'enforcement_application', 'power_of_attorney', 'other', name='documenttemplatetype').drop(op.get_bind())
-    sa.Enum('draft', 'active', 'archived', name='documenttemplatestatus').drop(op.get_bind())
-    sa.Enum('title', 'secondary_title', 'tertiary_title', 'field', name='templatefieldlevel').drop(op.get_bind())
+    # 使用 IF EXISTS 删除表和索引（如果不存在则忽略错误）
+    op.execute("DROP TABLE IF EXISTS template_fields CASCADE")
+    op.execute("DROP TABLE IF EXISTS document_templates CASCADE")
+    op.execute("DROP TABLE IF EXISTS generated_documents CASCADE")
+    
+    # 使用 IF EXISTS 删除枚举类型（如果不存在则忽略错误）
+    op.execute("DROP TYPE IF EXISTS documenttemplatetype")
+    op.execute("DROP TYPE IF EXISTS documenttemplatestatus")
+    op.execute("DROP TYPE IF EXISTS templatefieldlevel")
     # ### end Alembic commands ###
 
 
