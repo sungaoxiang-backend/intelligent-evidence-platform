@@ -347,6 +347,7 @@ export interface Evidence {
   classification_confidence?: number
   classification_reasoning?: string
   is_classified: boolean
+  is_minted: boolean // 是否已铸造（是否有关联的证据卡片）
   individual_features?: {
     evidence_type?: string
     confidence?: number
@@ -595,13 +596,16 @@ export const evidenceApi = {
 // 证据卡片接口类型定义
 export interface EvidenceCard {
   id: number;
-  evidence_ids: number[];
+  evidence_ids: number[]; // 只包含存在的证据ID
+  all_evidence_ids: number[]; // 所有引用ID（包括已删除的）
   card_info?: {
     card_type?: string;
     card_is_associated?: boolean;
     [key: string]: any;
   };
   updated_times: number;
+  is_normal: boolean; // 是否正常（True表示正常，False表示存在异常关联）
+  abnormal_sequence_numbers: number[]; // 异常关联的索引列表（在all_evidence_ids中的位置）
   created_at?: string;
   updated_at?: string;
 }
@@ -676,18 +680,14 @@ export const evidenceCardApi = {
     case_id: number;
     skip?: number;
     limit?: number;
-    evidence_ids?: number[];
     card_type?: string;
     card_is_associated?: boolean;
     sort_by?: string;
     sort_order?: string;
   }): Promise<{ data: EvidenceCard[]; pagination?: any }> {
-    const { case_id, skip = 0, limit = 100, evidence_ids, card_type, card_is_associated, sort_by, sort_order } = params;
+    const { case_id, skip = 0, limit = 100, card_type, card_is_associated, sort_by, sort_order } = params;
     let url = buildApiUrl(`/evidences/evidence-cards?case_id=${case_id}&skip=${skip}&limit=${limit}`);
     
-    if (evidence_ids && evidence_ids.length > 0) {
-      evidence_ids.forEach(id => url += `&evidence_ids=${id}`);
-    }
     if (card_type) url += `&card_type=${encodeURIComponent(card_type)}`;
     if (card_is_associated !== undefined) url += `&card_is_associated=${card_is_associated}`;
     if (sort_by) url += `&sort_by=${encodeURIComponent(sort_by)}`;

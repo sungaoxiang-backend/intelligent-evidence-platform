@@ -239,13 +239,13 @@ function OriginalEvidenceItem({
               <span className="text-xs font-mono text-blue-600 font-semibold">#{evidence.id}</span>
             </div>
             <Badge
-              variant={isCast ? "default" : "secondary"}
+              variant={evidence.is_minted ? "default" : "secondary"}
               className={cn(
                 "text-xs flex-shrink-0 font-medium",
-                isCast ? "bg-green-500 hover:bg-green-600 text-white" : "bg-slate-200 text-slate-600",
+                evidence.is_minted ? "bg-green-500 hover:bg-green-600 text-white" : "bg-slate-200 text-slate-600",
               )}
             >
-              {isCast ? "已铸造" : "未铸造"}
+              {evidence.is_minted ? "已铸造" : "未铸造"}
             </Badge>
           </div>
 
@@ -302,9 +302,19 @@ function EvidenceCardListItem({
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
   const [isHoveringImage, setIsHoveringImage] = useState(false)
   
+  // 异常卡片不能拖拽，只能删除
+  const isAbnormal = !card.is_normal
+  
+  // 获取所有引用ID（包括已删除的）和已删除的ID集合
+  const allEvidenceIds = card.all_evidence_ids || card.evidence_ids || []
+  const existingEvidenceIds = new Set(card.evidence_ids || [])
+  const deletedEvidenceIds = new Set(
+    allEvidenceIds.filter(id => !existingEvidenceIds.has(id))
+  )
+  
   const { attributes, listeners, setNodeRef, isDragging: isLocalDragging } = useDraggable({
     id: `card-${card.id}`,
-    disabled: false, // 始终允许拖拽，不受展开状态影响
+    disabled: isAbnormal, // 异常卡片禁用拖拽
   })
 
   // 不使用 transform，让原卡片保持原位，使用 DragOverlay 显示拖拽副本
@@ -512,29 +522,50 @@ function EvidenceCardListItem({
     <Card
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners} // 将拖拽属性绑定到整个卡片
+      {...(isAbnormal ? {} : { ...attributes, ...listeners })} // 异常卡片不绑定拖拽属性
       onClick={onClick}
       onMouseDown={(e) => {
-        // 防止在拖动时触发文本选择
-        if (e.target === e.currentTarget) {
+        // 防止在拖动时触发文本选择（仅正常卡片）
+        if (!isAbnormal && e.target === e.currentTarget) {
           e.preventDefault()
         }
       }}
       className={cn(
         "w-full p-4 text-left transition-all duration-200 group relative overflow-hidden",
         "shadow-lg hover:shadow-2xl border-2", // 使用 shadcn Card 的默认样式，增强阴影
-        "cursor-grab active:cursor-grabbing select-none", // 整个卡片可拖拽
+        // 异常卡片不能拖拽，显示红色边框+感叹号
+        isAbnormal 
+          ? "cursor-not-allowed border-red-300 bg-red-50/30 hover:border-red-300 hover:bg-red-50/30" // 异常卡片：红色边框，拒绝交互
+          : "cursor-grab active:cursor-grabbing select-none", // 正常卡片可拖拽
         isSelected
-          ? "border-blue-400 shadow-2xl ring-2 ring-blue-200 bg-blue-50/50" // 选中时增强阴影
-          : "border-slate-300 hover:border-blue-400 hover:bg-blue-50/30 hover:shadow-xl", // 默认边框更明显，hover时更突出
-        isCurrentlyDragging && "opacity-40 shadow-2xl scale-105", // 拖拽时增强阴影和轻微放大
-        // 拖拽悬停时的视觉反馈
-        isDragOver && "ring-2 ring-green-400 border-green-400 bg-green-50/30 shadow-xl"
+          ? isAbnormal
+            ? "border-red-400 shadow-xl ring-2 ring-red-200 bg-red-50/40" // 异常卡片选中时
+            : "border-blue-400 shadow-2xl ring-2 ring-blue-200 bg-blue-50/50" // 正常卡片选中时
+          : isAbnormal
+            ? "border-red-300 hover:border-red-300 hover:bg-red-50/30 hover:shadow-lg" // 异常卡片默认（拒绝交互）
+            : "border-slate-300 hover:border-blue-400 hover:bg-blue-50/30 hover:shadow-xl", // 正常卡片默认
+        isCurrentlyDragging && !isAbnormal && "opacity-40 shadow-2xl scale-105", // 拖拽时增强阴影和轻微放大（仅正常卡片）
+        // 拖拽悬停时的视觉反馈（仅正常卡片）
+        isDragOver && !isAbnormal && "ring-2 ring-green-400 border-green-400 bg-green-50/30 shadow-xl"
       )}
     >
       {isSelected && (
-        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-blue-500 to-blue-600 rounded-l-lg" />
+        <div className={cn(
+          "absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg",
+          isAbnormal 
+            ? "bg-gradient-to-b from-red-500 to-red-600" // 异常卡片：红色指示条
+            : "bg-gradient-to-b from-blue-500 to-blue-600" // 正常卡片：蓝色指示条
+        )} />
+      )}
+      
+      {/* 异常卡片的感叹号标识 */}
+      {isAbnormal && (
+        <div className="absolute top-2 right-2 z-20">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-100 border border-red-300">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <span className="text-xs font-semibold text-red-600">异常</span>
+          </div>
+        </div>
       )}
 
       {/* 顶部高光效果 - 增强卡片层次感 */}
@@ -625,10 +656,12 @@ function EvidenceCardListItem({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* 拖拽句柄 - 移到卡片信息区域左侧 */}
-              <div className="flex-shrink-0 text-slate-400 pointer-events-none">
-                <GripVertical className="h-4 w-4" />
-              </div>
+              {/* 拖拽句柄 - 移到卡片信息区域左侧（仅正常卡片显示） */}
+              {!isAbnormal && (
+                <div className="flex-shrink-0 text-slate-400 pointer-events-none">
+                  <GripVertical className="h-4 w-4" />
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-slate-500 font-medium">卡片ID</span>
                 <span className="text-sm font-bold text-blue-600">#{card.id}</span>
@@ -677,17 +710,20 @@ function EvidenceCardListItem({
             </div>
             {!isEditing ? (
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 hover:bg-blue-100"
-                  onClick={(e) => {
-                    e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
-                    handleEditClick(e)
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-slate-600" />
-                </Button>
+                {/* 异常卡片禁用编辑 */}
+                {!isAbnormal && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-blue-100"
+                    onClick={(e) => {
+                      e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+                      handleEditClick(e)
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                  </Button>
+                )}
                 {onDeleteCard && (
                   <Button
                     variant="ghost"
@@ -732,10 +768,36 @@ function EvidenceCardListItem({
             )}
           </div>
 
-          <p className="text-sm font-semibold text-slate-900">{cardType}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-900">{cardType}</p>
+            {/* 卡片类型标签：联合卡片/独立卡片 */}
+            {cardInfo.card_is_associated !== undefined && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] font-medium px-2 py-0.5",
+                  cardInfo.card_is_associated
+                    ? "border-blue-300 text-blue-700 bg-blue-50"
+                    : "border-slate-300 text-slate-700 bg-slate-50"
+                )}
+              >
+                {cardInfo.card_is_associated ? "联合卡片" : "独立卡片"}
+              </Badge>
+            )}
+          </div>
 
           <p className="text-xs text-slate-500">
-            引用: {card.evidence_ids.map(id => `#${id}`).join(", ")}
+            引用: {allEvidenceIds.map((id, idx) => {
+              const isDeleted = deletedEvidenceIds.has(id)
+              return (
+                <React.Fragment key={id}>
+                  {idx > 0 && <span>, </span>}
+                  <span className={isDeleted ? "text-red-600 font-semibold" : ""}>
+                    #{id}
+                  </span>
+                </React.Fragment>
+              )
+            })}
           </p>
         </div>
 
@@ -885,12 +947,12 @@ function EvidenceCardListItem({
             {isExpanded ? (
               <>
                 <X className="h-4 w-4 mr-2" />
-                收起引用证据 ({card.evidence_ids.length})
+                收起引用证据 ({allEvidenceIds.length})
               </>
             ) : (
               <>
                 <Plus className="h-4 w-4 mr-2" />
-                展开引用证据 ({card.evidence_ids.length})
+                展开引用证据 ({allEvidenceIds.length})
               </>
             )}
           </Button>
@@ -1076,19 +1138,32 @@ function ReferencedEvidenceList({
 }) {
   const [hoveredEvidenceId, setHoveredEvidenceId] = useState<number | null>(null)
   
+  // 异常卡片禁用拖拽功能
+  const isAbnormal = !card.is_normal
+  
   // 使用 useDroppable 使引用证据列表区域可以接收从左侧拖入的证据
   // 注意：不再使用嵌套的 DndContext，所有拖拽逻辑都在外部处理
+  // 异常卡片禁用拖拽功能
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `referenced-evidence-list-${card.id}`,
+    disabled: isAbnormal, // 异常卡片禁用拖拽
   })
 
-  // 获取引用证据的详细信息（按序号排序）
-  const referencedEvidences = card.evidence_ids
-    .map((evidenceId, index) => {
-      const evidence = evidenceList.find((e: any) => e.id === evidenceId)
-      return evidence ? { ...evidence, sequence_number: index } : null
-    })
-    .filter((e): e is any => e !== null)
+  // 获取所有引用ID（包括已删除的）
+  const allEvidenceIds = card.all_evidence_ids || card.evidence_ids || []
+  const existingEvidenceIds = new Set(card.evidence_ids || [])
+  
+  // 获取引用证据的详细信息（按序号排序），包括已删除的项
+  const referencedEvidences = allEvidenceIds.map((evidenceId, index) => {
+    const evidence = evidenceList.find((e: any) => e.id === evidenceId)
+    const isDeleted = !existingEvidenceIds.has(evidenceId)
+    return {
+      id: evidenceId,
+      evidence: evidence || null,
+      sequence_number: index,
+      isDeleted
+    }
+  })
 
   const handleRemove = (evidenceId: number, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -1100,49 +1175,98 @@ function ReferencedEvidenceList({
   return (
     // 注意：这里不使用嵌套的 DndContext，所有拖拽逻辑都在外部的 CardFactory 的 DndContext 中处理
     // 这样可以避免冲突，确保外部拖入的证据能够正确到达引用证据列表
-    <div
+      <div
       ref={setDroppableRef}
       className={cn(
         "mt-3 pt-3 border-t space-y-3 transition-all",
-          isOver 
+          isOver && !isAbnormal
             ? "border-green-400 bg-green-50/30" 
             : "border-slate-200"
       )}
       id={`referenced-evidence-list-${card.id}`}
+      onClick={(e) => {
+        // 异常卡片点击时阻止事件冒泡，避免触发原始证据列的拖拽样式
+        if (isAbnormal) {
+          e.stopPropagation()
+        }
+      }}
     >
       <div className="text-xs font-medium text-slate-600 mb-2">
         引用证据列表：
       </div>
-      <SortableContext
-        items={referencedEvidences.map((e) => e.id)}
-        strategy={verticalListSortingStrategy}
-      >
-          {referencedEvidences.map((evidence, index) => {
-            const isDragOverItem = dragOverEvidenceId === evidence.id
+      {isAbnormal ? (
+        // 异常卡片：不使用SortableContext，直接渲染列表项（禁用拖拽）
+        <div className="space-y-3">
+          {referencedEvidences.map((item, index) => {
+            if (item.isDeleted) {
+              // 已删除的证据项 - 空占位样式
+              return (
+                <DeletedReferencedEvidenceItem
+                  key={item.id}
+                  evidenceId={item.id}
+                  index={index}
+                />
+              )
+            } else {
+              // 异常卡片：使用非拖拽版本的引用证据项
+              return (
+                <NonSortableReferencedEvidenceItem
+                  key={item.id}
+                  evidence={item.evidence!}
+                  index={index}
+                  cardId={card.id}
+                  onRemove={handleRemove}
+                  isHovered={hoveredEvidenceId === item.id}
+                  onMouseEnter={() => setHoveredEvidenceId(item.id)}
+                  onMouseLeave={() => setHoveredEvidenceId(null)}
+                />
+              )
+            }
+          })}
+          {/* 插入位置指示线 - 拖拽到列表末尾时显示 */}
+          {isOver && !dragOverEvidenceId && !isAbnormal && (
+            <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
+          )}
+        </div>
+      ) : (
+        <SortableContext
+          items={referencedEvidences.filter(e => !e.isDeleted).map((e) => e.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {referencedEvidences.map((item, index) => {
+            const isDragOverItem = dragOverEvidenceId === item.id
             const shouldShowInsertLineBefore = isDragOverItem && dragOverInsertPosition === 'before'
             const shouldShowInsertLineAfter = isDragOverItem && dragOverInsertPosition === 'after'
             
             return (
-              <React.Fragment key={evidence.id}>
+              <React.Fragment key={item.id}>
                 {/* 插入位置指示线 - 在目标项之前显示（当插入位置为 before 时） */}
                 {shouldShowInsertLineBefore && (
                   <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
                 )}
-                <SortableReferencedEvidenceItem
-                  evidence={evidence}
-                  index={index}
-                  cardId={card.id}
-                  onRemove={handleRemove}
-                  isHovered={hoveredEvidenceId === evidence.id || isDragOverItem} // 当拖拽悬停时也显示悬停效果
-                  onMouseEnter={() => setHoveredEvidenceId(evidence.id)}
-                  onMouseLeave={() => {
-                    // 只有在不是拖拽悬停时才清除悬停状态
-                    if (!isDragOverItem) {
-                      setHoveredEvidenceId(null)
-                    }
-                  }}
-                  isDragOver={isDragOverItem}
-                />
+                {item.isDeleted ? (
+                  // 已删除的证据项 - 空占位样式
+                  <DeletedReferencedEvidenceItem
+                    evidenceId={item.id}
+                    index={index}
+                  />
+                ) : (
+                  <SortableReferencedEvidenceItem
+                    evidence={item.evidence!}
+                    index={index}
+                    cardId={card.id}
+                    onRemove={handleRemove}
+                    isHovered={hoveredEvidenceId === item.id || isDragOverItem} // 当拖拽悬停时也显示悬停效果
+                    onMouseEnter={() => setHoveredEvidenceId(item.id)}
+                    onMouseLeave={() => {
+                      // 只有在不是拖拽悬停时才清除悬停状态
+                      if (!isDragOverItem) {
+                        setHoveredEvidenceId(null)
+                      }
+                    }}
+                    isDragOver={isDragOverItem}
+                  />
+                )}
                 {/* 插入位置指示线 - 在目标项之后显示（当插入位置为 after 时） */}
                 {shouldShowInsertLineAfter && (
                   <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
@@ -1154,7 +1278,119 @@ function ReferencedEvidenceList({
           {isOver && !dragOverEvidenceId && (
             <div className="h-1 bg-green-500 rounded-full mx-2 my-2 shadow-lg border-2 border-green-600" />
           )}
-      </SortableContext>
+        </SortableContext>
+      )}
+    </div>
+  )
+}
+
+// 已删除的引用证据项组件（空占位样式）
+function DeletedReferencedEvidenceItem({
+  evidenceId,
+  index
+}: {
+  evidenceId: number
+  index: number
+}) {
+  return (
+    <div
+      className="relative p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 opacity-60"
+    >
+      <div className="flex items-center gap-2.5">
+        {/* 拖拽句柄占位 */}
+        <div className="flex-shrink-0 w-4 h-4" />
+
+        {/* 序号 */}
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold flex items-center justify-center">
+          {index + 1}
+        </div>
+        
+        {/* 缩略图占位 */}
+        <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+          <ImageIcon className="w-6 h-6 text-slate-400" />
+        </div>
+
+        {/* 证据信息 */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-[10px] text-slate-400">证据ID</span>
+            <span className="text-xs font-semibold text-red-600">#{evidenceId}</span>
+          </div>
+          <p className="text-xs text-slate-400 italic">原始证据不存在</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 非拖拽版本的引用证据项组件（用于异常卡片）
+function NonSortableReferencedEvidenceItem({
+  evidence,
+  index,
+  cardId,
+  onRemove,
+  isHovered,
+  onMouseEnter,
+  onMouseLeave
+}: {
+  evidence: any
+  index: number
+  cardId: number
+  onRemove: (evidenceId: number, e: React.MouseEvent) => void
+  isHovered: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
+  const fileTypeInfo = getFileTypeInfo(evidence.file_name || '')
+
+  return (
+    <div
+      data-evidence-id={evidence.id}
+      className={cn(
+        "relative p-2.5 rounded-lg border border-slate-200 bg-slate-50 transition-all group/reference-item cursor-default", // 禁用拖拽
+        // 悬停时的视觉反馈
+        isHovered && "border-slate-300 bg-slate-100"
+      )}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={(e) => {
+        // 阻止事件冒泡，避免触发原始证据列的拖拽样式
+        e.stopPropagation()
+      }}
+    >
+      <div className="flex items-center gap-2.5">
+        {/* 拖拽句柄占位 - 不显示 */}
+        <div className="flex-shrink-0 w-4 h-4" />
+
+        {/* 序号 */}
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-semibold flex items-center justify-center">
+          {index + 1}
+        </div>
+        
+        {/* 缩略图 */}
+        <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden border border-slate-200 bg-white">
+          {fileTypeInfo.type === 'image' && evidence.file_url ? (
+            <img
+              src={evidence.file_url}
+              alt={evidence.file_name || ''}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className={`w-full h-full ${fileTypeInfo.bgColor} flex items-center justify-center`}>
+              <span className="text-lg">{fileTypeInfo.icon}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 证据信息 */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-[10px] text-slate-500">证据ID</span>
+            <span className="text-xs font-semibold text-blue-600">#{evidence.id}</span>
+          </div>
+          <p className="text-xs font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -2348,6 +2584,8 @@ export function CardFactory({
   const [draggingCardType, setDraggingCardType] = useState<string | null>(null) // 当前正在拖拽的卡片类型
   const [proofreadResults, setProofreadResults] = useState<Record<string, Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>>>({}) // 校对结果：{slotId: {slotName: result}}
   const [slotConsistency, setSlotConsistency] = useState<Record<string, boolean>>({}) // 槽位整体一致性：{slotId: overall_consistency}
+  const cleanedSlotsRef = useRef<Set<string>>(new Set()) // 跟踪已经清理过的槽位，避免重复清理
+  const slotCardsRef = useRef<Record<string, number | null>>({}) // 存储最新的槽位关联，用于清理检查
   
   const { toast } = useToast()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
@@ -2530,6 +2768,116 @@ export function CardFactory({
     
     loadSnapshot()
   }, [currentTemplate?.template_id, caseId])
+
+  // 同步 slotCards 到 ref，用于清理检查
+  useEffect(() => {
+    slotCardsRef.current = slotCards
+  }, [slotCards])
+
+  // 检测并清理异常卡片所在的槽位关联（双重保险，后端已自动清理）
+  // 注意：此逻辑在槽位快照和卡片列表都加载后执行
+  useEffect(() => {
+    const cleanupAbnormalCards = async () => {
+      // 确保槽位快照和卡片列表都已加载
+      if (!currentTemplate || !caseId || !cardList || cardList.length === 0) return
+      
+      // 使用 ref 获取最新的槽位关联，避免闭包问题
+      const currentSlotCards = slotCardsRef.current
+      if (Object.keys(currentSlotCards).length === 0) return // 如果没有槽位关联，直接返回
+      
+      // 检查所有已关联的槽位
+      const slotsToCleanup: string[] = []
+      
+      for (const [slotId, cardId] of Object.entries(currentSlotCards)) {
+        if (cardId === null || cardId === undefined) continue
+        
+        // 如果这个槽位已经被清理过，跳过
+        if (cleanedSlotsRef.current.has(slotId)) continue
+        
+        // 查找对应的卡片
+        const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+        
+        // 如果卡片不存在或卡片异常，标记为需要清理
+        if (!card || !card.is_normal) {
+          slotsToCleanup.push(slotId)
+        }
+      }
+      
+      // 如果有需要清理的槽位，执行清理（双重保险）
+      if (slotsToCleanup.length > 0) {
+        console.log('[cleanupAbnormalCards] 检测到异常卡片，清理槽位关联（双重保险）:', slotsToCleanup)
+        
+        // 标记这些槽位为已清理，避免重复清理
+        slotsToCleanup.forEach(slotId => {
+          cleanedSlotsRef.current.add(slotId)
+        })
+        
+        // 批量清理槽位关联（后端已自动清理，这里作为双重保险）
+        const cleanupPromises = slotsToCleanup.map(async (slotId) => {
+          try {
+            await evidenceCardApi.updateSlotAssignment(
+              Number(caseId),
+              currentTemplate.template_id,
+              slotId,
+              null
+            )
+          } catch (error) {
+            console.error(`清理槽位 ${slotId} 关联失败:`, error)
+          }
+        })
+        
+        await Promise.all(cleanupPromises)
+        
+        // 更新本地状态：移除异常卡片所在的槽位关联
+        setSlotCards(prev => {
+          const newSlotCards = { ...prev }
+          slotsToCleanup.forEach(slotId => {
+            delete newSlotCards[slotId]
+          })
+          return newSlotCards
+        })
+        
+        // 清除相关槽位的校对结果
+        setProofreadResults(prev => {
+          const newResults = { ...prev }
+          slotsToCleanup.forEach(slotId => {
+            delete newResults[slotId]
+          })
+          return newResults
+        })
+        
+        // 清除相关槽位的一致性状态
+        setSlotConsistency(prev => {
+          const newConsistency = { ...prev }
+          slotsToCleanup.forEach(slotId => {
+            delete newConsistency[slotId]
+          })
+          return newConsistency
+        })
+        
+        // 显示提示信息（仅在检测到异常时显示，后端已自动清理）
+        toast({
+          title: "已清理异常卡片",
+          description: `已自动清理 ${slotsToCleanup.length} 个异常卡片所在的槽位关联`,
+          variant: "default",
+        })
+      }
+    }
+    
+    // 当卡片列表或模板更新时，检查并清理异常卡片
+    // 注意：不依赖 slotCards，避免在清理过程中触发循环
+    // 延迟执行，确保槽位快照已加载
+    const timer = setTimeout(() => {
+      cleanupAbnormalCards()
+    }, 100) // 延迟100ms，确保槽位快照已加载
+    
+    return () => clearTimeout(timer)
+  }, [cardList, currentTemplate?.template_id, caseId])
+  
+  // 当模板切换或槽位快照加载时，重置已清理槽位的跟踪
+  useEffect(() => {
+    cleanedSlotsRef.current.clear()
+  }, [currentTemplate?.template_id])
 
   // 处理证据选择
   const handleEvidenceSelect = (evidenceId: string) => {
@@ -2725,21 +3073,33 @@ export function CardFactory({
   // 处理拖拽开始
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
-    setDraggedCardId(active.id as string)
-    // 清除之前的高亮状态
-    setDragOverEvidenceId(null)
-    setDragOverInsertPosition(null)
-    
-    // 如果是拖拽卡片，获取卡片类型
     const activeIdStr = String(active.id)
+    
+    // 如果是拖拽卡片，检查是否异常
     if (activeIdStr.startsWith('card-')) {
       const cardId = parseInt(activeIdStr.replace('card-', ''))
       const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      // 异常卡片不能拖拽，如果尝试拖拽异常卡片，取消拖拽
+      if (card && !card.is_normal) {
+        setDraggedCardId(null)
+        setDraggingCardType(null)
+        toast({
+          title: "操作失败",
+          description: `异常卡片 #${cardId} 不能拖拽，请先修复异常关联`,
+          variant: "destructive"
+        })
+        return
+      }
       const cardType = card?.card_info?.card_type || null
       setDraggingCardType(cardType)
     } else {
       setDraggingCardType(null)
     }
+    
+    setDraggedCardId(active.id as string)
+    // 清除之前的高亮状态
+    setDragOverEvidenceId(null)
+    setDragOverInsertPosition(null)
   }
 
   // 处理拖拽悬停（用于实时显示视觉反馈）
@@ -2777,6 +3137,13 @@ export function CardFactory({
       // 确保卡片类型已设置（用于槽位匹配检查）
       const cardId = parseInt(activeIdStr.replace('card-', ''))
       const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      // 异常卡片不能拖拽到槽位，清除拖拽状态
+      if (card && !card.is_normal) {
+        setDraggingCardType(null)
+        setDragOverEvidenceId(null)
+        setDragOverInsertPosition(null)
+        return
+      }
       const cardType = card?.card_info?.card_type || null
       // 只有在真正悬停在槽位上时才更新拖拽卡片类型（用于显示高亮）
       if (cardType) {
@@ -3130,6 +3497,17 @@ export function CardFactory({
           return
         }
         
+        // 检查卡片是否异常，异常卡片不能拖拽到槽位
+        if (!card.is_normal) {
+          console.log('[handleDragEnd] 异常卡片不能拖拽到槽位:', cardId)
+          toast({
+            title: "操作失败",
+            description: `异常卡片 #${cardId} 不能拖拽到槽位，请先修复异常关联`,
+            variant: "destructive"
+          })
+          return
+        }
+        
         const cardType = card?.card_info?.card_type || ''
         console.log('[handleDragEnd] 卡片类型:', cardType)
         
@@ -3250,9 +3628,9 @@ export function CardFactory({
     }
   }
 
-  // 检查证据是否已铸造
-  const isEvidenceCast = (evidenceId: number) => {
-    return cardList.some(card => card.evidence_ids.includes(evidenceId))
+  // 检查证据是否已铸造（使用后端返回的 is_minted 字段）
+  const isEvidenceCast = (evidence: any) => {
+    return evidence.is_minted === true
   }
 
   // 处理从槽位移除卡片
@@ -3663,7 +4041,7 @@ export function CardFactory({
                       key={evidence.id}
                       evidence={evidence}
                       isSelected={selectedEvidenceIds.has(String(evidence.id))}
-                      isCast={isEvidenceCast(evidence.id)}
+                      isCast={isEvidenceCast(evidence)}
                       multiSelectMode={isMultiSelect}
                       onClick={() => handleEvidenceSelect(String(evidence.id))}
                       isDraggable={!!expandedCardId && cardList.some((c: EvidenceCard) => c.card_info?.card_is_associated === true && expandedCardId === c.id)}

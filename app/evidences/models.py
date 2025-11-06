@@ -47,12 +47,7 @@ class Evidence(Base):
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
     case = relationship("Case", back_populates="evidences")
 
-    # 证据通过关联表关联到卡片（多对多关系）
-    evidence_cards = relationship(
-        "EvidenceCard", 
-        secondary=lambda: evidence_card_evidence_association,
-        back_populates="evidences"
-    )
+    # 证据不再通过ORM关系关联到卡片，而是通过EvidenceCard的evidence_ids字段记录
 
     async def get_associated_cards(
         self,
@@ -83,12 +78,10 @@ class Evidence(Base):
         """
         from sqlalchemy import select, and_, func, cast, Text
         
-        # 构建基础查询：从关联表中查找与该证据关联的卡片
-        query = select(EvidenceCard).join(
-            evidence_card_evidence_association,
-            EvidenceCard.id == evidence_card_evidence_association.c.evidence_card_id
-        ).where(
-            evidence_card_evidence_association.c.evidence_id == self.id
+        # 构建基础查询：从evidence_ids字段中查找包含该证据ID的卡片
+        # 使用JSONB的@>操作符检查数组是否包含该证据ID
+        query = select(EvidenceCard).where(
+            EvidenceCard.evidence_ids.contains([self.id])
         )
         
         # 应用筛选条件
@@ -131,17 +124,6 @@ class Evidence(Base):
         return list(result.scalars().unique().all())
 
 
-# 证据卡片与证据的多对多关联表（证据外键关联卡片）
-# 支持引用证据的顺序管理（sequence_number）
-evidence_card_evidence_association = Table(
-    "evidence_card_evidence_association",
-    Base.metadata,
-    Column("evidence_card_id", Integer, ForeignKey("evidence_cards.id", ondelete="CASCADE"), primary_key=True),
-    Column("evidence_id", Integer, ForeignKey("evidences.id", ondelete="CASCADE"), primary_key=True),
-    Column("sequence_number", Integer, nullable=False, default=0, comment="引用证据的顺序序号，从0开始"),
-)
-
-
 class EvidenceCard(Base):
     """证据卡片（快照）模型
     
@@ -156,17 +138,14 @@ class EvidenceCard(Base):
         "card_is_associated": False,
         "card_features": [...]
     }
+    
+    evidence_ids 存储引用的证据ID列表，按顺序存储，支持查询时动态检查证据是否存在。
     """
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False, index=True, comment="关联的案件ID")
     card_info: Mapped[Optional[Dict]] = mapped_column(JSONB, nullable=True)  # 改为 Dict 类型
+    evidence_ids: Mapped[Optional[List[int]]] = mapped_column(JSONB, nullable=True, default=list, comment="引用的证据ID列表，按顺序存储")
     updated_times: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-
-    # 多对多关系：一个卡片可以关联多个证据
-    evidences = relationship(
-        "Evidence", 
-        secondary=evidence_card_evidence_association,
-        back_populates="evidence_cards"
-    )
 
     async def get_associated_evidences(
         self,
@@ -196,12 +175,13 @@ class EvidenceCard(Base):
         """
         from sqlalchemy import select, and_
         
-        # 构建基础查询：从关联表中查找与该卡片关联的证据
-        query = select(Evidence).join(
-            evidence_card_evidence_association,
-            Evidence.id == evidence_card_evidence_association.c.evidence_id
-        ).where(
-            evidence_card_evidence_association.c.evidence_card_id == self.id
+        # 构建基础查询：从evidence_ids字段中查找关联的证据
+        # 如果evidence_ids为空，返回空列表
+        if not self.evidence_ids:
+            return []
+        
+        query = select(Evidence).where(
+            Evidence.id.in_(self.evidence_ids)
         )
         
         # 应用筛选条件
@@ -233,13 +213,14 @@ class EvidenceCard(Base):
     async def update_or_create(
         cls,
         db,
+        case_id: int,
         evidence_ids: List[int],
         card_info: Optional[Dict],
     ) -> "EvidenceCard":
         """
         更新或创建证据卡片
         
-        如果存在完全相同的卡片快照（相同的 evidence_ids 和 card_info），
+        如果存在完全相同的卡片快照（相同的 case_id、evidence_ids 和 card_info），
         则更新其时间戳（updated_at）和更新次数（updated_times）；否则创建新卡片。
         
         注意：在比较 card_info 时，会自动排除白名单中的字段（如 updated_at, 
@@ -257,6 +238,7 @@ class EvidenceCard(Base):
         
         Args:
             db: 数据库会话（AsyncSession）
+            case_id: 案件ID
             evidence_ids: 证据ID列表（支持1到多个证据）
             card_info: 卡片信息（JSONB Dict），包含类型、特征等信息
             
@@ -268,38 +250,47 @@ class EvidenceCard(Base):
         from datetime import datetime
         import pytz
         
-        # 标准化 evidence_ids（排序以便比较）
-        sorted_evidence_ids = sorted(set(evidence_ids))  # 去重并排序
+        # 去重但保持原始顺序（用于存储）
+        seen = set()
+        unique_evidence_ids = []
+        for ev_id in evidence_ids:
+            if ev_id not in seen:
+                seen.add(ev_id)
+                unique_evidence_ids.append(ev_id)
         
-        if not sorted_evidence_ids:
+        if not unique_evidence_ids:
             raise ValueError("evidence_ids 不能为空")
         
+        # 排序后的evidence_ids（用于比较）
+        sorted_evidence_ids = sorted(unique_evidence_ids)
+        
         # 查找关联了这些 evidence_ids 的所有卡片
-        # 需要找到关联的证据数量与传入的 evidence_ids 数量相同的卡片
-        # 然后检查它们关联的证据ID是否完全相同
-        from sqlalchemy.orm import selectinload
+        # 使用JSONB的contains操作符检查数组是否包含任一evidence_id
+        # 然后进一步检查数组长度和内容是否完全相同
+        
+        # 先查找该案件下所有包含任一evidence_id的卡片（使用JSONB的contains操作符）
+        from sqlalchemy import or_, and_
+        card_conditions = []
+        for ev_id in sorted_evidence_ids:
+            card_conditions.append(cls.evidence_ids.contains([ev_id]))
         
         result = await db.execute(
-            select(cls)
-            .options(selectinload(cls.evidences))  # 预加载 evidences 关系
-            .join(
-                evidence_card_evidence_association,
-                cls.id == evidence_card_evidence_association.c.evidence_card_id
-            ).where(
-                evidence_card_evidence_association.c.evidence_id.in_(sorted_evidence_ids)
-            ).group_by(cls.id).having(
-                func.count(evidence_card_evidence_association.c.evidence_id.distinct()) == len(sorted_evidence_ids)
-            )
+            select(cls).where(and_(cls.case_id == case_id, or_(*card_conditions)))
         )
-        candidate_cards = result.scalars().unique().all()
+        candidate_cards = result.scalars().all()
 
-        # 查找是否存在完全相同的卡片（比较 card_info 和 evidence_ids）
+        # 查找是否存在完全相同的卡片（比较 case_id、card_info 和 evidence_ids）
+        # 比较时忽略顺序，只比较内容和长度
         matched_card = None
         for card in candidate_cards:
-            # 获取卡片关联的所有 evidence_ids（已经通过 selectinload 预加载）
-            card_evidence_ids = sorted([ev.id for ev in card.evidences])
+            # 确保是同一个案件
+            if card.case_id != case_id:
+                continue
+                
+            # 获取卡片关联的所有 evidence_ids（排序后比较）
+            card_evidence_ids = sorted(card.evidence_ids or [])
             
-            # 比较 evidence_ids 和 card_info
+            # 比较 evidence_ids（忽略顺序）和 card_info
             if card_evidence_ids == sorted_evidence_ids:
                 # 处理 None 值的情况
                 if card.card_info is None and card_info is None:
@@ -316,44 +307,30 @@ class EvidenceCard(Base):
             matched_card.updated_at = datetime.now(shanghai_tz)
             matched_card.updated_times = (matched_card.updated_times or 0) + 1
             await db.commit()
-            # 刷新时需要加载关系
-            await db.refresh(matched_card, ["evidences"])
+            await db.refresh(matched_card)
             return matched_card
         else:
             # 没有找到相同的卡片，创建新卡片
-            new_card = cls(
-                card_info=card_info
-            )
-            db.add(new_card)
-            await db.flush()  # 先刷新以获取 card.id
-            
             # 验证证据是否存在
             evidences_result = await db.execute(
-                select(Evidence).where(Evidence.id.in_(sorted_evidence_ids))
+                select(Evidence).where(Evidence.id.in_(unique_evidence_ids))
             )
             evidences = evidences_result.scalars().all()
             
-            if len(evidences) != len(sorted_evidence_ids):
-                missing_ids = set(sorted_evidence_ids) - {ev.id for ev in evidences}
+            if len(evidences) != len(unique_evidence_ids):
+                missing_ids = set(unique_evidence_ids) - {ev.id for ev in evidences}
                 raise ValueError(f"找不到以下证据ID: {missing_ids}")
             
-            # 直接向关联表插入记录，避免通过 relationship 属性设置（会触发懒加载）
-            from sqlalchemy import insert
-            association_records = [
-                {
-                    "evidence_card_id": new_card.id,
-                    "evidence_id": ev_id
-                }
-                for ev_id in sorted_evidence_ids
-            ]
-            await db.execute(
-                insert(evidence_card_evidence_association).values(association_records)
+            # 创建新卡片，直接设置case_id和evidence_ids字段（保持原始顺序）
+            new_card = cls(
+                case_id=case_id,
+                card_info=card_info,
+                evidence_ids=unique_evidence_ids  # 保持原始顺序，去重后
             )
-            await db.flush()  # 刷新以保存关联关系
-            
+            db.add(new_card)
+            await db.flush()
             await db.commit()
-            # 刷新时需要加载关系
-            await db.refresh(new_card, ["evidences"])
+            await db.refresh(new_card)
             return new_card
     
     # 需要排除的比较字段（白名单保护层）

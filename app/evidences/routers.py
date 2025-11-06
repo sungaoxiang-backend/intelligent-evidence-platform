@@ -27,8 +27,49 @@ from app.evidences.schemas import (
 )
 from app.cases import services as case_service
 from app.evidences import services as evidence_service
+from app.evidences.models import Evidence
 
 router = APIRouter()
+
+
+async def evidences_to_responses(db: DBSession, evidences: List[Evidence]) -> List[EvidenceResponse]:
+    """将Evidence列表转换为EvidenceResponse列表，并设置is_minted字段
+    
+    Args:
+        db: 数据库会话
+        evidences: 证据列表
+        
+    Returns:
+        List[EvidenceResponse]: 响应模型列表
+    """
+    responses = []
+    for evidence in evidences:
+        # 检查是否已铸造
+        is_minted = await evidence_service.check_evidence_is_minted(db, evidence.id)
+        
+        # 转换为响应模型
+        response_dict = {
+            "id": evidence.id,
+            "file_url": evidence.file_url,
+            "file_name": evidence.file_name,
+            "file_size": evidence.file_size,
+            "file_extension": evidence.file_extension,
+            "evidence_status": evidence.evidence_status,
+            "evidence_role": evidence.evidence_role,
+            "classification_category": evidence.classification_category,
+            "classification_confidence": evidence.classification_confidence,
+            "classification_reasoning": evidence.classification_reasoning,
+            "classified_at": evidence.classified_at,
+            "evidence_features": evidence.evidence_features,
+            "features_extracted_at": evidence.features_extracted_at,
+            "case": evidence.case if hasattr(evidence, 'case') else None,
+            "is_minted": is_minted,
+            "created_at": evidence.created_at,
+            "updated_at": evidence.updated_at,
+        }
+        responses.append(EvidenceResponse(**response_dict))
+    
+    return responses
 
 
 @router.get("", response_model=ListResponse[EvidenceResponse])
@@ -51,9 +92,11 @@ async def read_evidences(
             evidence = await evidence_service.get_by_id(db, evidence_id)
             if evidence:
                 evidences.append(evidence)
+        # 转换为响应模型并设置is_minted字段
+        evidence_responses = await evidences_to_responses(db, evidences)
         return ListResponse(
-            data=evidences,
-            pagination=Pagination(total=len(evidences), page=1, size=len(evidences), pages=1)
+            data=evidence_responses,
+            pagination=Pagination(total=len(evidence_responses), page=1, size=len(evidence_responses), pages=1)
         )
     else:
         # 原有的分页查询逻辑，支持排序
@@ -61,8 +104,10 @@ async def read_evidences(
             db, skip=skip, limit=limit, case_id=case_id, search=search,
             sort_by=sort_by, sort_order=sort_order
         )
+        # 转换为响应模型并设置is_minted字段
+        evidence_responses = await evidences_to_responses(db, evidences)
         return ListResponse(
-            data=evidences,
+            data=evidence_responses,
             pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
         )
 
@@ -80,31 +125,31 @@ async def read_evidences_by_case_id(
 ):
     """获取案件的所有证据"""
     evidences, total = await evidence_service.list_evidences_by_case_id(db, case_id, search=search, skip=skip, limit=limit, sort_by=sort_by, sort_order=sort_order)
-    return ListResponse(data=evidences, pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit))
+    # 转换为响应模型并设置is_minted字段
+    evidence_responses = await evidences_to_responses(db, evidences)
+    return ListResponse(data=evidence_responses, pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit if limit > 0 else 1))
 
 
 @router.get("/evidence-cards", response_model=ListResponse[EvidenceCardResponse])
 async def list_evidence_cards(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
-    case_id: int = Query(...),
+    case_id: int = Query(..., description="案件ID（必须）"),
     skip: int = 0,
     limit: int = 100,
-    evidence_ids: Optional[List[int]] = Query(None),
     card_type: Optional[str] = None,
     card_is_associated: Optional[bool] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "desc",
 ):
-    """获取证据卡片列表，支持筛选和排序
+    """获取案件的证据卡片列表，支持筛选和排序
     
     Args:
         db: 数据库会话
         current_staff: 当前员工（认证）
+        case_id: 案件ID（必须）
         skip: 跳过记录数（分页）
         limit: 返回记录数限制（分页）
-        case_id: 案件ID（筛选条件）
-        evidence_ids: 证据ID列表（筛选条件）
         card_type: 卡片类型（筛选条件，从card_info中提取）
         card_is_associated: 是否关联提取（筛选条件，从card_info中提取）
         sort_by: 排序字段（created_at, updated_at, updated_times）
@@ -114,15 +159,13 @@ async def list_evidence_cards(
         ListResponse[EvidenceCardResponse]: 卡片列表
     """
     from app.evidences.services import get_cards_with_count
-    from sqlalchemy.orm import selectinload
     
     # 获取卡片列表
     cards, total = await get_cards_with_count(
         db=db,
+        case_id=case_id,
         skip=skip,
         limit=limit,
-        case_id=case_id,
-        evidence_ids=evidence_ids,
         card_type=card_type,
         card_is_associated=card_is_associated,
         sort_by=sort_by,
@@ -130,21 +173,12 @@ async def list_evidence_cards(
     )
     
     # 转换为响应模型
-    from app.evidences.services import get_cards_with_evidence_ids_sorted
+    from app.evidences.services import card_to_response
     
-    cards_with_evidence_ids = await get_cards_with_evidence_ids_sorted(db, cards)
     card_responses = []
-    for card, evidence_ids in cards_with_evidence_ids:
-        card_responses.append(
-            EvidenceCardResponse(
-                id=card.id,
-                evidence_ids=evidence_ids,
-                card_info=card.card_info,
-                updated_times=card.updated_times,
-                created_at=card.created_at.isoformat() if card.created_at else None,
-                updated_at=card.updated_at.isoformat() if card.updated_at else None,
-            )
-        )
+    for card in cards:
+        card_response = await card_to_response(card, db)
+        card_responses.append(card_response)
     
     return ListResponse(
         data=card_responses,
@@ -202,7 +236,7 @@ async def delete_evidence_card(
         current_staff: 当前员工（认证）
         
     Note:
-        - 删除卡片时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+        - 删除卡片时，不需要处理任何关联，直接删除即可
         - 删除卡片时，关联表 EvidenceCardSlotAssignment 中的 card_id 会通过 SET NULL 自动设置为 NULL
         - 引用该卡片的槽位关联状态会自动更新
     """
@@ -276,7 +310,9 @@ async def read_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="证据不存在",
         )
-    return SingleResponse(data=evidence)
+    # 转换为响应模型并设置is_minted字段
+    evidence_responses = await evidences_to_responses(db, [evidence])
+    return SingleResponse(data=evidence_responses[0])
 
 
 @router.post("/{evidence_id}/update-party-info", response_model=SingleResponse[dict])

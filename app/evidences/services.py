@@ -354,8 +354,21 @@ async def update(db: AsyncSession, db_obj: Evidence, obj_in: EvidenceEditRequest
 
 
 async def delete(db: AsyncSession, evidence_id: int) -> bool:
-    """删除证据"""
-    evidence = await get_by_id(db, evidence_id)
+    """删除证据
+    
+    Note:
+        - 删除证据时，不需要处理任何关联，EvidenceCard的evidence_ids字段保持不变
+        - 由于SQLAlchemy的relationship行为，我们需要确保不在删除前加载关联关系，让数据库外键约束正常工作
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    
+    # 使用select直接查询，不加载relationship，避免SQLAlchemy干预关联表的删除行为
+    result = await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id)
+    )
+    evidence = result.scalar_one_or_none()
+    
     if not evidence:
         return False
     
@@ -366,6 +379,7 @@ async def delete(db: AsyncSession, evidence_id: int) -> bool:
     cos_service.delete_file(object_key)
     
     # 从数据库删除记录
+    # 注意：不加载evidence_cards关系，让数据库外键约束SET NULL正常工作
     await db.delete(evidence)
     await db.commit()
     return True
@@ -557,17 +571,24 @@ async def batch_delete(
         包含成功和失败删除的字典
         
     Note:
-        - 删除证据时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
-        - 证据卡片引用该证据的关联关系会自动解除，前端查询时会自动反映最新状态
+        - 删除证据时，不需要处理任何关联，EvidenceCard的evidence_ids字段保持不变
+        - 由于SQLAlchemy的relationship行为，我们需要确保不在删除前加载关联关系，让数据库外键约束正常工作
     """
+    from sqlalchemy import select
+    
     successful = []
     failed = []
     object_keys = []
     deleted_evidences = []  # 保存被删除的证据信息，用于后续处理
     
     # 先获取所有证据信息（在删除前）
+    # 使用select直接查询，不加载relationship，避免SQLAlchemy干预关联表的删除行为
     for evidence_id in evidence_ids:
-        evidence = await get_by_id(db, evidence_id)
+        result = await db.execute(
+            select(Evidence).where(Evidence.id == evidence_id)
+        )
+        evidence = result.scalar_one_or_none()
+        
         if not evidence:
             failed.append(f"证据ID {evidence_id} 不存在")
             continue
@@ -581,6 +602,7 @@ async def batch_delete(
         object_keys.append(object_key)
         
         # 标记为删除
+        # 注意：不加载evidence_cards关系，让数据库外键约束SET NULL正常工作
         await db.delete(evidence)
         successful.append(evidence_id)
     
@@ -618,7 +640,7 @@ async def batch_delete(
             cos_service.delete_file(object_key)
     
     # 提交数据库事务
-    # 注意：关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+    # 注意：删除证据时，不需要处理任何关联，EvidenceCard的evidence_ids字段保持不变
     await db.commit()
     
     return {"successful": successful, "failed": failed}
@@ -1958,7 +1980,7 @@ async def evidence_card_casting(
                                         card_type = first_card.card_info.get("card_type") if first_card and first_card.card_info else "微信聊天记录"
                                         
                                         grouped_cards[slot_group_name] = EvidenceCardSchema(
-                                            evidence_ids=sorted(reference_evidence_ids),  # 排序以确保一致性
+                                            evidence_ids=reference_evidence_ids,  # 保持原始顺序（来自image_sequence_info）
                                             card_info={
                                                 "card_type": card_type,
                                                 "card_is_associated": True,
@@ -1984,7 +2006,7 @@ async def evidence_card_casting(
                                         # 构建 slot_group_info
                                         slot_group_info = [{
                                             "group_name": slot_group_name,
-                                            "reference_evidence_ids": sorted(reference_evidence_ids)  # 排序以确保一致性
+                                            "reference_evidence_ids": reference_evidence_ids  # 保持原始顺序（来自image_sequence_info）
                                         }] if reference_evidence_ids else None
                                         
                                         card.card_info["card_features"].append({
@@ -1996,7 +2018,7 @@ async def evidence_card_casting(
                                             "slot_group_info": slot_group_info
                                         })
                                     
-                                    logger.info(f"创建关联分组卡片: group_name={slot_group_name}, evidence_ids={sorted(reference_evidence_ids)}")
+                                    logger.info(f"创建关联分组卡片: group_name={slot_group_name}, evidence_ids={reference_evidence_ids}")
                                 
                                 # 将按 slot_group_name 分组的卡片替换掉原来按单个证据创建的卡片
                                 # 首先移除所有微信聊天记录类型的原始卡片
@@ -2035,8 +2057,13 @@ async def evidence_card_casting(
     cards_without_group = []
     
     for card in card_data:
-        if not card.card_info or not card.card_info.get("card_features"):
-            # 如果没有特征，保持原有逻辑
+        # 如果 card_info 为 None，跳过（这些卡片会在后续步骤中被过滤掉）
+        if not card.card_info:
+            cards_without_group.append(card)
+            continue
+        
+        # 如果 card_info 存在但没有 card_features，也添加到 cards_without_group（保持原有逻辑）
+        if not card.card_info.get("card_features"):
             cards_without_group.append(card)
             continue
         
@@ -2108,19 +2135,29 @@ async def evidence_card_casting(
         try:
             # 只有 card_info 不为空时才创建卡片
             if not card.card_info:
-                logger.warning(f"跳过卡片创建（缺少信息），evidence_ids: {card.evidence_ids}")
+                logger.warning(f"跳过卡片创建（缺少 card_info），evidence_ids: {card.evidence_ids}")
                 continue
             
-            # 确保 card_info 有 card_type（即使是"未知"）
-            if "card_type" not in card.card_info:
-                card.card_info["card_type"] = "未知"
+            # 确保 card_info 有必要的字段
+            # 如果 card_type 不存在，说明分类失败，跳过创建
+            if "card_type" not in card.card_info or not card.card_info.get("card_type"):
+                logger.warning(f"跳过卡片创建（缺少 card_type），evidence_ids: {card.evidence_ids}")
+                continue
+            
+            # 确保其他必要字段存在
             if "card_is_associated" not in card.card_info:
                 card.card_info["card_is_associated"] = len(card.evidence_ids) > 1
             if "card_features" not in card.card_info:
                 card.card_info["card_features"] = []
             
+            # 确保 evidence_ids 不为空
+            if not card.evidence_ids:
+                logger.warning(f"跳过卡片创建（evidence_ids 为空）")
+                continue
+            
             created_card = await EvidenceCard.update_or_create(
                 db=db,
+                case_id=case_id,
                 evidence_ids=card.evidence_ids,
                 card_info=card.card_info
             )
@@ -2130,29 +2167,17 @@ async def evidence_card_casting(
             continue
     
     # 返回创建的卡片数据
-    # 需要预先加载 evidences 关系，避免在访问时触发异步操作
-    from sqlalchemy.orm import selectinload
-    from sqlalchemy import select
-    
+    # 直接使用evidence_ids字段，不需要加载关系
     result_cards = []
     for card in created_cards:
-        # 重新查询并加载关系
-        card_result = await db.execute(
-            select(EvidenceCard)
-            .options(selectinload(EvidenceCard.evidences))
-            .where(EvidenceCard.id == card.id)
-        )
-        card_with_relations = card_result.scalar_one_or_none()
-        
-        if card_with_relations:
-            result_cards.append({
-                "id": card_with_relations.id,
-                "evidence_ids": [ev.id for ev in card_with_relations.evidences],
-                "card_info": card_with_relations.card_info,
-                "updated_times": card_with_relations.updated_times,
-                "created_at": card_with_relations.created_at.isoformat() if card_with_relations.created_at else None,
-                "updated_at": card_with_relations.updated_at.isoformat() if card_with_relations.updated_at else None,
-            })
+        result_cards.append({
+            "id": card.id,
+            "evidence_ids": card.evidence_ids or [],
+            "card_info": card.card_info,
+            "updated_times": card.updated_times,
+            "created_at": card.created_at.isoformat() if card.created_at else None,
+            "updated_at": card.updated_at.isoformat() if card.updated_at else None,
+        })
     
     return result_cards
 
@@ -2167,64 +2192,86 @@ async def get_card_by_id(db: AsyncSession, card_id: int) -> Optional[EvidenceCar
     Returns:
         EvidenceCard: 卡片实例，evidences 已按序号排序
     """
-    from sqlalchemy.orm import selectinload
-    from app.evidences.models import evidence_card_evidence_association
     from sqlalchemy import select
     
     result = await db.execute(
-        select(EvidenceCard)
-        .options(selectinload(EvidenceCard.evidences))
-        .where(EvidenceCard.id == card_id)
+        select(EvidenceCard).where(EvidenceCard.id == card_id)
     )
     card = result.scalar_one_or_none()
     
-    if card:
-        # 按序号排序证据
-        evidence_with_seq = []
-        for evidence in card.evidences:
-            # 查询该证据在关联表中的序号
-            seq_result = await db.execute(
-                select(evidence_card_evidence_association.c.sequence_number)
-                .where(
-                    evidence_card_evidence_association.c.evidence_card_id == card_id,
-                    evidence_card_evidence_association.c.evidence_id == evidence.id
-                )
-            )
-            sequence_number = seq_result.scalar_one_or_none() or 0
-            evidence_with_seq.append((sequence_number, evidence))
-        
-        # 按序号排序
-        evidence_with_seq.sort(key=lambda x: x[0])
-        # 重新设置 evidences 关系（按序号排序）
-        card.evidences = [ev for _, ev in evidence_with_seq]
+    # 不再需要排序，因为evidence_ids字段已经按顺序存储
+    # 如果需要获取证据列表，可以通过card.evidence_ids查询
     
     return card
 
 
-async def get_card_evidence_ids_sorted(db: AsyncSession, card_id: int) -> List[int]:
-    """获取卡片关联的证据ID列表（按序号排序）
+async def check_evidence_is_minted(db: AsyncSession, evidence_id: int) -> bool:
+    """检查证据是否已铸造（是否有卡片引用了该证据）
+    
+    Args:
+        db: 数据库会话
+        evidence_id: 证据ID
+        
+    Returns:
+        bool: True表示已铸造（有卡片在evidence_ids字段中包含该证据ID），False表示未铸造
+    """
+    from app.evidences.models import EvidenceCard
+    from sqlalchemy import select
+    
+    # 使用JSONB的@>操作符检查数组是否包含该证据ID
+    result = await db.execute(
+        select(EvidenceCard.id)
+        .where(EvidenceCard.evidence_ids.contains([evidence_id]))
+        .limit(1)
+    )
+    
+    return result.scalar_one_or_none() is not None
+
+
+async def get_card_evidence_ids_sorted(db: AsyncSession, card_id: int) -> tuple[List[int], bool, List[int]]:
+    """获取卡片关联的证据ID列表（按顺序返回），同时返回异常信息
     
     Args:
         db: 数据库会话
         card_id: 卡片ID
         
     Returns:
-        List[int]: 按序号排序的证据ID列表
+        tuple[List[int], bool, List[int]]: 
+            - 证据ID列表（过滤掉不存在的证据，保持原有顺序）
+            - 是否存在异常关联（有证据被删除）
+            - 异常关联的索引列表（在evidence_ids中的位置）
     """
-    from app.evidences.models import evidence_card_evidence_association
+    from app.evidences.models import EvidenceCard, Evidence
     from sqlalchemy import select
     
+    # 获取卡片
     result = await db.execute(
-        select(
-            evidence_card_evidence_association.c.evidence_id,
-            evidence_card_evidence_association.c.sequence_number
-        )
-        .where(evidence_card_evidence_association.c.evidence_card_id == card_id)
-        .order_by(evidence_card_evidence_association.c.sequence_number)
+        select(EvidenceCard).where(EvidenceCard.id == card_id)
     )
+    card = result.scalar_one_or_none()
     
-    evidence_records = result.all()
-    return [record.evidence_id for record in evidence_records]
+    if not card or not card.evidence_ids:
+        return [], False, []
+    
+    # 检查每个evidence_id是否存在
+    evidence_ids_result = await db.execute(
+        select(Evidence.id).where(Evidence.id.in_(card.evidence_ids))
+    )
+    existing_evidence_ids = set(evidence_ids_result.scalars().all())
+    
+    # 过滤掉不存在的证据，保持原有顺序
+    evidence_ids = []
+    abnormal_indices = []
+    
+    for idx, evidence_id in enumerate(card.evidence_ids):
+        if evidence_id in existing_evidence_ids:
+            evidence_ids.append(evidence_id)
+        else:
+            # 证据不存在，记录索引
+            abnormal_indices.append(idx)
+    
+    has_abnormal = len(abnormal_indices) > 0
+    return evidence_ids, has_abnormal, abnormal_indices
 
 
 async def card_to_response(card: EvidenceCard, db: AsyncSession) -> Any:
@@ -2232,21 +2279,30 @@ async def card_to_response(card: EvidenceCard, db: AsyncSession) -> Any:
     
     Args:
         card: 卡片实例
-        db: 数据库会话（用于获取按序号排序的证据ID）
+        db: 数据库会话（用于检查证据是否存在）
         
     Returns:
         EvidenceCardResponse: 响应模型
     """
     from app.evidences.schemas import EvidenceCardResponse
     
-    # 获取按序号排序的证据ID列表
-    evidence_ids = await get_card_evidence_ids_sorted(db, card.id)
+    # 获取所有引用ID（包括已删除的），从card.evidence_ids获取
+    all_evidence_ids = card.evidence_ids or []
+    
+    # 获取存在的证据ID列表，以及异常信息
+    evidence_ids, has_abnormal, abnormal_indices = await get_card_evidence_ids_sorted(db, card.id)
+    
+    # has_abnormal为True表示有异常，is_normal应该为False（反转逻辑）
+    is_normal = not has_abnormal
     
     return EvidenceCardResponse(
         id=card.id,
         evidence_ids=evidence_ids,
+        all_evidence_ids=all_evidence_ids,  # 所有引用ID（包括已删除的）
         card_info=card.card_info,
         updated_times=card.updated_times,
+        is_normal=is_normal,
+        abnormal_sequence_numbers=abnormal_indices,  # 使用索引而不是序号（在all_evidence_ids中的位置）
         created_at=card.created_at.isoformat() if card.created_at else None,
         updated_at=card.updated_at.isoformat() if card.updated_at else None,
     )
@@ -2266,7 +2322,7 @@ async def delete_card(
         bool: 删除是否成功
         
     Note:
-        - 删除卡片时，关联表 evidence_card_evidence_association 中的记录会通过 CASCADE 自动删除
+        - 删除卡片时，不需要处理任何关联，直接删除即可
         - 删除卡片时，关联表 EvidenceCardSlotAssignment 中的 card_id 会通过 SET NULL 自动设置为 NULL
         - 为了保持数据一致性，我们显式地将所有引用该卡片的槽位关联的 card_id 设置为 NULL
     """
@@ -2324,18 +2380,14 @@ async def update_card(
     Raises:
         ValueError: 如果卡片不存在或更新数据无效
     """
-    from sqlalchemy.orm import selectinload
     from sqlalchemy.orm.attributes import flag_modified
-    from sqlalchemy import delete, insert, update as sql_update
     from datetime import datetime
     import pytz
-    from app.evidences.models import evidence_card_evidence_association, Evidence
+    from app.evidences.models import Evidence
     
     # 获取卡片
     result = await db.execute(
-        select(EvidenceCard)
-        .options(selectinload(EvidenceCard.evidences))
-        .where(EvidenceCard.id == card_id)
+        select(EvidenceCard).where(EvidenceCard.id == card_id)
     )
     card = result.scalar_one_or_none()
     
@@ -2403,25 +2455,13 @@ async def update_card(
         if sequence_numbers != list(range(len(sequence_numbers))):
             raise ValueError(f"序号必须从0开始且连续，当前序号: {sequence_numbers}")
         
-        # 删除现有的关联关系
-        await db.execute(
-            delete(evidence_card_evidence_association)
-            .where(evidence_card_evidence_association.c.evidence_card_id == card_id)
-        )
+        # 按序号排序evidence_ids
+        sorted_refs = sorted(update_request.referenced_evidences, key=lambda x: x.sequence_number)
+        evidence_ids_ordered = [ref.evidence_id for ref in sorted_refs]
         
-        # 插入新的关联关系（带序号）
-        association_records = [
-            {
-                "evidence_card_id": card_id,
-                "evidence_id": ref.evidence_id,
-                "sequence_number": ref.sequence_number
-            }
-            for ref in update_request.referenced_evidences
-        ]
-        
-        await db.execute(
-            insert(evidence_card_evidence_association).values(association_records)
-        )
+        # 直接更新evidence_ids字段
+        card.evidence_ids = evidence_ids_ordered
+        flag_modified(card, 'evidence_ids')
     
     # 更新时间戳和更新次数
     shanghai_tz = pytz.timezone('Asia/Shanghai')
@@ -2430,27 +2470,8 @@ async def update_card(
     
     await db.commit()
     
-    # 刷新卡片以加载更新后的关联关系
-    await db.refresh(card, ["evidences"])
-    
-    # 按序号排序证据
-    if card.evidences:
-        evidence_with_seq = []
-        for evidence in card.evidences:
-            # 查询该证据在关联表中的序号
-            seq_result = await db.execute(
-                select(evidence_card_evidence_association.c.sequence_number)
-                .where(
-                    evidence_card_evidence_association.c.evidence_card_id == card_id,
-                    evidence_card_evidence_association.c.evidence_id == evidence.id
-                )
-            )
-            sequence_number = seq_result.scalar_one_or_none() or 0
-            evidence_with_seq.append((sequence_number, evidence))
-        
-        # 按序号排序
-        evidence_with_seq.sort(key=lambda x: x[0])
-        card.evidences = [ev for _, ev in evidence_with_seq]
+    # 刷新卡片
+    await db.refresh(card)
     
     return card
 
@@ -2458,20 +2479,21 @@ async def update_card(
 async def get_cards_with_evidence_ids_sorted(
     db: AsyncSession,
     cards: List[EvidenceCard]
-) -> List[tuple[EvidenceCard, List[int]]]:
-    """获取卡片列表及其按序号排序的证据ID列表
+) -> List[tuple[EvidenceCard, List[int], bool, List[int]]]:
+    """获取卡片列表及其按序号排序的证据ID列表，以及异常信息
     
     Args:
         db: 数据库会话
         cards: 卡片列表
         
     Returns:
-        List[tuple[EvidenceCard, List[int]]]: 卡片及其按序号排序的证据ID列表
+        List[tuple[EvidenceCard, List[int], bool, List[int]]]: 
+            卡片及其按序号排序的证据ID列表、是否存在异常关联、异常序号列表
     """
     result = []
     for card in cards:
-        evidence_ids = await get_card_evidence_ids_sorted(db, card.id)
-        result.append((card, evidence_ids))
+        evidence_ids, has_abnormal, abnormal_sequence_numbers = await get_card_evidence_ids_sorted(db, card.id)
+        result.append((card, evidence_ids, has_abnormal, abnormal_sequence_numbers))
     
     return result
 
@@ -2479,44 +2501,39 @@ async def get_cards_with_evidence_ids_sorted(
 async def get_cards_with_count(
     db: AsyncSession,
     *,
+    case_id: int,
     skip: int = 0,
     limit: int = 100,
-    case_id: Optional[int] = None,
-    evidence_ids: Optional[List[int]] = None,
     card_type: Optional[str] = None,
     card_is_associated: Optional[bool] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "desc"
 ) -> tuple[List[EvidenceCard], int]:
-    """获取多个证据卡片，并返回总数，支持筛选和排序"""
-    from sqlalchemy.orm import selectinload
+    """获取案件的证据卡片列表，并返回总数，支持筛选和排序
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID（必须）
+        skip: 跳过记录数（分页）
+        limit: 返回记录数限制（分页）
+        card_type: 卡片类型（筛选条件，从card_info中提取）
+        card_is_associated: 是否关联提取（筛选条件，从card_info中提取）
+        sort_by: 排序字段（created_at, updated_at, updated_times）
+        sort_order: 排序顺序（asc, desc）
+        
+    Returns:
+        tuple[List[EvidenceCard], int]: 卡片列表和总数
+    """
     from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy import cast, Text, and_
-    from app.evidences.models import evidence_card_evidence_association
     
-    query = select(EvidenceCard).options(selectinload(EvidenceCard.evidences))
+    query = select(EvidenceCard)
     
     # 筛选条件
     conditions = []
     
-    # 根据案件ID筛选（需要通过关联的证据来筛选）
-    if case_id is not None:
-        query = query.join(
-            evidence_card_evidence_association,
-            EvidenceCard.id == evidence_card_evidence_association.c.evidence_card_id
-        ).join(
-            Evidence,
-            evidence_card_evidence_association.c.evidence_id == Evidence.id
-        ).where(Evidence.case_id == case_id)
-    
-    # 根据证据ID筛选
-    if evidence_ids:
-        query = query.join(
-            evidence_card_evidence_association,
-            EvidenceCard.id == evidence_card_evidence_association.c.evidence_card_id
-        ).where(
-            evidence_card_evidence_association.c.evidence_id.in_(evidence_ids)
-        )
+    # 根据案件ID筛选（必须，直接通过case_id查询）
+    conditions.append(EvidenceCard.case_id == case_id)
     
     # 根据卡片类型筛选（从 card_info JSONB 中提取）
     if card_type:
@@ -2841,6 +2858,8 @@ async def get_slot_assignment_snapshot(
     """
     获取某个案件、某个模板的槽位快照（包含校对结果）
     
+    注意：会自动清理异常卡片所在的槽位关联
+    
     Args:
         db: 数据库会话
         case_id: 案件ID
@@ -2848,17 +2867,72 @@ async def get_slot_assignment_snapshot(
         
     Returns:
         Dict包含:
-            - assignments: Dict[str, Optional[int]] - 槽位ID到卡片ID的映射
+            - assignments: Dict[str, Optional[int]] - 槽位ID到卡片ID的映射（已过滤异常卡片）
             - proofread_results: Dict[str, List[SlotProofreadResult]] - 校对结果：{slotId: [校对结果列表]}
     """
+    from sqlalchemy import select
+    
     # 获取槽位关联
     assignments = await EvidenceCardSlotAssignment.get_snapshot(db, case_id, template_id)
     
-    # 为每个有卡片的槽位获取校对结果
+    # 检查并清理异常卡片所在的槽位关联
+    slots_to_cleanup: List[str] = []
+    cleaned_assignments: Dict[str, Optional[int]] = {}
+    
+    for slot_id, card_id in assignments.items():
+        if card_id is None:
+            # 空槽位，直接保留
+            cleaned_assignments[slot_id] = None
+            continue
+        
+        # 检查卡片是否存在且正常
+        try:
+            # 查询卡片
+            result = await db.execute(
+                select(EvidenceCard).where(EvidenceCard.id == card_id)
+            )
+            card = result.scalar_one_or_none()
+            
+            if card is None:
+                # 卡片不存在，标记为需要清理
+                logger.warning(f"槽位 {slot_id} 关联的卡片 {card_id} 不存在，将自动清理")
+                slots_to_cleanup.append(slot_id)
+                continue
+            
+            # 检查卡片是否异常
+            evidence_ids, has_abnormal, abnormal_indices = await get_card_evidence_ids_sorted(db, card_id)
+            is_normal = not has_abnormal
+            
+            if not is_normal:
+                # 卡片异常，标记为需要清理
+                logger.warning(f"槽位 {slot_id} 关联的卡片 {card_id} 异常（is_normal=False），将自动清理")
+                slots_to_cleanup.append(slot_id)
+                continue
+            
+            # 卡片正常，保留关联
+            cleaned_assignments[slot_id] = card_id
+            
+        except Exception as e:
+            logger.error(f"检查槽位 {slot_id} 关联的卡片 {card_id} 时出错: {e}")
+            # 检查失败时，为了安全起见，也标记为需要清理
+            slots_to_cleanup.append(slot_id)
+    
+    # 批量清理异常卡片所在的槽位关联
+    if slots_to_cleanup:
+        logger.info(f"自动清理 {len(slots_to_cleanup)} 个异常卡片所在的槽位关联: {slots_to_cleanup}")
+        for slot_id in slots_to_cleanup:
+            try:
+                await EvidenceCardSlotAssignment.update_assignment(
+                    db, case_id, template_id, slot_id, None
+                )
+            except Exception as e:
+                logger.error(f"清理槽位 {slot_id} 关联失败: {e}")
+    
+    # 为每个有卡片的槽位获取校对结果（只处理正常卡片）
     proofread_results: Dict[str, List[SlotProofreadResult]] = {}
     slot_consistency: Dict[str, bool] = {}
     
-    for slot_id, card_id in assignments.items():
+    for slot_id, card_id in cleaned_assignments.items():
         if card_id is not None:
             try:
                 # 调用校对函数获取校对结果
@@ -2881,7 +2955,7 @@ async def get_slot_assignment_snapshot(
                 slot_consistency[slot_id] = False
     
     return {
-        "assignments": assignments,
+        "assignments": cleaned_assignments,  # 返回清理后的关联（已过滤异常卡片）
         "proofread_results": proofread_results,
         "slot_consistency": slot_consistency
     }

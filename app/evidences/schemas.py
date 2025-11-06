@@ -55,6 +55,8 @@ class EvidenceResponse(BaseSchema):
     # 包含case信息用于校对
     case: Optional[Case] = Field(None, description="关联案件信息")
     
+    is_minted: bool = Field(default=False, description="是否已铸造（是否有关联的证据卡片）")
+    
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
 
@@ -155,9 +157,12 @@ class EvidenceCardCastingRequest(BaseModel):
 class EvidenceCardResponse(BaseModel):
     """证据卡片响应模型"""
     id: int = Field(..., description="卡片ID")
-    evidence_ids: List[int] = Field(..., description="关联的证据ID列表（按序号排序）")
+    evidence_ids: List[int] = Field(..., description="关联的证据ID列表（按顺序返回），只包含存在的证据ID")
+    all_evidence_ids: List[int] = Field(..., description="所有关联的证据ID列表（按顺序返回），包括已删除的证据ID")
     card_info: Optional[Dict[str, Any]] = Field(None, description="卡片信息，包含类型、特征等")
     updated_times: int = Field(..., description="更新次数")
+    is_normal: bool = Field(default=True, description="是否正常（True表示正常，False表示存在异常关联，如关联的证据被删除）")
+    abnormal_sequence_numbers: List[int] = Field(default_factory=list, description="异常关联的索引列表（在all_evidence_ids数组中的位置，表示该位置的证据已被删除）")
     created_at: Optional[str] = Field(None, description="创建时间（ISO格式）")
     updated_at: Optional[str] = Field(None, description="更新时间（ISO格式）")
 
