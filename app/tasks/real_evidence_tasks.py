@@ -408,18 +408,20 @@ async def run_association_analysis_async(case_id: int, evidence_ids: List[int], 
 
 
 @celery_app.task(bind=True, name="app.tasks.real_evidence_tasks.cast_evidence_cards_task")
-def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int]) -> Dict[str, Any]:
+def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int], card_id: Optional[int] = None, skip_classification: bool = False) -> Dict[str, Any]:
     """
     证据卡片铸造任务 - 从证据特征中铸造证据卡片
     
     Args:
         case_id: 案件ID
         evidence_ids: 证据ID列表
+        card_id: 重铸时的卡片ID（如果提供，则更新该卡片而不是创建新卡片）
+        skip_classification: 是否跳过分类（重铸时使用，因为卡片已有分类）
         
     Returns:
         dict: 铸造结果，包含创建的卡片信息
     """
-    logger.info(f"开始证据卡片铸造任务: case_id={case_id}, evidence_ids={evidence_ids}")
+    logger.info(f"开始证据卡片铸造任务: case_id={case_id}, evidence_ids={evidence_ids}, card_id={card_id}, skip_classification={skip_classification}")
     
     # 创建进度更新函数
     def update_progress(status: str, message: str, progress: Optional[int] = None):
@@ -440,17 +442,25 @@ def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int]) -> Dic
     
     try:
         # 更新任务状态为开始
-        update_progress("started", "开始证据卡片铸造任务", 0)
+        if card_id:
+            update_progress("started", f"开始重铸卡片 #{card_id}", 0)
+        else:
+            update_progress("started", "开始证据卡片铸造任务", 0)
         
         # 运行异步任务
         result = asyncio.run(_cast_evidence_cards_async(
             case_id=case_id,
             evidence_ids=evidence_ids,
-            update_progress=update_progress
+            update_progress=update_progress,
+            card_id=card_id,
+            skip_classification=skip_classification
         ))
         
         # 更新任务状态为完成
-        update_progress("completed", f"成功铸造 {len(result.get('cards', []))} 个证据卡片", 100)
+        if card_id:
+            update_progress("completed", f"成功重铸卡片 #{card_id}", 100)
+        else:
+            update_progress("completed", f"成功铸造 {len(result.get('cards', []))} 个证据卡片", 100)
         
         logger.info(f"证据卡片铸造任务完成: {result}")
         return result
@@ -479,7 +489,9 @@ def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int]) -> Dic
 async def _cast_evidence_cards_async(
     case_id: int,
     evidence_ids: List[int],
-    update_progress: Callable
+    update_progress: Callable,
+    card_id: Optional[int] = None,
+    skip_classification: bool = False
 ) -> Dict[str, Any]:
     """
     异步执行证据卡片铸造
@@ -529,7 +541,9 @@ async def _cast_evidence_cards_async(
             cards_data = await evidence_card_casting(
                 db=db,
                 case_id=case_id,
-                evidence_ids=evidence_ids
+                evidence_ids=evidence_ids,
+                card_id=card_id,
+                skip_classification=skip_classification
             )
             
             # 更新进度

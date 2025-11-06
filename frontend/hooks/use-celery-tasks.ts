@@ -656,6 +656,8 @@ export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?:
     case_id: number
     evidence_ids: (number | string)[]
     caseTitle?: string
+    card_id?: number // 重铸时的卡片ID
+    skip_classification?: boolean // 是否跳过分类
   }) => {
     try {
       console.log('启动卡片铸造任务，参数:', params)
@@ -663,7 +665,9 @@ export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?:
       // 使用证据卡片API启动卡片铸造任务
       const result = await evidenceCardApi.castEvidenceCards({
         case_id: params.case_id,
-        evidence_ids: params.evidence_ids.map(id => Number(id))
+        evidence_ids: params.evidence_ids.map(id => Number(id)),
+        card_id: params.card_id,
+        skip_classification: params.skip_classification || false
       })
       
       console.log('卡片铸造任务已启动:', result)
@@ -671,15 +675,18 @@ export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?:
       // 构建任务上下文信息
       const taskContext: TaskProgress['context'] = {
         type: 'evidence_analysis',
-        title: '证据卡片铸造',
-        description: `铸造 ${params.evidence_ids.length} 个证据的卡片`,
+        title: params.card_id ? `重铸卡片 #${params.card_id}` : '证据卡片铸造',
+        description: params.card_id 
+          ? `重铸卡片 #${params.card_id}，使用 ${params.evidence_ids.length} 个证据重新提取特征`
+          : `铸造 ${params.evidence_ids.length} 个证据的卡片`,
         caseId: params.case_id,
         caseTitle: params.caseTitle || `案件 ${params.case_id}`,
         pagePath: `/cases/${params.case_id}?tab=card-factory`,
         pageTitle: '卡片工厂',
         evidenceCount: params.evidence_ids.length,
         metadata: {
-          operation: 'card_casting'
+          operation: params.card_id ? 'card_recasting' : 'card_casting',
+          card_id: params.card_id
         }
       }
       

@@ -1646,6 +1646,8 @@ async def evidence_card_casting(
         db: AsyncSession, 
         case_id: int,
         evidence_ids: List[int],
+        card_id: Optional[int] = None,
+        skip_classification: bool = False,
     ):
     """
     证据卡片铸造（从证据特征中铸造证据卡片）
@@ -1653,11 +1655,14 @@ async def evidence_card_casting(
     支持两种场景：
     1. 单个证据提取：每个证据生成一个卡片
     2. 关联证据提取：多个证据共同生成一个卡片（未来功能）
+    3. 重铸场景：更新现有卡片（card_id 不为 None）
     
     Args:
         db: 数据库会话
         case_id: 案件ID
         evidence_ids: 证据ID列表
+        card_id: 重铸时的卡片ID（如果提供，则更新该卡片而不是创建新卡片）
+        skip_classification: 是否跳过分类（重铸时使用，因为卡片已有分类）
     """
     # 检索证据列表
     evidences = await get_multi_by_ids(db, evidence_ids)
@@ -1677,31 +1682,73 @@ async def evidence_card_casting(
     # 建立 evidence_id 到 evidence 的映射，用于后续匹配
     evidence_map: Dict[int, Evidence] = {ev.id: ev for ev in filtered_evidences}
     
-    # 初始化卡片数据（当前实现：每个证据一个卡片，后续可扩展为关联提取）
-    card_data = [
-        EvidenceCardSchema(
-            evidence_ids=[evidence.id]  # 单个证据提取，后续可扩展为多个
-        )
-        for evidence in filtered_evidences
-    ]
+    # 如果是重铸，获取现有卡片信息
+    existing_card = None
+    existing_card_type = None
+    if card_id:
+        existing_card = await get_card_by_id(db, card_id)
+        if existing_card and existing_card.card_info:
+            existing_card_type = existing_card.card_info.get("card_type")
+            logger.info(f"重铸卡片 #{card_id}，现有类型: {existing_card_type}")
+    
+    # 初始化卡片数据
+    # 重铸时：创建一个包含所有 evidence_ids 的单一卡片
+    # 正常铸造时：每个证据一个卡片
+    if card_id and existing_card:
+        # 重铸：创建一个包含所有 evidence_ids 的单一卡片
+        card_data = [
+            EvidenceCardSchema(
+                evidence_ids=evidence_ids,  # 使用传入的所有 evidence_ids
+                card_info=existing_card.card_info.copy() if existing_card.card_info else None
+            )
+        ]
+        logger.info(f"重铸模式：创建单一卡片，evidence_ids: {evidence_ids}")
+    else:
+        # 正常铸造：每个证据一个卡片
+        card_data = [
+            EvidenceCardSchema(
+                evidence_ids=[evidence.id]  # 单个证据提取，后续可扩展为多个
+            )
+            for evidence in filtered_evidences
+        ]
 
         
     # 卡片铸造数据构建
-    # Step1. 证据分类
-    evidence_classifier = EvidenceClassifier()
-    classification_response: RunResponse = await asyncio.wait_for(
-                evidence_classifier.arun([evidence.file_url for evidence in filtered_evidences]),
-                timeout=180.0
-            )
-    if classification_response.content is None:
-        raise ValueError("证据分类结果为空")
+    # Step1. 证据分类（重铸时跳过）
+    evidence_classifi_results: Optional[EvidenceClassifiResults] = None
+    if skip_classification and existing_card_type:
+        # 重铸时跳过分类，使用现有卡片的类型
+        logger.info(f"跳过分类，使用现有卡片类型: {existing_card_type}")
+        # 为所有卡片设置现有类型
+        for card in card_data:
+            if card.card_info is None:
+                card.card_info = {
+                    "card_type": existing_card_type,
+                    "card_is_associated": existing_card.card_info.get("card_is_associated", False) if existing_card and existing_card.card_info else False,
+                    "card_features": []
+                }
+            else:
+                card.card_info["card_type"] = existing_card_type
+                if "card_is_associated" not in card.card_info:
+                    card.card_info["card_is_associated"] = existing_card.card_info.get("card_is_associated", False) if existing_card and existing_card.card_info else False
+                if "card_features" not in card.card_info:
+                    card.card_info["card_features"] = []
+    else:
+        # 正常铸造流程：进行证据分类
+        evidence_classifier = EvidenceClassifier()
+        classification_response: RunResponse = await asyncio.wait_for(
+                    evidence_classifier.arun([evidence.file_url for evidence in filtered_evidences]),
+                    timeout=180.0
+                )
+        if classification_response.content is None:
+            raise ValueError("证据分类结果为空")
 
-    # Step2: 证据分类结果处理
-    evidence_classifi_results = cast(EvidenceClassifiResults, classification_response.content)
-    
-    if not evidence_classifi_results.results:
-        logger.warning("证据分类结果为空，无法构建卡片数据")
-        return []
+        # Step2: 证据分类结果处理
+        evidence_classifi_results = cast(EvidenceClassifiResults, classification_response.content)
+        
+        if not evidence_classifi_results or not evidence_classifi_results.results:
+            logger.warning("证据分类结果为空，无法构建卡片数据")
+            return []
 
     # 建立 URL -> evidence_id 映射关系，用于匹配分类结果
     url_to_evidence_id: Dict[str, int] = {}
@@ -1715,33 +1762,34 @@ async def evidence_card_casting(
         card.evidence_ids[0]: card for card in card_data if len(card.evidence_ids) == 1
     }
     
-    # Step2: 证据分类结果处理（使用映射关系匹配）
-    for result in evidence_classifi_results.results:
-        normalized_result_url = unquote(result.image_url)
-        evidence_id = url_to_evidence_id.get(normalized_result_url) or url_to_evidence_id.get(result.image_url)
-        
-        if evidence_id is None:
-            logger.warning(f"无法找到对应的证据ID，image_url: {result.image_url}")
-            continue
-        
-        card = evidence_id_to_card.get(evidence_id)
-        if card:
-            # 初始化 card_info 结构：Dict类型，包含分类信息
-            if card.card_info is None:
-                card.card_info = {
-                    "card_type": result.evidence_type,
-                    "card_is_associated": False,  # 当前是单个证据提取
-                    "card_features": []
-                }
+    # Step2: 证据分类结果处理（使用映射关系匹配，如果不是重铸）
+    if not skip_classification and evidence_classifi_results:
+        for result in evidence_classifi_results.results:
+            normalized_result_url = unquote(result.image_url)
+            evidence_id = url_to_evidence_id.get(normalized_result_url) or url_to_evidence_id.get(result.image_url)
+            
+            if evidence_id is None:
+                logger.warning(f"无法找到对应的证据ID，image_url: {result.image_url}")
+                continue
+            
+            card = evidence_id_to_card.get(evidence_id)
+            if card:
+                # 初始化 card_info 结构：Dict类型，包含分类信息
+                if card.card_info is None:
+                    card.card_info = {
+                        "card_type": result.evidence_type,
+                        "card_is_associated": False,  # 当前是单个证据提取
+                        "card_features": []
+                    }
+                else:
+                    # 更新 card_type
+                    card.card_info["card_type"] = result.evidence_type
+                    if "card_is_associated" not in card.card_info:
+                        card.card_info["card_is_associated"] = False
+                    if "card_features" not in card.card_info:
+                        card.card_info["card_features"] = []
             else:
-                # 更新 card_type
-                card.card_info["card_type"] = result.evidence_type
-                if "card_is_associated" not in card.card_info:
-                    card.card_info["card_is_associated"] = False
-                if "card_features" not in card.card_info:
-                    card.card_info["card_features"] = []
-        else:
-            logger.warning(f"无法找到对应的卡片，evidence_id: {evidence_id}")
+                logger.warning(f"无法找到对应的卡片，evidence_id: {evidence_id}")
 
     # Step3: 证据特征提取
     # 过滤出有 card_type 的卡片（特征提取需要类型）
@@ -1974,21 +2022,44 @@ async def evidence_card_casting(
                                     
                                     # 初始化或获取该分组的卡片
                                     if slot_group_name not in grouped_cards:
-                                        # 获取第一个证据的类型（所有同组证据应该是同一类型）
-                                        first_evidence_id = reference_evidence_ids[0]
-                                        first_card = evidence_id_to_card.get(first_evidence_id)
-                                        card_type = first_card.card_info.get("card_type") if first_card and first_card.card_info else "微信聊天记录"
-                                        
-                                        grouped_cards[slot_group_name] = EvidenceCardSchema(
-                                            evidence_ids=reference_evidence_ids,  # 保持原始顺序（来自image_sequence_info）
-                                            card_info={
-                                                "card_type": card_type,
-                                                "card_is_associated": True,
-                                                "card_features": []
-                                            }
-                                        )
+                                        # 如果是重铸，使用重铸卡片的类型和 evidence_ids
+                                        if card_id and existing_card:
+                                            # 重铸时：使用现有卡片的类型和所有 evidence_ids
+                                            card_type = existing_card.card_info.get("card_type") if existing_card.card_info else "微信聊天记录"
+                                            # 使用重铸时传入的所有 evidence_ids，而不是只使用 reference_evidence_ids
+                                            grouped_cards[slot_group_name] = EvidenceCardSchema(
+                                                evidence_ids=evidence_ids,  # 使用重铸时传入的所有 evidence_ids
+                                                card_info={
+                                                    "card_type": card_type,
+                                                    "card_is_associated": True,
+                                                    "card_features": []
+                                                }
+                                            )
+                                            logger.info(f"重铸模式：使用所有 evidence_ids: {evidence_ids}")
+                                        else:
+                                            # 正常铸造：获取第一个证据的类型
+                                            first_evidence_id = reference_evidence_ids[0]
+                                            first_card = evidence_id_to_card.get(first_evidence_id)
+                                            card_type = first_card.card_info.get("card_type") if first_card and first_card.card_info else "微信聊天记录"
+                                            
+                                            grouped_cards[slot_group_name] = EvidenceCardSchema(
+                                                evidence_ids=reference_evidence_ids,  # 保持原始顺序（来自image_sequence_info）
+                                                card_info={
+                                                    "card_type": card_type,
+                                                    "card_is_associated": True,
+                                                    "card_features": []
+                                                }
+                                            )
                                     
                                     card = grouped_cards[slot_group_name]
+                                    
+                                    # 确保 card_info 已初始化
+                                    if card.card_info is None:
+                                        card.card_info = {
+                                            "card_type": "微信聊天记录",
+                                            "card_is_associated": True,
+                                            "card_features": []
+                                        }
                                     
                                     # 为每个 slot_extraction 添加 slot_group_info
                                     for slot_extraction in result_item.slot_extraction:
@@ -2009,6 +2080,10 @@ async def evidence_card_casting(
                                             "reference_evidence_ids": reference_evidence_ids  # 保持原始顺序（来自image_sequence_info）
                                         }] if reference_evidence_ids else None
                                         
+                                        # 确保 card_features 列表存在
+                                        if "card_features" not in card.card_info:
+                                            card.card_info["card_features"] = []
+                                        
                                         card.card_info["card_features"].append({
                                             "slot_name": slot_dict["slot_name"],
                                             "slot_value_type": slot_dict.get("slot_value_type", "string"),
@@ -2021,15 +2096,27 @@ async def evidence_card_casting(
                                     logger.info(f"创建关联分组卡片: group_name={slot_group_name}, evidence_ids={reference_evidence_ids}")
                                 
                                 # 将按 slot_group_name 分组的卡片替换掉原来按单个证据创建的卡片
-                                # 首先移除所有微信聊天记录类型的原始卡片
-                                card_data = [
-                                    card for card in card_data 
-                                    if not (card.card_info and card.card_info.get("card_type") == "微信聊天记录")
-                                ]
-                                
-                                # 添加按 slot_group_name 分组的卡片
-                                for group_card in grouped_cards.values():
-                                    card_data.append(group_card)
+                                # 如果是重铸，不移除原始卡片，直接使用分组卡片更新
+                                if card_id and existing_card:
+                                    # 重铸时：直接使用分组卡片替换 card_data 中的重铸卡片
+                                    # 移除重铸卡片，添加分组卡片
+                                    card_data = [
+                                        card for card in card_data 
+                                        if not (card.card_info and card.card_info.get("card_type") == "微信聊天记录" and len(card.evidence_ids) == len(evidence_ids))
+                                    ]
+                                    # 添加按 slot_group_name 分组的卡片（重铸时应该只有一个分组）
+                                    for group_card in grouped_cards.values():
+                                        card_data.append(group_card)
+                                        logger.info(f"重铸模式：使用分组卡片替换重铸卡片，evidence_ids: {group_card.evidence_ids}")
+                                else:
+                                    # 正常铸造：移除所有微信聊天记录类型的原始卡片
+                                    card_data = [
+                                        card for card in card_data 
+                                        if not (card.card_info and card.card_info.get("card_type") == "微信聊天记录")
+                                    ]
+                                    # 添加按 slot_group_name 分组的卡片
+                                    for group_card in grouped_cards.values():
+                                        card_data.append(group_card)
                             else:
                                 logger.warning("关联特征提取结果列表为空")
                     elif hasattr(association_response, 'results'):
@@ -2048,86 +2135,94 @@ async def evidence_card_casting(
     # Step4: 按 slot_group_name 重新组织卡片数据
     # 如果有 slot_group_name，则按 slot_group_name 分组，每个分组生成一张卡片
     # 如果没有 slot_group_name，则每个证据生成一张卡片（保持原有逻辑）
+    # 重铸时：保持原有的 evidence_ids，不按 slot_group_name 重新组织
     
-    # 收集所有具有 slot_group_name 的特征
-    group_to_features: Dict[str, Dict[str, Any]] = {}  # group_name -> {evidence_ids: set, features: list, card_type: str}
-    group_to_card_info: Dict[str, Dict] = {}  # group_name -> card_info (card_type, card_is_associated)
-    
-    # 收集没有 slot_group_name 的卡片（保持原有逻辑）
-    cards_without_group = []
-    
-    for card in card_data:
-        # 如果 card_info 为 None，跳过（这些卡片会在后续步骤中被过滤掉）
-        if not card.card_info:
-            cards_without_group.append(card)
-            continue
+    # 如果是重铸，直接使用 card_data，不进行重新组织
+    if card_id and existing_card:
+        # 重铸时：直接使用 card_data，确保 evidence_ids 包含所有传入的证据
+        final_card_data = card_data
+        logger.info(f"重铸模式：跳过 Step4 重新组织，直接使用 card_data，evidence_ids: {[card.evidence_ids for card in card_data]}")
+    else:
+        # 正常铸造：按 slot_group_name 重新组织
+        # 收集所有具有 slot_group_name 的特征
+        group_to_features: Dict[str, Dict[str, Any]] = {}  # group_name -> {evidence_ids: set, features: list, card_type: str}
+        group_to_card_info: Dict[str, Dict] = {}  # group_name -> card_info (card_type, card_is_associated)
         
-        # 如果 card_info 存在但没有 card_features，也添加到 cards_without_group（保持原有逻辑）
-        if not card.card_info.get("card_features"):
-            cards_without_group.append(card)
-            continue
+        # 收集没有 slot_group_name 的卡片（保持原有逻辑）
+        cards_without_group = []
         
-        card_features = card.card_info.get("card_features", [])
-        card_type = card.card_info.get("card_type", "未知")
-        card_is_associated = card.card_info.get("card_is_associated", False)
-        
-        # 检查是否有 slot_group_info
-        has_group = False
-        for feature in card_features:
-            slot_group_info = feature.get("slot_group_info")
-            if slot_group_info and isinstance(slot_group_info, list) and len(slot_group_info) > 0:
-                group_info = slot_group_info[0]
-                group_name = group_info.get("group_name")
-                reference_evidence_ids = group_info.get("reference_evidence_ids", [])
-                
-                if group_name:
-                    has_group = True
-                    # 初始化分组数据
-                    if group_name not in group_to_features:
-                        group_to_features[group_name] = {
-                            "evidence_ids": set(),
-                            "features": [],
-                            "card_type": card_type,
-                            "card_is_associated": True
-                        }
-                        group_to_card_info[group_name] = {
-                            "card_type": card_type,
-                            "card_is_associated": True,
-                            "card_features": []
-                        }
-                    else:
-                        # 如果分组已存在，确保 card_type 一致（如果不同，使用第一个）
-                        if group_to_card_info[group_name]["card_type"] != card_type:
-                            logger.warning(f"分组 {group_name} 的 card_type 不一致: {group_to_card_info[group_name]['card_type']} vs {card_type}, 使用第一个")
+        for card in card_data:
+            # 如果 card_info 为 None，跳过（这些卡片会在后续步骤中被过滤掉）
+            if not card.card_info:
+                cards_without_group.append(card)
+                continue
+            
+            # 如果 card_info 存在但没有 card_features，也添加到 cards_without_group（保持原有逻辑）
+            if not card.card_info.get("card_features"):
+                cards_without_group.append(card)
+                continue
+            
+            card_features = card.card_info.get("card_features", [])
+            card_type = card.card_info.get("card_type", "未知")
+            card_is_associated = card.card_info.get("card_is_associated", False)
+            
+            # 检查是否有 slot_group_info
+            has_group = False
+            for feature in card_features:
+                slot_group_info = feature.get("slot_group_info")
+                if slot_group_info and isinstance(slot_group_info, list) and len(slot_group_info) > 0:
+                    group_info = slot_group_info[0]
+                    group_name = group_info.get("group_name")
+                    reference_evidence_ids = group_info.get("reference_evidence_ids", [])
                     
-                    # 添加证据ID
-                    group_to_features[group_name]["evidence_ids"].update(reference_evidence_ids)
-                    # 添加特征（避免重复）
-                    if feature not in group_to_card_info[group_name]["card_features"]:
-                        group_to_card_info[group_name]["card_features"].append(feature)
+                    if group_name:
+                        has_group = True
+                        # 初始化分组数据
+                        if group_name not in group_to_features:
+                            group_to_features[group_name] = {
+                                "evidence_ids": set(),
+                                "features": [],
+                                "card_type": card_type,
+                                "card_is_associated": True
+                            }
+                            group_to_card_info[group_name] = {
+                                "card_type": card_type,
+                                "card_is_associated": True,
+                                "card_features": []
+                            }
+                        else:
+                            # 如果分组已存在，确保 card_type 一致（如果不同，使用第一个）
+                            if group_to_card_info[group_name]["card_type"] != card_type:
+                                logger.warning(f"分组 {group_name} 的 card_type 不一致: {group_to_card_info[group_name]['card_type']} vs {card_type}, 使用第一个")
+                        
+                        # 添加证据ID
+                        group_to_features[group_name]["evidence_ids"].update(reference_evidence_ids)
+                        # 添加特征（避免重复）
+                        if feature not in group_to_card_info[group_name]["card_features"]:
+                            group_to_card_info[group_name]["card_features"].append(feature)
+            
+            # 如果没有分组信息，保持原有逻辑
+            if not has_group:
+                cards_without_group.append(card)
         
-        # 如果没有分组信息，保持原有逻辑
-        if not has_group:
-            cards_without_group.append(card)
-    
-    # 重新构建卡片数据：按 slot_group_name 分组的卡片 + 没有分组的卡片
-    final_card_data = []
-    
-    # 添加按 slot_group_name 分组的卡片
-    for group_name, group_data in group_to_features.items():
-        evidence_ids_list = sorted(list(group_data["evidence_ids"]))
-        card_info = group_to_card_info[group_name]
+        # 重新构建卡片数据：按 slot_group_name 分组的卡片 + 没有分组的卡片
+        final_card_data = []
         
-        final_card_data.append(
-            EvidenceCardSchema(
-                evidence_ids=evidence_ids_list,
-                card_info=card_info
+        # 添加按 slot_group_name 分组的卡片
+        for group_name, group_data in group_to_features.items():
+            evidence_ids_list = sorted(list(group_data["evidence_ids"]))
+            card_info = group_to_card_info[group_name]
+            
+            final_card_data.append(
+                EvidenceCardSchema(
+                    evidence_ids=evidence_ids_list,
+                    card_info=card_info
+                )
             )
-        )
-        logger.info(f"创建按 slot_group_name 分组的卡片: group_name={group_name}, evidence_ids={evidence_ids_list}")
-    
-    # 添加没有分组的卡片（保持原有逻辑）
-    final_card_data.extend(cards_without_group)
+            logger.info(f"创建按 slot_group_name 分组的卡片: group_name={group_name}, evidence_ids={evidence_ids_list}")
+        
+        # 添加没有分组的卡片（保持原有逻辑）
+        final_card_data.extend(cards_without_group)
     
     # Step5: 证据卡片批量创建（使用 update_or_create 方法）
     created_cards = []
@@ -2155,13 +2250,28 @@ async def evidence_card_casting(
                 logger.warning(f"跳过卡片创建（evidence_ids 为空）")
                 continue
             
-            created_card = await EvidenceCard.update_or_create(
-                db=db,
-                case_id=case_id,
-                evidence_ids=card.evidence_ids,
-                card_info=card.card_info
-            )
-            created_cards.append(created_card)
+            # 如果是重铸，更新现有卡片
+            if card_id:
+                # 重铸：更新现有卡片
+                if existing_card:
+                    # 更新卡片的 evidence_ids 和 card_info
+                    existing_card.evidence_ids = card.evidence_ids
+                    existing_card.card_info = card.card_info
+                    await db.commit()
+                    await db.refresh(existing_card)
+                    created_cards.append(existing_card)
+                    logger.info(f"重铸卡片 #{card_id}，更新 evidence_ids: {card.evidence_ids}")
+                else:
+                    logger.error(f"重铸失败：找不到卡片 #{card_id}")
+            else:
+                # 正常铸造：创建新卡片
+                created_card = await EvidenceCard.update_or_create(
+                    db=db,
+                    case_id=case_id,
+                    evidence_ids=card.evidence_ids,
+                    card_info=card.card_info
+                )
+                created_cards.append(created_card)
         except Exception as e:
             logger.error(f"创建卡片失败，evidence_ids: {card.evidence_ids}, 错误: {str(e)}")
             continue

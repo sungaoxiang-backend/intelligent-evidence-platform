@@ -2089,10 +2089,6 @@ function CardSlotUnit({
   proofreadResults?: Record<string, { status: 'passed' | 'failed'; message: string; reason: string }>
   slotConsistency?: boolean
 }) {
-  const [hoveredSlotName, setHoveredSlotName] = useState<string | null>(null)
-  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
-  const iconRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  
   const { isOver, setNodeRef } = useDroppable({
     id,
   })
@@ -2365,22 +2361,23 @@ function CardSlotUnit({
             <div
               key={`${slot.slot_name}-${index}`}
               className={cn(
-                "flex flex-col gap-1.5 py-2 px-3 rounded-lg text-xs",
+                "flex flex-row gap-3 py-2 px-3 rounded-lg text-xs",
                 getBackgroundColor()
               )}
             >
-              {/* 字段名称 - 在上方 */}
-              <div className="flex items-center gap-1.5">
-                <span className={cn(
-                  "text-xs font-medium",
-                  hasValue ? "text-slate-700" : "text-slate-500"
-                )}>
-                  {slot.slot_name}
-                </span>
-              </div>
-              {/* 字段值 - 在下方，支持换行，校对图标在右侧 */}
-              <div className="flex items-start justify-between gap-2 min-w-0">
-                <div className="flex-1 min-w-0">
+              {/* 左侧：字段名称和值 */}
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+                {/* 字段名称 */}
+                <div className="flex items-center">
+                  <span className={cn(
+                    "text-xs font-medium",
+                    hasValue ? "text-slate-700" : "text-slate-500"
+                  )}>
+                    {slot.slot_name}
+                  </span>
+                </div>
+                {/* 字段值 */}
+                <div className="min-w-0">
                   {hasValue ? (
                     <span className="text-xs text-slate-900 break-words break-all leading-relaxed">
                       {String(slotValue)}
@@ -2389,34 +2386,31 @@ function CardSlotUnit({
                     <span className="text-xs text-slate-400 italic">待填充</span>
                   )}
                 </div>
-                {/* 校对结果图标 - 统一对齐到右侧，调大尺寸 */}
-                {hasValue && cardId && proofreadingResult ? (
-                  <div 
-                    ref={(el) => {
-                      iconRefs.current[slot.slot_name] = el
-                    }}
-                    className="relative flex-shrink-0 cursor-help"
-                    onMouseEnter={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      setTooltipPosition({
-                        top: rect.bottom + 8,
-                        left: rect.right - 256 // 256px = 64 * 4 (w-64)
-                      })
-                      setHoveredSlotName(slot.slot_name)
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredSlotName(null)
-                      setTooltipPosition(null)
-                    }}
-                  >
-                    {proofreadingResult.status === 'passed' ? (
-                      <CheckCircle2 className="h-4.5 w-4.5 text-green-600" />
-                    ) : (
-                      <X className="h-4.5 w-4.5 text-red-600" />
-                    )}
-                  </div>
-                ) : null}
               </div>
+              
+              {/* 右侧：校对结果 */}
+              {hasValue && cardId && proofreadingResult ? (
+                <div className="flex-shrink-0 w-56 flex flex-col gap-1.5 text-[10px] leading-relaxed">
+                  <div className={cn(
+                    "flex items-center gap-1.5 font-semibold",
+                    proofreadingResult.status === 'passed' 
+                      ? "text-green-600" 
+                      : "text-red-600"
+                  )}>
+                    {proofreadingResult.status === 'passed' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                    ) : (
+                      <X className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />
+                    )}
+                    <span>{proofreadingResult.status === 'passed' ? '校对通过' : '校对失败'}</span>
+                  </div>
+                  <div className="text-slate-600 text-[10px] whitespace-pre-line leading-relaxed">
+                    {proofreadingResult.reason}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-shrink-0 w-56" />
+              )}
             </div>
           )
         })}
@@ -2430,39 +2424,6 @@ function CardSlotUnit({
           </div>
         </div>
       )}
-
-      {/* 悬浮提示 - 使用Portal渲染到body */}
-      {hoveredSlotName && tooltipPosition && (() => {
-        const slot = requiredSlots.find(s => s.slot_name === hoveredSlotName)
-        if (!slot) return null
-        const proofreadingResult = getProofreadingResult(hoveredSlotName)
-        if (!proofreadingResult) return null
-
-        return createPortal(
-          <div 
-            className="fixed z-[9999] w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl whitespace-normal pointer-events-none"
-            style={{
-              top: `${tooltipPosition.top}px`,
-              left: typeof window !== 'undefined' 
-                ? `${Math.max(8, Math.min(tooltipPosition.left, window.innerWidth - 272))}px` 
-                : `${tooltipPosition.left}px`,
-            }}
-          >
-            <div className={cn(
-              "font-semibold mb-2",
-              proofreadingResult.status === 'passed' ? 'text-green-400' : 'text-red-400'
-            )}>
-              {proofreadingResult.message}
-            </div>
-            <div className="text-slate-300 leading-relaxed whitespace-pre-line">
-              {proofreadingResult.reason}
-            </div>
-            {/* 箭头 */}
-            <div className="absolute -top-1.5 right-4 w-3 h-3 bg-slate-900 rotate-45" />
-          </div>,
-          document.body
-        )
-      })()}
     </div>
   )
 }
@@ -2909,10 +2870,41 @@ export function CardFactory({
     }
   }
 
-  // 处理更新引用证据
+  // 处理更新引用证据（触发重铸）
   const handleUpdateReferencedEvidences = async (cardId: number, evidenceIds: number[]) => {
     try {
-      // 构建引用证据更新列表（带序号）
+      // 检查是否是联合卡片
+      const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      if (!card || !card.card_info?.card_is_associated) {
+        // 不是联合卡片，使用原来的更新逻辑
+        const referencedEvidences = evidenceIds.map((evidenceId, index) => ({
+          evidence_id: evidenceId,
+          sequence_number: index,
+        }))
+
+        await evidenceCardApi.updateCard(cardId, {
+          referenced_evidences: referencedEvidences,
+        })
+        
+        toast({
+          title: "更新成功",
+          description: "引用证据已更新，页面即将刷新",
+        })
+        
+        setTimeout(() => {
+          window.location.reload()
+        }, 500)
+        return
+      }
+
+      // 联合卡片：先更新引用证据，然后触发重铸
+      // 1. 弹窗确认
+      const confirmMessage = `该操作会导致重铸卡片 #${cardId}，是否继续？\n\n重铸将使用新的引用证据列表重新提取特征。`
+      if (!window.confirm(confirmMessage)) {
+        return
+      }
+
+      // 2. 先同步更新引用证据列表（让页面立即看到更新）
       const referencedEvidences = evidenceIds.map((evidenceId, index) => ({
         evidence_id: evidenceId,
         sequence_number: index,
@@ -2921,20 +2913,32 @@ export function CardFactory({
       await evidenceCardApi.updateCard(cardId, {
         referenced_evidences: referencedEvidences,
       })
-      
-      // 刷新页面，确保所有状态（案件信息、卡槽快照、校对结果等）都是最新的
-      setTimeout(() => {
-        window.location.reload()
-      }, 500) // 延迟500ms，让用户看到成功提示
 
-      toast({
-        title: "更新成功",
-        description: "引用证据已更新，页面即将刷新",
+      // 3. 刷新卡片列表，让页面立即显示更新后的引用证据
+      await mutateCards()
+
+      // 4. 获取案件信息
+      const caseTitle = finalCaseData?.description || `案件 ${caseId}`
+      
+      // 5. 异步启动重铸任务（在后台进行特征提取）
+      const result = await startCardCasting({
+        case_id: Number(caseId),
+        evidence_ids: evidenceIds,
+        caseTitle,
+        card_id: cardId,
+        skip_classification: true // 重铸时跳过分类
       })
+
+      if (result.success) {
+        toast({
+          title: "更新成功，重铸任务已启动",
+          description: `引用证据已更新，卡片 #${cardId} 的重铸任务正在后台运行`,
+        })
+      }
     } catch (error: any) {
       toast({
-        title: "更新失败",
-        description: error.message || "更新引用证据失败",
+        title: "操作失败",
+        description: error.message || "更新引用证据或启动重铸任务失败",
         variant: "destructive",
       })
     }

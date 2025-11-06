@@ -613,6 +613,8 @@ export interface EvidenceCard {
 export interface EvidenceCardCastingRequest {
   case_id: number;
   evidence_ids: number[];
+  card_id?: number; // 重铸时的卡片ID（如果提供，则更新该卡片而不是创建新卡片）
+  skip_classification?: boolean; // 是否跳过分类（重铸时使用，因为卡片已有分类）
 }
 
 // 证据卡槽模板类型定义

@@ -565,10 +565,12 @@ async def cast_evidence_cards(
         # 创建异步任务
         task = cast_evidence_cards_task.delay(
             case_id=request.case_id,
-            evidence_ids=request.evidence_ids
+            evidence_ids=request.evidence_ids,
+            card_id=request.card_id,
+            skip_classification=request.skip_classification
         )
         
-        logger.info(f"创建证据卡片铸造任务: task_id={task.id}, case_id={request.case_id}, evidence_ids={request.evidence_ids}")
+        logger.info(f"创建证据卡片铸造任务: task_id={task.id}, case_id={request.case_id}, evidence_ids={request.evidence_ids}, card_id={request.card_id}, skip_classification={request.skip_classification}")
         
         return SingleResponse(
             data={
@@ -576,7 +578,9 @@ async def cast_evidence_cards(
                 "status": "started",
                 "message": "证据卡片铸造任务已创建",
                 "case_id": request.case_id,
-                "evidence_ids": request.evidence_ids
+                "evidence_ids": request.evidence_ids,
+                "card_id": request.card_id,
+                "skip_classification": request.skip_classification
             },
             message="证据卡片铸造任务已创建"
         )
