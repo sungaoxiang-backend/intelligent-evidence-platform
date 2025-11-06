@@ -37,7 +37,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['evidence_id'], ['evidences.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('evidence_card_id', 'evidence_id')
     )
-    op.drop_index(op.f('ix_template_fields_id'), table_name='template_fields')
+    # 使用 IF EXISTS 删除索引（如果索引不存在则忽略错误）
+    op.execute("DROP INDEX IF EXISTS ix_template_fields_id")
     op.drop_table('template_fields')
     op.drop_index(op.f('ix_document_templates_id'), table_name='document_templates')
     op.drop_index(op.f('ix_document_templates_name'), table_name='document_templates')
