@@ -549,6 +549,26 @@ async def _cast_evidence_cards_async(
                 target_card_type=target_card_type
             )
             
+            # 静默过滤：如果没有有效的图片类型证据，cards_data 可能为空列表
+            # 这是正常的，因为非图片类型（如PDF）会被静默忽略
+            if not cards_data:
+                logger.info(f"卡片铸造完成，但没有创建任何卡片（可能所有证据都是非图片类型，已被静默过滤）")
+                # 返回空结果，任务仍然标记为成功
+                result = {
+                    "case_id": case_id,
+                    "evidence_ids": evidence_ids,
+                    "cards_count": 0,
+                    "cards": [],
+                    "summary": {
+                        "total_cards": 0,
+                        "associated_cards": 0,
+                        "single_cards": 0,
+                    },
+                    "message": "没有创建任何卡片（所选证据中没有支持的类型，非图片类型已被静默过滤）"
+                }
+                update_progress("completed", "卡片铸造完成（没有有效的图片类型证据）", 100)
+                return result
+            
             # 更新进度
             update_progress("completed", f"成功铸造 {len(cards_data)} 个证据卡片", 95)
             

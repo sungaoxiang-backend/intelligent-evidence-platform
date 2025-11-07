@@ -1678,7 +1678,11 @@ async def evidence_card_casting(
     ]
 
     filtered_evidences = [evidence for evidence in evidences if evidence.file_extension in supported_ai_formats]
+    
+    # 静默过滤：如果没有有效的图片类型证据，返回空列表
+    # 非图片类型（如PDF）会被静默忽略，不会抛出错误
     if not filtered_evidences:
+        logger.info(f"没有找到支持的类型（图片格式），已过滤的证据ID: {evidence_ids}，将返回空列表")
         return []
 
     # 建立 evidence_id 到 evidence 的映射，用于后续匹配
