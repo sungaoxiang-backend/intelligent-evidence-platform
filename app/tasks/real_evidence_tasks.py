@@ -408,7 +408,7 @@ async def run_association_analysis_async(case_id: int, evidence_ids: List[int], 
 
 
 @celery_app.task(bind=True, name="app.tasks.real_evidence_tasks.cast_evidence_cards_task")
-def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int], card_id: Optional[int] = None, skip_classification: bool = False) -> Dict[str, Any]:
+def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int], card_id: Optional[int] = None, skip_classification: bool = False, target_card_type: Optional[str] = None) -> Dict[str, Any]:
     """
     证据卡片铸造任务 - 从证据特征中铸造证据卡片
     
@@ -453,7 +453,8 @@ def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int], card_i
             evidence_ids=evidence_ids,
             update_progress=update_progress,
             card_id=card_id,
-            skip_classification=skip_classification
+            skip_classification=skip_classification,
+            target_card_type=target_card_type
         ))
         
         # 更新任务状态为完成
@@ -491,7 +492,8 @@ async def _cast_evidence_cards_async(
     evidence_ids: List[int],
     update_progress: Callable,
     card_id: Optional[int] = None,
-    skip_classification: bool = False
+    skip_classification: bool = False,
+    target_card_type: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     异步执行证据卡片铸造
@@ -543,7 +545,8 @@ async def _cast_evidence_cards_async(
                 case_id=case_id,
                 evidence_ids=evidence_ids,
                 card_id=card_id,
-                skip_classification=skip_classification
+                skip_classification=skip_classification,
+                target_card_type=target_card_type
             )
             
             # 更新进度

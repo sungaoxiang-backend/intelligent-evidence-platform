@@ -658,6 +658,7 @@ export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?:
     caseTitle?: string
     card_id?: number // 重铸时的卡片ID
     skip_classification?: boolean // 是否跳过分类
+    target_card_type?: string // 目标分类（更新分类时使用）
   }) => {
     try {
       console.log('启动卡片铸造任务，参数:', params)
@@ -667,7 +668,8 @@ export function useCardCasting(tasksHook?: { addTask: (taskId: string, context?:
         case_id: params.case_id,
         evidence_ids: params.evidence_ids.map(id => Number(id)),
         card_id: params.card_id,
-        skip_classification: params.skip_classification || false
+        skip_classification: params.skip_classification || false,
+        target_card_type: params.target_card_type
       })
       
       console.log('卡片铸造任务已启动:', result)

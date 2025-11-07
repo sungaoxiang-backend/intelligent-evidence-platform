@@ -154,6 +154,7 @@ class EvidenceCardCastingRequest(BaseModel):
     evidence_ids: List[int] = Field(..., min_items=1, description="证据ID列表（至少一个）")
     card_id: Optional[int] = Field(None, description="重铸时的卡片ID（如果提供，则更新该卡片而不是创建新卡片）")
     skip_classification: bool = Field(False, description="是否跳过分类（重铸时使用，因为卡片已有分类）")
+    target_card_type: Optional[str] = Field(None, description="目标分类（更新分类时使用，如果提供则使用此分类而不是重新分类）")
 
 
 class EvidenceCardResponse(BaseModel):

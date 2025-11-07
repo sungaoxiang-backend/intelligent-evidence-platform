@@ -381,7 +381,11 @@ function EvidenceCardListItem({
   isDragOver,
   dragOverEvidenceId,
   dragOverInsertPosition,
-  onDeleteCard
+  onDeleteCard,
+  availableCardTypes,
+  onUpdateCardType,
+  associationCardTypes,
+  getAvailableTypesForIndependentCard
 }: { 
   card: EvidenceCard
   isSelected: boolean
@@ -399,6 +403,10 @@ function EvidenceCardListItem({
   dragOverEvidenceId?: number | null
   dragOverInsertPosition?: 'before' | 'after' | null
   onDeleteCard?: (cardId: number) => void
+  availableCardTypes?: string[]
+  onUpdateCardType?: (cardId: number, newCardType: string) => void
+  associationCardTypes?: string[]
+  getAvailableTypesForIndependentCard?: (currentCardType: string) => string[]
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
@@ -434,6 +442,12 @@ function EvidenceCardListItem({
 
   // 显示所有字段，包括null值（null值会显示为"N/A"）
   const allFeatures = cardFeatures
+
+  // 获取独立卡片可用的分类列表（排除联合卡片类型）
+  const independentCardTypes = React.useMemo(() => {
+    if (!availableCardTypes || !associationCardTypes) return []
+    return availableCardTypes.filter((type: string) => !associationCardTypes.includes(type))
+  }, [availableCardTypes, associationCardTypes])
 
   // 初始化编辑数据
   useEffect(() => {
@@ -871,7 +885,39 @@ function EvidenceCardListItem({
           </div>
 
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-slate-900">{cardType}</p>
+            {/* 卡片分类下拉选择器 - 只在编辑模式下显示，且仅独立卡片可编辑 */}
+            {isEditing && 
+             !isCombined && // 联合卡片不开放分类编辑
+             independentCardTypes && 
+             independentCardTypes.length > 0 && 
+             onUpdateCardType ? (
+              <Select
+                value={cardType}
+                onValueChange={(newCardType) => {
+                  if (newCardType !== cardType && onUpdateCardType) {
+                    // 确保不能选择联合卡片类型
+                    if (!associationCardTypes?.includes(newCardType)) {
+                      onUpdateCardType(card.id, newCardType)
+                      setIsEditing(false) // 更新分类后退出编辑模式
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs w-auto min-w-[120px] px-2" onClick={(e) => e.stopPropagation()}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent onClick={(e) => e.stopPropagation()}>
+                  {/* 只显示独立卡片可用的分类（排除联合卡片类型） */}
+                  {independentCardTypes.map((type) => (
+                    <SelectItem key={type} value={type} onClick={(e) => e.stopPropagation()}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm font-semibold text-slate-900">{cardType}</p>
+            )}
             {/* 卡片类型标签：联合卡片/独立卡片 */}
             {cardInfo.card_is_associated !== undefined && (
               <Badge
@@ -2815,6 +2861,30 @@ export function CardFactory({
   const evidenceList = evidenceData?.data || []
   const cardList = cardData?.data || []
 
+  // 从卡槽模板中提取所有唯一的卡片类型
+  const availableCardTypes = React.useMemo(() => {
+    const cardTypesSet = new Set<string>()
+    slotTemplates.forEach((template: EvidenceCardSlotTemplate) => {
+      template.required_card_types?.forEach((cardType: EvidenceCardTemplate) => {
+        if (cardType.card_type) {
+          cardTypesSet.add(cardType.card_type)
+        }
+      })
+    })
+    return Array.from(cardTypesSet).sort()
+  }, [slotTemplates])
+
+  // 定义联合卡片类型（这些类型不允许独立卡片切换为）
+  const associationCardTypes = React.useMemo(() => {
+    return ["微信聊天记录"] // 联合卡片类型列表
+  }, [])
+
+  // 获取独立卡片可用的分类列表（排除联合卡片类型）
+  const getAvailableTypesForIndependentCard = React.useCallback((currentCardType: string) => {
+    // 独立卡片可以选择所有类型，但排除联合卡片类型
+    return availableCardTypes.filter(type => !associationCardTypes.includes(type))
+  }, [availableCardTypes, associationCardTypes])
+
   // 初始化编辑表单
   useEffect(() => {
     if (finalCaseData && !isEditingCase) {
@@ -3009,6 +3079,62 @@ export function CardFactory({
       setSelectedEvidenceIds(new Set())
     } else {
       setSelectedEvidenceIds(new Set(evidenceList.map((e: any) => String(e.id))))
+    }
+  }
+
+  // 处理更新卡片分类（触发重铸）
+  const handleUpdateCardType = async (cardId: number, newCardType: string) => {
+    try {
+      const card = cardList.find((c: EvidenceCard) => c.id === cardId)
+      if (!card) {
+        toast({
+          title: "操作失败",
+          description: "找不到卡片",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const oldCardType = card.card_info?.card_type || '未知类型'
+      if (newCardType === oldCardType) {
+        return // 没有变化，不需要更新
+      }
+
+      // 判断新分类是否为联合卡片类型
+      const associationRequiredTypes = ["微信聊天记录"]
+      const isNewTypeAssociated = associationRequiredTypes.includes(newCardType) || card.evidence_ids.length > 1
+
+      // 弹窗确认
+      const confirmMessage = `该操作会导致重铸卡片 #${cardId}，是否继续？\n\n重铸将使用新的分类 "${newCardType}" 重新提取特征。`
+      if (!window.confirm(confirmMessage)) {
+        return
+      }
+
+      // 获取案件信息
+      const caseTitle = finalCaseData?.description || `案件 ${caseId}`
+      
+      // 异步启动重铸任务（使用新分类）
+      const result = await startCardCasting({
+        case_id: Number(caseId),
+        evidence_ids: card.evidence_ids,
+        caseTitle,
+        card_id: cardId,
+        skip_classification: true, // 使用目标分类时跳过分类，直接进行特征提取
+        target_card_type: newCardType, // 传入目标分类
+      })
+
+      if (result.success) {
+        toast({
+          title: "更新成功，重铸任务已启动",
+          description: `分类已更新为 "${newCardType}"，卡片 #${cardId} 的重铸任务正在后台运行`,
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "操作失败",
+        description: error.message || "更新分类或启动重铸任务失败",
+        variant: "destructive",
+      })
     }
   }
 
@@ -4276,6 +4402,10 @@ export function CardFactory({
                         onUpdateCard={handleUpdateCardFeatures}
                         onUpdateReferencedEvidences={handleUpdateReferencedEvidences}
                         onDeleteCard={handleDeleteCard}
+                        availableCardTypes={availableCardTypes}
+                        onUpdateCardType={handleUpdateCardType}
+                        associationCardTypes={associationCardTypes}
+                        getAvailableTypesForIndependentCard={getAvailableTypesForIndependentCard}
                       />
                     ))
                   ) : (

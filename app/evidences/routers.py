@@ -567,10 +567,11 @@ async def cast_evidence_cards(
             case_id=request.case_id,
             evidence_ids=request.evidence_ids,
             card_id=request.card_id,
-            skip_classification=request.skip_classification
+            skip_classification=request.skip_classification,
+            target_card_type=request.target_card_type
         )
         
-        logger.info(f"创建证据卡片铸造任务: task_id={task.id}, case_id={request.case_id}, evidence_ids={request.evidence_ids}, card_id={request.card_id}, skip_classification={request.skip_classification}")
+        logger.info(f"创建证据卡片铸造任务: task_id={task.id}, case_id={request.case_id}, evidence_ids={request.evidence_ids}, card_id={request.card_id}, skip_classification={request.skip_classification}, target_card_type={request.target_card_type}")
         
         return SingleResponse(
             data={
@@ -580,7 +581,8 @@ async def cast_evidence_cards(
                 "case_id": request.case_id,
                 "evidence_ids": request.evidence_ids,
                 "card_id": request.card_id,
-                "skip_classification": request.skip_classification
+                "skip_classification": request.skip_classification,
+                "target_card_type": request.target_card_type
             },
             message="证据卡片铸造任务已创建"
         )

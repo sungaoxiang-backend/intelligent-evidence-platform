@@ -1648,6 +1648,7 @@ async def evidence_card_casting(
         evidence_ids: List[int],
         card_id: Optional[int] = None,
         skip_classification: bool = False,
+        target_card_type: Optional[str] = None,
     ):
     """
     证据卡片铸造（从证据特征中铸造证据卡片）
@@ -1663,6 +1664,7 @@ async def evidence_card_casting(
         evidence_ids: 证据ID列表
         card_id: 重铸时的卡片ID（如果提供，则更新该卡片而不是创建新卡片）
         skip_classification: 是否跳过分类（重铸时使用，因为卡片已有分类）
+        target_card_type: 目标分类（更新分类时使用，如果提供则使用此分类而不是重新分类）
     """
     # 检索证据列表
     evidences = await get_multi_by_ids(db, evidence_ids)
@@ -1691,18 +1693,41 @@ async def evidence_card_casting(
             existing_card_type = existing_card.card_info.get("card_type")
             logger.info(f"重铸卡片 #{card_id}，现有类型: {existing_card_type}")
     
+    # 判断是否使用目标分类（需要在初始化 card_data 之前判断）
+    use_target_type = target_card_type is not None
+    
+    # 判断新类型是否为联合卡片类型
+    association_required_types = {"微信聊天记录"}
+    is_target_type_associated = use_target_type and (target_card_type in association_required_types or len(evidence_ids) > 1)
+    
     # 初始化卡片数据
     # 重铸时：创建一个包含所有 evidence_ids 的单一卡片
     # 正常铸造时：每个证据一个卡片
     if card_id and existing_card:
         # 重铸：创建一个包含所有 evidence_ids 的单一卡片
-        card_data = [
-            EvidenceCardSchema(
-                evidence_ids=evidence_ids,  # 使用传入的所有 evidence_ids
-                card_info=existing_card.card_info.copy() if existing_card.card_info else None
-            )
-        ]
-        logger.info(f"重铸模式：创建单一卡片，evidence_ids: {evidence_ids}")
+        # 注意：如果使用 target_card_type，不要复制旧的 card_features，因为要重新提取
+        if use_target_type:
+            # 使用目标分类时，不复制旧的 card_features
+            card_data = [
+                EvidenceCardSchema(
+                    evidence_ids=evidence_ids,  # 使用传入的所有 evidence_ids
+                    card_info={
+                        "card_type": target_card_type,  # 先设置目标分类
+                        "card_is_associated": is_target_type_associated,
+                        "card_features": []  # 清空旧特征
+                    }
+                )
+            ]
+            logger.info(f"重铸模式：创建单一卡片（使用目标分类），evidence_ids: {evidence_ids}, target_card_type: {target_card_type}")
+        else:
+            # 不使用目标分类时，复制现有的 card_info（包括 card_features）
+            card_data = [
+                EvidenceCardSchema(
+                    evidence_ids=evidence_ids,  # 使用传入的所有 evidence_ids
+                    card_info=existing_card.card_info.copy() if existing_card.card_info else None
+                )
+            ]
+            logger.info(f"重铸模式：创建单一卡片（保持现有分类），evidence_ids: {evidence_ids}")
     else:
         # 正常铸造：每个证据一个卡片
         card_data = [
@@ -1714,11 +1739,32 @@ async def evidence_card_casting(
 
         
     # 卡片铸造数据构建
-    # Step1. 证据分类（重铸时跳过）
+    # Step1. 证据分类（重铸时跳过或使用目标分类）
     evidence_classifi_results: Optional[EvidenceClassifiResults] = None
-    if skip_classification and existing_card_type:
+    
+    # 重铸逻辑：
+    # 1. 如果使用 target_card_type：跳过分类，直接使用目标分类进行特征提取
+    # 2. 如果 skip_classification=True 且没有 target_card_type：使用现有卡片的类型
+    # 3. 否则：进行正常分类流程
+    if use_target_type:
+        # 使用目标分类：跳过分类，直接进行特征提取
+        logger.info(f"重铸模式：使用目标分类 {target_card_type}，跳过分类步骤，直接进行特征提取")
+        for card in card_data:
+            if card.card_info is None:
+                card.card_info = {
+                    "card_type": target_card_type,
+                    "card_is_associated": is_target_type_associated,
+                    "card_features": []  # 清空旧的特征
+                }
+            else:
+                # 强制更新 card_type 和 card_is_associated，并清空旧的特征
+                card.card_info["card_type"] = target_card_type
+                card.card_info["card_is_associated"] = is_target_type_associated
+                card.card_info["card_features"] = []  # 清空旧的特征，重新提取
+                logger.info(f"重铸模式：清空旧特征，准备使用目标分类 {target_card_type} 重新提取")
+    elif skip_classification and existing_card_type:
         # 重铸时跳过分类，使用现有卡片的类型
-        logger.info(f"跳过分类，使用现有卡片类型: {existing_card_type}")
+        logger.info(f"重铸模式：跳过分类，使用现有卡片类型: {existing_card_type}")
         # 为所有卡片设置现有类型
         for card in card_data:
             if card.card_info is None:
@@ -1735,6 +1781,7 @@ async def evidence_card_casting(
                     card.card_info["card_features"] = []
     else:
         # 正常铸造流程：进行证据分类
+        logger.info("正常铸造流程：进行证据分类")
         evidence_classifier = EvidenceClassifier()
         classification_response: RunResponse = await asyncio.wait_for(
                     evidence_classifier.arun([evidence.file_url for evidence in filtered_evidences]),
@@ -1762,8 +1809,8 @@ async def evidence_card_casting(
         card.evidence_ids[0]: card for card in card_data if len(card.evidence_ids) == 1
     }
     
-    # Step2: 证据分类结果处理（使用映射关系匹配，如果不是重铸）
-    if not skip_classification and evidence_classifi_results:
+    # Step2: 证据分类结果处理（使用映射关系匹配，如果不是重铸且没有使用目标分类）
+    if not skip_classification and not use_target_type and evidence_classifi_results:
         for result in evidence_classifi_results.results:
             normalized_result_url = unquote(result.image_url)
             evidence_id = url_to_evidence_id.get(normalized_result_url) or url_to_evidence_id.get(result.image_url)
@@ -2024,8 +2071,13 @@ async def evidence_card_casting(
                                     if slot_group_name not in grouped_cards:
                                         # 如果是重铸，使用重铸卡片的类型和 evidence_ids
                                         if card_id and existing_card:
-                                            # 重铸时：使用现有卡片的类型和所有 evidence_ids
-                                            card_type = existing_card.card_info.get("card_type") if existing_card.card_info else "微信聊天记录"
+                                            # 重铸时：优先使用 target_card_type，否则使用现有卡片的类型
+                                            if use_target_type:
+                                                card_type = target_card_type
+                                                logger.info(f"重铸模式：使用目标分类 {target_card_type} 创建分组卡片")
+                                            else:
+                                                card_type = existing_card.card_info.get("card_type") if existing_card.card_info else "微信聊天记录"
+                                                logger.info(f"重铸模式：使用现有卡片类型 {card_type} 创建分组卡片")
                                             # 使用重铸时传入的所有 evidence_ids，而不是只使用 reference_evidence_ids
                                             grouped_cards[slot_group_name] = EvidenceCardSchema(
                                                 evidence_ids=evidence_ids,  # 使用重铸时传入的所有 evidence_ids
@@ -2053,13 +2105,17 @@ async def evidence_card_casting(
                                     
                                     card = grouped_cards[slot_group_name]
                                     
-                                    # 确保 card_info 已初始化
+                                    # 确保 card_info 已初始化，如果使用目标分类则更新 card_type
                                     if card.card_info is None:
                                         card.card_info = {
-                                            "card_type": "微信聊天记录",
+                                            "card_type": target_card_type if use_target_type else "微信聊天记录",
                                             "card_is_associated": True,
                                             "card_features": []
                                         }
+                                    elif use_target_type:
+                                        # 如果使用目标分类，确保 card_type 是目标分类
+                                        card.card_info["card_type"] = target_card_type
+                                        card.card_info["card_is_associated"] = is_target_type_associated
                                     
                                     # 为每个 slot_extraction 添加 slot_group_info
                                     for slot_extraction in result_item.slot_extraction:
@@ -2100,14 +2156,20 @@ async def evidence_card_casting(
                                 if card_id and existing_card:
                                     # 重铸时：直接使用分组卡片替换 card_data 中的重铸卡片
                                     # 移除重铸卡片，添加分组卡片
+                                    # 注意：这里需要根据 target_card_type 或现有类型来判断，而不是硬编码 "微信聊天记录"
+                                    target_type_for_filter = target_card_type if use_target_type else (existing_card.card_info.get("card_type") if existing_card.card_info else "微信聊天记录")
                                     card_data = [
                                         card for card in card_data 
-                                        if not (card.card_info and card.card_info.get("card_type") == "微信聊天记录" and len(card.evidence_ids) == len(evidence_ids))
+                                        if not (card.card_info and card.card_info.get("card_type") == target_type_for_filter and len(card.evidence_ids) == len(evidence_ids))
                                     ]
                                     # 添加按 slot_group_name 分组的卡片（重铸时应该只有一个分组）
                                     for group_card in grouped_cards.values():
+                                        # 确保分组卡片的 card_type 是正确的
+                                        if use_target_type and group_card.card_info:
+                                            group_card.card_info["card_type"] = target_card_type
+                                            group_card.card_info["card_is_associated"] = is_target_type_associated
                                         card_data.append(group_card)
-                                        logger.info(f"重铸模式：使用分组卡片替换重铸卡片，evidence_ids: {group_card.evidence_ids}")
+                                        logger.info(f"重铸模式：使用分组卡片替换重铸卡片，evidence_ids: {group_card.evidence_ids}, card_type: {group_card.card_info.get('card_type') if group_card.card_info else None}")
                                 else:
                                     # 正常铸造：移除所有微信聊天记录类型的原始卡片
                                     card_data = [
@@ -2224,7 +2286,47 @@ async def evidence_card_casting(
         # 添加没有分组的卡片（保持原有逻辑）
         final_card_data.extend(cards_without_group)
     
-    # Step5: 证据卡片批量创建（使用 update_or_create 方法）
+    # Step5: 确保所有 slot_name 都存在（从卡槽模板获取）
+    # 如果使用了目标分类，确保所有 required_slots 都存在
+    if use_target_type:
+        from app.core.config_manager import config_manager
+        config = config_manager.load_evidence_card_slots_config()
+        
+        # 查找目标类型的卡槽模板
+        target_template = None
+        for template in config.evidence_card_templates:
+            if template.get('card_type') == target_card_type:
+                target_template = template
+                break
+        
+        if target_template:
+            required_slot_names = [slot.get('slot_name') for slot in target_template.get('required_slots', [])]
+            
+            # 为每个卡片确保所有 slot_name 都存在
+            for card in final_card_data:
+                if not card.card_info or card.card_info.get("card_type") != target_card_type:
+                    continue
+                
+                if "card_features" not in card.card_info:
+                    card.card_info["card_features"] = []
+                
+                # 获取现有的 slot_name 集合
+                existing_slot_names = {feature.get("slot_name") for feature in card.card_info["card_features"] if feature.get("slot_name")}
+                
+                # 添加缺失的 slot_name
+                for slot_name in required_slot_names:
+                    if slot_name and slot_name not in existing_slot_names:
+                        card.card_info["card_features"].append({
+                            "slot_name": slot_name,
+                            "slot_value_type": "string",
+                            "slot_value": None,
+                            "confidence": 0.0,
+                            "reasoning": "未提取到信息",
+                            "slot_group_info": None
+                        })
+                        logger.info(f"为卡片添加缺失的 slot_name: {slot_name}")
+    
+    # Step6: 证据卡片批量创建（使用 update_or_create 方法）
     created_cards = []
     for card in final_card_data:
         try:
@@ -2256,11 +2358,28 @@ async def evidence_card_casting(
                 if existing_card:
                     # 更新卡片的 evidence_ids 和 card_info
                     existing_card.evidence_ids = card.evidence_ids
-                    existing_card.card_info = card.card_info
+                    # 确保 card_info 被正确更新（使用深拷贝避免引用问题）
+                    import copy
+                    from sqlalchemy.orm.attributes import flag_modified
+                    
+                    # 验证 card_type 是否正确设置
+                    final_card_type = card.card_info.get('card_type') if card.card_info else None
+                    logger.info(f"重铸卡片 #{card_id}，准备保存的 card_type: {final_card_type}, target_card_type: {target_card_type}")
+                    
+                    existing_card.card_info = copy.deepcopy(card.card_info)
+                    # 标记 JSONB 字段已被修改，确保 SQLAlchemy 检测到变化
+                    flag_modified(existing_card, "card_info")
+                    # 确保 updated_times 递增
+                    existing_card.updated_times = (existing_card.updated_times or 0) + 1
                     await db.commit()
                     await db.refresh(existing_card)
+                    
+                    # 验证保存后的 card_type
+                    saved_card_type = existing_card.card_info.get('card_type') if existing_card.card_info else None
+                    logger.info(f"重铸卡片 #{card_id}，保存后的 card_type: {saved_card_type}")
+                    
                     created_cards.append(existing_card)
-                    logger.info(f"重铸卡片 #{card_id}，更新 evidence_ids: {card.evidence_ids}")
+                    logger.info(f"重铸卡片 #{card_id}，更新 evidence_ids: {card.evidence_ids}, card_type: {final_card_type}")
                 else:
                     logger.error(f"重铸失败：找不到卡片 #{card_id}")
             else:
