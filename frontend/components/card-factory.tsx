@@ -44,7 +44,9 @@ import {
   File,
   FileSpreadsheet,
   FileVideo,
-  FileAudio
+  FileAudio,
+  Copy,
+  CheckCheck
 } from "lucide-react"
 import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate, type ProofreadRule } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
@@ -2674,6 +2676,24 @@ export function CardFactory({
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
   const { startCardCasting } = useCardCasting({ addTask, updateTask, removeTask })
 
+  // 复制到剪贴板功能
+  const handleCopy = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "复制成功",
+        description: `${label}已复制到剪贴板`,
+      })
+    } catch (error) {
+      console.error('复制失败:', error)
+      toast({
+        title: "复制失败",
+        description: "无法复制到剪贴板",
+        variant: "destructive",
+      })
+    }
+  }
+
   // 只使用鼠标拖拽，完全禁用键盘拖拽（包括空格键）
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -3804,6 +3824,31 @@ export function CardFactory({
     
     const updatedParties = editedCaseInfo.case_parties?.map((p: any) => {
       if (p.party_role === partyRole) {
+        // 如果修改的是 party_type，需要重置相关字段
+        if (field === 'party_type') {
+          const oldType = p.party_type
+          const newType = value
+          
+          // 如果类型发生变化，重置所有类型相关的字段
+          if (oldType !== newType) {
+            const updated: any = { 
+              ...p, 
+              [field]: value,
+              // 清空所有类型相关的字段，因为字段含义随类型变化
+              name: null,
+              company_name: null,
+              company_code: null,
+              id_number: null,
+              id_card: null,
+              phone: null,
+              address: null
+            }
+            
+            return updated
+          }
+        }
+        
+        // 其他字段直接更新
         return { ...p, [field]: value }
       }
       return p
@@ -3820,7 +3865,7 @@ export function CardFactory({
     try {
       // 准备更新数据
       const updateData: any = {
-        description: editedCaseInfo?.description,
+        case_type: editedCaseInfo?.case_type,
         loan_amount: editedCaseInfo?.loan_amount,
       }
       
@@ -4298,31 +4343,79 @@ export function CardFactory({
                     pointerEvents: 'auto',
                   } as React.CSSProperties}
                 >
-                  {/* 案件基本信息 */}
+                  {/* 案件信息和当事人信息 - 整体为一个区域 */}
                   {finalCaseData && editedCaseInfo && (
-                    <div>
-                      <div className="grid grid-cols-3 gap-x-6 gap-y-3 mb-6 pb-6 border-b border-slate-200">
+                    <div className="mb-6 pb-6 border-b border-slate-200">
+                      {/* 案件基本信息 - 2x2网格布局，视觉平衡且信息分组合理 */}
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
+                        {/* 第一行第一列：案件ID */}
                         <div className="space-y-1">
-                          <span className="text-xs text-slate-500">案件ID</span>
-                          <div className="text-sm font-semibold text-slate-900">#{editedCaseInfo.id}</div>
+                          <Label className="text-xs text-slate-500">案件ID</Label>
+                          <div 
+                            onClick={() => handleCopy(String(editedCaseInfo.id), '案件ID')}
+                            className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                            title="点击复制案件ID"
+                          >
+                            #{editedCaseInfo.id}
+                          </div>
                         </div>
+                        {/* 第一行第二列：关联用户 */}
                         <div className="space-y-1">
-                          <span className="text-xs text-slate-500">案由</span>
+                          <Label className="text-xs text-slate-500">关联用户</Label>
+                          <div className="flex items-center gap-2">
+                            {editedCaseInfo.user?.id && (
+                              <div 
+                                onClick={() => handleCopy(String(editedCaseInfo.user.id), '用户ID')}
+                                className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                                title="点击复制用户ID"
+                              >
+                                #{editedCaseInfo.user.id}
+                              </div>
+                            )}
+                            {editedCaseInfo.user?.wechat_avatar && (
+                              <img 
+                                src={editedCaseInfo.user.wechat_avatar} 
+                                alt={editedCaseInfo.user?.name || '用户头像'} 
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            )}
+                            {editedCaseInfo.user?.name && (
+                              <div className="text-sm font-medium text-slate-900">
+                                {editedCaseInfo.user.name}
+                              </div>
+                            )}
+                            {!editedCaseInfo.user && (
+                              <div className="text-sm font-medium text-slate-500">N/A</div>
+                            )}
+                          </div>
+                        </div>
+                        {/* 第二行第一列：案由 */}
+                        <div className="space-y-1">
+                          <Label className="text-xs text-slate-500">案由</Label>
                           {isEditingCase ? (
-                            <Input
-                              value={editedCaseInfo.description || ''}
-                              onChange={(e) => setEditedCaseInfo({ ...editedCaseInfo, description: e.target.value })}
-                              className="h-8 text-sm"
-                              placeholder="请输入案由"
-                            />
+                            <Select
+                              value={editedCaseInfo.case_type || ''}
+                              onValueChange={(value) => setEditedCaseInfo({ ...editedCaseInfo, case_type: value })}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="选择案由" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="debt">民间借贷纠纷</SelectItem>
+                                <SelectItem value="contract">买卖合同纠纷</SelectItem>
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <div className="text-sm font-medium text-slate-900">
-                              {editedCaseInfo.description || 'N/A'}
+                              {editedCaseInfo.case_type === 'debt' ? '民间借贷纠纷' : 
+                               editedCaseInfo.case_type === 'contract' ? '买卖合同纠纷' : 
+                               'N/A'}
                             </div>
                           )}
                         </div>
+                        {/* 第二行第二列：欠款金额 */}
                         <div className="space-y-1">
-                          <span className="text-xs text-slate-500">欠款金额</span>
+                          <Label className="text-xs text-slate-500">欠款金额</Label>
                           {isEditingCase ? (
                             <Input
                               type="number"
@@ -4343,13 +4436,13 @@ export function CardFactory({
 
                       {/* 债权人和债务人信息 - 左右分布 */}
                       {(editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") || editedCaseInfo.case_parties?.find((p: any) => p.party_role === "debtor")) && (
-                        <div className="relative grid grid-cols-2 gap-4 mb-4 items-start">
+                        <div className="relative grid grid-cols-2 gap-4 items-start">
                           {/* 债权人信息 */}
                           {editedCaseInfo.case_parties?.find((p: any) => p.party_role === "creditor") && (
                             <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100">
                               <div className="flex items-center gap-2 mb-4">
                                 <div className="w-1 h-5 bg-blue-500 rounded-full" />
-                                <h4 className="font-bold text-slate-900 text-sm">债权人</h4>
+                                <h4 className="text-slate-500 text-sm font-normal">债权人信息</h4>
                               </div>
                               {(() => {
                                 const creditor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "creditor")
@@ -4358,7 +4451,7 @@ export function CardFactory({
                                 return (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
-                                      <Label className="text-xs text-slate-500">类型</Label>
+                                      <Label className="text-xs text-slate-500">债权人类型</Label>
                                       {isEditingCase ? (
                                         <Select
                                           value={creditor.party_type || 'person'}
@@ -4383,19 +4476,21 @@ export function CardFactory({
                                       )}
                                     </div>
                                     <div className="space-y-1">
-                                      <Label className="text-xs text-slate-500">姓名</Label>
+                                      <Label className="text-xs text-slate-500">债权人名称</Label>
                                       {isEditingCase ? (
                                         <Input
                                           value={creditor.party_name || ''}
                                           onChange={(e) => updatePartyInfo('creditor', 'party_name', e.target.value)}
                                           className="h-8 text-sm"
-                                          placeholder="请输入姓名"
+                                          placeholder="请输入债权人名称"
                                         />
                                       ) : (
                                         <div className="text-sm font-medium text-slate-900">{creditor.party_name || 'N/A'}</div>
                                       )}
                                     </div>
-                                    {(creditor.name || isEditingCase) && (
+                                    
+                                    {/* 根据类型动态渲染必要字段 */}
+                                    {creditor.party_type === "person" && (
                                       <div className="space-y-1">
                                         <Label className="text-xs text-slate-500">自然人姓名</Label>
                                         {isEditingCase ? (
@@ -4410,87 +4505,66 @@ export function CardFactory({
                                         )}
                                       </div>
                                     )}
-                                    {(creditor.id_number || creditor.id_card || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">身份证号</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={creditor.id_number || creditor.id_card || ''}
-                                            onChange={(e) => updatePartyInfo('creditor', 'id_number', e.target.value)}
-                                            className="h-8 text-sm font-mono"
-                                            placeholder="请输入身份证号"
-                                          />
-                                        ) : (
-                                          <div className="text-xs font-mono text-slate-700 break-all">
-                                            {creditor.id_number || creditor.id_card || 'N/A'}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(creditor.phone || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">电话</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={creditor.phone || ''}
-                                            onChange={(e) => updatePartyInfo('creditor', 'phone', e.target.value)}
-                                            className="h-8 text-sm"
-                                            placeholder="请输入电话"
-                                          />
-                                        ) : (
-                                          <div className="text-sm font-medium text-slate-900">{creditor.phone || 'N/A'}</div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(creditor.address || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">地址</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={creditor.address || ''}
-                                            onChange={(e) => updatePartyInfo('creditor', 'address', e.target.value)}
-                                            className="h-8 text-sm"
-                                            placeholder="请输入地址"
-                                          />
-                                        ) : (
-                                          <div className="text-sm font-medium text-slate-900">{creditor.address || 'N/A'}</div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(creditor.party_type === 'company' || creditor.party_type === 'individual') && (
+
+                                    {creditor.party_type === "individual" && (
                                       <>
-                                        {(creditor.company_name || isEditingCase) && (
-                                          <div className="space-y-1">
-                                            <Label className="text-xs text-slate-500">公司名称</Label>
-                                            {isEditingCase ? (
-                                              <Input
-                                                value={creditor.company_name || ''}
-                                                onChange={(e) => updatePartyInfo('creditor', 'company_name', e.target.value)}
-                                                className="h-8 text-sm"
-                                                placeholder="请输入公司名称"
-                                              />
-                                            ) : (
-                                              <div className="text-sm font-medium text-slate-900">{creditor.company_name || 'N/A'}</div>
-                                            )}
-                                          </div>
-                                        )}
-                                        {(creditor.company_code || isEditingCase) && (
-                                          <div className="space-y-1">
-                                            <Label className="text-xs text-slate-500">统一社会信用代码</Label>
-                                            {isEditingCase ? (
-                                              <Input
-                                                value={creditor.company_code || ''}
-                                                onChange={(e) => updatePartyInfo('creditor', 'company_code', e.target.value)}
-                                                className="h-8 text-sm font-mono"
-                                                placeholder="请输入统一社会信用代码"
-                                              />
-                                            ) : (
-                                              <div className="text-xs font-mono text-slate-700 break-all">
-                                                {creditor.company_code || 'N/A'}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">个体工商户名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={creditor.company_name || ''}
+                                              onChange={(e) => updatePartyInfo('creditor', 'company_name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入个体工商户名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{creditor.company_name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">经营者名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={creditor.name || ''}
+                                              onChange={(e) => updatePartyInfo('creditor', 'name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入经营者名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{creditor.name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {creditor.party_type === "company" && (
+                                      <>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">公司名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={creditor.company_name || ''}
+                                              onChange={(e) => updatePartyInfo('creditor', 'company_name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入公司名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{creditor.company_name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">法定代表人名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={creditor.name || ''}
+                                              onChange={(e) => updatePartyInfo('creditor', 'name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入法定代表人名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{creditor.name || 'N/A'}</div>
+                                          )}
+                                        </div>
                                       </>
                                     )}
                                   </div>
@@ -4504,7 +4578,7 @@ export function CardFactory({
                             <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200">
                               <div className="flex items-center gap-2 mb-4">
                                 <div className="w-1 h-5 bg-slate-400 rounded-full" />
-                                <h4 className="font-bold text-slate-900 text-sm">债务人</h4>
+                                <h4 className="text-slate-500 text-sm font-normal">债务人信息</h4>
                               </div>
                               {(() => {
                                 const debtor = editedCaseInfo.case_parties.find((p: any) => p.party_role === "debtor")
@@ -4513,7 +4587,7 @@ export function CardFactory({
                                 return (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
-                                      <Label className="text-xs text-slate-500">类型</Label>
+                                      <Label className="text-xs text-slate-500">债务人类型</Label>
                                       {isEditingCase ? (
                                         <Select
                                           value={debtor.party_type || 'person'}
@@ -4538,19 +4612,21 @@ export function CardFactory({
                                       )}
                                     </div>
                                     <div className="space-y-1">
-                                      <Label className="text-xs text-slate-500">姓名</Label>
+                                      <Label className="text-xs text-slate-500">债务人名称</Label>
                                       {isEditingCase ? (
                                         <Input
                                           value={debtor.party_name || ''}
                                           onChange={(e) => updatePartyInfo('debtor', 'party_name', e.target.value)}
                                           className="h-8 text-sm"
-                                          placeholder="请输入姓名"
+                                          placeholder="请输入债务人名称"
                                         />
                                       ) : (
                                         <div className="text-sm font-medium text-slate-900">{debtor.party_name || 'N/A'}</div>
                                       )}
                                     </div>
-                                    {(debtor.name || isEditingCase) && (
+                                    
+                                    {/* 根据类型动态渲染必要字段 */}
+                                    {debtor.party_type === "person" && (
                                       <div className="space-y-1">
                                         <Label className="text-xs text-slate-500">自然人姓名</Label>
                                         {isEditingCase ? (
@@ -4565,87 +4641,66 @@ export function CardFactory({
                                         )}
                                       </div>
                                     )}
-                                    {(debtor.id_number || debtor.id_card || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">身份证号</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={debtor.id_number || debtor.id_card || ''}
-                                            onChange={(e) => updatePartyInfo('debtor', 'id_number', e.target.value)}
-                                            className="h-8 text-sm font-mono"
-                                            placeholder="请输入身份证号"
-                                          />
-                                        ) : (
-                                          <div className="text-xs font-mono text-slate-700 break-all">
-                                            {debtor.id_number || debtor.id_card || 'N/A'}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(debtor.phone || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">电话</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={debtor.phone || ''}
-                                            onChange={(e) => updatePartyInfo('debtor', 'phone', e.target.value)}
-                                            className="h-8 text-sm"
-                                            placeholder="请输入电话"
-                                          />
-                                        ) : (
-                                          <div className="text-sm font-medium text-slate-900">{debtor.phone || 'N/A'}</div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(debtor.address || isEditingCase) && (
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-slate-500">地址</Label>
-                                        {isEditingCase ? (
-                                          <Input
-                                            value={debtor.address || ''}
-                                            onChange={(e) => updatePartyInfo('debtor', 'address', e.target.value)}
-                                            className="h-8 text-sm"
-                                            placeholder="请输入地址"
-                                          />
-                                        ) : (
-                                          <div className="text-sm font-medium text-slate-900">{debtor.address || 'N/A'}</div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {(debtor.party_type === 'company' || debtor.party_type === 'individual') && (
+
+                                    {debtor.party_type === "individual" && (
                                       <>
-                                        {(debtor.company_name || isEditingCase) && (
-                                          <div className="space-y-1">
-                                            <Label className="text-xs text-slate-500">公司名称</Label>
-                                            {isEditingCase ? (
-                                              <Input
-                                                value={debtor.company_name || ''}
-                                                onChange={(e) => updatePartyInfo('debtor', 'company_name', e.target.value)}
-                                                className="h-8 text-sm"
-                                                placeholder="请输入公司名称"
-                                              />
-                                            ) : (
-                                              <div className="text-sm font-medium text-slate-900">{debtor.company_name || 'N/A'}</div>
-                                            )}
-                                          </div>
-                                        )}
-                                        {(debtor.company_code || isEditingCase) && (
-                                          <div className="space-y-1">
-                                            <Label className="text-xs text-slate-500">统一社会信用代码</Label>
-                                            {isEditingCase ? (
-                                              <Input
-                                                value={debtor.company_code || ''}
-                                                onChange={(e) => updatePartyInfo('debtor', 'company_code', e.target.value)}
-                                                className="h-8 text-sm font-mono"
-                                                placeholder="请输入统一社会信用代码"
-                                              />
-                                            ) : (
-                                              <div className="text-xs font-mono text-slate-700 break-all">
-                                                {debtor.company_code || 'N/A'}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">个体工商户名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={debtor.company_name || ''}
+                                              onChange={(e) => updatePartyInfo('debtor', 'company_name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入个体工商户名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{debtor.company_name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">经营者名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={debtor.name || ''}
+                                              onChange={(e) => updatePartyInfo('debtor', 'name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入经营者名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{debtor.name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {debtor.party_type === "company" && (
+                                      <>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">公司名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={debtor.company_name || ''}
+                                              onChange={(e) => updatePartyInfo('debtor', 'company_name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入公司名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{debtor.company_name || 'N/A'}</div>
+                                          )}
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-slate-500">法定代表人名称</Label>
+                                          {isEditingCase ? (
+                                            <Input
+                                              value={debtor.name || ''}
+                                              onChange={(e) => updatePartyInfo('debtor', 'name', e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="请输入法定代表人名称"
+                                            />
+                                          ) : (
+                                            <div className="text-sm font-medium text-slate-900">{debtor.name || 'N/A'}</div>
+                                          )}
+                                        </div>
                                       </>
                                     )}
                                   </div>
@@ -4657,8 +4712,6 @@ export function CardFactory({
                       )}
                     </div>
                   )}
-
-                  <Separator />
 
                   {/* 卡片槽位 */}
                   <div>
