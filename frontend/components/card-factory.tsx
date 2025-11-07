@@ -38,7 +38,13 @@ import {
   AlertCircle,
   Info,
   Calendar as CalendarIcon,
-  Trash2
+  Trash2,
+  FileText,
+  FileImage,
+  File,
+  FileSpreadsheet,
+  FileVideo,
+  FileAudio
 } from "lucide-react"
 import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type EvidenceCardSlotTemplate, type EvidenceCardTemplate, type ProofreadRule } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
@@ -92,6 +98,89 @@ const cardFetcher = async ([_key, caseId]: [string, string]) => {
     limit: 1000,
   })
   return response
+}
+
+// 获取文件扩展名（带点号）
+const getFileExtension = (fileName: string): string => {
+  if (!fileName) return ''
+  const lastDotIndex = fileName.lastIndexOf('.')
+  if (lastDotIndex === -1 || lastDotIndex === fileName.length - 1) {
+    return ''
+  }
+  return fileName.substring(lastDotIndex) // 返回带点号的扩展名，如 ".png"
+}
+
+// 获取文件类型图标组件
+const getFileTypeIcon = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  
+  // 图片类型
+  if (['jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'svg'].includes(ext)) {
+    return {
+      Icon: FileImage,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+      label: '图片'
+    };
+  }
+  
+  // PDF类型
+  if (ext === 'pdf') {
+    return {
+      Icon: FileText,
+      color: 'text-red-600',
+      bgColor: 'bg-red-100 dark:bg-red-900/20',
+      label: 'PDF'
+    };
+  }
+  
+  // Excel/表格类型
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return {
+      Icon: FileSpreadsheet,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/20',
+      label: '表格'
+    };
+  }
+  
+  // Word/文档类型
+  if (['doc', 'docx', 'txt', 'rtf'].includes(ext)) {
+    return {
+      Icon: FileText,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+      label: '文档'
+    };
+  }
+  
+  // 视频类型
+  if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'].includes(ext)) {
+    return {
+      Icon: FileVideo,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100 dark:bg-purple-900/20',
+      label: '视频'
+    };
+  }
+  
+  // 音频类型
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext)) {
+    return {
+      Icon: FileAudio,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+      label: '音频'
+    };
+  }
+  
+  // 默认/未知类型
+  return {
+    Icon: File,
+    color: 'text-gray-600',
+    bgColor: 'bg-gray-100 dark:bg-gray-900/20',
+    label: '文件'
+  };
 }
 
 // 获取文件类型信息
@@ -170,9 +259,9 @@ function OriginalEvidenceItem({
       ref={setNodeRef}
       {...(isDraggable ? { ...attributes, ...listeners } : {})} // 当可拖拽时，将拖拽属性绑定到整个卡片
       className={cn(
-        "w-full p-3 rounded-xl border text-left transition-all duration-200 hover:shadow-lg group relative overflow-hidden",
+        "w-full p-2 rounded-lg border text-left transition-all duration-200 hover:shadow-md group relative overflow-hidden",
         isSelected
-          ? "border-blue-400 shadow-lg ring-2 ring-blue-200 bg-blue-50/50"
+          ? "border-blue-400 shadow-md ring-1 ring-blue-200 bg-blue-50/50"
           : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30",
         isDraggable && "cursor-grab active:cursor-grabbing select-none", // 添加 select-none 防止文本选择
         isDragging && "opacity-30" // 拖拽时降低透明度，但不移动原卡片
@@ -186,21 +275,21 @@ function OriginalEvidenceItem({
       }}
     >
       {isSelected && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-blue-600" />
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 to-blue-600" />
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* 拖拽句柄 - 仅在可拖拽时显示，放在最左侧，与引用证据列表保持一致 */}
         {isDraggable && (
           <div
             className="flex-shrink-0 text-slate-400 pointer-events-none" // 使用 pointer-events-none 防止图标干扰拖拽
           >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical className="h-3.5 w-3.5" />
           </div>
         )}
         <div className="relative flex-shrink-0">
           <div
-            className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+            className="w-12 h-12 rounded-md overflow-hidden border border-slate-200 bg-slate-100 shadow-sm cursor-pointer hover:ring-1 hover:ring-blue-400 transition-all"
             onClick={(e) => {
               e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
               if (fileTypeInfo.type === 'image' && evidence.file_url && onImageClick) {
@@ -217,31 +306,31 @@ function OriginalEvidenceItem({
               />
             ) : (
               <div className={`w-full h-full ${fileTypeInfo.bgColor} flex items-center justify-center`}>
-                <span className="text-2xl">{fileTypeInfo.icon}</span>
+                <span className="text-lg">{fileTypeInfo.icon}</span>
               </div>
             )}
           </div>
           {multiSelectMode && (
-            <div className="absolute -top-1.5 -right-1.5 bg-white rounded-full shadow-md">
+            <div className="absolute -top-1 -right-1 bg-white rounded-full shadow-sm">
               {isSelected ? (
-                <CheckCircle2 className="h-5 w-5 text-blue-600 fill-blue-600" strokeWidth={0} />
+                <CheckCircle2 className="h-4 w-4 text-blue-600 fill-blue-600" strokeWidth={0} />
               ) : (
-                <Circle className="h-5 w-5 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                <Circle className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
               )}
             </div>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-500 font-medium">证据ID</span>
-              <span className="text-xs font-mono text-blue-600 font-semibold">#{evidence.id}</span>
+          <div className="flex items-center justify-between gap-1.5 mb-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-slate-500 font-medium">ID</span>
+              <span className="text-[10px] font-mono text-blue-600 font-semibold">#{evidence.id}</span>
             </div>
             <Badge
               variant={evidence.is_minted ? "default" : "secondary"}
               className={cn(
-                "text-xs flex-shrink-0 font-medium",
+                "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4",
                 evidence.is_minted ? "bg-green-500 hover:bg-green-600 text-white" : "bg-slate-200 text-slate-600",
               )}
             >
@@ -249,9 +338,20 @@ function OriginalEvidenceItem({
             </Badge>
           </div>
 
-          <p className="text-sm font-medium text-slate-900 truncate mb-1">{evidence.file_name || ''}</p>
+          <div className="flex items-center gap-1 mb-0.5">
+            {(() => {
+              const fileTypeIcon = getFileTypeIcon(evidence.file_name || '')
+              const { Icon, color } = fileTypeIcon
+              return (
+                <>
+                  <Icon className={cn("h-3 w-3", color)} />
+                  <span className="text-[10px] text-slate-500">{fileTypeIcon.label}</span>
+                </>
+              )
+            })()}
+          </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-1 text-[10px] text-slate-500">
             <span>{formatFileSize(evidence.file_size || 0)}</span>
             <span>•</span>
             <span>{formatDate(evidence.created_at)}</span>
@@ -1388,7 +1488,18 @@ function NonSortableReferencedEvidenceItem({
             <span className="text-[10px] text-slate-500">证据ID</span>
             <span className="text-xs font-semibold text-blue-600">#{evidence.id}</span>
           </div>
-          <p className="text-xs font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const fileTypeIcon = getFileTypeIcon(evidence.file_name || '')
+              const { Icon, color } = fileTypeIcon
+              return (
+                <>
+                  <Icon className={cn("h-3 w-3", color)} />
+                  <span className="text-xs text-slate-500">{fileTypeIcon.label}</span>
+                </>
+              )
+            })()}
+          </div>
         </div>
       </div>
     </div>
@@ -1495,7 +1606,18 @@ function SortableReferencedEvidenceItem({
             <span className="text-[10px] text-slate-500">证据ID</span>
             <span className="text-xs font-semibold text-blue-600">#{evidence.id}</span>
           </div>
-          <p className="text-xs font-medium text-slate-900 truncate">{evidence.file_name || ''}</p>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const fileTypeIcon = getFileTypeIcon(evidence.file_name || '')
+              const { Icon, color } = fileTypeIcon
+              return (
+                <>
+                  <Icon className={cn("h-3 w-3", color)} />
+                  <span className="text-xs text-slate-500">{fileTypeIcon.label}</span>
+                </>
+              )
+            })()}
+          </div>
         </div>
 
         {/* 移除按钮 - 悬停时显示 */}
@@ -3930,21 +4052,21 @@ export function CardFactory({
       <div className="space-y-4">
         <div className="grid grid-cols-12 gap-4">
           {/* 左侧：原始证据列表 */}
-          <Card className="col-span-3">
-            <CardHeader className="pb-2 pt-3 px-3">
-              <div className="flex items-center justify-between w-full gap-2">
-                <CardTitle className="text-base flex items-center gap-2 flex-shrink-0">
+          <Card className="col-span-2">
+            <CardHeader className="pb-1.5 pt-2 px-2">
+              <div className="flex items-center justify-between w-full gap-1.5">
+                <CardTitle className="text-sm flex items-center gap-1.5 flex-shrink-0">
                   <span>原始证据</span>
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
                     {evidenceList.length}
                   </Badge>
                 </CardTitle>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   <Button
                     onClick={handleCast}
                     disabled={selectedEvidenceIds.size === 0}
                     size="sm"
-                    className="h-7 px-3 text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
                     铸造 {selectedEvidenceIds.size > 0 && `(${selectedEvidenceIds.size})`}
                   </Button>
@@ -3953,12 +4075,12 @@ export function CardFactory({
             </CardHeader>
             {/* 多选操作栏 - 仅在多选时显示 */}
             {isMultiSelect && (
-              <div className="px-3 pb-2 border-b border-slate-200">
-                <div className="flex items-center gap-2">
+              <div className="px-2 pb-1.5 border-b border-slate-200">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                    className="h-6 px-2 text-[10px] text-slate-600 hover:text-blue-600 hover:bg-blue-50"
                     onClick={handleSelectAll}
                   >
                     全选
@@ -3966,7 +4088,7 @@ export function CardFactory({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-3 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                    className="h-6 px-2 text-[10px] text-slate-600 hover:text-blue-600 hover:bg-blue-50"
                     onClick={() => {
                       const allIds = evidenceList.map((e: any) => String(e.id)) as string[]
                       const inverted = new Set<string>(
@@ -3980,7 +4102,7 @@ export function CardFactory({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-3 text-xs text-slate-600 hover:text-red-600 hover:bg-red-50"
+                    className="h-6 px-2 text-[10px] text-slate-600 hover:text-red-600 hover:bg-red-50"
                     onClick={() => {
                       // 取消多选模式时，清空所有选择
                       setIsMultiSelect(false)
@@ -3992,7 +4114,7 @@ export function CardFactory({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-6 px-2 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={selectedEvidenceIds.size === 0}
                     onClick={async () => {
                       if (selectedEvidenceIds.size === 0) return
@@ -4039,7 +4161,7 @@ export function CardFactory({
             )}
             <CardContent className="p-0">
               <ScrollArea className="h-[calc(100vh-280px)]">
-                <div className="p-3 space-y-2.5">
+                <div className="p-2 space-y-2">
                   {evidenceList.map((evidence: any) => (
                     <OriginalEvidenceItem
                       key={evidence.id}
@@ -4061,7 +4183,7 @@ export function CardFactory({
           </Card>
 
           {/* 中间：证据卡片列表和详情 */}
-          <Card className="col-span-3">
+          <Card className="col-span-4">
             <CardHeader className="pb-2 pt-3 px-3 h-[44px] flex items-start">
               <CardTitle className="text-base flex items-center gap-2 w-full">
                 <span>证据卡片</span>
@@ -4758,7 +4880,18 @@ export function CardFactory({
                         <span className="text-[10px] text-slate-500 font-medium">证据ID</span>
                         <span className="text-xs font-mono text-blue-600 font-semibold">#{evidence.id}</span>
                       </div>
-                      <p className="text-sm font-bold text-slate-900 truncate">{evidence.file_name || ''}</p>
+                      <div className="flex items-center gap-1.5">
+                        {(() => {
+                          const fileTypeIcon = getFileTypeIcon(evidence.file_name || '')
+                          const { Icon, color } = fileTypeIcon
+                          return (
+                            <>
+                              <Icon className={cn("h-3.5 w-3.5", color)} />
+                              <span className="text-xs text-slate-500">{fileTypeIcon.label}</span>
+                            </>
+                          )
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
