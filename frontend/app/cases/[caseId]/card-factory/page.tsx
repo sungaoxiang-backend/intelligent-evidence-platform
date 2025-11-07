@@ -7,6 +7,14 @@ import { CardFactory } from "@/components/card-factory"
 import { caseApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import useSWR from "swr"
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 
 // 案件数据获取函数
 const caseFetcher = async ([key, caseId]: [string, string]) => {
@@ -63,7 +71,29 @@ export default function CardFactoryPage() {
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">卡片工厂</h1>
+          {/* 面包屑导航 */}
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/cases" className="hover:text-foreground">
+                  案件管理
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink 
+                  href={`/cases/${caseId}`}
+                  className="hover:text-foreground"
+                >
+                  案件 {numericCaseId}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>卡片工厂</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </div>
         <div className="flex gap-3 items-center">
           <Button 

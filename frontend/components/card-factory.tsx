@@ -4353,7 +4353,7 @@ export function CardFactory({
                           <Label className="text-xs text-slate-500">案件ID</Label>
                           <div 
                             onClick={() => handleCopy(String(editedCaseInfo.id), '案件ID')}
-                            className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                            className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
                             title="点击复制案件ID"
                           >
                             #{editedCaseInfo.id}
