@@ -2861,8 +2861,28 @@ export function CardFactory({
   const evidenceList = evidenceData?.data || []
   const cardList = cardData?.data || []
 
-  // 从卡槽模板中提取所有唯一的卡片类型
-  const availableCardTypes = React.useMemo(() => {
+  // 获取所有可用的卡片类型（从新API获取）
+  const { data: allAvailableCardTypesData } = useSWR(
+    '/api/evidences/available-card-types',
+    async () => {
+      try {
+        const response = await evidenceCardApi.getAvailableCardTypes()
+        return response.data || []
+      } catch (error) {
+        console.error('获取可用卡片类型列表失败:', error)
+        return []
+      }
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
+  )
+
+  const allAvailableCardTypes = allAvailableCardTypesData || []
+
+  // 从卡槽模板中提取所有唯一的卡片类型（作为后备）
+  const templateCardTypes = React.useMemo(() => {
     const cardTypesSet = new Set<string>()
     slotTemplates.forEach((template: EvidenceCardSlotTemplate) => {
       template.required_card_types?.forEach((cardType: EvidenceCardTemplate) => {
@@ -2873,6 +2893,14 @@ export function CardFactory({
     })
     return Array.from(cardTypesSet).sort()
   }, [slotTemplates])
+
+  // 优先使用从新API获取的所有可用卡片类型，如果没有则从模板中提取
+  const availableCardTypes = React.useMemo(() => {
+    if (allAvailableCardTypes.length > 0) {
+      return allAvailableCardTypes
+    }
+    return templateCardTypes
+  }, [allAvailableCardTypes, templateCardTypes])
 
   // 定义联合卡片类型（这些类型不允许独立卡片切换为）
   const associationCardTypes = React.useMemo(() => {

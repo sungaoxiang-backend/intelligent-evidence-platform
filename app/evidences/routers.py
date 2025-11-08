@@ -130,6 +130,47 @@ async def read_evidences_by_case_id(
     return ListResponse(data=evidence_responses, pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit if limit > 0 else 1))
 
 
+@router.get("/available-card-types")
+async def get_available_card_types(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """获取所有可用的证据卡片类型列表
+    
+    返回所有在evidence_card_templates中定义的证据卡片类型，
+    用于前端下拉列表显示，允许用户选择任何类型的证据卡片。
+    
+    Returns:
+        ListResponse: 所有可用的证据卡片类型列表
+    """
+    try:
+        from app.core.config_manager import config_manager
+        
+        # 加载证据卡槽配置
+        config = config_manager.load_evidence_card_slots_config()
+        
+        # 提取所有card_type
+        card_types = []
+        for template in config.evidence_card_templates:
+            card_type = template.get('card_type')
+            if card_type:
+                card_types.append(card_type)
+        
+        # 去重并排序
+        card_types = sorted(list(set(card_types)))
+        
+        return ListResponse(
+            data=card_types,
+            pagination=None
+        )
+    except Exception as e:
+        logger.error(f"获取可用卡片类型列表失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取可用卡片类型列表失败: {str(e)}"
+        )
+
+
 @router.get("/evidence-cards", response_model=ListResponse[EvidenceCardResponse])
 async def list_evidence_cards(
     db: DBSession,

@@ -877,6 +877,33 @@ export const evidenceCardApi = {
       throw new Error(result.message || "校对卡槽失败");
     }
   },
+
+  async getAvailableCardTypes(): Promise<{ data: string[] }> {
+    const url = buildApiUrl(`/evidences/available-card-types`);
+    const resp = await fetch(url, {
+      headers: getAuthHeader(),
+    });
+    
+    // 检查响应状态
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      let errorMsg = "获取可用卡片类型列表失败";
+      try {
+        const errorObj = JSON.parse(errorText);
+        errorMsg = errorObj.message || errorObj.detail || errorMsg;
+      } catch {
+        errorMsg = errorText || errorMsg;
+      }
+      throw new Error(errorMsg);
+    }
+    
+    const result = await resp.json();
+    if (result.code === 200) {
+      return { data: result.data || [] };
+    } else {
+      throw new Error(result.message || "获取可用卡片类型列表失败");
+    }
+  },
 }
 
 // OCR API
