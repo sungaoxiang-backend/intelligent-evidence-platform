@@ -593,10 +593,21 @@ scenario_rules:
         or_group: "转账身份"
       
       # 身份证据 - 根据当事人类型动态添加
-      # 个人身份证据
-      # 逻辑：当债权人是个人类型时，需要身份证（债权人角色）
-      #       当债务人是个人类型时，需要身份证（债务人角色）
-      #       如果债权人和债务人都是个人类型，则双方都需要（all）
+      # 个人身份证据（身份证/户籍档案）
+      # 逻辑：
+      # 1. 当债权人是个人类型时，需要身份证/户籍档案（债权人角色）
+      # 2. 当债务人是个人类型时，需要身份证/户籍档案（债务人角色）
+      # 3. 当债权人是个体工商户时，需要身份证/户籍档案（债权人角色）- 因为个体工商户经营者是个人
+      # 4. 当债务人是个体工商户时，需要身份证/户籍档案（债务人角色）- 因为个体工商户经营者是个人
+      # 5. 当债权人是公司时，需要身份证/户籍档案（债权人角色）- 因为公司需要提供法定代表人的身份证
+      # 6. 如果债权人和债务人都是个人类型，则双方都需要（all）
+      # 7. 如果一方是个人/个体工商户，另一方是公司/个体工商户，则个人/个体工商户一方需要（creditor/debtor）
+      # 8. 如果债权人是公司，债务人是个体工商户，则双方都需要（all）- 公司需要法定代表人的身份证，个体工商户需要经营者的身份证
+      # 示例场景：
+      #   - 个人诉个人：双方都需要（all）
+      #   - 个人诉个体工商户：双方都需要（all）- 个人需要（creditor），个体工商户需要（debtor）
+      #   - 公司诉个体工商户：双方都需要（all）- 公司需要法定代表人的身份证（creditor），个体工商户需要经营者的身份证（debtor）
+      #   - 个体工商户诉公司：双方都需要（all）- 个体工商户需要经营者的身份证（creditor），公司需要法定代表人的身份证（debtor）
       - evidence_type: "身份证"
         for_creditor_type: "person"  # 当债权人是该类型时需要（债权人角色）
         for_debtor_type: "person"  # 当债务人是该类型时需要（债务人角色）
@@ -605,9 +616,79 @@ scenario_rules:
         # 如果只有for_debtor_type匹配，则role_requirement为"debtor"
         or_group: "居民身份"
       
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的身份证（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的身份证（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
       - evidence_type: "中华人民共和国居民户籍档案"
         for_creditor_type: "person"
         for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
         or_group: "居民身份"
       
       # 公司身份证据
@@ -642,14 +723,93 @@ scenario_rules:
         or_group: null
       
       # 身份证据 - 根据当事人类型动态添加(同上)
+      # 个人身份证据（身份证/户籍档案）
+      # 逻辑：当一方是个人、个体工商户或公司时，需要身份证/户籍档案
+      # - 个人/个体工商户：需要经营者/个人的身份证
+      # - 公司：需要法定代表人的身份证
+      # 示例场景：
+      #   - 个人诉个人：双方都需要（all）
+      #   - 个人诉个体工商户：双方都需要（all）
+      #   - 公司诉个体工商户：双方都需要（all）- 公司需要法定代表人的身份证（creditor），个体工商户需要经营者的身份证（debtor）
+      #   - 个体工商户诉公司：双方都需要（all）- 个体工商户需要经营者的身份证（creditor），公司需要法定代表人的身份证（debtor）
       - evidence_type: "身份证"
         for_creditor_type: "person"
         for_debtor_type: "person"
         or_group: "居民身份"
       
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的身份证（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的身份证（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
       - evidence_type: "中华人民共和国居民户籍档案"
         for_creditor_type: "person"
         for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
         or_group: "居民身份"
       
       - evidence_type: "公司营业执照"
@@ -704,14 +864,93 @@ scenario_rules:
         or_group: "转账记录"
       
       # 身份证据 - 根据当事人类型动态添加(同上)
+      # 个人身份证据（身份证/户籍档案）
+      # 逻辑：当一方是个人、个体工商户或公司时，需要身份证/户籍档案
+      # - 个人/个体工商户：需要经营者/个人的身份证
+      # - 公司：需要法定代表人的身份证
+      # 示例场景：
+      #   - 个人诉个人：双方都需要（all）
+      #   - 个人诉个体工商户：双方都需要（all）
+      #   - 公司诉个体工商户：双方都需要（all）- 公司需要法定代表人的身份证（creditor），个体工商户需要经营者的身份证（debtor）
+      #   - 个体工商户诉公司：双方都需要（all）- 个体工商户需要经营者的身份证（creditor），公司需要法定代表人的身份证（debtor）
       - evidence_type: "身份证"
         for_creditor_type: "person"
         for_debtor_type: "person"
         or_group: "居民身份"
       
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的身份证（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的身份证（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
       - evidence_type: "中华人民共和国居民户籍档案"
         for_creditor_type: "person"
         for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
         or_group: "居民身份"
       
       - evidence_type: "公司营业执照"
@@ -753,14 +992,93 @@ scenario_rules:
         or_group: "转账记录"
       
       # 身份证据 - 根据当事人类型动态添加(同上)
+      # 个人身份证据（身份证/户籍档案）
+      # 逻辑：当一方是个人、个体工商户或公司时，需要身份证/户籍档案
+      # - 个人/个体工商户：需要经营者/个人的身份证
+      # - 公司：需要法定代表人的身份证
+      # 示例场景：
+      #   - 个人诉个人：双方都需要（all）
+      #   - 个人诉个体工商户：双方都需要（all）
+      #   - 公司诉个体工商户：双方都需要（all）- 公司需要法定代表人的身份证（creditor），个体工商户需要经营者的身份证（debtor）
+      #   - 个体工商户诉公司：双方都需要（all）- 个体工商户需要经营者的身份证（creditor），公司需要法定代表人的身份证（debtor）
       - evidence_type: "身份证"
         for_creditor_type: "person"
         for_debtor_type: "person"
         or_group: "居民身份"
       
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的身份证（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的身份证（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "身份证"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的身份证（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的身份证（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
       - evidence_type: "中华人民共和国居民户籍档案"
         for_creditor_type: "person"
         for_debtor_type: "person"
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时需要（债权人角色）- 覆盖：个体工商户诉个人/公司/个体工商户
+        for_debtor_type: "individual"  # 当债务人是个体工商户时需要（债务人角色）- 覆盖：个人/公司/个体工商户诉个体工商户
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "individual"  # 当债务人是个体工商户时，需要经营者的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个体工商户时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "individual"  # 当债权人是个体工商户时，需要经营者的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个体工商户且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "person"  # 当债务人是个人时，需要个人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是个人时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "person"  # 当债权人是个人时，需要个人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是个人且债务人是公司时，双方都需要（all）
+        or_group: "居民身份"
+      
+      - evidence_type: "中华人民共和国居民户籍档案"
+        for_creditor_type: "company"  # 当债权人是公司时，需要法定代表人的户籍档案（债权人角色）
+        for_debtor_type: "company"  # 当债务人是公司时，需要法定代表人的户籍档案（债务人角色）
+        # 当债权人是公司且债务人是公司时，双方都需要（all）
         or_group: "居民身份"
       
       - evidence_type: "公司营业执照"
