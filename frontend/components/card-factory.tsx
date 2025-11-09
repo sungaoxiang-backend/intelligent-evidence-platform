@@ -229,6 +229,36 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+// 根据卡片类型获取允许的字段列表（基于后端配置）
+function getAllowedFieldsForCardType(type: string): string[] {
+  const fieldMap: Record<string, string[]> = {
+    "公司营业执照": [
+      "公司名称",
+      "统一社会信用代码",
+      "法定代表人",
+      "公司类型",
+      "住所地"
+    ],
+    "个体工商户营业执照": [
+      "公司名称",
+      "统一社会信用代码",
+      "经营者姓名",
+      "经营类型",
+      "经营场所"
+    ],
+    "身份证": [
+      "姓名",
+      "性别",
+      "民族",
+      "出生",
+      "住址",
+      "公民身份号码"
+    ],
+    // 可以继续添加其他类型的字段映射
+  }
+  return fieldMap[type] || [] // 如果没有配置，返回空数组（显示所有字段）
+}
+
 // 原始证据列表项组件（参考demo设计）
 function OriginalEvidenceItem({ 
   evidence, 
@@ -411,6 +441,8 @@ function EvidenceCardListItem({
   const [isEditing, setIsEditing] = useState(false)
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
   const [isHoveringImage, setIsHoveringImage] = useState(false)
+  const prevIsEditingRef = React.useRef(false)
+  const prevAllFeaturesRef = React.useRef<any[]>([])
   
   // 异常卡片不能拖拽，只能删除
   const isAbnormal = !card.is_normal
@@ -440,8 +472,13 @@ function EvidenceCardListItem({
   const isCombined = cardInfo.card_is_associated === true
   const cardFeatures = cardInfo.card_features || []
 
-  // 显示所有字段，包括null值（null值会显示为"N/A"）
-  const allFeatures = cardFeatures
+  // 过滤字段：只显示配置中定义的字段
+  const allowedFields = getAllowedFieldsForCardType(cardType)
+  const allFeatures = React.useMemo(() => {
+    return allowedFields.length > 0
+      ? cardFeatures.filter((f: any) => allowedFields.includes(f.slot_name))
+      : cardFeatures // 如果没有配置，显示所有字段（向后兼容）
+  }, [cardFeatures, cardType]) // 使用 cardType 而不是 allowedFields，因为 allowedFields 是函数调用结果
 
   // 获取独立卡片可用的分类列表（排除联合卡片类型）
   const independentCardTypes = React.useMemo(() => {
@@ -451,19 +488,30 @@ function EvidenceCardListItem({
 
   // 初始化编辑数据
   useEffect(() => {
-    if (isEditing && cardFeatures.length > 0) {
-      // 深拷贝特征数据，保持原始结构和类型信息
-      const cloned = cardFeatures.map((f: any) => ({
+    // 进入编辑模式时初始化
+    if (isEditing && !prevIsEditingRef.current && allFeatures.length > 0) {
+      // 使用过滤后的字段列表（allFeatures）来初始化编辑数据，确保只编辑显示的字段
+      // 深拷贝特征数据，保持原始结构和类型信息，并标准化值格式
+      const cloned = allFeatures.map((f: any) => ({
         ...f,
-        slot_value: f.slot_value, // 保持原始值
+        // 标准化值：确保字符串值去除首尾空格，保持其他类型不变
+        slot_value: f.slot_value != null && typeof f.slot_value === 'string' 
+          ? f.slot_value.trim() 
+          : f.slot_value,
         slot_value_type: f.slot_value_type || 'string', // 确保有类型信息
       }))
       setEditedFeatures(cloned)
-    } else if (!isEditing) {
-      // 退出编辑模式时，清空编辑数据
+      prevAllFeaturesRef.current = allFeatures
+    } 
+    // 退出编辑模式时清空
+    else if (!isEditing && prevIsEditingRef.current) {
       setEditedFeatures([])
+      prevAllFeaturesRef.current = []
     }
-  }, [isEditing, cardFeatures])
+    
+    // 更新 ref
+    prevIsEditingRef.current = isEditing
+  }, [isEditing, allFeatures])
 
   // 获取关联的证据图片URL（按序号排序）
   const getEvidenceUrls = () => {
@@ -524,8 +572,11 @@ function EvidenceCardListItem({
 
   // 根据字段名和类型获取合适的输入控件
   const getFieldInputType = (slotName: string, slotValueType: string): 'text' | 'number' | 'date' | 'select' | 'boolean' => {
+    // 标准化字段名（去除首尾空格）
+    const normalizedSlotName = slotName?.trim() || ''
+    
     // 日期类型字段
-    if (slotValueType === 'date' || slotName.includes('日期') || slotName === '出生') {
+    if (slotValueType === 'date' || normalizedSlotName.includes('日期') || normalizedSlotName === '出生') {
       return 'date'
     }
     
@@ -535,18 +586,18 @@ function EvidenceCardListItem({
     }
     
     // 数字类型字段
-    if (slotValueType === 'number' || slotName.includes('金额') || slotName.includes('代码') || slotName.includes('号码')) {
+    if (slotValueType === 'number' || normalizedSlotName.includes('金额') || normalizedSlotName.includes('代码') || normalizedSlotName.includes('号码')) {
       return 'number'
     }
     
-    // 需要下拉选择的字段
-    if (slotName === '性别') {
+    // 需要下拉选择的字段（使用标准化后的字段名进行匹配）
+    if (normalizedSlotName === '性别') {
       return 'select'
     }
-    if (slotName === '民族') {
+    if (normalizedSlotName === '民族') {
       return 'select'
     }
-    if (slotName === '公司类型' || slotName === '经营类型') {
+    if (normalizedSlotName === '公司类型' || normalizedSlotName === '经营类型') {
       return 'select'
     }
     
@@ -556,13 +607,16 @@ function EvidenceCardListItem({
   
   // 获取下拉选项
   const getSelectOptions = (slotName: string): Array<{ value: string; label: string }> => {
-    if (slotName === '性别') {
+    // 标准化字段名（去除首尾空格）
+    const normalizedSlotName = slotName?.trim() || ''
+    
+    if (normalizedSlotName === '性别') {
       return [
         { value: '男', label: '男' },
         { value: '女', label: '女' }
       ]
     }
-    if (slotName === '民族') {
+    if (normalizedSlotName === '民族') {
       return [
         { value: '汉', label: '汉' },
         { value: '回', label: '回' },
@@ -573,10 +627,11 @@ function EvidenceCardListItem({
         { value: '其他', label: '其他' }
       ]
     }
-    if (slotName === '公司类型' || slotName === '经营类型') {
+    if (normalizedSlotName === '公司类型' || normalizedSlotName === '经营类型') {
       return [
         { value: '个体工商户', label: '个体工商户' },
         { value: '有限责任公司', label: '有限责任公司' },
+        { value: '有限责任公司(自然人投资或控股)', label: '有限责任公司(自然人投资或控股)' },
         { value: '股份有限公司', label: '股份有限公司' },
         { value: '其他', label: '其他' }
       ]
@@ -1024,21 +1079,43 @@ function EvidenceCardListItem({
                           </Select>
                         ) : inputType === 'select' && selectOptions.length > 0 ? (
                           /* 下拉选择器 */
-                          <Select
-                            value={displayFeature.slot_value || ''}
-                            onValueChange={(value) => handleFeatureChange(displayFeature.slot_name, value)}
-                          >
-                            <SelectTrigger className="h-7 text-xs" onClick={(e) => e.stopPropagation()}>
-                              <SelectValue placeholder={`请选择${displayFeature.slot_name}`} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {selectOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          (() => {
+                            // 标准化当前值：转换为字符串并去除首尾空格
+                            const currentValue = displayFeature.slot_value != null 
+                              ? String(displayFeature.slot_value).trim() 
+                              : ''
+                            
+                            // 检查当前值是否在选项中
+                            const matchedOption = selectOptions.find(opt => opt.value === currentValue)
+                            
+                            // 如果当前值不在选项中，但有值，动态添加到选项中（确保当前值可以显示）
+                            const finalOptions = matchedOption 
+                              ? selectOptions 
+                              : (currentValue 
+                                  ? [...selectOptions, { value: currentValue, label: currentValue }]
+                                  : selectOptions)
+                            
+                            // 确定要使用的值：如果当前值存在，使用它；否则使用空字符串
+                            const selectValue = currentValue || ''
+                            
+                            return (
+                              <Select
+                                value={selectValue}
+                                onValueChange={(value) => handleFeatureChange(displayFeature.slot_name, value)}
+                              >
+                                <SelectTrigger className="h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                                  <SelectValue placeholder={`请选择${displayFeature.slot_name}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {finalOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )
+                          })()
                         ) : inputType === 'number' ? (
                           /* 数字输入框 */
                           <Input
@@ -1139,7 +1216,12 @@ function DraggedCardPreview({
   const cardType = cardInfo.card_type || '未知类型'
   const isCombined = cardInfo.card_is_associated === true
   const cardFeatures = cardInfo.card_features || []
-  const allFeatures = cardFeatures
+  
+  // 过滤字段：只显示配置中定义的字段
+  const allowedFields = getAllowedFieldsForCardType(cardType)
+  const allFeatures = allowedFields.length > 0
+    ? cardFeatures.filter((f: any) => allowedFields.includes(f.slot_name))
+    : cardFeatures // 如果没有配置，显示所有字段（向后兼容）
 
   // 获取关联的证据图片URL
   const getEvidenceUrls = () => {
