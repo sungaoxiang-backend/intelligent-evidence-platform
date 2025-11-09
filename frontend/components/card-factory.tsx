@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
+import { useRouter } from "next/navigation"
 import useSWR, { mutate } from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,6 +53,7 @@ import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type Evidence
 import { useToast } from "@/components/ui/use-toast"
 import { useGlobalTasks } from "@/contexts/global-task-context"
 import { useCardCasting } from "@/hooks/use-celery-tasks"
+import { storeCaseDataForDocument } from "@/lib/document-template-mapper"
 import {
   DndContext,
   DragOverlay,
@@ -2072,18 +2074,43 @@ function renderCardSlots(
   }
 
   // 按or_group分组，用于显示分组信息
+  // 对于同一个or_group内的相同card_type，只保留一个（去重）
   const groupedByOrGroup: Record<string, EvidenceCardTemplate[]> = {}
   const ungroupedCards: EvidenceCardTemplate[] = []
+  const seenCardTypesInGroups = new Set<string>() // 跟踪已见过的 card_type（用于去重）
   
   filteredCards.forEach(cardType => {
     if (cardType.or_group) {
       if (!groupedByOrGroup[cardType.or_group]) {
         groupedByOrGroup[cardType.or_group] = []
       }
-      groupedByOrGroup[cardType.or_group].push(cardType)
+      
+      // 检查这个 card_type 是否已经在当前组中出现过
+      const groupKey = `${cardType.or_group}::${cardType.card_type}`
+      if (!seenCardTypesInGroups.has(groupKey)) {
+        groupedByOrGroup[cardType.or_group].push(cardType)
+        seenCardTypesInGroups.add(groupKey)
+      } else {
+        // 调试日志：发现重复的卡片类型
+        console.log(`[renderCardSlots] 跳过重复的卡片类型: ${cardType.card_type} in group: ${cardType.or_group}`)
+      }
     } else {
-      ungroupedCards.push(cardType)
+      // 对于无分组的卡片，也检查是否重复
+      const ungroupedKey = `ungrouped::${cardType.card_type}`
+      if (!seenCardTypesInGroups.has(ungroupedKey)) {
+        ungroupedCards.push(cardType)
+        seenCardTypesInGroups.add(ungroupedKey)
+      }
     }
+  })
+
+  // 调试日志：显示分组结果
+  console.log(`[renderCardSlots] role=${role}, 分组结果:`, {
+    groupedByOrGroup: Object.keys(groupedByOrGroup).map(groupName => ({
+      groupName,
+      cardTypes: groupedByOrGroup[groupName].map(ct => ct.card_type)
+    })),
+    ungroupedCards: ungroupedCards.map(ct => ct.card_type)
   })
 
   return (
@@ -2358,14 +2385,47 @@ function CardSlotUnit({
     
     const cardFeatures = placedCard.card_info.card_features || []
     
-    // 查找匹配的字段（支持大小写不敏感匹配）
+    // 字段名同义词映射表（用于处理不同来源的字段名差异）
+    const slotNameAliases: Record<string, string[]> = {
+      // 经营名称的同义词（个体工商户使用）
+      '经营名称': ['公司名称', '经营名称', '名称', '企业名称', '个体工商户名称'],
+      // 公司名称的同义词（用于公司类型）
+      '公司名称': ['公司名称', '企业名称', '名称', '经营名称'],
+      // 住所地的同义词
+      '住所地': ['住所地', '地址', '住址', '注册地址', '经营场所', '住所'],
+      // 统一社会信用代码的同义词
+      '统一社会信用代码': ['统一社会信用代码', '社会信用代码', '信用代码', '统一代码'],
+      // 法定代表人的同义词
+      '法定代表人': ['法定代表人', '法人代表', '负责人', '法人'],
+      // 经营者姓名的同义词
+      '经营者姓名': ['经营者姓名', '经营者', '姓名', '经营者名称'],
+      // 经营类型的同义词
+      '经营类型': ['经营类型', '公司类型', '企业类型', '类型'],
+      // 身份证相关字段的同义词
+      '出生': ['出生', '出生日期', '生日', '出生年月日'],
+      '住址': ['住址', '地址', '住所地', '居住地址', '户籍地址'],
+      '公民身份号码': ['公民身份号码', '身份证号', '身份证号码', '身份证'],
+      '姓名': ['姓名', '名字', '真名', '名称'],
+      // 其他常见字段的同义词
+      '真名': ['真名', '姓名', '名字', '名称'],
+      '地址': ['地址', '住址', '住所地', '居住地址', '注册地址', '经营场所'],
+    }
+    
+    // 获取目标字段名的所有可能别名
+    const possibleNames = slotNameAliases[slotName] || [slotName]
+    
+    // 查找匹配的字段（支持同义词匹配）
     const feature = cardFeatures.find((f: any) => {
       if (!f || !f.slot_name) return false
-      // 精确匹配
-      if (f.slot_name === slotName) return true
-      // 去除空格后匹配
-      if (f.slot_name.trim() === slotName.trim()) return true
-      return false
+      const normalizedCardSlotName = f.slot_name.trim()
+      
+      // 检查是否匹配任何可能的别名
+      return possibleNames.some(alias => {
+        const normalizedAlias = alias.trim()
+        // 精确匹配
+        if (normalizedCardSlotName === normalizedAlias) return true
+        return false
+      })
     })
     
     if (!feature) {
@@ -2401,16 +2461,13 @@ function CardSlotUnit({
     }
     
     // 情况2: 需要校对 - 从后端获取的结果
+    // 只有当后端返回了校对结果时才显示，否则返回 null（不显示校对状态）
     if (proofreadResults && proofreadResults[slotName]) {
       return proofreadResults[slotName]
     }
     
-    // 情况3: 有校对规则但还没有结果（可能正在加载中）
-    return {
-      status: 'passed',
-      message: '⏳ 校对中...',
-      reason: `该字段 "${slotName}" 需要校对，正在验证中...`
-    }
+    // 有校对规则但还没有结果时，不显示任何校对状态
+    return null
   }
 
   // 检查当前拖拽的卡片类型是否匹配此槽位
@@ -2801,6 +2858,7 @@ export function CardFactory({
   const slotCardsRef = useRef<Record<string, number | null>>({}) // 存储最新的槽位关联，用于清理检查
   
   const { toast } = useToast()
+  const router = useRouter()
   const { tasks, addTask, updateTask, removeTask } = useGlobalTasks()
   const { startCardCasting } = useCardCasting({ addTask, updateTask, removeTask })
 
@@ -4151,6 +4209,24 @@ export function CardFactory({
     setIsEditingCase(false)
   }
 
+  // 跳转到文书模板页面并传递案件数据
+  const handleGoToDocumentTemplates = () => {
+    if (!finalCaseData) {
+      toast({
+        title: "提示",
+        description: "案件信息不存在，无法生成文书",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // 存储案件和卡片数据到 localStorage
+    storeCaseDataForDocument(caseId, finalCaseData, cardList, slotCards)
+
+    // 跳转到文书模板页面，通过 URL 参数传递案件ID
+    router.push(`/document-templates?caseId=${caseId}`)
+  }
+
   // 暴露上传对话框控制给外部
   useEffect(() => {
     // 创建一个全局函数供外部调用
@@ -4534,15 +4610,26 @@ export function CardFactory({
               <div className="flex items-center justify-between w-full">
                 <CardTitle className="text-base">案件信息</CardTitle>
                 {!isEditingCase ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditingCase(true)}
-                    className="h-8 px-3 text-xs border-slate-300 hover:border-blue-400 hover:bg-blue-50"
-                  >
-                    <Pencil className="h-3 w-3 mr-1.5" />
-                    编辑
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGoToDocumentTemplates}
+                      className="h-8 px-3 text-xs border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600"
+                    >
+                      <FileText className="h-3 w-3 mr-1.5" />
+                      生成文书
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingCase(true)}
+                      className="h-8 px-3 text-xs border-slate-300 hover:border-blue-400 hover:bg-blue-50"
+                    >
+                      <Pencil className="h-3 w-3 mr-1.5" />
+                      编辑
+                    </Button>
+                  </div>
                 ) : (
                   <div className="flex gap-2">
                     <Button

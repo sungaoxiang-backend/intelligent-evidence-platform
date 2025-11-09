@@ -11,27 +11,91 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { documentTemplateApi, type TemplateInfo, type TemplateSchema } from "@/lib/document-template-api"
+import { getCaseDataForDocument, mapCaseAndCardsToFormData, clearCaseDataForDocument } from "@/lib/document-template-mapper"
 import { API_CONFIG } from "@/lib/config"
 import { FileText, Download, Save, Loader2, AlertCircle, Sparkles, ChevronDown } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function DocumentTemplatesPage() {
+  const [caseId, setCaseId] = useState<string | null>(null)
+  
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
   const [templateSchema, setTemplateSchema] = useState<TemplateSchema | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+  const [isPrefilled, setIsPrefilled] = useState(false) // 标记是否已预填充
   const { toast } = useToast()
+
+  // 从 URL 获取案件ID
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const id = params.get('caseId')
+      if (id) {
+        setCaseId(id)
+      }
+    }
+  }, [])
 
   // 加载模板列表
   useEffect(() => {
     loadTemplates()
   }, [])
 
+  // 根据案件类型默认选择模板
+  useEffect(() => {
+    if (templates.length > 0 && caseId && !selectedTemplate) {
+      const storedData = getCaseDataForDocument(caseId)
+      if (storedData && storedData.caseData) {
+        const caseType = storedData.caseData.case_type
+        
+        // 根据案件类型匹配模板
+        let defaultTemplate: TemplateInfo | null = null
+        
+        if (caseType === 'debt') {
+          // 民间借贷纠纷 -> 查找包含"民间借贷"的模板
+          defaultTemplate = templates.find(t => 
+            t.name.includes('民间借贷') || 
+            t.template_id.includes('private_lending') ||
+            t.category === '民间借贷纠纷'
+          ) || null
+        } else if (caseType === 'contract') {
+          // 买卖合同纠纷 -> 查找包含"买卖合同"的模板
+          defaultTemplate = templates.find(t => 
+            t.name.includes('买卖合同') || 
+            t.template_id.includes('sales_contract') ||
+            t.category === '买卖合同纠纷'
+          ) || null
+        }
+        
+        // 如果找到匹配的模板，设置为选中；否则选择第一个
+        if (defaultTemplate) {
+          setSelectedTemplate(defaultTemplate)
+          console.log('[DocumentTemplates] 根据案件类型自动选择模板:', {
+            caseType,
+            templateId: defaultTemplate.template_id,
+            templateName: defaultTemplate.name
+          })
+        } else if (templates.length > 0) {
+          setSelectedTemplate(templates[0])
+        }
+      } else if (templates.length > 0) {
+        // 如果没有案件数据，默认选择第一个模板
+        setSelectedTemplate(templates[0])
+      }
+    } else if (templates.length > 0 && !selectedTemplate) {
+      // 如果没有caseId，默认选择第一个模板
+      setSelectedTemplate(templates[0])
+    }
+  }, [templates, caseId, selectedTemplate])
+
   // 加载选中的模板详情
   useEffect(() => {
     if (selectedTemplate) {
+      // 切换模板时重置预填充状态
+      setIsPrefilled(false)
       loadTemplateDetail(selectedTemplate.template_id)
     }
   }, [selectedTemplate])
@@ -41,9 +105,7 @@ export default function DocumentTemplatesPage() {
       setLoading(true)
       const data = await documentTemplateApi.getTemplateList()
       setTemplates(data)
-      if (data.length > 0 && !selectedTemplate) {
-        setSelectedTemplate(data[0])
-      }
+      // 不再在这里设置默认模板，由useEffect根据案件类型选择
     } catch (error: any) {
       toast({
         title: "加载失败",
@@ -60,8 +122,46 @@ export default function DocumentTemplatesPage() {
       setLoading(true)
       const schema = await documentTemplateApi.getTemplateDetail(template_id)
       setTemplateSchema(schema)
-      // 初始化表单数据
+      // 先初始化表单数据为空值
       initializeFormData(schema)
+      
+      // 然后尝试预填充数据（如果有案件ID）
+      if (caseId) {
+        const storedData = getCaseDataForDocument(caseId)
+      if (storedData && storedData.caseData) {
+        // 使用映射函数生成预填充数据
+        const prefilledData = mapCaseAndCardsToFormData(
+          storedData.caseData,
+          storedData.cardList,
+          schema,
+          storedData.slotCards
+        )
+          
+          // 合并预填充数据（覆盖空值）
+          setFormData((prev) => {
+            const merged = { ...prev, ...prefilledData }
+            console.log('[DocumentTemplates] 预填充数据:', {
+              caseId,
+              prefilledData,
+              merged,
+              storedData: {
+                caseData: storedData.caseData,
+                cardListCount: storedData.cardList.length
+              }
+            })
+            return merged
+          })
+          
+          setIsPrefilled(true)
+          
+          toast({
+            title: "数据已预填充",
+            description: "已从案件和证据卡片中提取信息并填充到表单",
+          })
+        } else {
+          console.log('[DocumentTemplates] 未找到存储的数据:', { caseId })
+        }
+      }
     } catch (error: any) {
       toast({
         title: "加载失败",
@@ -78,6 +178,11 @@ export default function DocumentTemplatesPage() {
     schema.blocks.forEach((block) => {
       block.rows.forEach((row) => {
         row.fields.forEach((field) => {
+          // 如果已经有预填充的数据，不要覆盖
+          if (formData[field.field_id] !== undefined) {
+            return
+          }
+          
           if (field.default) {
             data[field.field_id] = field.default
           } else if (field.type === "checkbox") {
@@ -88,7 +193,12 @@ export default function DocumentTemplatesPage() {
         })
       })
     })
-    setFormData(data)
+    
+    // 合并现有数据（保留预填充的数据）
+    setFormData((prev) => ({
+      ...prev,
+      ...data,
+    }))
   }
 
   const handleFieldChange = (field_id: string, value: any) => {

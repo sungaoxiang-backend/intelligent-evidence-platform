@@ -3338,15 +3338,45 @@ async def proofread_card_slot(
         if not proofread_rules_config:
             continue
         
-        # 查找对应的卡片特征值
+        # 查找对应的卡片特征值（支持字段名同义词映射）
         slot_value = None
-        for feature in card_features:
-            if isinstance(feature, dict) and feature.get('slot_name') == slot_name:
-                slot_value = feature.get('slot_value')
-                break
         
-        # 如果没有找到值，跳过
+        # 字段名同义词映射表（用于处理不同来源的字段名差异）
+        slot_name_aliases = {
+            '经营名称': ['公司名称', '经营名称', '名称', '企业名称', '个体工商户名称'],
+            '公司名称': ['公司名称', '企业名称', '名称', '经营名称'],
+            '住所地': ['住所地', '地址', '住址', '注册地址', '经营场所', '住所'],
+            '统一社会信用代码': ['统一社会信用代码', '社会信用代码', '信用代码', '统一代码'],
+            '法定代表人': ['法定代表人', '法人代表', '负责人', '法人'],
+            '经营者姓名': ['经营者姓名', '经营者', '姓名', '经营者名称'],
+            '经营类型': ['经营类型', '公司类型', '企业类型', '类型'],
+            # 身份证相关字段的同义词
+            '出生': ['出生', '出生日期', '生日', '出生年月日'],
+            '住址': ['住址', '地址', '住所地', '居住地址', '户籍地址'],
+            '公民身份号码': ['公民身份号码', '身份证号', '身份证号码', '身份证'],
+            '姓名': ['姓名', '名字', '真名', '名称'],
+            # 其他常见字段的同义词
+            '真名': ['真名', '姓名', '名字', '名称'],
+            '地址': ['地址', '住址', '住所地', '居住地址', '注册地址', '经营场所'],
+        }
+        
+        # 获取目标字段名的所有可能别名
+        possible_names = slot_name_aliases.get(slot_name, [slot_name])
+        
+        # 查找匹配的字段（支持同义词匹配）
+        for feature in card_features:
+            if isinstance(feature, dict):
+                feature_slot_name = feature.get('slot_name')
+                if feature_slot_name:
+                    # 检查是否匹配任何可能的别名
+                    if feature_slot_name in possible_names:
+                        slot_value = feature.get('slot_value')
+                        logger.info(f"[proofread_card_slot] 找到字段值: slot_name={slot_name}, feature_slot_name={feature_slot_name}, slot_value={slot_value}")
+                        break
+        
+        # 如果没有找到值，记录日志并跳过
         if slot_value is None or slot_value == '':
+            logger.warning(f"[proofread_card_slot] 未找到字段值: slot_name={slot_name}, possible_names={possible_names}, card_features={[f.get('slot_name') for f in card_features if isinstance(f, dict)]}")
             continue
         
         # 解析校对规则
