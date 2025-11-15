@@ -231,8 +231,8 @@ export function TemplateList({
       {/* 分页 */}
       {templates && templates.length > 0 && (
         <div className="p-4 border-t flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            共 {total} 条记录
+          <div className="text-sm text-muted-foreground whitespace-nowrap">
+            共<span className="mx-1">{total}</span>条记录
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">每页</span>

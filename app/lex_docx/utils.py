@@ -10,10 +10,198 @@ from typing import Dict, Optional, Set
 import mammoth
 from docx import Document
 from docx.shared import RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
 from app.lex_docx.schemas import PlaceholderMetadata, validate_placeholder_name
 
 logger = logging.getLogger(__name__)
+
+
+def _get_alignment_style(alignment) -> str:
+    """
+    获取段落对齐方式对应的 CSS 样式
+    
+    Args:
+        alignment: WD_ALIGN_PARAGRAPH 枚举值或 None
+        
+    Returns:
+        CSS text-align 值
+    """
+    if alignment is None:
+        return "left"
+    
+    if alignment == WD_ALIGN_PARAGRAPH.CENTER:
+        return "center"
+    elif alignment == WD_ALIGN_PARAGRAPH.RIGHT:
+        return "right"
+    elif alignment == WD_ALIGN_PARAGRAPH.JUSTIFY:
+        return "justify"
+    else:
+        return "left"
+
+
+def _get_vertical_alignment_style(vertical_alignment) -> str:
+    """
+    获取单元格垂直对齐方式对应的 CSS 样式
+    
+    Args:
+        vertical_alignment: 单元格垂直对齐枚举值
+        
+    Returns:
+        CSS vertical-align 值
+    """
+    if vertical_alignment is None:
+        return "top"
+    
+    # python-docx 中垂直对齐：0=TOP, 1=CENTER, 2=BOTTOM
+    if vertical_alignment == 0:  # TOP
+        return "top"
+    elif vertical_alignment == 1:  # CENTER
+        return "middle"
+    elif vertical_alignment == 2:  # BOTTOM
+        return "bottom"
+    else:
+        return "top"
+
+
+def _inject_alignment_info(html: str, doc) -> str:
+    """
+    将 DOCX 文档中的对齐信息注入到 HTML 中
+    
+    Args:
+        html: mammoth 生成的 HTML
+        doc: python-docx Document 对象
+        
+    Returns:
+        注入对齐信息后的 HTML
+    """
+    import re
+    from html import escape
+    
+    # 1. 为没有 border 属性的 table 添加默认样式
+    html = re.sub(
+        r'<table(?!\s+style)([^>]*)>',
+        r'<table\1 style="border-collapse: collapse; border: 1px solid #000;">',
+        html
+    )
+    
+    # 2. 处理段落对齐
+    # 收集所有段落及其对齐信息
+    paragraph_alignments = {}
+    for para in doc.paragraphs:
+        if para.text.strip():
+            text = para.text.strip()
+            alignment = _get_alignment_style(para.alignment)
+            # 使用文本的前50个字符作为键（避免过长）
+            key = text[:50] if len(text) > 50 else text
+            paragraph_alignments[key] = alignment
+    
+    # 为段落注入对齐样式
+    for text_key, alignment in paragraph_alignments.items():
+        if alignment != "left":  # 只处理非默认对齐
+            # 转义特殊字符用于正则匹配
+            escaped_text = re.escape(text_key)
+            # 匹配包含该文本的 p 或 h 标签
+            pattern = rf'<(p|h[1-6])([^>]*)>(.*?{escaped_text}.*?)</\1>'
+            def add_alignment(match):
+                tag = match.group(1)
+                attrs = match.group(2)
+                content = match.group(3)
+                # 检查是否已有 style 属性
+                if 'style=' in attrs:
+                    # 如果已有 style，添加或更新 text-align
+                    if 'text-align' not in attrs:
+                        attrs = re.sub(
+                            r'style="([^"]*)"',
+                            rf'style="\1; text-align: {alignment};"',
+                            attrs
+                        )
+                else:
+                    attrs += f' style="text-align: {alignment};"'
+                return f'<{tag}{attrs}>{content}</{tag}>'
+            html = re.sub(pattern, add_alignment, html, flags=re.DOTALL)
+    
+    # 3. 处理表格单元格对齐
+    # 收集所有表格单元格的对齐信息
+    cell_info = []
+    for table_idx, table in enumerate(doc.tables):
+        for row_idx, row in enumerate(table.rows):
+            for col_idx, cell in enumerate(row.cells):
+                # 获取单元格的第一个段落的对齐方式
+                cell_para_alignment = "left"
+                if cell.paragraphs:
+                    cell_para_alignment = _get_alignment_style(cell.paragraphs[0].alignment)
+                
+                # 获取单元格的垂直对齐
+                cell_vertical_alignment = _get_vertical_alignment_style(cell.vertical_alignment)
+                
+                # 获取单元格文本内容（用于匹配）
+                cell_text = cell.text.strip()
+                if cell_text:
+                    cell_info.append({
+                        'text': cell_text[:50] if len(cell_text) > 50 else cell_text,
+                        'full_text': cell_text,
+                        'horizontal_align': cell_para_alignment,
+                        'vertical_align': cell_vertical_alignment,
+                        'is_header': row_idx == 0,  # 第一行通常是表头
+                    })
+    
+    # 为表格单元格注入对齐样式
+    for cell_data in cell_info:
+        if cell_data['text']:
+            escaped_text = re.escape(cell_data['text'])
+            tag = 'th' if cell_data['is_header'] else 'td'
+            
+            # 匹配包含该文本的 td/th 标签
+            pattern = rf'<{tag}([^>]*)>(.*?{escaped_text}.*?)</{tag}>'
+            def add_cell_alignment(match):
+                attrs = match.group(1)
+                content = match.group(2)
+                
+                # 构建样式字符串
+                styles = []
+                if 'style=' in attrs:
+                    # 提取现有样式
+                    style_match = re.search(r'style="([^"]*)"', attrs)
+                    if style_match:
+                        existing_style = style_match.group(1)
+                        styles.append(existing_style)
+                        attrs = re.sub(r'style="[^"]*"', '', attrs)
+                else:
+                    # 添加默认边框样式
+                    styles.append("border: 1px solid #000; padding: 4pt 8pt")
+                
+                # 添加对齐样式
+                if cell_data['horizontal_align'] != "left":
+                    styles.append(f"text-align: {cell_data['horizontal_align']}")
+                if cell_data['vertical_align'] != "top":
+                    styles.append(f"vertical-align: {cell_data['vertical_align']}")
+                
+                # 如果是表头，添加表头样式
+                if cell_data['is_header']:
+                    styles.append("background-color: #f0f0f0; font-weight: bold")
+                    if 'text-align' not in '; '.join(styles):
+                        styles.append("text-align: center")
+                
+                style_str = "; ".join(styles)
+                return f'<{tag}{attrs} style="{style_str}">{content}</{tag}>'
+            
+            html = re.sub(pattern, add_cell_alignment, html, flags=re.DOTALL)
+    
+    # 4. 为没有 style 的 td/th 添加默认边框（如果还没有被处理）
+    html = re.sub(
+        r'<td(?!\s+style)([^>]*)>',
+        r'<td\1 style="border: 1px solid #000; padding: 4pt 8pt; vertical-align: top; text-align: left;">',
+        html
+    )
+    html = re.sub(
+        r'<th(?!\s+style)([^>]*)>',
+        r'<th\1 style="border: 1px solid #000; padding: 4pt 8pt; vertical-align: top; text-align: center; background-color: #f0f0f0; font-weight: bold;">',
+        html
+    )
+    
+    return html
 
 
 def extract_placeholders(html_content: str) -> Set[str]:
@@ -45,7 +233,7 @@ def extract_placeholders(html_content: str) -> Set[str]:
 
 def docx_to_html(docx_path: str | Path) -> str:
     """
-    使用 mammoth-python 将 DOCX 文件转换为 HTML
+    使用 mammoth-python 将 DOCX 文件转换为 HTML，保留样式信息
     
     Args:
         docx_path: DOCX 文件路径
@@ -64,8 +252,35 @@ def docx_to_html(docx_path: str | Path) -> str:
     
     try:
         with open(docx_path, "rb") as docx_file:
-            result = mammoth.convert_to_html(docx_file)
+            # 使用样式映射来保留更多样式信息
+            style_map = """
+            p[style-name='Title'] => h1.title:fresh
+            p[style-name='Heading 1'] => h1.heading1:fresh
+            p[style-name='Heading 2'] => h2.heading2:fresh
+            p[style-name='Heading 3'] => h3.heading3:fresh
+            p[style-name='Heading 4'] => h4.heading4:fresh
+            p[style-name='Heading 5'] => h5.heading5:fresh
+            p[style-name='Heading 6'] => h6.heading6:fresh
+            p[style-name='标题 1'] => h1.heading1:fresh
+            p[style-name='标题 2'] => h2.heading2:fresh
+            p[style-name='标题 3'] => h3.heading3:fresh
+            p[style-name='标题'] => h1.title:fresh
+            r[style-name='Strong'] => strong
+            p[style-name='Normal'] => p.paragraph:fresh
+            """
+            
+            result = mammoth.convert_to_html(
+                docx_file,
+                style_map=style_map,
+                include_default_style_map=True  # 包含默认样式映射
+            )
             html = result.value
+            
+            # 读取 DOCX 文件以获取对齐信息
+            doc = Document(str(docx_path))
+            
+            # 后处理 HTML，注入对齐信息
+            html = _inject_alignment_info(html, doc)
             
             # 记录警告（如果有）
             if result.messages:
@@ -80,7 +295,7 @@ def docx_to_html(docx_path: str | Path) -> str:
 
 def docx_bytes_to_html(docx_bytes: bytes) -> str:
     """
-    将 DOCX 字节数据转换为 HTML
+    将 DOCX 字节数据转换为 HTML，保留样式信息
     
     Args:
         docx_bytes: DOCX 文件的字节数据
@@ -93,8 +308,36 @@ def docx_bytes_to_html(docx_bytes: bytes) -> str:
     """
     try:
         docx_file = io.BytesIO(docx_bytes)
-        result = mammoth.convert_to_html(docx_file)
+        # 使用样式映射来保留更多样式信息
+        style_map = """
+        p[style-name='Title'] => h1.title:fresh
+        p[style-name='Heading 1'] => h1.heading1:fresh
+        p[style-name='Heading 2'] => h2.heading2:fresh
+        p[style-name='Heading 3'] => h3.heading3:fresh
+        p[style-name='Heading 4'] => h4.heading4:fresh
+        p[style-name='Heading 5'] => h5.heading5:fresh
+        p[style-name='Heading 6'] => h6.heading6:fresh
+        p[style-name='标题 1'] => h1.heading1:fresh
+        p[style-name='标题 2'] => h2.heading2:fresh
+        p[style-name='标题 3'] => h3.heading3:fresh
+        p[style-name='标题'] => h1.title:fresh
+        r[style-name='Strong'] => strong
+        p[style-name='Normal'] => p.paragraph:fresh
+        """
+        
+        result = mammoth.convert_to_html(
+            docx_file,
+            style_map=style_map,
+            include_default_style_map=True  # 包含默认样式映射
+        )
         html = result.value
+        
+        # 读取 DOCX 文件以获取对齐信息
+        docx_file.seek(0)  # 重置文件指针
+        doc = Document(docx_file)
+        
+        # 后处理 HTML，注入对齐信息
+        html = _inject_alignment_info(html, doc)
         
         # 记录警告（如果有）
         if result.messages:

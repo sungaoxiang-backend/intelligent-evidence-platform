@@ -387,12 +387,8 @@ async def update_template_status(
     Raises:
         HTTPException: 如果验证失败或更新失败
     """
-    # 权限检查：只有超级管理员可以切换状态
-    if not is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有超级管理员可以切换模板状态",
-        )
+    # 模板管理不需要复杂权限，所有登录用户都可以切换状态
+    # 权限检查已移除
     
     # 获取模板
     template = await get_template_by_id(db, template_id)

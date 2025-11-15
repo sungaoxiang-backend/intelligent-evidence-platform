@@ -2,12 +2,13 @@
 文档模板管理 API 路由
 """
 from typing import Annotated, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from loguru import logger
 
-from app.core.deps import DBSession, get_current_active_superuser, get_current_staff
+from app.core.deps import DBSession, get_current_staff
 from app.core.response import ListResponse, Pagination, SingleResponse
 from app.lex_docx import services
 from app.lex_docx.schemas import (
@@ -297,16 +298,16 @@ async def update_template_status(
     template_id: int,
     obj_in: TemplateStatusUpdate,
     db: DBSession,
-    current_staff: Annotated[Staff, Depends(get_current_active_superuser)],
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
 ):
-    """更新模板状态（需要超级管理员权限）"""
+    """更新模板状态"""
     try:
         template = await services.update_template_status(
             db=db,
             template_id=template_id,
             new_status=obj_in.status,
             updated_by=current_staff.id,
-            is_superuser=current_staff.is_superuser,
+            is_superuser=True,  # 模板管理不需要复杂权限，所有登录用户都可以发布
         )
         
         return SingleResponse(
@@ -430,11 +431,14 @@ async def export_template(
         template = await services.get_template_by_id(db, template_id)
         filename = f"{template.name if template else 'template'}.docx"
         
+        # 对文件名进行 URL 编码，支持中文文件名
+        encoded_filename = quote(filename.encode('utf-8'))
+        
         return Response(
             content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{encoded_filename}"; filename*=UTF-8\'\'{encoded_filename}',
             },
         )
     except HTTPException:

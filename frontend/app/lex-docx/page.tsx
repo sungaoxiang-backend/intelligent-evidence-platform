@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,10 +30,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Trash2, FileText, Loader2, Upload, Download } from "lucide-react"
+import { Plus, Trash2, FileText, Loader2, Upload, Download, CheckCircle, FileX } from "lucide-react"
 import { TemplateList } from "@/components/lex-docx/TemplateList"
 import { TemplatePreview } from "@/components/lex-docx/TemplatePreview"
-import { TemplateEditor } from "@/components/lex-docx/TemplateEditor"
+import { InteractiveTemplatePreview, type InteractiveTemplatePreviewRef } from "@/components/lex-docx/InteractiveTemplatePreview"
+import { TemplateEditor, type TemplateEditorRef } from "@/components/lex-docx/TemplateEditor"
 import {
   lexDocxApi,
   type DocumentTemplate,
@@ -61,8 +62,11 @@ export default function LexDocxPage() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importProgress, setImportProgress] = useState(0)
+  const editorRef = useRef<TemplateEditorRef>(null)
+  const interactivePreviewRef = useRef<InteractiveTemplatePreviewRef>(null)
 
   // 新建模板表单
   const [newTemplateForm, setNewTemplateForm] = useState({
@@ -71,40 +75,27 @@ export default function LexDocxPage() {
     category: "",
   })
 
-  // 获取当前用户信息（用于权限检查）
-  const [isSuperuser, setIsSuperuser] = useState(false)
-
-  useEffect(() => {
-    // 从 localStorage 或 API 获取用户信息
-    // 这里简化处理，实际应该从认证服务获取
-    const checkSuperuser = async () => {
-      try {
-        // 假设有获取当前用户信息的 API
-        // const user = await getUserInfo()
-        // setIsSuperuser(user?.is_superuser || false)
-        setIsSuperuser(false) // 临时设置，实际应从 API 获取
-      } catch (error) {
-        console.error("获取用户信息失败:", error)
-      }
-    }
-    checkSuperuser()
-  }, [])
+  // 模板管理不需要复杂的权限管理，所有用户都可以发布模板
+  const isSuperuser = true
 
   // 处理模板选择
   const handleTemplateSelect = (template: DocumentTemplate | null) => {
     setSelectedTemplate(template)
-    setIsEditMode(false) // 切换到预览模式
+    setIsEditMode(false) // 默认切换到预览模式
   }
 
   // 处理编辑按钮点击
   const handleEditClick = () => {
-    if (selectedTemplate?.status === "draft") {
-      setIsEditMode(true)
-    }
+    setIsEditMode(true)
   }
 
-  // 处理保存
-  const handleSave = async (
+  // 处理取消编辑
+  const handleCancelEdit = () => {
+    setIsEditMode(false)
+  }
+
+  // 处理保存编辑
+  const handleSaveEdit = async (
     content: string,
     placeholderMetadata: Record<string, PlaceholderMetadata>
   ) => {
@@ -123,16 +114,12 @@ export default function LexDocxPage() {
         setSelectedTemplate(updated)
       }
 
-      toast({
-        title: "保存成功",
-        description: "模板内容已保存",
-      })
+      // 保存成功后切换到预览模式
+      setIsEditMode(false)
+
+      handleSuccess("模板内容已保存")
     } catch (error) {
-      toast({
-        title: "保存失败",
-        description: error instanceof Error ? error.message : "未知错误",
-        variant: "destructive",
-      })
+      handleApiError(error, "模板保存失败")
     } finally {
       setIsSaving(false)
     }
@@ -276,6 +263,37 @@ export default function LexDocxPage() {
     }
   }
 
+  // 处理文档生成
+  const handleGenerateDocument = async (formData: Record<string, any>) => {
+    if (!selectedTemplate) return
+
+    setIsGenerating(true)
+    try {
+      const result = await lexDocxApi.generateDocument({
+        template_id: selectedTemplate.id,
+        form_data: formData,
+      })
+
+      // 创建下载链接
+      const response = await fetch(result.document_url)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = result.document_filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      handleSuccess("文书已生成并下载")
+    } catch (error) {
+      handleApiError(error, "文书生成失败")
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   // 处理模板导出
   const handleExportTemplate = async () => {
     if (!selectedTemplate) return
@@ -294,7 +312,7 @@ export default function LexDocxPage() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
 
-      handleSuccess("模板已导出")
+      handleSuccess("模板文件已下载")
     } catch (error) {
       handleApiError(error, "模板导出失败")
     } finally {
@@ -357,59 +375,132 @@ export default function LexDocxPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* 编辑/预览切换（仅草稿状态） */}
-              {selectedTemplate.status === "draft" && (
-                <Button
-                  variant={isEditMode ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setIsEditMode(!isEditMode)}
-                >
-                  {isEditMode ? "预览" : "编辑"}
-                </Button>
+              {/* 编辑模式下显示取消和保存按钮 */}
+              {isEditMode && selectedTemplate.status === "draft" ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                    disabled={isSaving}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      editorRef.current?.save()
+                    }}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        保存中...
+                      </>
+                    ) : (
+                      "保存"
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* 预览模式下显示操作按钮 */}
+                  {selectedTemplate.status === "draft" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEditClick}
+                    >
+                      编辑
+                    </Button>
+                  )}
+
+                  {/* 状态切换（仅超级用户） */}
+                  {isSuperuser && (
+                    <Button
+                      variant={selectedTemplate.status === "published" ? "outline" : "default"}
+                      size="sm"
+                      onClick={() => setShowStatusDialog(true)}
+                      disabled={isUpdatingStatus}
+                    >
+                      {isUpdatingStatus ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          更新中...
+                        </>
+                      ) : selectedTemplate.status === "published" ? (
+                        <>
+                          <FileX className="h-4 w-4 mr-2" />
+                          设为草稿
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          发布模板
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {/* 已发布模板显示"生成文书"，草稿模板显示"下载模板" */}
+                  {selectedTemplate.status === "published" ? (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={isGenerating}
+                      title="随时可以生成，即使表单没有内容也可以生成空的 Word 文档"
+                      onClick={() => {
+                        // 触发表单提交
+                        interactivePreviewRef.current?.submit()
+                      }}
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4 mr-2" />
+                          生成文书
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportTemplate}
+                      disabled={isExporting}
+                      title="下载模板文件（用于备份或分享）"
+                    >
+                      {isExporting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          下载中...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          下载模板
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {/* 删除按钮 */}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    删除
+                  </Button>
+                </>
               )}
-
-              {/* 状态切换（仅超级用户） */}
-              {isSuperuser && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowStatusDialog(true)}
-                >
-                  {selectedTemplate.status === "published"
-                    ? "设为草稿"
-                    : "发布模板"}
-                </Button>
-              )}
-
-              {/* 导出按钮 */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportTemplate}
-                disabled={isExporting}
-              >
-                {isExporting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    导出中...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    导出
-                  </>
-                )}
-              </Button>
-
-              {/* 删除按钮 */}
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                删除
-              </Button>
             </div>
           </div>
         )}
@@ -419,14 +510,23 @@ export default function LexDocxPage() {
           {selectedTemplate ? (
             isEditMode && selectedTemplate.status === "draft" ? (
               <TemplateEditor
+                ref={editorRef}
                 template={selectedTemplate}
-                onSave={handleSave}
+                onSave={handleSaveEdit}
+                onCancel={handleCancelEdit}
                 onContentChange={handleContentChange}
+                isSaving={isSaving}
+              />
+            ) : selectedTemplate.status === "published" ? (
+              <InteractiveTemplatePreview
+                ref={interactivePreviewRef}
+                template={selectedTemplate}
+                onSubmit={handleGenerateDocument}
+                isGenerating={isGenerating}
               />
             ) : (
               <TemplatePreview
                 template={selectedTemplate}
-                onEditClick={handleEditClick}
               />
             )
           ) : (

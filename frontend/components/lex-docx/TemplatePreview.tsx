@@ -1,23 +1,20 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Button } from "@/components/ui/button"
-import { Eye, Edit, FileText } from "lucide-react"
+import { useMemo } from "react"
+import { FileText } from "lucide-react"
 import { type DocumentTemplate } from "@/lib/api/lex-docx"
 import { cn } from "@/lib/utils"
+import "@/app/lex-docx/docx-styles.css"
 
 interface TemplatePreviewProps {
   template: DocumentTemplate | null
-  onEditClick?: () => void
   className?: string
 }
 
 export function TemplatePreview({
   template,
-  onEditClick,
   className,
 }: TemplatePreviewProps) {
-  const [isPreviewMode, setIsPreviewMode] = useState(true)
 
   // 处理 HTML 内容，高亮显示占位符
   const processedHtml = useMemo(() => {
@@ -72,9 +69,6 @@ export function TemplatePreview({
     return processed
   }, [template?.content_html])
 
-  // 判断是否为草稿状态
-  const isDraft = template?.status === "draft"
-
   // 如果没有模板，显示空状态
   if (!template) {
     return (
@@ -100,73 +94,13 @@ export function TemplatePreview({
         )}
       >
         <FileText className="h-12 w-12 mb-4 opacity-50" />
-        <p>该模板暂无内容</p>
-        {isDraft && onEditClick && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={onEditClick}
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            开始编辑
-          </Button>
-        )}
+        <p>该模板暂无内容，点击编辑按钮开始编辑</p>
       </div>
     )
   }
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between p-4 border-b bg-background">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold">{template.name}</h3>
-          {isDraft && (
-            <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded">
-              草稿
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* 预览/编辑模式切换（仅草稿状态显示） */}
-          {isDraft && (
-            <>
-              <Button
-                variant={isPreviewMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIsPreviewMode(true)}
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                预览
-              </Button>
-              {onEditClick && (
-                <Button
-                  variant={!isPreviewMode ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setIsPreviewMode(false)
-                    onEditClick()
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  编辑
-                </Button>
-              )}
-            </>
-          )}
-
-          {/* 已发布状态只显示预览 */}
-          {!isDraft && (
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
-              <Eye className="h-4 w-4" />
-              <span>只读预览</span>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* 预览内容区域 */}
       <div className="flex-1 overflow-auto p-6 bg-white">
         <div
@@ -191,24 +125,12 @@ export function TemplatePreview({
         </div>
       </div>
 
-      {/* 占位符说明（如果有占位符） */}
+      {/* 占位符说明（简洁版，仅在预览区域底部） */}
       {processedHtml.includes("lex-docx-placeholder") && (
-        <div className="p-4 border-t bg-muted/50">
-          <div className="flex items-start gap-2 text-sm text-muted-foreground">
-            <div
-              className="w-4 h-4 rounded mt-0.5"
-              style={{
-                backgroundColor: "#fef3c7",
-                border: "1px solid #fbbf24",
-              }}
-            />
-            <div>
-              <p className="font-medium mb-1">占位符说明</p>
-              <p>
-                黄色高亮显示的是占位符，将在生成文档时被替换为实际内容。
-              </p>
-            </div>
-          </div>
+        <div className="px-6 py-2 border-t bg-muted/30">
+          <p className="text-xs text-muted-foreground text-center">
+            黄色高亮显示的是占位符，将在生成文档时被替换为实际内容
+          </p>
         </div>
       )}
     </div>
