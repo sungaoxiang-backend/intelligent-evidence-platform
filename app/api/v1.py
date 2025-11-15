@@ -16,6 +16,7 @@ from app.tasks import router as tasks_router
 from app.users.routers import router as users_router
 from app.users.services import get_by_wechat_number
 from app.wecom.services import wecom_service
+from app.lex_docx.routers import router as lex_docx_router
 
 api_router = APIRouter()
 
@@ -28,6 +29,7 @@ api_router.include_router(agentic_router, prefix="/agentic", tags=["agentic"])
 api_router.include_router(chain_router, prefix="/chain", tags=["chain"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(documents_template_router, prefix="/document-templates", tags=["document-templates"])
+api_router.include_router(lex_docx_router, prefix="/lex-docx", tags=["lex-docx"])
 api_router.include_router(ocr_router, prefix="/ocr", tags=["ocr"])
 api_router.include_router(tasks_router)
 api_router.include_router(config_router, tags=["config"])

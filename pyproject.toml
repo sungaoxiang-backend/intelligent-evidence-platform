@@ -33,12 +33,14 @@ dependencies = [
     "docxtpl>=0.20.1",
     "celery>=5.3.0",
     "redis>=4.5.0",
+    "mammoth>=1.11.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.1",
+    "httpx>=0.24.0",
     "black>=23.7.0",
     "isort>=5.12.0",
     "mypy>=1.5.1",

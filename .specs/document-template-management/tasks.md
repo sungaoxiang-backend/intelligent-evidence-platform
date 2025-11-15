@@ -1,0 +1,285 @@
+# Implementation Plan
+
+- [ ] 1. 设置后端项目结构和数据模型
+  - 创建 `app/lex-docx/` 目录结构
+  - 创建 `__init__.py` 文件
+  - 在 `models.py` 中定义 `DocumentTemplate` 模型（包含所有字段：id, name, description, category, status, content_path, content_html, placeholder_metadata, created_by, updated_by, created_at, updated_at）
+  - 在 `models.py` 中定义 `DocumentGeneration` 模型（包含所有字段：id, template_id, generated_by, form_data, document_url, document_filename, generated_at）
+  - 定义模板状态枚举 `TemplateStatus` (draft, published)
+  - 为模型添加必要的索引定义
+  - 创建 Alembic 迁移文件生成数据库表
+  - 运行迁移并验证表结构
+  - _Requirements: 1.1, 1.2, 3.8, 4.1, 4.2, 5.1, 8.7, 9.1_
+
+- [ ] 2. 实现后端数据结构和验证
+  - 在 `schemas.py` 中定义 `PlaceholderMetadata` Pydantic 模型（包含 type, label, required, default_value, options, validation）
+  - 在 `schemas.py` 中定义 `DocumentTemplateCreate` schema（包含 name, description, category, content_html, placeholder_metadata）
+  - 在 `schemas.py` 中定义 `DocumentTemplateUpdate` schema（所有字段可选）
+  - 在 `schemas.py` 中定义 `DocumentTemplateResponse` schema（包含所有字段）
+  - 在 `schemas.py` 中定义 `DocumentGenerationCreate` schema（包含 template_id, form_data）
+  - 在 `schemas.py` 中定义 `DocumentGenerationResponse` schema（包含所有字段）
+  - 添加占位符名称验证函数（只允许字母、数字、下划线）
+  - 添加占位符元数据验证函数（验证字段类型、必填项等）
+  - 为所有 schema 添加字段验证器
+  - _Requirements: 3.4, 3.6, 7.2, 8.1_
+
+- [ ] 3. 实现模板解析和文档转换工具函数
+  - 在 `utils.py` 中实现 `extract_placeholders()` 函数，从 HTML 内容中提取所有 `{{field_name}}` 格式的占位符
+  - 在 `utils.py` 中实现 `validate_placeholder_name()` 函数，验证占位符名称合法性
+  - 在 `utils.py` 中实现 `docx_to_html()` 函数，使用 mammoth-python 将 DOCX 转换为 HTML
+  - 在 `utils.py` 中实现 `html_to_docx()` 函数，将 HTML 转换回 DOCX 格式（使用 python-docx）
+  - 在 `utils.py` 中实现 `parse_placeholder_metadata()` 函数，从模板内容中解析并构建占位符元数据
+  - 添加单元测试验证占位符提取和验证功能
+  - 添加单元测试验证 DOCX 和 HTML 转换功能
+  - _Requirements: 3.3, 3.4, 7.1, 10.3, 10.4_
+
+- [ ] 4. 实现模板服务层核心功能
+  - 在 `services.py` 中实现 `TemplateService` 类
+  - 实现 `create_template()` 方法：创建模板，将 HTML 转换为 DOCX 保存到文件系统，解析占位符元数据
+  - 实现 `get_template_by_id()` 方法：根据 ID 获取模板详情
+  - 实现 `update_template()` 方法：更新模板内容和元数据
+  - 实现 `list_templates()` 方法：支持搜索、筛选（状态、分类）、分页
+  - 实现 `delete_template()` 方法：删除模板和关联文件
+  - 实现模板文件路径管理（`templates/document-templates/{template_id}.docx`）
+  - 添加服务层单元测试
+  - _Requirements: 1.1, 1.2, 1.4, 3.8, 5.1, 5.4, 5.5_
+
+- [ ] 5. 实现模板状态管理功能
+  - 在 `services.py` 中实现 `update_template_status()` 方法
+  - 实现状态切换验证：从草稿切换到已发布时，验证模板至少包含一个占位符
+  - 实现权限检查：只有超级管理员（is_superuser）可以切换状态
+  - 实现状态切换确认逻辑
+  - 在 `schemas.py` 中添加 `TemplateStatusUpdate` schema
+  - 添加状态管理单元测试
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
+
+- [ ] 6. 实现模板导入导出功能
+  - 在 `services.py` 中实现 `import_template()` 方法：接收 DOCX 文件，转换为 HTML，解析占位符，创建草稿模板
+  - 在 `services.py` 中实现 `export_template()` 方法：从文件系统读取 DOCX 文件并返回
+  - 实现文件上传处理（验证文件类型、大小）
+  - 实现占位符自动识别和提取
+  - 添加导入导出单元测试
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ] 7. 实现文档生成服务
+  - 在 `services.py` 中实现 `GenerationService` 类
+  - 实现 `generate_document()` 方法：使用 python-docx-template 渲染模板，将生成的文档上传到 COS，保存生成记录
+  - 实现 `list_generations()` 方法：支持按模板、用户、时间范围筛选，分页
+  - 实现 `get_generation_by_id()` 方法：获取生成记录详情
+  - 实现表单数据验证（验证必填字段）
+  - 实现文档上传到 COS 的逻辑
+  - 实现生成记录保存逻辑
+  - 添加文档生成单元测试
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 9.1, 9.2, 9.3_
+
+- [ ] 8. 实现后端 API 路由 - 模板管理
+  - 在 `routers.py` 中创建 `router = APIRouter()`
+  - 实现 `GET /api/v1/lex-docx` 端点：获取模板列表（支持搜索、筛选、分页）
+  - 实现 `GET /api/v1/lex-docx/{id}` 端点：获取模板详情
+  - 实现 `POST /api/v1/lex-docx` 端点：创建模板（需要认证）
+  - 实现 `PUT /api/v1/lex-docx/{id}` 端点：更新模板（需要认证）
+  - 实现 `DELETE /api/v1/lex-docx/{id}` 端点：删除模板（需要认证）
+  - 实现 `PUT /api/v1/lex-docx/{id}/status` 端点：更新模板状态（需要超级管理员权限）
+  - 实现 `GET /api/v1/lex-docx/{id}/preview` 端点：获取模板预览 HTML
+  - 实现 `POST /api/v1/lex-docx/import` 端点：导入模板（文件上传）
+  - 实现 `GET /api/v1/lex-docx/{id}/export` 端点：导出模板（文件下载）
+  - 添加 API 路由测试
+  - 在 `app/api/v1.py` 中注册路由（使用 `/lex-docx` 前缀以避免与现有的 `document-templates` 路由冲突）
+  - _Requirements: 1.1, 1.2, 1.4, 3.8, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 5.1, 5.4, 5.5, 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ] 9. 实现后端 API 路由 - 文书生成
+  - 在 `routers.py` 中实现 `GET /api/v1/lex-docx/published` 端点：获取已发布模板列表（用于生成页面）
+  - 实现 `POST /api/v1/lex-docx/generations` 端点：生成文书（需要认证）
+  - 实现 `GET /api/v1/lex-docx/generations` 端点：获取生成记录列表（支持筛选、分页）
+  - 实现 `GET /api/v1/lex-docx/generations/{id}` 端点：获取生成记录详情
+  - 实现 `GET /api/v1/lex-docx/generations/{id}/download` 端点：下载生成的文档
+  - 添加 API 路由测试
+  - 在 `app/api/v1.py` 中注册路由
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 9.1, 9.2, 9.3, 9.4, 9.5_
+
+- [ ] 10. 安装和配置前端依赖
+  - 在 `frontend/package.json` 中添加 Tiptap 相关依赖（@tiptap/react, @tiptap/starter-kit, @tiptap/extension-placeholder 等）
+  - 添加 Mammoth.js 依赖（mammoth）
+  - 添加日期选择器依赖（react-day-picker，已存在）
+  - 运行 `npm install` 安装依赖
+  - 验证依赖安装成功
+  - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2, 7.3, 7.6_
+
+- [ ] 11. 创建前端 API 客户端
+  - 创建 `frontend/lib/api/lex-docx.ts` 文件
+  - 实现 `getTemplates()` 函数：获取模板列表（支持搜索、筛选、分页参数）
+  - 实现 `getTemplate(id)` 函数：获取模板详情
+  - 实现 `createTemplate(data)` 函数：创建模板
+  - 实现 `updateTemplate(id, data)` 函数：更新模板
+  - 实现 `deleteTemplate(id)` 函数：删除模板
+  - 实现 `updateTemplateStatus(id, status)` 函数：更新模板状态
+  - 实现 `getTemplatePreview(id)` 函数：获取模板预览
+  - 实现 `importTemplate(file)` 函数：导入模板
+  - 实现 `exportTemplate(id)` 函数：导出模板
+  - 实现 `getPublishedTemplates()` 函数：获取已发布模板列表
+  - 实现 `generateDocument(data)` 函数：生成文书
+  - 实现 `getGenerations(params)` 函数：获取生成记录列表
+  - 实现 `getGeneration(id)` 函数：获取生成记录详情
+  - 实现 `downloadDocument(id)` 函数：下载生成的文档
+  - 使用统一的错误处理
+  - _Requirements: 1.1, 1.2, 1.4, 3.8, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 5.1, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 9.1, 9.2, 9.3, 9.4, 9.5, 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ] 12. 实现模板列表组件
+  - 创建 `frontend/components/lex-docx/TemplateList.tsx` 组件
+  - 实现左侧边栏模板列表展示
+  - 实现模板名称和状态显示（草稿/已发布）
+  - 实现搜索框和实时过滤功能
+  - 实现模板点击切换功能
+  - 实现加载状态和错误处理
+  - 使用 SWR 进行数据获取和缓存
+  - 添加组件样式（使用 Tailwind CSS）
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [ ] 13. 实现模板预览组件
+  - 创建 `frontend/components/lex-docx/TemplatePreview.tsx` 组件
+  - 实现 HTML 内容渲染
+  - 实现占位符高亮显示（使用 CSS 样式高亮 `{{field_name}}` 格式）
+  - 实现预览/编辑模式切换按钮（仅草稿状态显示）
+  - 实现只读模式（已发布状态）
+  - 保持原始文档格式样式
+  - 添加组件样式
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+- [ ] 14. 实现占位符配置组件
+  - 创建 `frontend/components/lex-docx/PlaceholderConfig.tsx` 组件
+  - 实现占位符元数据配置表单
+  - 实现字段类型选择（文本、数字、日期、多行文本、复选框、多选框）
+  - 实现字段标签输入
+  - 实现必填属性开关
+  - 实现默认值输入
+  - 实现多选框选项列表配置
+  - 实现表单验证
+  - 添加组件样式
+  - _Requirements: 3.5, 3.6_
+
+- [ ] 15. 实现模板编辑器组件
+  - 创建 `frontend/components/lex-docx/TemplateEditor.tsx` 组件
+  - 集成 Tiptap 富文本编辑器
+  - 实现文本格式设置工具栏（粗体、斜体、下划线、字体大小、颜色等）
+  - 实现占位符插入功能（插入 `{{field_name}}` 格式）
+  - 实现占位符名称验证（只能包含字母、数字、下划线）
+  - 实现占位符插入时弹出配置对话框（使用 PlaceholderConfig 组件）
+  - 实现实时保存功能（使用防抖，定时保存草稿）
+  - 实现手动保存按钮
+  - 实现保存成功提示
+  - 实现编辑器内容与预览同步
+  - 添加组件样式
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+- [ ] 16. 实现模板管理主页面
+  - 创建 `frontend/app/lex-docx/page.tsx` 页面
+  - 实现左右分栏布局（左侧模板列表，右侧预览/编辑区域）
+  - 集成 TemplateList 组件
+  - 集成 TemplatePreview 组件
+  - 集成 TemplateEditor 组件（草稿状态）
+  - 实现模板选择状态管理
+  - 实现预览/编辑模式切换
+  - 实现新建模板功能
+  - 实现模板删除功能（带确认）
+  - 实现模板状态切换功能（带权限检查）
+  - 添加页面样式和响应式布局
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
+
+- [ ] 17. 实现动态表单生成组件
+  - 创建 `frontend/components/lex-docx/DynamicForm.tsx` 组件
+  - 实现根据占位符元数据动态生成表单字段
+  - 实现文本输入框组件（type: text）
+  - 实现数字输入框组件（type: number），包含格式验证
+  - 实现日期选择器组件（type: date），使用 react-day-picker
+  - 实现多行文本输入框组件（type: textarea）
+  - 实现复选框组件（type: checkbox）
+  - 实现多选框组件（type: multiselect），支持选项列表配置
+  - 实现字段标签显示（使用 placeholder_metadata.label）
+  - 实现默认值预填充（使用 placeholder_metadata.default_value）
+  - 实现必填字段标记和验证（使用 placeholder_metadata.required）
+  - 实现实时表单验证（使用 react-hook-form 和 zod）
+  - 实现表单验证错误提示
+  - 实现草稿保存功能（保存到 localStorage）
+  - 实现草稿加载功能（从 localStorage 恢复数据）
+  - 添加组件样式
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 7.11, 7.12, 7.13, 7.14, 7.15, 7.16_
+
+- [ ] 18. 实现模板选择组件
+  - 创建 `frontend/components/lex-docx/TemplateSelector.tsx` 组件
+  - 实现已发布模板列表展示
+  - 实现模板基本信息显示（名称、描述、分类、创建时间）
+  - 实现分类筛选功能
+  - 实现模板预览功能（集成 TemplatePreview 组件）
+  - 实现模板选择确认功能
+  - 实现未分类模板处理
+  - 添加组件样式
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4_
+
+- [ ] 19. 实现生成记录组件
+  - 创建 `frontend/components/lex-docx/GenerateHistory.tsx` 组件
+  - 实现生成记录列表展示（支持分页）
+  - 实现按模板、用户、时间范围筛选
+  - 实现记录详情展示
+  - 实现文档重新下载功能
+  - 添加组件样式
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
+
+- [ ] 20. 实现文书生成页面
+  - 创建 `frontend/app/lex-docx/generate/page.tsx` 页面
+  - 集成 TemplateSelector 组件（第一步：选择模板）
+  - 集成 DynamicForm 组件（第二步：填写表单）
+  - 实现表单提交和文档生成功能
+  - 实现生成进度提示
+  - 实现生成成功后的文档下载功能
+  - 实现生成错误处理
+  - 实现页面状态管理（选择模板 -> 填写表单 -> 生成完成）
+  - 添加页面样式
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 7.11, 7.12, 7.13, 7.14, 7.15, 7.16, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
+
+- [ ] 21. 实现模板导入导出功能（前端）
+  - 在模板管理页面添加"导入模板"按钮
+  - 实现文件上传对话框（支持 DOCX 格式）
+  - 实现文件上传进度显示
+  - 实现导入成功后的模板列表刷新
+  - 在模板详情页面添加"导出模板"按钮
+  - 实现模板导出下载功能
+  - 添加错误处理和提示
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ] 22. 实现生成记录页面
+  - 创建生成记录查看页面（可选：在生成页面添加历史记录标签页，或创建独立页面）
+  - 集成 GenerateHistory 组件
+  - 实现记录筛选和分页功能
+  - 实现记录详情查看
+  - 实现文档重新下载
+  - 添加页面样式
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
+
+- [ ] 23. 添加错误处理和用户体验优化
+  - 实现全局错误处理中间件（前端）
+  - 实现统一的错误提示组件（使用 sonner toast）
+  - 实现加载状态指示器
+  - 实现空状态展示
+  - 优化表单验证错误提示
+  - 添加操作确认对话框（删除、状态切换等）
+  - 实现响应式布局优化
+  - _Requirements: 3.9, 4.4, 4.5, 7.14, 8.6_
+
+- [ ] 24. 集成测试和端到端测试
+  - 编写后端 API 集成测试（测试完整的模板创建、编辑、发布流程）
+  - 编写后端 API 集成测试（测试完整的文书生成流程）
+  - 编写前端组件集成测试（测试模板编辑器功能）
+  - 编写前端组件集成测试（测试动态表单生成）
+  - 编写端到端测试（测试模板管理完整流程）
+  - 编写端到端测试（测试文书生成完整流程）
+  - 修复测试中发现的问题
+  - _Requirements: 所有需求_
+
+- [ ] 25. 代码审查和优化
+  - 代码风格检查（使用项目现有的 linting 规则）
+  - 性能优化（检查数据库查询、前端渲染性能）
+  - 安全性检查（验证权限控制、输入验证）
+  - 文档完善（代码注释、API 文档）
+  - 最终测试和验证
+  - _Requirements: 所有需求_
+
