@@ -4,8 +4,6 @@ import { useState, useMemo, useRef, useImperativeHandle, forwardRef, useEffect, 
 import { createRoot } from "react-dom/client"
 import "@/app/lex-docx/docx-styles.css"
 import { useForm, Controller } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,6 +24,7 @@ import {
 import { Calendar } from "@/components/ui/calendar"
 import { CalendarIcon, Loader2 } from "lucide-react"
 import { format } from "date-fns"
+import { zhCN } from "date-fns/locale"
 import { type DocumentTemplate, type PlaceholderMetadata } from "@/lib/api/lex-docx"
 import { cn } from "@/lib/utils"
 import { FileText } from "lucide-react"
@@ -42,137 +41,6 @@ export interface InteractiveTemplatePreviewRef {
 }
 
 // 生成 Zod Schema
-function generateZodSchema(
-  placeholderMetadata: Record<string, PlaceholderMetadata>
-): z.ZodObject<any> {
-  const shape: Record<string, z.ZodTypeAny> = {}
-
-  for (const [key, metadata] of Object.entries(placeholderMetadata)) {
-    let fieldSchema: z.ZodTypeAny
-
-    switch (metadata.type) {
-      case "text":
-        fieldSchema = z.string()
-        break
-      case "number":
-        fieldSchema = z
-          .union([z.number(), z.string()])
-          .refine(
-            (val) => {
-              if (typeof val === "string") {
-                return val === "" || !isNaN(Number(val))
-              }
-              return true
-            },
-            { message: "必须是有效的数字" }
-          )
-          .transform((val) => {
-            if (typeof val === "string") {
-              return val === "" ? undefined : Number(val)
-            }
-            return val
-          })
-        break
-      case "date":
-        fieldSchema = z
-          .union([z.date(), z.string()])
-          .refine(
-            (val) => {
-              if (typeof val === "string") {
-                return val === "" || !isNaN(new Date(val).getTime())
-              }
-              return true
-            },
-            { message: "必须是有效的日期" }
-          )
-          .transform((val) => {
-            if (typeof val === "string") {
-              return val === "" ? undefined : new Date(val)
-            }
-            return val
-          })
-        break
-      case "textarea":
-        fieldSchema = z.string()
-        break
-      case "checkbox":
-        fieldSchema = z.boolean()
-        break
-      case "multiselect":
-        fieldSchema = z.array(z.string())
-        break
-      default:
-        fieldSchema = z.string()
-    }
-
-    // 应用必填验证
-    if (metadata.required) {
-      if (metadata.type === "checkbox") {
-        // 复选框的必填意味着必须为 true
-        fieldSchema = fieldSchema.refine((val) => val === true, {
-          message: `${metadata.label}是必填项`,
-        })
-      } else if (metadata.type === "multiselect") {
-        fieldSchema = fieldSchema.refine((val) => Array.isArray(val) && val.length > 0, {
-          message: `${metadata.label}是必填项`,
-        })
-      } else {
-        fieldSchema = fieldSchema.refine((val) => {
-          if (typeof val === "string") {
-            return val.trim().length > 0
-          }
-          return val !== undefined && val !== null && val !== ""
-        }, { message: `${metadata.label}是必填项` })
-      }
-    } else {
-      // 可选字段允许空值，但需要处理空字符串
-      if (metadata.type === "text" || metadata.type === "textarea") {
-        fieldSchema = fieldSchema.optional().or(z.literal(""))
-      } else {
-        fieldSchema = fieldSchema.optional()
-      }
-    }
-
-    // 应用验证规则
-    if (metadata.validation) {
-      if (metadata.validation.min !== undefined) {
-        fieldSchema = fieldSchema.refine(
-          (val) => {
-            if (val === undefined || val === null || val === "") return true
-            const numVal = typeof val === "number" ? val : Number(val)
-            return !isNaN(numVal) && numVal >= metadata.validation!.min!
-          },
-          { message: `最小值不能小于${metadata.validation.min}` }
-        )
-      }
-      if (metadata.validation.max !== undefined) {
-        fieldSchema = fieldSchema.refine(
-          (val) => {
-            if (val === undefined || val === null || val === "") return true
-            const numVal = typeof val === "number" ? val : Number(val)
-            return !isNaN(numVal) && numVal <= metadata.validation!.max!
-          },
-          { message: `最大值不能大于${metadata.validation.max}` }
-        )
-      }
-      if (metadata.validation.pattern) {
-        fieldSchema = fieldSchema.refine(
-          (val) => {
-            if (val === undefined || val === null || val === "") return true
-            return new RegExp(metadata.validation!.pattern!).test(String(val))
-          },
-          { message: "格式不正确" }
-        )
-      }
-    }
-
-    shape[key] = fieldSchema
-  }
-
-  return z.object(shape)
-}
-
-
 export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewRef, InteractiveTemplatePreviewProps>(({
   template,
   onSubmit,
@@ -184,36 +52,47 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   const rootsRef = useRef<Array<{ root: ReturnType<typeof createRoot>; container: HTMLElement }>>([])
   const placeholderMetadata = template?.placeholder_metadata || {}
 
-  // 生成表单 schema
-  const schema = useMemo(() => {
-    if (Object.keys(placeholderMetadata).length === 0) {
-      return z.object({})
-    }
-    return generateZodSchema(placeholderMetadata)
+  // 计算默认值
+  const getDefaultValues = useCallback(() => {
+    return Object.fromEntries(
+      Object.entries(placeholderMetadata).map(([key, meta]) => {
+        // 如果有默认值，使用默认值
+        if (meta.default_value !== undefined) {
+          return [key, meta.default_value]
+        }
+        // 根据类型设置默认值
+        if (meta.type === "checkbox") {
+          // checkbox 类型实际上是 radio（单选），使用第一个选项作为默认值，或者空字符串
+          return [key, meta.options && meta.options.length > 0 ? meta.options[0] : ""]
+        }
+        if (meta.type === "multiselect") {
+          return [key, []]
+        }
+        if (meta.type === "date") {
+          return [key, undefined]
+        }
+        return [key, ""]
+      })
+    )
   }, [placeholderMetadata])
 
   const {
     control,
-    handleSubmit,
-    formState: { errors },
+    getValues,
+    reset,
   } = useForm({
-    resolver: zodResolver(schema),
-    mode: "onBlur", // 只在失去焦点时验证，允许空值提交
-    defaultValues: Object.fromEntries(
-      Object.entries(placeholderMetadata).map(([key, meta]) => [
-        key,
-        meta.default_value !== undefined
-          ? meta.default_value
-          : meta.type === "checkbox"
-          ? false
-          : meta.type === "multiselect"
-          ? []
-          : meta.type === "date"
-          ? undefined
-          : "",
-      ])
-    ),
+    // 移除验证，允许直接提交任何值
+    mode: "onBlur",
+    defaultValues: getDefaultValues(),
   })
+
+  // 当模板改变时，重置表单数据
+  useEffect(() => {
+    if (template) {
+      const defaultValues = getDefaultValues()
+      reset(defaultValues)
+    }
+  }, [template?.id, reset, getDefaultValues])
 
   // 处理 HTML 内容，将占位符替换为表单组件
   // 使用与 TemplatePreview 相同的方法，保持完整的HTML结构
@@ -280,8 +159,8 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
     fieldName: string,
     metadata: PlaceholderMetadata
   ) => {
-    const error = errors[fieldName]
-    const hasError = !!error
+    // 移除验证，不再显示错误
+    const hasError = false
 
     switch (metadata.type) {
       case "text":
@@ -310,7 +189,7 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
                     width: "200px",
                     border: "1px solid #d1d5db",
                     borderRadius: "4px",
-                    backgroundColor: "#ffffff",
+                    backgroundColor: field.value ? "#e0f2fe" : "#ffffff",
                     boxSizing: "border-box",
                   }}
                 />
@@ -324,47 +203,134 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
             key={fieldName}
             name={fieldName}
             control={control}
-            render={({ field }) => (
-              <span className="inline-block lex-docx-form-field-container">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "inline-flex justify-start text-left font-normal lex-docx-form-field-container",
-                        !field.value && "text-muted-foreground",
-                        hasError && "border-destructive"
-                      )}
-                      style={{
-                        fontFamily: "inherit",
-                        fontSize: "inherit",
-                        lineHeight: "1.5",
-                        padding: "2px 8px",
-                        height: "auto",
-                        minHeight: "1.5em",
-                        width: "200px",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <CalendarIcon className="mr-1 h-3 w-3" />
-                      {field.value ? (
-                        format(field.value, "yyyy-MM-dd")
-                      ) : (
-                        <span className="text-muted-foreground">选择日期</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </span>
-            )}
+            render={({ field }) => {
+              const [currentMonth, setCurrentMonth] = useState<Date>(field.value || new Date())
+              const [open, setOpen] = useState(false)
+
+              // 当字段值改变时，更新当前月份
+              useEffect(() => {
+                if (field.value) {
+                  setCurrentMonth(field.value)
+                }
+              }, [field.value])
+
+              // 生成年份选项（从1900年到当前年份+10年）
+              const currentYear = new Date().getFullYear()
+              const years = Array.from({ length: currentYear - 1900 + 11 }, (_, i) => 1900 + i)
+              const months = [
+                { value: "0", label: "1月" },
+                { value: "1", label: "2月" },
+                { value: "2", label: "3月" },
+                { value: "3", label: "4月" },
+                { value: "4", label: "5月" },
+                { value: "5", label: "6月" },
+                { value: "6", label: "7月" },
+                { value: "7", label: "8月" },
+                { value: "8", label: "9月" },
+                { value: "9", label: "10月" },
+                { value: "10", label: "11月" },
+                { value: "11", label: "12月" },
+              ]
+
+              const handleSelect = (date: Date | undefined) => {
+                field.onChange(date)
+                setOpen(false)
+              }
+
+              const handleYearChange = (year: string) => {
+                const newDate = new Date(currentMonth)
+                newDate.setFullYear(parseInt(year))
+                setCurrentMonth(newDate)
+              }
+
+              const handleMonthChange = (month: string) => {
+                const newDate = new Date(currentMonth)
+                newDate.setMonth(parseInt(month))
+                setCurrentMonth(newDate)
+              }
+
+              return (
+                <span className="inline-block lex-docx-form-field-container">
+                  <Popover open={open} onOpenChange={setOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "inline-flex justify-start text-left font-normal lex-docx-form-field-container",
+                          !field.value && "text-muted-foreground",
+                          hasError && "border-destructive",
+                          // 使用 Tailwind 类来覆盖背景色，确保优先级
+                          field.value ? "!bg-[#e0f2fe]" : "!bg-white"
+                        )}
+                        style={{
+                          fontFamily: "inherit",
+                          fontSize: "inherit",
+                          lineHeight: "1.5",
+                          padding: "2px 8px",
+                          height: "auto",
+                          minHeight: "1.5em",
+                          width: "200px",
+                          boxSizing: "border-box",
+                          borderColor: "#d1d5db",
+                        }}
+                      >
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {field.value ? (
+                          format(field.value, "yyyy年M月d日", { locale: zhCN })
+                        ) : (
+                          <span className="text-muted-foreground">选择日期</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="p-3 border-b">
+                        <div className="flex items-center space-x-2">
+                          <Select
+                            value={currentMonth.getFullYear().toString()}
+                            onValueChange={handleYearChange}
+                          >
+                            <SelectTrigger className="h-8 w-20">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {years.map((year) => (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {year}年
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={currentMonth.getMonth().toString()}
+                            onValueChange={handleMonthChange}
+                          >
+                            <SelectTrigger className="h-8 w-16">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {months.map((month) => (
+                                <SelectItem key={month.value} value={month.value}>
+                                  {month.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={handleSelect}
+                        month={currentMonth}
+                        onMonthChange={setCurrentMonth}
+                        locale={zhCN}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </span>
+              )
+            }}
           />
         )
 
@@ -391,6 +357,7 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
                     minHeight: "60px",
                     height: "auto",
                     width: "200px",
+                    backgroundColor: field.value ? "#e0f2fe" : "#ffffff",
                     boxSizing: "border-box",
                   }}
                 />
@@ -489,7 +456,7 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
                     width: "200px",
                     border: "1px solid #d1d5db",
                     borderRadius: "4px",
-                    backgroundColor: "#ffffff",
+                    backgroundColor: field.value ? "#e0f2fe" : "#ffffff",
                     boxSizing: "border-box",
                   }}
                 />
@@ -497,7 +464,7 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
           />
         )
     }
-  }, [control, errors])
+  }, [control])
 
   // 在 DOM 渲染后，将占位符标记替换为表单组件
   // 使用 useEffect 确保在 HTML 内容渲染后执行
@@ -649,16 +616,37 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
     )
   }
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
-    // 清理空值，但保留所有字段（即使为空也可以生成文档）
+  const handleFormSubmit = async (e?: React.FormEvent) => {
+    // 阻止默认表单提交行为
+    if (e) {
+      e.preventDefault()
+    }
+    
+    // 直接获取表单值，不做任何验证
+    const formData = getValues()
+    
+    // 清理数据格式，但保留所有字段（即使为空也可以生成文档）
     const cleanedData: Record<string, any> = {}
-    for (const [key, value] of Object.entries(data)) {
+    for (const [key, value] of Object.entries(formData)) {
       // 保留所有字段，即使是空值
-      cleanedData[key] = value === undefined || value === null ? "" : value
+      if (value instanceof Date) {
+        // 日期转换为中文格式字符串：YYYY年MM月DD日
+        cleanedData[key] = format(value, "yyyy年M月d日", { locale: zhCN })
+      } else {
+        cleanedData[key] = value === undefined || value === null ? "" : value
+      }
     }
     
     if (onSubmit) {
-      await onSubmit(cleanedData)
+      try {
+        await onSubmit(cleanedData)
+        // 提交成功后，重置表单为默认值
+        const defaultValues = getDefaultValues()
+        reset(defaultValues)
+      } catch (error) {
+        // 如果提交失败，不重置表单，保留用户输入
+        throw error
+      }
     }
   }
 
@@ -672,7 +660,7 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   }))
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className={cn("flex flex-col h-full", className)}>
+    <form ref={formRef} onSubmit={handleFormSubmit} className={cn("flex flex-col h-full", className)}>
       {/* 文档内容区域 - WYSIWYG 编辑 */}
       <div className="flex-1 overflow-auto p-6 bg-white">
         <div

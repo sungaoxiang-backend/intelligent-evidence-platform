@@ -251,10 +251,10 @@ async def update_template(
                     file_path.write_bytes(updated_docx_bytes)
                     logger.info(f"模板 {db_obj.id} 已更新DOCX文件（保留格式）")
                 except Exception as e:
-                    logger.error(f"模板 {db_obj.id} 更新DOCX文件失败: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-                    # 不抛出异常，至少HTML已经保存了
+                            logger.error(f"模板 {db_obj.id} 更新DOCX文件失败: {e}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            # 不抛出异常，至少HTML已经保存了
             else:
                 logger.warning(f"模板 {db_obj.id} 的DOCX文件不存在: {file_path}")
         else:
@@ -736,9 +736,65 @@ async def generate_document(
         # 准备渲染数据（将表单数据转换为模板变量）
         context = {}
         for key, value in obj_in.form_data.items():
+            # 获取字段元数据（如果存在）
+            metadata = None
+            if template.placeholder_metadata:
+                metadata_dict = template.placeholder_metadata.get(key)
+                if metadata_dict:
+                    # metadata_dict 可能是字典（从数据库读取）或 PlaceholderMetadata 对象
+                    if isinstance(metadata_dict, dict):
+                        from app.lex_docx.schemas import PlaceholderMetadata
+                        try:
+                            metadata = PlaceholderMetadata(**metadata_dict)
+                        except Exception:
+                            metadata = None
+                    elif hasattr(metadata_dict, 'type'):
+                        metadata = metadata_dict
+            
             # 处理不同类型的值
-            if isinstance(value, (list, dict)):
+            if isinstance(value, dict):
                 context[key] = value
+            elif isinstance(value, list):
+                # 列表类型（通常是 multiselect）
+                if metadata and metadata.type == 'multiselect' and metadata.options:
+                    # 对于 multiselect 类型，提供格式化的字符串显示
+                    # 格式：选项1☑ 选项2☐（选中的显示☑，未选中的显示☐）
+                    selected_values = [str(v) for v in value] if value else []
+                    
+                    # 构建格式化的字符串：每个选项后跟选中状态
+                    formatted_options = []
+                    for option in metadata.options:
+                        checkbox = "☑" if option in selected_values else "☐"
+                        formatted_options.append(f"{option}{checkbox}")
+                    context[key] = " ".join(formatted_options)
+                    
+                    # 同时提供每个选项的选中状态变量（供模板使用更复杂的格式）
+                    for option in metadata.options:
+                        context[f"{key}_{option}"] = "☑" if option in selected_values else "☐"
+                    
+                    # 提供选中的值列表（用逗号连接，兼容旧模板）
+                    context[f"{key}_selected"] = "，".join(selected_values) if selected_values else ""
+                else:
+                    # 其他列表类型，转换为字符串（用逗号连接）
+                    context[key] = "，".join(str(v) for v in value) if value else ""
+            elif metadata and metadata.type == 'checkbox' and metadata.options:
+                # 对于 checkbox/radio 类型，提供格式化的字符串显示
+                # 格式：选项1☑ 选项2☐（选中的显示☑，未选中的显示☐）
+                selected_value = str(value) if value is not None else ""
+                
+                # 构建格式化的字符串：每个选项后跟选中状态
+                formatted_options = []
+                for option in metadata.options:
+                    checkbox = "☑" if option == selected_value else "☐"
+                    formatted_options.append(f"{option}{checkbox}")
+                context[key] = " ".join(formatted_options)
+                
+                # 同时提供每个选项的选中状态变量（供模板使用更复杂的格式）
+                for option in metadata.options:
+                    context[f"{key}_{option}"] = "☑" if option == selected_value else "☐"
+                
+                # 提供选中的值（兼容旧模板）
+                context[f"{key}_selected"] = selected_value
             else:
                 context[key] = str(value) if value is not None else ""
         
