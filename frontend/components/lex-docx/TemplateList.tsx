@@ -35,6 +35,7 @@ interface TemplateListProps {
 
 export interface TemplateListRef {
   refresh: () => void
+  getTotal: () => number
 }
 
 export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
@@ -219,9 +220,10 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
 
   const selectedCount = selectedTemplateIds.size
 
-  // 暴露刷新方法给父组件
+  // 暴露刷新方法和总数给父组件
   useImperativeHandle(ref, () => ({
     refresh: () => mutate(),
+    getTotal: () => total || 0,
   }))
 
   return (

@@ -69,6 +69,7 @@ export default function LexDocxPage() {
   const [isMultiSelect, setIsMultiSelect] = useState(false)
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(new Set())
   const [isBatchProcessing, setIsBatchProcessing] = useState(false)
+  const [templateTotal, setTemplateTotal] = useState(0)
 
   // 新建模板表单
   const [newTemplateForm, setNewTemplateForm] = useState({
@@ -193,16 +194,23 @@ export default function LexDocxPage() {
         handleSuccess("模板已创建，可以开始编辑")
       }
 
-      // 选择新创建的模板
-      setSelectedTemplate(newTemplate)
-      setIsEditMode(true) // 自动进入编辑模式
-
+      // 不自动选择新创建的模板，让用户手动选择
+      // 清除当前选择，确保显示"请选择一个模板"的提示
+      setSelectedTemplate(null)
+      setIsEditMode(false)
+      
       // 重置表单
       resetCreateForm()
       setShowCreateDialog(false)
       
       // 刷新模板列表
       templateListRef.current?.refresh()
+      
+      // 更新模板总数（延迟一下，等待列表刷新）
+      setTimeout(() => {
+        const total = templateListRef.current?.getTotal() || 0
+        setTemplateTotal(total)
+      }, 100)
     } catch (error) {
       handleApiError(error, templateFile ? "模板导入失败" : "模板创建失败")
     } finally {
@@ -300,6 +308,21 @@ export default function LexDocxPage() {
     }
   }
 
+  // 定期更新模板总数（用于控制多选按钮的显示）
+  useEffect(() => {
+    const updateTotal = () => {
+      const total = templateListRef.current?.getTotal() || 0
+      setTemplateTotal(total)
+    }
+    
+    // 初始更新
+    updateTotal()
+    
+    // 定期更新（每2秒检查一次）
+    const interval = setInterval(updateTotal, 2000)
+    
+    return () => clearInterval(interval)
+  }, [])
 
   // 处理文档生成
   const handleGenerateDocument = async (formData: Record<string, any>) => {
@@ -375,15 +398,18 @@ export default function LexDocxPage() {
             <Plus className="h-4 w-4 mr-2" />
             新建模板
           </Button>
-          <Button
-            onClick={handleToggleMultiSelect}
-            variant={isMultiSelect ? "default" : "outline"}
-            className="w-full"
-            size="sm"
-          >
-            <CheckSquare className="h-4 w-4 mr-2" />
-            {isMultiSelect ? "退出多选" : "多选"}
-          </Button>
+          {/* 只有在有模板时才显示多选按钮 */}
+          {templateTotal > 0 && (
+            <Button
+              onClick={handleToggleMultiSelect}
+              variant={isMultiSelect ? "default" : "outline"}
+              className="w-full"
+              size="sm"
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {isMultiSelect ? "退出多选" : "多选"}
+            </Button>
+          )}
         </div>
 
         {/* 模板列表 */}

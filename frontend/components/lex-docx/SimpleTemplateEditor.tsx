@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Save, Loader2, Hash } from "lucide-react"
+import { Hash } from "lucide-react"
 import { type DocumentTemplate, type PlaceholderMetadata } from "@/lib/api/lex-docx"
 import { PlaceholderConfig } from "./PlaceholderConfig"
 import { cn } from "@/lib/utils"
@@ -403,44 +403,17 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between p-4 border-b bg-white">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleInsertPlaceholder}
-            className="gap-2"
-          >
-            <Hash className="h-4 w-4" />
-            插入占位符
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          {onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel}>
-              取消
-            </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSavingState}
-            className="gap-2"
-          >
-            {isSavingState ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                保存中...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                保存
-              </>
-            )}
-          </Button>
-        </div>
+      {/* 工具栏 - 只显示插入占位符按钮，取消和保存按钮由父组件提供 */}
+      <div className="flex items-center justify-start p-4 border-b bg-white">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleInsertPlaceholder}
+          className="gap-2"
+        >
+          <Hash className="h-4 w-4" />
+          插入占位符
+        </Button>
       </div>
 
       {/* 编辑器内容区域 */}
