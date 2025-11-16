@@ -195,6 +195,8 @@
 .lex-docx-interactive-preview table th p {
   margin: 0;
   padding: 0;
+  /* 确保内联样式中的格式能够正确应用 */
+  display: block;
 }
 
 .lex-docx-preview-content table td br,
@@ -223,6 +225,48 @@
 .lex-docx-preview-content [style*="text-align: justify"],
 .lex-docx-interactive-preview [style*="text-align: justify"] {
   text-align: justify !important;
+}
+
+/* 段落缩进支持 - 确保内联样式正确应用 */
+/* 注意：内联样式中的text-indent和padding-left应该自动生效，但我们需要确保它们不被其他样式覆盖 */
+.lex-docx-preview-content p[style*="text-indent"],
+.lex-docx-interactive-preview p[style*="text-indent"],
+.lex-docx-preview-content table td p[style*="text-indent"],
+.lex-docx-interactive-preview table td p[style*="text-indent"],
+.lex-docx-preview-content table th p[style*="text-indent"],
+.lex-docx-interactive-preview table th p[style*="text-indent"] {
+  /* 确保text-indent生效 */
+  display: block;
+}
+
+.lex-docx-preview-content p[style*="padding-left"],
+.lex-docx-interactive-preview p[style*="padding-left"],
+.lex-docx-preview-content table td p[style*="padding-left"],
+.lex-docx-interactive-preview table td p[style*="padding-left"],
+.lex-docx-preview-content table th p[style*="padding-left"],
+.lex-docx-interactive-preview table th p[style*="padding-left"] {
+  /* 确保padding-left生效 */
+  display: block;
+  box-sizing: border-box;
+}
+
+/* 确保单元格内段落格式正确应用 */
+.lex-docx-preview-content table td p[style],
+.lex-docx-interactive-preview table td p[style],
+.lex-docx-preview-content table th p[style],
+.lex-docx-interactive-preview table th p[style] {
+  margin: 0;
+  padding: 0;
+  /* 保留内联样式中的所有格式，确保样式优先级 */
+  display: block;
+}
+
+/* 确保单元格垂直对齐正确应用（特别是拆分/合并单元格） */
+.lex-docx-preview-content table td[style*="vertical-align"],
+.lex-docx-interactive-preview table td[style*="vertical-align"],
+.lex-docx-preview-content table th[style*="vertical-align"],
+.lex-docx-interactive-preview table th[style*="vertical-align"] {
+  /* 确保垂直对齐样式正确应用 */
 }
 
 /* 换行和空白处理 */
