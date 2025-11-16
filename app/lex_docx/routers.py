@@ -536,15 +536,23 @@ async def batch_update_template_status(
                 detail=f"无效的状态值: {obj_in.new_status}",
             )
         
-        updated_count = await services.batch_update_template_status(
+        result = await services.batch_update_template_status(
             db=db,
             template_ids=obj_in.template_ids,
             new_status=obj_in.new_status,
             updated_by=current_staff.id,
         )
         
+        # result 是一个字典，包含 updated_count 和 failed_templates
+        updated_count = result.get("updated_count", 0)
+        failed_templates = result.get("failed_templates", [])
+        
         return SingleResponse(
-            data={"updated_count": updated_count, "total": len(obj_in.template_ids)}
+            data={
+                "updated_count": updated_count,
+                "total": len(obj_in.template_ids),
+                "failed_templates": failed_templates
+            }
         )
     except HTTPException:
         raise

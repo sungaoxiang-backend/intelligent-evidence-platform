@@ -405,15 +405,15 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
     <div className={cn("flex flex-col h-full", className)}>
       {/* 工具栏 - 只显示插入占位符按钮，取消和保存按钮由父组件提供 */}
       <div className="flex items-center justify-start p-4 border-b bg-white">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleInsertPlaceholder}
-          className="gap-2"
-        >
-          <Hash className="h-4 w-4" />
-          插入占位符
-        </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleInsertPlaceholder}
+            className="gap-2"
+          >
+            <Hash className="h-4 w-4" />
+            插入占位符
+          </Button>
       </div>
 
       {/* 编辑器内容区域 */}

@@ -198,11 +198,11 @@ export default function LexDocxPage() {
       // 清除当前选择，确保显示"请选择一个模板"的提示
       setSelectedTemplate(null)
       setIsEditMode(false)
-      
+
       // 重置表单
       resetCreateForm()
       setShowCreateDialog(false)
-      
+
       // 刷新模板列表
       templateListRef.current?.refresh()
       
@@ -275,10 +275,30 @@ export default function LexDocxPage() {
       } else {
         const newStatus = action === "publish" ? "published" : "draft"
         const result = await lexDocxApi.batchUpdateTemplateStatus(templateIds, newStatus)
-        handleSuccess(
-          `成功${action === "publish" ? "发布" : "撤销"} ${result.updated_count} 个模板`
-        )
         
+        // 检查是否有失败的模板
+        if (result.failed_templates && result.failed_templates.length > 0) {
+          const failedNames = result.failed_templates.map((f: any) => f.name || `ID:${f.id}`).join("、")
+          const reasons = result.failed_templates.map((f: any) => f.reason).join("、")
+          toast({
+            title: "部分模板操作失败",
+            description: `${failedNames}：${reasons}`,
+            variant: "destructive",
+          })
+        }
+        
+        if (result.updated_count > 0) {
+          handleSuccess(
+            `成功${action === "publish" ? "发布" : "撤销"} ${result.updated_count} 个模板`
+          )
+        } else {
+          toast({
+            title: "操作失败",
+            description: "没有模板被更新，请检查模板是否符合发布条件（需要内容、占位符和元数据）",
+            variant: "destructive",
+          })
+        }
+
         // 如果当前选中的模板状态改变，刷新数据
         if (selectedTemplate && templateIds.includes(selectedTemplate.id)) {
           const updated = await lexDocxApi.getTemplate(selectedTemplate.id)
@@ -294,7 +314,10 @@ export default function LexDocxPage() {
       // 自动退出多选模式
       setIsMultiSelect(false)
       
-      // 调用成功回调（用于刷新列表）
+      // 强制刷新模板列表（确保状态更新）
+      templateListRef.current?.refresh()
+      
+      // 调用成功回调（用于额外的刷新逻辑）
       onSuccess?.()
     } catch (error) {
       handleApiError(error, "批量操作失败")
@@ -403,15 +426,15 @@ export default function LexDocxPage() {
           </Button>
           {/* 只有在有模板时才显示多选按钮 */}
           {templateTotal > 0 && (
-            <Button
+          <Button
               onClick={handleToggleMultiSelect}
               variant={isMultiSelect ? "default" : "outline"}
-              className="w-full"
-              size="sm"
-            >
+            className="w-full"
+            size="sm"
+          >
               <CheckSquare className="h-4 w-4 mr-2" />
               {isMultiSelect ? "退出多选" : "多选"}
-            </Button>
+          </Button>
           )}
         </div>
 
@@ -463,31 +486,31 @@ export default function LexDocxPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancelEdit}
-                disabled={isSaving}
-              >
-                取消
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  editorRef.current?.save()
-                }}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    保存中...
-                  </>
-                ) : (
-                  "保存"
-                )}
-              </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                    disabled={isSaving}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      editorRef.current?.save()
+                    }}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        保存中...
+                      </>
+                    ) : (
+                      "保存"
+                    )}
+                  </Button>
             </div>
           </div>
         )}
@@ -508,8 +531,8 @@ export default function LexDocxPage() {
               <InteractiveTemplatePreview
                 ref={interactivePreviewRef}
                 template={selectedTemplate}
-                onDownloadDocument={handleExportTemplate}
-                isExporting={isExporting}
+                onSubmit={handleGenerateDocument}
+                isGenerating={isGenerating}
               />
             ) : (
               <TemplatePreview

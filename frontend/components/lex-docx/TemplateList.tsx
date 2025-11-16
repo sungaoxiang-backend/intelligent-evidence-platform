@@ -111,9 +111,9 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
       onSelectionChange?.(newSelected)
     } else {
       // 单选模式：选择模板
-      if (onTemplateSelect) {
-        onTemplateSelect(template)
-      }
+    if (onTemplateSelect) {
+      onTemplateSelect(template)
+    }
     }
   }
 
@@ -347,9 +347,9 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
 
               return (
                 <div
-                  key={template.id}
-                  onClick={() => handleTemplateClick(template)}
-                  className={cn(
+                key={template.id}
+                onClick={() => handleTemplateClick(template)}
+                className={cn(
                     "w-full p-3 rounded-lg border text-left transition-all duration-200 cursor-pointer relative overflow-hidden",
                     isSelected
                       ? "border-blue-400 shadow-md ring-1 ring-blue-200 bg-blue-50/50"
@@ -376,26 +376,26 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
                       </div>
                     )}
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium truncate text-sm">{template.name}</h3>
-                        <Badge
-                          variant={getStatusBadgeVariant(template.status)}
+                      <Badge
+                        variant={getStatusBadgeVariant(template.status)}
                           className="shrink-0 text-xs"
-                        >
-                          {getStatusLabel(template.status)}
-                        </Badge>
-                      </div>
-                      {template.description && (
+                      >
+                        {getStatusLabel(template.status)}
+                      </Badge>
+                    </div>
+                    {template.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-1">
-                          {template.description}
-                        </p>
-                      )}
-                      {template.category && (
+                        {template.description}
+                      </p>
+                    )}
+                    {template.category && (
                         <p className="text-xs text-muted-foreground">
-                          分类: {template.category}
-                        </p>
-                      )}
+                        分类: {template.category}
+                      </p>
+                    )}
                     </div>
                   </div>
                 </div>

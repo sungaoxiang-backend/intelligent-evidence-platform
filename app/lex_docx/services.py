@@ -89,10 +89,10 @@ async def create_template(
             existing_metadata,
         )
         # 转换为字典格式（用于JSONB存储）
-        if placeholder_metadata:
-            placeholder_metadata = {
-                k: v.model_dump() for k, v in placeholder_metadata.items()
-            }
+        # 注意：即使字典为空，也要保存为 {} 而不是 None，以便后续可以添加元数据
+        placeholder_metadata = {
+            k: v.model_dump() for k, v in placeholder_metadata.items()
+        } if placeholder_metadata else {}
     
     # 创建模板对象
     create_data = obj_in.model_dump(exclude_unset=True, exclude={"placeholder_metadata"})
@@ -388,7 +388,7 @@ async def batch_update_template_status(
     template_ids: List[int],
     new_status: str,
     updated_by: int,
-) -> int:
+) -> dict:
     """
     批量更新模板状态
     
@@ -399,13 +399,13 @@ async def batch_update_template_status(
         updated_by: 更新人ID
         
     Returns:
-        成功更新的数量
+        包含 updated_count 和 failed_templates 的字典
         
     Raises:
         HTTPException: 如果验证失败
     """
     if not template_ids:
-        return 0
+        return {"updated_count": 0, "failed_templates": []}
     
     # 验证状态值
     if new_status not in [TemplateStatus.DRAFT, TemplateStatus.PUBLISHED]:
@@ -426,6 +426,8 @@ async def batch_update_template_status(
         )
     
     updated_count = 0
+    failed_templates = []  # 记录失败的模板和原因
+    
     for template in templates:
         # 如果状态没有变化，跳过
         if template.status == new_status:
@@ -435,18 +437,25 @@ async def batch_update_template_status(
         if template.status == TemplateStatus.DRAFT and new_status == TemplateStatus.PUBLISHED:
             # 验证模板至少包含一个占位符
             if not template.content_html:
-                logger.warning(f"模板 {template.id} 内容为空，跳过发布")
+                logger.warning(f"模板 {template.id} ({template.name}) 内容为空，跳过发布")
+                failed_templates.append({"id": template.id, "name": template.name, "reason": "模板内容为空"})
                 continue
             
             # 提取占位符
             placeholders = extract_placeholders(template.content_html)
             if not placeholders:
-                logger.warning(f"模板 {template.id} 没有占位符，跳过发布")
+                logger.warning(f"模板 {template.id} ({template.name}) 没有占位符，跳过发布")
+                failed_templates.append({"id": template.id, "name": template.name, "reason": "模板没有占位符"})
                 continue
             
             # 验证占位符元数据是否存在
-            if not template.placeholder_metadata:
-                logger.warning(f"模板 {template.id} 占位符元数据未配置，跳过发布")
+            # 注意：placeholder_metadata 可能是 None 或空字典 {}
+            # 如果模板有占位符但没有元数据配置，则无法发布
+            if not template.placeholder_metadata or (
+                isinstance(template.placeholder_metadata, dict) and len(template.placeholder_metadata) == 0 and placeholders
+            ):
+                logger.warning(f"模板 {template.id} ({template.name}) 占位符元数据未配置，跳过发布")
+                failed_templates.append({"id": template.id, "name": template.name, "reason": "占位符元数据未配置"})
                 continue
         
         # 更新状态
@@ -454,9 +463,17 @@ async def batch_update_template_status(
         template.updated_by = updated_by
         updated_count += 1
     
+    # 如果有失败的模板，记录详细信息
+    if failed_templates:
+        logger.warning(f"批量更新状态：成功 {updated_count} 个，失败 {len(failed_templates)} 个。失败详情：{failed_templates}")
+    
     await db.commit()
     
-    return updated_count
+    # 返回更新数量和失败信息
+    return {
+        "updated_count": updated_count,
+        "failed_templates": failed_templates
+    }
 
 
 async def batch_delete_templates(
@@ -494,16 +511,6 @@ async def batch_delete_templates(
     
     deleted_count = 0
     for template in templates:
-        # 删除模板文件
-        if template.content_path:
-            file_path = Path(template.content_path)
-            if file_path.exists():
-                try:
-                    file_path.unlink()
-                    logger.info(f"已删除模板文件: {template.content_path}")
-                except Exception as e:
-                    logger.warning(f"删除模板文件失败: {e}")
-        
         # 删除数据库记录
         # 注意：关联的生成记录不会被删除，template_id 会被设置为 NULL（通过外键约束 SET NULL）
         # 这样生成记录作为快照保留，可以继续访问，即使模板已删除
@@ -681,12 +688,11 @@ async def import_template(
         # 解析占位符元数据（创建默认配置）
         placeholder_metadata_dict = parse_placeholder_metadata(html_content)
         # 转换为字典格式（用于JSONB存储）
-        placeholder_metadata_for_create = None
-        if placeholder_metadata_dict:
-            placeholder_metadata_for_create = {
-                k: v.model_dump() if hasattr(v, 'model_dump') else v
-                for k, v in placeholder_metadata_dict.items()
-            }
+        # 注意：即使字典为空，也要保存为 {} 而不是 None，以便后续可以添加元数据
+        placeholder_metadata_for_create = {
+            k: v.model_dump() if hasattr(v, 'model_dump') else v
+            for k, v in placeholder_metadata_dict.items()
+        } if placeholder_metadata_dict else {}
         
         # 使用文件名作为模板名称（如果没有提供）
         template_name = name.strip() if name and name.strip() else Path(file.filename).stem

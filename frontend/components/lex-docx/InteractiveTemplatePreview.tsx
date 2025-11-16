@@ -22,7 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, Loader2, FileText, Download } from "lucide-react"
+import { CalendarIcon, Loader2, FileText, FileDown } from "lucide-react"
 import { format } from "date-fns"
 import { zhCN } from "date-fns/locale"
 import { type DocumentTemplate, type PlaceholderMetadata } from "@/lib/api/lex-docx"
@@ -33,8 +33,6 @@ interface InteractiveTemplatePreviewProps {
   onSubmit?: (formData: Record<string, any>) => void | Promise<void>
   isGenerating?: boolean
   className?: string
-  onDownloadDocument?: () => void
-  isExporting?: boolean
 }
 
 export interface InteractiveTemplatePreviewRef {
@@ -47,8 +45,6 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   onSubmit,
   isGenerating = false,
   className,
-  onDownloadDocument,
-  isExporting = false,
 }, ref) => {
   const formRef = useRef<HTMLFormElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -664,26 +660,29 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
 
   return (
     <form ref={formRef} onSubmit={handleFormSubmit} className={cn("flex flex-col h-full relative", className)}>
-      {/* 下载文书按钮（已发布状态，右上角） */}
-      {onDownloadDocument && (
+      {/* 生成文书按钮（右上角） */}
+      {onSubmit && (
         <div className="absolute top-4 right-4 z-10">
           <Button
-            type="button"
+            type="submit"
             variant="outline"
             size="sm"
-            onClick={onDownloadDocument}
-            disabled={isExporting}
+            onClick={(e) => {
+              e.preventDefault()
+              handleFormSubmit()
+            }}
+            disabled={isGenerating}
             className="shadow-md bg-white hover:bg-gray-50"
           >
-            {isExporting ? (
+            {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                下载中...
+                生成中...
               </>
             ) : (
               <>
-                <Download className="h-4 w-4 mr-2" />
-                下载文书
+                <FileDown className="h-4 w-4 mr-2" />
+                生成文书
               </>
             )}
           </Button>

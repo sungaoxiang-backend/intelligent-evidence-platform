@@ -466,3 +466,14 @@
   white-space: nowrap;
 }
 
+/* 隐藏占位符标记，直到表单组件渲染完成 */
+.lex-docx-form-field-marker {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+

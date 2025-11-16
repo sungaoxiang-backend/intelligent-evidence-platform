@@ -457,7 +457,11 @@ class LexDocxAPI {
   async batchUpdateTemplateStatus(
     templateIds: number[],
     newStatus: "draft" | "published"
-  ): Promise<{ updated_count: number; total: number }> {
+  ): Promise<{ 
+    updated_count: number
+    total: number
+    failed_templates?: Array<{ id: number; name: string; reason: string }>
+  }> {
     const url = `${this.getBaseUrl()}/lex-docx/batch/update-status`
     const response = await fetch(url, {
       method: "POST",
@@ -468,7 +472,11 @@ class LexDocxAPI {
       }),
     })
 
-    return this.handleResponse<{ updated_count: number; total: number }>(response)
+    return this.handleResponse<{ 
+      updated_count: number
+      total: number
+      failed_templates?: Array<{ id: number; name: string; reason: string }>
+    }>(response)
   }
 
   /**
