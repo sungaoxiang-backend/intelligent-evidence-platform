@@ -23,6 +23,8 @@ interface PlaceholderConfigProps {
   onSave: (name: string, metadata: PlaceholderMetadata) => void
   onCancel?: () => void
   className?: string
+  allowNameEdit?: boolean  // 是否允许编辑占位符名称
+  onNameChange?: (newName: string) => void  // 占位符名称变化回调
 }
 
 const FIELD_TYPES = [
@@ -40,7 +42,11 @@ export function PlaceholderConfig({
   onSave,
   onCancel,
   className,
+  allowNameEdit = false,
+  onNameChange,
 }: PlaceholderConfigProps) {
+  // 占位符名称状态（如果允许编辑）
+  const [editableName, setEditableName] = useState(placeholderName)
   // 表单状态
   const [formData, setFormData] = useState<PlaceholderMetadata>({
     type: "text",
@@ -57,19 +63,24 @@ export function PlaceholderConfig({
   // 多选框选项列表（临时状态，用于编辑）
   const [optionItems, setOptionItems] = useState<string[]>([])
 
+  // 同步占位符名称变化
+  useEffect(() => {
+    setEditableName(placeholderName)
+  }, [placeholderName])
+
   // 初始化表单数据
   useEffect(() => {
     if (metadata) {
       setFormData(metadata)
-      // 如果是多选框，初始化选项列表
-      if (metadata.type === "multiselect" && metadata.options) {
+      // 如果是多选框或复选框，初始化选项列表
+      if ((metadata.type === "multiselect" || metadata.type === "checkbox") && metadata.options) {
         setOptionItems([...metadata.options])
       } else {
         setOptionItems([])
       }
     } else {
       // 默认值：尝试从占位符名称推断标签
-      const inferredLabel = placeholderName
+      const inferredLabel = editableName
         .replace(/_/g, " ")
         .replace(/\b\w/g, (l) => l.toUpperCase())
       setFormData({
@@ -82,7 +93,7 @@ export function PlaceholderConfig({
       })
       setOptionItems([])
     }
-  }, [metadata, placeholderName])
+  }, [metadata, editableName])
 
   // 验证表单
   const validate = (): boolean => {
@@ -93,10 +104,12 @@ export function PlaceholderConfig({
       newErrors.label = "标签不能为空"
     }
 
-    // 验证多选框选项
-    if (formData.type === "multiselect") {
+    // 验证多选框和复选框选项
+    if (formData.type === "multiselect" || formData.type === "checkbox") {
       if (!optionItems || optionItems.length === 0) {
-        newErrors.options = "多选框必须至少有一个选项"
+        newErrors.options = formData.type === "multiselect" 
+          ? "多选框必须至少有一个选项" 
+          : "复选框必须至少有一个选项"
       } else {
         // 验证选项不能为空
         const emptyOptions = optionItems.filter((opt) => !opt.trim())
@@ -138,11 +151,14 @@ export function PlaceholderConfig({
       label: formData.label.trim(),
       required: formData.required,
       default_value: formData.default_value,
-      options: formData.type === "multiselect" ? optionItems.filter((opt) => opt.trim()) : undefined,
+      // 多选框和复选框都需要选项列表
+      options: (formData.type === "multiselect" || formData.type === "checkbox") 
+        ? optionItems.filter((opt) => opt.trim()) 
+        : undefined,
       validation: formData.validation,
     }
 
-    onSave(placeholderName, finalMetadata)
+    onSave(editableName.trim(), finalMetadata)
   }
 
   // 处理字段类型变化
@@ -153,19 +169,16 @@ export function PlaceholderConfig({
         type: newType,
       }
 
-      // 如果切换到多选框，初始化选项列表
-      if (newType === "multiselect") {
+      // 如果切换到多选框或复选框，初始化选项列表
+      if (newType === "multiselect" || newType === "checkbox") {
         updated.options = optionItems.length > 0 ? optionItems : []
+        // 如果选项列表为空，添加一个空选项
+        if (optionItems.length === 0) {
+          setOptionItems([""])
+        }
       } else {
         updated.options = undefined
-      }
-
-      // 如果切换到非多选框，清空选项列表
-      if (newType !== "multiselect") {
         setOptionItems([])
-      } else if (optionItems.length === 0) {
-        // 如果是多选框且选项列表为空，添加一个空选项
-        setOptionItems([""])
       }
 
       // 根据类型重置默认值
@@ -174,7 +187,10 @@ export function PlaceholderConfig({
       } else if (newType === "date") {
         updated.default_value = undefined
       } else if (newType === "checkbox") {
-        updated.default_value = false
+        // 复选框：如果有选项，默认值为第一个选项；否则为 false
+        updated.default_value = optionItems.length > 0 && optionItems[0].trim() 
+          ? optionItems[0].trim() 
+          : false
       } else if (newType === "multiselect") {
         updated.default_value = []
       } else {
@@ -208,12 +224,27 @@ export function PlaceholderConfig({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* 占位符名称（只读） */}
+      {/* 占位符名称（可编辑或只读） */}
       <div>
         <Label>占位符名称</Label>
-        <Input value={placeholderName} disabled className="mt-1 font-mono" />
+        {allowNameEdit ? (
+          <Input
+            value={editableName}
+            onChange={(e) => {
+              const newName = e.target.value
+              setEditableName(newName)
+              if (onNameChange) {
+                onNameChange(newName)
+              }
+            }}
+            className="mt-1 font-mono"
+            placeholder="例如: plaintiff_name"
+          />
+        ) : (
+          <Input value={editableName} disabled className="mt-1 font-mono" />
+        )}
         <p className="text-xs text-muted-foreground mt-1">
-          格式：{`{{${placeholderName}}}`}
+          格式：{`{{${editableName}}}`}
         </p>
       </div>
 
@@ -275,7 +306,7 @@ export function PlaceholderConfig({
       </div>
 
       {/* 默认值（根据类型显示不同的输入控件） */}
-      {formData.type !== "multiselect" && (
+      {formData.type !== "multiselect" && formData.type !== "checkbox" && (
         <div>
           <Label htmlFor="default_value">默认值</Label>
           {formData.type === "textarea" ? (
@@ -328,22 +359,6 @@ export function PlaceholderConfig({
               }
               className="mt-1"
             />
-          ) : formData.type === "checkbox" ? (
-            <div className="flex items-center space-x-2 mt-2">
-              <Switch
-                id="default_value_checkbox"
-                checked={(formData.default_value as boolean) || false}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    default_value: checked,
-                  }))
-                }
-              />
-              <Label htmlFor="default_value_checkbox" className="text-sm">
-                {formData.default_value ? "默认选中" : "默认不选中"}
-              </Label>
-            </div>
           ) : (
             <Input
               id="default_value"
@@ -366,12 +381,14 @@ export function PlaceholderConfig({
         </div>
       )}
 
-      {/* 多选框选项列表 */}
-      {formData.type === "multiselect" && (
+      {/* 选项列表（多选框和复选框） */}
+      {(formData.type === "multiselect" || formData.type === "checkbox") && (
         <div>
           <Label>选项列表 *</Label>
           <p className="text-xs text-muted-foreground mb-2">
-            为多选框配置可选项，至少需要一个选项
+            {formData.type === "multiselect" 
+              ? "为多选框配置可选项，至少需要一个选项"
+              : "为复选框配置可选项，至少需要一个选项"}
           </p>
           <div className="space-y-2 mt-1">
             {optionItems.map((option, index) => (
@@ -408,6 +425,75 @@ export function PlaceholderConfig({
           </div>
           {errors.options && (
             <p className="text-sm text-destructive mt-1">{errors.options}</p>
+          )}
+        </div>
+      )}
+
+      {/* 默认值（复选框和多选框，从选项中选择） */}
+      {(formData.type === "checkbox" || formData.type === "multiselect") && optionItems.length > 0 && (
+        <div>
+          <Label htmlFor="default_value">默认值</Label>
+          {formData.type === "checkbox" ? (
+            <Select
+              value={
+                formData.default_value && typeof formData.default_value === "string"
+                  ? formData.default_value
+                  : "__none__"
+              }
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  default_value: value === "__none__" ? false : value,
+                }))
+              }
+            >
+              <SelectTrigger id="default_value" className="mt-1">
+                <SelectValue placeholder="请选择默认选项（可选）" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">无默认值</SelectItem>
+                {optionItems.filter((opt) => opt.trim()).map((option, index) => (
+                  <SelectItem key={index} value={option.trim()}>
+                    {option.trim()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="space-y-2 mt-1">
+              {optionItems.filter((opt) => opt.trim()).map((option, index) => {
+                const optionValue = option.trim()
+                const selectedValues = (formData.default_value as string[]) || []
+                const isSelected = selectedValues.includes(optionValue)
+                return (
+                  <div key={index} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`default_${index}`}
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const newValues = e.target.checked
+                          ? [...selectedValues, optionValue]
+                          : selectedValues.filter((v) => v !== optionValue)
+                        setFormData((prev) => ({
+                          ...prev,
+                          default_value: newValues.length > 0 ? newValues : [],
+                        }))
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor={`default_${index}`} className="text-sm font-normal cursor-pointer">
+                      {optionValue}
+                    </Label>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {errors.default_value && (
+            <p className="text-sm text-destructive mt-1">
+              {errors.default_value}
+            </p>
           )}
         </div>
       )}

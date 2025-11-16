@@ -114,7 +114,7 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
           placeholderSpan.className = "lex-docx-placeholder-editor"
           placeholderSpan.setAttribute("data-placeholder", fieldName)
           placeholderSpan.setAttribute("contenteditable", "false")
-          placeholderSpan.style.cssText = "background-color: #fef3c7; color: #92400e; padding: 2px 4px; border-radius: 3px; font-weight: 500; font-family: 'Courier New', monospace; cursor: pointer; user-select: none; display: inline-block;"
+          placeholderSpan.setAttribute("tabindex", "0") // 支持键盘导航
           placeholderSpan.textContent = match[0]
           
           // 添加点击事件
@@ -189,7 +189,7 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
     const placeholderRegex = /\{\{([^}]+)\}\}/g
     return html.replace(placeholderRegex, (match, fieldName) => {
       const trimmedName = fieldName.trim()
-      return `<span class="lex-docx-placeholder-editor" data-placeholder="${trimmedName}" contenteditable="false" style="background-color: #fef3c7; color: #92400e; padding: 2px 4px; border-radius: 3px; font-weight: 500; font-family: 'Courier New', monospace; cursor: pointer; user-select: none; display: inline-block;">${match}</span>`
+      return `<span class="lex-docx-placeholder-editor" data-placeholder="${trimmedName}" contenteditable="false" tabindex="0">${match}</span>`
     })
   }
 
@@ -206,7 +206,7 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
     }, 50)
   }, [onContentChange, markPlaceholders])
 
-  // 处理占位符点击
+  // 处理占位符点击和键盘事件
   const [editingPlaceholderName, setEditingPlaceholderName] = useState<string | null>(null)
   
   useEffect(() => {
@@ -228,9 +228,28 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
       }
     }
     
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.classList.contains("lex-docx-placeholder-editor")) {
+        // 支持 Enter 和 Space 键打开编辑对话框
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          e.stopPropagation()
+          const placeholderName = target.getAttribute("data-placeholder")
+          if (placeholderName) {
+            setEditingPlaceholderName(placeholderName)
+            setPlaceholderName(placeholderName)
+            setShowPlaceholderDialog(true)
+          }
+        }
+      }
+    }
+    
     contentEditableRef.current.addEventListener("click", handleClick)
+    contentEditableRef.current.addEventListener("keydown", handleKeyDown)
     return () => {
       contentEditableRef.current?.removeEventListener("click", handleClick)
+      contentEditableRef.current?.removeEventListener("keydown", handleKeyDown)
     }
   }, [])
 
@@ -338,7 +357,7 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
         placeholderSpan.className = "lex-docx-placeholder-editor"
         placeholderSpan.setAttribute("data-placeholder", fieldName)
         placeholderSpan.setAttribute("contenteditable", "false")
-        placeholderSpan.style.cssText = "background-color: #fef3c7; color: #92400e; padding: 2px 4px; border-radius: 3px; font-weight: 500; font-family: 'Courier New', monospace; cursor: pointer; user-select: none; display: inline-block;"
+        placeholderSpan.setAttribute("tabindex", "0") // 支持键盘导航
         placeholderSpan.textContent = `{{${fieldName}}}`
         
         placeholderSpan.addEventListener("click", (e) => {
@@ -464,45 +483,113 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="placeholder-name">占位符名称</Label>
-              <Input
-                id="placeholder-name"
-                value={placeholderName}
-                onChange={(e) => {
-                  setPlaceholderName(e.target.value)
-                  setPlaceholderNameError("")
-                }}
-                placeholder="例如: plaintiff_name"
-                className={cn(placeholderNameError && "border-red-500")}
-              />
-              {placeholderNameError && (
-                <p className="text-sm text-red-500 mt-1">{placeholderNameError}</p>
-              )}
-            </div>
+            {/* 占位符名称输入（仅在插入新占位符时显示，编辑时隐藏，因为 PlaceholderConfig 会显示） */}
+            {!editingPlaceholderName && (
+              <div>
+                <Label htmlFor="placeholder-name">占位符名称</Label>
+                <Input
+                  id="placeholder-name"
+                  value={placeholderName}
+                  onChange={(e) => {
+                    setPlaceholderName(e.target.value)
+                    setPlaceholderNameError("")
+                  }}
+                  placeholder="例如: plaintiff_name"
+                  className={cn(placeholderNameError && "border-red-500")}
+                />
+                {placeholderNameError && (
+                  <p className="text-sm text-red-500 mt-1">{placeholderNameError}</p>
+                )}
+              </div>
+            )}
             {placeholderName.trim() && validatePlaceholderName(placeholderName.trim()) && (
               <PlaceholderConfig
-                fieldName={placeholderName.trim()}
+                placeholderName={placeholderName.trim()}
                 metadata={placeholderMetadata[placeholderName.trim()] || {
                   type: "text",
                   label: placeholderName.trim().replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
                   required: false,
                   default_value: null,
                 }}
-                onChange={(metadata) => {
-                  setPlaceholderMetadata({
-                    ...placeholderMetadata,
-                    [placeholderName.trim()]: metadata,
-                  })
+                allowNameEdit={!!editingPlaceholderName}
+                onNameChange={(newName) => {
+                  // 验证新名称
+                  if (!validatePlaceholderName(newName.trim())) {
+                    setPlaceholderNameError("占位符名称只能包含字母、数字和下划线，且不能以数字开头")
+                  } else {
+                    setPlaceholderNameError("")
+                    setPlaceholderName(newName)
+                  }
+                }}
+                onSave={(name, metadata) => {
+                  // 验证最终名称
+                  if (!validatePlaceholderName(name.trim())) {
+                    setPlaceholderNameError("占位符名称只能包含字母、数字和下划线，且不能以数字开头")
+                    return
+                  }
+                  
+                  const finalName = name.trim()
+                  
+                  // 如果正在编辑现有占位符且名称改变，需要更新占位符名称
+                  if (editingPlaceholderName && editingPlaceholderName !== finalName) {
+                    // 检查新名称是否已存在
+                    if (placeholderMetadata[finalName] && finalName !== editingPlaceholderName) {
+                      setPlaceholderNameError("该占位符名称已存在")
+                      return
+                    }
+                    
+                    // 更新编辑器中的占位符名称
+                    if (contentEditableRef.current) {
+                      const placeholderElements = contentEditableRef.current.querySelectorAll(
+                        `.lex-docx-placeholder-editor[data-placeholder="${editingPlaceholderName}"]`
+                      )
+                      placeholderElements.forEach((el) => {
+                        el.setAttribute("data-placeholder", finalName)
+                        el.textContent = `{{${finalName}}}`
+                      })
+                    }
+                    
+                    // 如果旧名称有元数据，迁移到新名称
+                    if (placeholderMetadata[editingPlaceholderName]) {
+                      const newMetadata = { ...placeholderMetadata }
+                      delete newMetadata[editingPlaceholderName]
+                      newMetadata[finalName] = metadata
+                      setPlaceholderMetadata(newMetadata)
+                    } else {
+                      setPlaceholderMetadata({
+                        ...placeholderMetadata,
+                        [finalName]: metadata,
+                      })
+                    }
+                  } else {
+                    // 检查新名称是否已存在（新建时）
+                    if (!editingPlaceholderName && placeholderMetadata[finalName]) {
+                      setPlaceholderNameError("该占位符名称已存在")
+                      return
+                    }
+                    
+                    // 正常保存或新建
+                    setPlaceholderMetadata({
+                      ...placeholderMetadata,
+                      [finalName]: metadata,
+                    })
+                  }
+                  
+                  // 保存后关闭对话框
+                  setShowPlaceholderDialog(false)
+                  setPlaceholderName("")
+                  setPlaceholderNameError("")
+                  setEditingPlaceholderName(null)
+                }}
+                onCancel={() => {
+                  setShowPlaceholderDialog(false)
+                  setPlaceholderName("")
+                  setPlaceholderNameError("")
+                  setEditingPlaceholderName(null)
                 }}
               />
             )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowPlaceholderDialog(false)}>
-                取消
-              </Button>
-              <Button onClick={handlePlaceholderConfirm}>确认</Button>
-            </div>
+            {/* PlaceholderConfig 内部已有保存和取消按钮，不需要外部按钮 */}
           </div>
         </DialogContent>
       </Dialog>

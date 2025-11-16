@@ -197,12 +197,87 @@ def _inject_alignment_info(html: str, doc) -> str:
     import re
     from html import escape
     
-    # 1. 为没有 border 属性的 table 添加默认样式
-    html = re.sub(
-        r'<table(?!\s+style)([^>]*)>',
-        r'<table\1 style="border-collapse: collapse; border: 1px solid #000;">',
-        html
-    )
+    # 1. 为没有 border 属性的 table 添加默认样式，并应用列宽度
+    # 先提取列宽度（需要在处理表格之前）
+    table_column_widths = {}  # {table_idx: [width1, width2, ...]}
+    for table_idx, table in enumerate(doc.tables):
+        column_widths = []
+        try:
+            # 从表格的 XML 中提取列宽度
+            tbl = table._element
+            from docx.oxml.ns import qn
+            tblGrid = tbl.find(qn('w:tblGrid'))
+            if tblGrid is not None:
+                gridCols = tblGrid.findall(qn('w:gridCol'))
+                for gridCol in gridCols:
+                    w = gridCol.get(qn('w:w'))
+                    if w:
+                        # w 单位是 twips (1/20 pt)，转换为 pt
+                        width_pt = float(w) / 20.0
+                        column_widths.append(width_pt)
+                    else:
+                        column_widths.append(None)
+        except Exception as e:
+            logger.debug(f"提取表格 {table_idx} 列宽度失败: {e}")
+        
+        if column_widths:
+            table_column_widths[table_idx] = column_widths
+            logger.info(f"表格 {table_idx} 列宽度: {column_widths}")
+    
+    # 为表格添加样式和列宽度
+    table_pattern = r'<table([^>]*)>'
+    tables = list(re.finditer(table_pattern, html))
+    offset = 0
+    for table_idx, table_match in enumerate(tables):
+        table_attrs = table_match.group(1)
+        table_start = table_match.start() + offset
+        table_end = table_match.end() + offset
+        
+        # 构建样式
+        styles = ["border-collapse: collapse", "border: 1px solid #000"]
+        if table_idx in table_column_widths:
+            styles.append("table-layout: fixed")
+        
+        # 检查是否已有 style 属性
+        if 'style=' in table_attrs:
+            # 合并现有样式
+            style_match = re.search(r'style="([^"]*)"', table_attrs)
+            if style_match:
+                existing_style = style_match.group(1)
+                new_style = existing_style + "; " + "; ".join(styles)
+                table_attrs = table_attrs.replace(f'style="{existing_style}"', f'style="{new_style}"')
+            else:
+                table_attrs += f' style="{"; ".join(styles)}"'
+        else:
+            table_attrs += f' style="{"; ".join(styles)}"'
+        
+        # 替换表格标签
+        new_table_tag = f'<table{table_attrs}>'
+        html = html[:table_start] + new_table_tag + html[table_end:]
+        offset += len(new_table_tag) - (table_end - table_start)
+        
+        # 如果有列宽度信息，添加 <colgroup>
+        if table_idx in table_column_widths:
+            column_widths = table_column_widths[table_idx]
+            if column_widths:
+                colgroup_html = '<colgroup>'
+                total_width = sum(w for w in column_widths if w is not None)
+                if total_width > 0:
+                    for width in column_widths:
+                        if width is not None:
+                            # 计算百分比宽度
+                            percentage = (width / total_width) * 100
+                            colgroup_html += f'<col style="width: {percentage:.2f}%;">'
+                        else:
+                            colgroup_html += '<col>'
+                else:
+                    # 如果没有宽度信息，平均分配
+                    for _ in column_widths:
+                        colgroup_html += '<col>'
+                colgroup_html += '</colgroup>'
+                # 在 <table> 标签后插入 <colgroup>
+                html = html[:table_start + len(new_table_tag)] + colgroup_html + html[table_start + len(new_table_tag):]
+                offset += len(colgroup_html)
     
     # 2. 处理文档级别段落对齐和缩进
     # 收集所有段落及其格式信息
@@ -259,6 +334,32 @@ def _inject_alignment_info(html: str, doc) -> str:
     # 3. 处理表格单元格内的段落对齐和缩进
     # 新方法：直接遍历表格，为每个单元格建立精确的段落映射
     cell_info_map = {}  # {(table_idx, row_idx, col_idx): cell_info}
+    table_column_widths = {}  # {table_idx: [width1, width2, ...]}
+    
+    # 提取表格列宽度
+    for table_idx, table in enumerate(doc.tables):
+        column_widths = []
+        try:
+            # 从表格的 XML 中提取列宽度
+            tbl = table._element
+            from docx.oxml.ns import qn
+            tblGrid = tbl.find(qn('w:tblGrid'))
+            if tblGrid is not None:
+                gridCols = tblGrid.findall(qn('w:gridCol'))
+                for gridCol in gridCols:
+                    w = gridCol.get(qn('w:w'))
+                    if w:
+                        # w 单位是 twips (1/20 pt)，转换为 pt
+                        width_pt = float(w) / 20.0
+                        column_widths.append(width_pt)
+                else:
+                        column_widths.append(None)
+        except Exception as e:
+            logger.debug(f"提取表格 {table_idx} 列宽度失败: {e}")
+        
+        if column_widths:
+            table_column_widths[table_idx] = column_widths
+            logger.info(f"表格 {table_idx} 列宽度: {column_widths}")
     
     for table_idx, table in enumerate(doc.tables):
         for row_idx, row in enumerate(table.rows):
@@ -347,7 +448,7 @@ def _inject_alignment_info(html: str, doc) -> str:
         
         table_match = tables[table_idx]
         table_html = table_match.group(0)
-        
+    
         # 在表格内找到对应的行
         row_pattern = rf'<tr[^>]*>.*?</tr>'
         rows = list(re.finditer(row_pattern, table_html, flags=re.DOTALL))
@@ -451,7 +552,7 @@ def _inject_alignment_info(html: str, doc) -> str:
         
         cell_attrs = cell_attrs_match.group(1)
         cell_content = cell_content_match.group(1)
-        
+                
         # 处理单元格样式
         cell_styles = []
         if 'style=' in cell_attrs:
@@ -460,9 +561,9 @@ def _inject_alignment_info(html: str, doc) -> str:
                 existing_style = style_match.group(1)
                 cell_styles.append(existing_style)
                 cell_attrs = re.sub(r'style="[^"]*"', '', cell_attrs)
-        else:
-            cell_styles.append("border: 1px solid #000; padding: 4pt 8pt")
-        
+            else:
+                cell_styles.append("border: 1px solid #000; padding: 4pt 8pt")
+                
         # 添加单元格垂直对齐（重要：必须应用，特别是对于拆分/合并的单元格）
         has_vertical_align = any('vertical-align' in s for s in cell_styles)
         if not has_vertical_align or cell_info['vertical_align'] != "top":

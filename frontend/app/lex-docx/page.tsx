@@ -92,7 +92,7 @@ export default function LexDocxPage() {
     try {
       const templateForEditing = await lexDocxApi.getTemplate(selectedTemplate.id, true)
       setSelectedTemplate(templateForEditing)
-      setIsEditMode(true)
+    setIsEditMode(true)
     } catch (error) {
       handleApiError(error, "加载模板失败")
     }
@@ -464,31 +464,8 @@ export default function LexDocxPage() {
                     </Button>
                   )}
 
-                  {/* 已发布模板显示"生成文书"，草稿模板显示"下载模板" */}
-                  {selectedTemplate.status === "published" ? (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      disabled={isGenerating}
-                      title="随时可以生成，即使表单没有内容也可以生成空的 Word 文档"
-                      onClick={() => {
-                        // 触发表单提交
-                        interactivePreviewRef.current?.submit()
-                      }}
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          生成中...
-                        </>
-                      ) : (
-                        <>
-                          <FileText className="h-4 w-4 mr-2" />
-                          生成文书
-                        </>
-                      )}
-                    </Button>
-                  ) : (
+                  {/* 草稿模板显示"下载模板" */}
+                  {selectedTemplate.status === "draft" && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -509,6 +486,8 @@ export default function LexDocxPage() {
                       )}
                     </Button>
                   )}
+                  
+                  {/* 已发布模板不显示顶部按钮，使用组件内部的按钮 */}
 
                   {/* 删除按钮 */}
                   <Button

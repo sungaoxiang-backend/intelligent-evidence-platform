@@ -21,7 +21,7 @@ class PlaceholderMetadata(BaseModel):
     label: str = Field(..., description="字段显示标签")
     required: bool = Field(default=False, description="是否必填")
     default_value: Optional[Any] = Field(default=None, description="默认值")
-    options: Optional[List[str]] = Field(default=None, description="选项列表（仅多选框需要）")
+    options: Optional[List[str]] = Field(default=None, description="选项列表（多选框和复选框需要）")
     validation: Optional[PlaceholderValidation] = Field(default=None, description="验证规则")
 
     @field_validator('type')
@@ -36,15 +36,20 @@ class PlaceholderMetadata(BaseModel):
     @field_validator('options')
     @classmethod
     def validate_options(cls, v: Optional[List[str]], info) -> Optional[List[str]]:
-        """验证选项列表（仅多选框需要）"""
+        """验证选项列表（多选框和复选框需要）"""
         field_type = info.data.get('type')
         if field_type == 'multiselect':
             if not v or len(v) == 0:
                 raise ValueError('多选框必须提供选项列表')
             if len(v) != len(set(v)):
                 raise ValueError('选项列表不能包含重复项')
+        elif field_type == 'checkbox':
+            if not v or len(v) == 0:
+                raise ValueError('复选框必须提供选项列表')
+            if len(v) != len(set(v)):
+                raise ValueError('选项列表不能包含重复项')
         elif v is not None:
-            raise ValueError('只有多选框类型才需要提供选项列表')
+            raise ValueError('只有多选框和复选框类型才需要提供选项列表')
         return v
 
     @field_validator('label')
@@ -106,6 +111,8 @@ def validate_placeholder_metadata(metadata: Dict[str, PlaceholderMetadata]) -> D
         # 这里主要是确保类型一致性
         if meta.type == 'multiselect' and not meta.options:
             raise ValueError(f'占位符 {field_name} 的类型为多选框，但未提供选项列表')
+        if meta.type == 'checkbox' and not meta.options:
+            raise ValueError(f'占位符 {field_name} 的类型为复选框，但未提供选项列表')
     
     return metadata
 

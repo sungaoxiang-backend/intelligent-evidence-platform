@@ -84,6 +84,18 @@
   table-layout: auto;
 }
 
+/* 如果表格有 table-layout: fixed，使用固定布局 */
+.lex-docx-preview-content table[style*="table-layout: fixed"],
+.lex-docx-interactive-preview table[style*="table-layout: fixed"] {
+  table-layout: fixed !important;
+}
+
+/* 列宽度样式 */
+.lex-docx-preview-content colgroup col,
+.lex-docx-interactive-preview colgroup col {
+  /* 列宽度由 style 属性控制 */
+}
+
 /* 表格行 */
 .lex-docx-preview-content table tr,
 .lex-docx-interactive-preview table tr {
@@ -319,5 +331,138 @@
 .lex-docx-preview-content [style],
 .lex-docx-interactive-preview [style] {
   /* 保留内联样式 */
+}
+
+/* 占位符样式 - 编辑器模式 */
+.lex-docx-placeholder-editor {
+  /* 统一的设计系统颜色 */
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.9em;
+  cursor: pointer;
+  user-select: none;
+  display: inline-block;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(3, 105, 161, 0.1);
+  position: relative;
+  vertical-align: baseline;
+}
+
+/* 占位符 hover 效果 */
+.lex-docx-placeholder-editor:hover {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #ffffff;
+  border-color: #0369a1;
+  box-shadow: 0 4px 8px rgba(3, 105, 161, 0.2), 0 0 0 2px rgba(14, 165, 233, 0.2);
+  transform: translateY(-1px);
+  z-index: 10;
+}
+
+/* 占位符 active 状态（点击时） */
+.lex-docx-placeholder-editor:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(3, 105, 161, 0.15);
+}
+
+/* 占位符 focus 状态（键盘导航） */
+.lex-docx-placeholder-editor:focus {
+  outline: none;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #ffffff;
+  border-color: #0369a1;
+  box-shadow: 0 4px 8px rgba(3, 105, 161, 0.2), 0 0 0 3px rgba(14, 165, 233, 0.3);
+}
+
+/* 预览模式占位符样式（非编辑模式） */
+.lex-docx-placeholder {
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.9em;
+  display: inline-block;
+  box-shadow: 0 1px 2px rgba(3, 105, 161, 0.1);
+  vertical-align: baseline;
+}
+
+/* 表单字段左右对齐布局 - 使用grid布局，5:5比例划分 */
+.lex-docx-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 5:5 比例划分 */
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+/* 字段标签样式（左侧列，左对齐） */
+.lex-docx-field-label {
+  grid-column: 1;
+  white-space: nowrap;
+  text-align: left;
+  padding-right: 8px;
+}
+
+/* 字段输入框容器（右侧列，右对齐） */
+.lex-docx-field-input {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* 右对齐 */
+  padding-right: 16px;
+  box-sizing: border-box;
+  min-width: 0; /* 允许收缩 */
+}
+
+/* 统一表单字段容器样式 */
+.lex-docx-form-field-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 100%;
+}
+
+/* 复选框和多选的选项容器 - 允许换行，但保持右对齐 */
+.lex-docx-field-input .lex-docx-form-field-container {
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* 表格单元格内的字段行 */
+.lex-docx-preview-content table td .lex-docx-field-row,
+.lex-docx-interactive-preview table td .lex-docx-field-row {
+  width: 100%;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+/* 确保段落内的字段行使用grid布局 */
+.lex-docx-preview-content table td p.lex-docx-field-row,
+.lex-docx-interactive-preview table td p.lex-docx-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+/* 确保占位符和表单字段不换行（除了复选框/多选的选项） */
+.lex-docx-placeholder,
+.lex-docx-placeholder-editor,
+[data-placeholder-field] {
+  white-space: nowrap;
 }
 

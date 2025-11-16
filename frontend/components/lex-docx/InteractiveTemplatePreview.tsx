@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useRef, useImperativeHandle, forwardRef } from "react"
+import { useState, useMemo, useRef, useImperativeHandle, forwardRef, useEffect, useCallback } from "react"
+import { createRoot } from "react-dom/client"
 import "@/app/lex-docx/docx-styles.css"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -179,6 +180,8 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   className,
 }, ref) => {
   const formRef = useRef<HTMLFormElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const rootsRef = useRef<Array<{ root: ReturnType<typeof createRoot>; container: HTMLElement }>>([])
   const placeholderMetadata = template?.placeholder_metadata || {}
 
   // 生成表单 schema
@@ -213,54 +216,410 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   })
 
   // 处理 HTML 内容，将占位符替换为表单组件
-  const processedContent = useMemo(() => {
+  // 使用与 TemplatePreview 相同的方法，保持完整的HTML结构
+  const processedHtml = useMemo(() => {
     if (!template?.content_html) {
-      return []
+      return ""
     }
 
+    // 使用正则表达式匹配占位符 {{field_name}}
     const placeholderRegex = /\{\{([^}]+)\}\}/g
-    const parts: Array<{ type: "text" | "placeholder"; content: string; fieldName?: string }> = []
-    let lastIndex = 0
-    let match
 
-    while ((match = placeholderRegex.exec(template.content_html)) !== null) {
-      // 添加占位符前的文本
-      if (match.index > lastIndex) {
-        parts.push({
-          type: "text",
-          content: template.content_html.substring(lastIndex, match.index),
-        })
+    // 转义 HTML 特殊字符（仅用于占位符内容）
+    const escapeHtml = (text: string) => {
+      const map: Record<string, string> = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
       }
+      return text.replace(/[&<>"']/g, (m) => map[m])
+    }
 
-      // 添加占位符
-      const fieldName = match[1].trim()
+    // 将 HTML 内容中的占位符替换为特殊标记，稍后在渲染时替换为表单组件
+    let processed = template.content_html
+    const matches = Array.from(template.content_html.matchAll(placeholderRegex))
+
+    if (matches.length === 0) {
+      return template.content_html
+    }
+
+    // 从后往前替换，避免索引偏移问题
+    // 使用特殊标记来标识占位符位置，稍后在渲染时替换为表单组件
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i]
+      const fullMatch = match[0] // {{field_name}}
+      const fieldName = match[1].trim() // field_name（去除首尾空格）
+      const startIndex = match.index!
+      const endIndex = startIndex + fullMatch.length
+
+      // 提取占位符前后的内容
+      const before = processed.substring(0, startIndex)
+      const after = processed.substring(endIndex)
+
+      // 如果占位符有元数据，使用特殊标记（稍后替换为表单组件）
+      // 如果没有元数据，保持高亮显示
       if (placeholderMetadata[fieldName]) {
-        parts.push({
-          type: "placeholder",
-          content: match[0],
-          fieldName,
-        })
+        // 使用特殊标记，稍后在渲染时替换为表单组件
+        const placeholderMarker = `<span data-placeholder-field="${escapeHtml(fieldName)}" class="lex-docx-form-field-marker"></span>`
+        processed = before + placeholderMarker + after
       } else {
         // 如果占位符没有元数据，保持原样（高亮显示）
-        parts.push({
-          type: "text",
-          content: `<span class="lex-docx-placeholder" style="background-color: #fef3c7; color: #92400e; padding: 2px 4px; border-radius: 3px; font-weight: 500; font-family: 'Courier New', monospace; display: inline-block;">${match[0]}</span>`,
-        })
+        const highlightedPlaceholder = `<span class="lex-docx-placeholder" data-placeholder="${escapeHtml(fieldName)}" style="background-color: #fef3c7; color: #92400e; padding: 2px 4px; border-radius: 3px; font-weight: 500; font-family: 'Courier New', monospace; display: inline-block;">${escapeHtml(fullMatch)}</span>`
+        processed = before + highlightedPlaceholder + after
       }
-
-      lastIndex = match.index + match[0].length
     }
 
-    // 添加剩余文本
-    if (lastIndex < template.content_html.length) {
-      parts.push({
-        type: "text",
-        content: template.content_html.substring(lastIndex),
-      })
-    }
-
-    return parts
+    return processed
   }, [template?.content_html, placeholderMetadata])
+
+  // 渲染内联表单字段（直接替换占位符）
+  // 使用 useCallback 以便在 useEffect 中使用
+  const renderInlineFormField = useCallback((
+    fieldName: string,
+    metadata: PlaceholderMetadata
+  ) => {
+    const error = errors[fieldName]
+    const hasError = !!error
+
+    switch (metadata.type) {
+      case "text":
+      case "number":
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+                <Input
+                  {...field}
+                  type={metadata.type === "number" ? "number" : "text"}
+                  value={field.value ?? ""}
+                  className={cn(
+                    "lex-docx-form-field-container",
+                    hasError && "border-destructive"
+                  )}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    lineHeight: "1.5",
+                    padding: "2px 8px",
+                    height: "auto",
+                    minHeight: "1.5em",
+                    width: "200px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px",
+                    backgroundColor: "#ffffff",
+                    boxSizing: "border-box",
+                  }}
+                />
+            )}
+          />
+        )
+
+      case "date":
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+              <span className="inline-block lex-docx-form-field-container">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "inline-flex justify-start text-left font-normal lex-docx-form-field-container",
+                        !field.value && "text-muted-foreground",
+                        hasError && "border-destructive"
+                      )}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "inherit",
+                        lineHeight: "1.5",
+                        padding: "2px 8px",
+                        height: "auto",
+                        minHeight: "1.5em",
+                        width: "200px",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {field.value ? (
+                        format(field.value, "yyyy-MM-dd")
+                      ) : (
+                        <span className="text-muted-foreground">选择日期</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </span>
+            )}
+          />
+        )
+
+      case "textarea":
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+              <span className="inline-block lex-docx-form-field-container">
+                <Textarea
+                  {...field}
+                  value={field.value ?? ""}
+                  className={cn(
+                    "lex-docx-form-field-container",
+                    hasError && "border-destructive"
+                  )}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    lineHeight: "1.5",
+                    padding: "2px 8px",
+                    minHeight: "60px",
+                    height: "auto",
+                    width: "200px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </span>
+            )}
+          />
+        )
+
+      case "checkbox":
+        // 复选框类型应该显示单选按钮组（radio buttons）
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+              <span className="lex-docx-form-field-container">
+                {metadata.options?.map((option) => (
+                  <span key={option} className="inline-flex items-center space-x-1.5 flex-shrink-0">
+                    <input
+                      type="radio"
+                      id={`${fieldName}_${option}`}
+                      name={fieldName}
+                      value={option}
+                      checked={field.value === option}
+                      onChange={() => field.onChange(option)}
+                      className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 flex-shrink-0"
+                    />
+                    <Label 
+                      htmlFor={`${fieldName}_${option}`} 
+                      className="text-sm font-normal cursor-pointer m-0 whitespace-nowrap"
+                    >
+                      {option}
+                    </Label>
+                  </span>
+                ))}
+              </span>
+            )}
+          />
+        )
+
+      case "multiselect":
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+              <span className="lex-docx-form-field-container">
+                {metadata.options?.map((option) => (
+                  <span key={option} className="inline-flex items-center space-x-1.5 flex-shrink-0">
+                    <Checkbox
+                      checked={field.value?.includes(option) ?? false}
+                      onCheckedChange={(checked) => {
+                        const currentValue = field.value || []
+                        if (checked) {
+                          field.onChange([...currentValue, option])
+                        } else {
+                          field.onChange(
+                            currentValue.filter((v: string) => v !== option)
+                          )
+                        }
+                      }}
+                    />
+                    <Label className="text-sm font-normal cursor-pointer m-0 whitespace-nowrap">
+                      {option}
+                    </Label>
+                  </span>
+                ))}
+              </span>
+            )}
+          />
+        )
+
+      default:
+        return (
+          <Controller
+            key={fieldName}
+            name={fieldName}
+            control={control}
+            render={({ field }) => (
+                <Input
+                  {...field}
+                  value={field.value ?? ""}
+                  className={cn(
+                    "lex-docx-form-field-container",
+                    hasError && "border-destructive"
+                  )}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    lineHeight: "1.5",
+                    padding: "2px 8px",
+                    height: "auto",
+                    minHeight: "1.5em",
+                    width: "200px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px",
+                    backgroundColor: "#ffffff",
+                    boxSizing: "border-box",
+                  }}
+                />
+            )}
+          />
+        )
+    }
+  }, [control, errors])
+
+  // 在 DOM 渲染后，将占位符标记替换为表单组件
+  // 使用 useEffect 确保在 HTML 内容渲染后执行
+  useEffect(() => {
+    if (!contentRef.current) return
+
+    // 使用 setTimeout 确保 HTML 内容已经渲染到 DOM
+    const timer = setTimeout(() => {
+      if (!contentRef.current) return
+
+      // 先清理之前的 roots（延迟清理，避免在渲染过程中同步卸载）
+      const previousRoots = [...rootsRef.current]
+      rootsRef.current = []
+      
+      // 延迟卸载之前的 roots
+      setTimeout(() => {
+        previousRoots.forEach(({ root }) => {
+          try {
+            root.unmount()
+          } catch (error) {
+            // 忽略卸载错误（可能已经被卸载）
+          }
+        })
+      }, 0)
+
+      // 查找所有占位符标记并替换为表单组件
+      const markers = contentRef.current.querySelectorAll('[data-placeholder-field]')
+
+      markers.forEach((marker) => {
+        const fieldName = marker.getAttribute('data-placeholder-field')
+        if (fieldName && placeholderMetadata[fieldName]) {
+          const metadata = placeholderMetadata[fieldName]
+          
+          // 检查父元素，转换为flex布局以实现左右对齐
+          const parent = marker.parentElement
+          if (parent) {
+            // 检查是否已经是flex布局
+            if (!parent.classList.contains('lex-docx-field-row')) {
+              parent.classList.add('lex-docx-field-row')
+              
+              // 将占位符前的文本节点包装为标签
+              const walker = document.createTreeWalker(
+                parent,
+                NodeFilter.SHOW_TEXT,
+                null
+              )
+              
+              let textNode
+              const textNodes: Text[] = []
+              while ((textNode = walker.nextNode() as Text)) {
+                if (textNode.textContent && textNode.textContent.trim()) {
+                  textNodes.push(textNode)
+                }
+              }
+              
+              // 找到占位符前的最后一个文本节点（最接近占位符的）
+              let labelNode: Text | null = null
+              let closestDistance = Infinity
+              
+              for (const node of textNodes) {
+                const position = marker.compareDocumentPosition(node)
+                if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+                  // 计算节点到marker的距离（通过DOM位置）
+                  const range = document.createRange()
+                  range.setStart(node, 0)
+                  range.setEnd(marker, 0)
+                  const distance = range.toString().length
+                  
+                  if (distance < closestDistance) {
+                    closestDistance = distance
+                    labelNode = node
+                  }
+                }
+              }
+              
+              // 如果找到标签文本节点，将其包装为span
+              if (labelNode && labelNode.textContent) {
+                const labelText = labelNode.textContent.trim()
+                // 检查是否包含冒号（常见的标签格式），或者有文本内容
+                if (labelText.length > 0) {
+                  const labelSpan = document.createElement('span')
+                  labelSpan.className = 'lex-docx-field-label'
+                  labelSpan.textContent = labelText
+                  labelNode.replaceWith(labelSpan)
+                }
+              }
+            }
+          }
+          
+          // 创建容器来渲染表单组件
+          const container = document.createElement('span')
+          container.className = 'lex-docx-field-input'
+          marker.replaceWith(container)
+          // 使用 React 渲染表单组件
+          const root = createRoot(container)
+          rootsRef.current.push({ root, container })
+          root.render(
+            <span className="inline-block">
+              {renderInlineFormField(fieldName, metadata)}
+            </span>
+          )
+        }
+      })
+    }, 0)
+
+    // 清理函数：清理定时器和 React 根
+    return () => {
+      clearTimeout(timer)
+      // 延迟卸载 React 根，避免在渲染过程中同步卸载
+      setTimeout(() => {
+        rootsRef.current.forEach(({ root }) => {
+          try {
+            root.unmount()
+          } catch (error) {
+            // 忽略卸载错误（可能已经被卸载）
+            console.warn('Error unmounting root:', error)
+          }
+        })
+        rootsRef.current = []
+      }, 0)
+    }
+  }, [processedHtml, placeholderMetadata, renderInlineFormField])
 
   if (!template) {
     return (
@@ -312,204 +671,6 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
     },
   }))
 
-  // 渲染内联表单字段（直接替换占位符）
-  const renderInlineFormField = (
-    fieldName: string,
-    metadata: PlaceholderMetadata
-  ) => {
-    const error = errors[fieldName]
-    const hasError = !!error
-
-    switch (metadata.type) {
-      case "text":
-      case "number":
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-block mx-1">
-                <Input
-                  {...field}
-                  type={metadata.type === "number" ? "number" : "text"}
-                  value={field.value ?? ""}
-                  placeholder={metadata.label}
-                  className={cn(
-                    "inline-block min-w-[120px]",
-                    hasError && "border-destructive"
-                  )}
-                  style={{
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    lineHeight: "inherit",
-                    padding: "2px 6px",
-                    height: "auto",
-                  }}
-                />
-              </span>
-            )}
-          />
-        )
-
-      case "date":
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-block mx-1">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "inline-flex min-w-[120px] justify-start text-left font-normal",
-                        !field.value && "text-muted-foreground",
-                        hasError && "border-destructive"
-                      )}
-                      style={{
-                        fontFamily: "inherit",
-                        fontSize: "inherit",
-                        lineHeight: "inherit",
-                        padding: "2px 6px",
-                        height: "auto",
-                      }}
-                    >
-                      <CalendarIcon className="mr-1 h-3 w-3" />
-                      {field.value ? (
-                        format(field.value, "yyyy-MM-dd")
-                      ) : (
-                        <span>{metadata.label}</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </span>
-            )}
-          />
-        )
-
-      case "textarea":
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-block mx-1">
-                <Textarea
-                  {...field}
-                  value={field.value ?? ""}
-                  placeholder={metadata.label}
-                  className={cn(
-                    "inline-block min-w-[200px]",
-                    hasError && "border-destructive"
-                  )}
-                  style={{
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    lineHeight: "inherit",
-                    padding: "4px 6px",
-                    minHeight: "60px",
-                  }}
-                />
-              </span>
-            )}
-          />
-        )
-
-      case "checkbox":
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-flex items-center mx-1">
-                <Checkbox
-                  checked={field.value ?? false}
-                  onCheckedChange={field.onChange}
-                  className="inline-block"
-                />
-              </span>
-            )}
-          />
-        )
-
-      case "multiselect":
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-flex flex-wrap items-center gap-2 mx-1">
-                {metadata.options?.map((option) => (
-                  <span key={option} className="inline-flex items-center space-x-1">
-                    <Checkbox
-                      checked={field.value?.includes(option) ?? false}
-                      onCheckedChange={(checked) => {
-                        const currentValue = field.value || []
-                        if (checked) {
-                          field.onChange([...currentValue, option])
-                        } else {
-                          field.onChange(
-                            currentValue.filter((v: string) => v !== option)
-                          )
-                        }
-                      }}
-                    />
-                    <Label className="text-sm font-normal cursor-pointer">
-                      {option}
-                    </Label>
-                  </span>
-                ))}
-              </span>
-            )}
-          />
-        )
-
-      default:
-        return (
-          <Controller
-            key={fieldName}
-            name={fieldName}
-            control={control}
-            render={({ field }) => (
-              <span className="inline-block mx-1">
-                <Input
-                  {...field}
-                  value={field.value ?? ""}
-                  placeholder={metadata.label}
-                  className={cn(
-                    "inline-block min-w-[120px]",
-                    hasError && "border-destructive"
-                  )}
-                  style={{
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    lineHeight: "inherit",
-                    padding: "2px 6px",
-                    height: "auto",
-                  }}
-                />
-              </span>
-            )}
-          />
-        )
-    }
-  }
-
   return (
     <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className={cn("flex flex-col h-full", className)}>
       {/* 文档内容区域 - WYSIWYG 编辑 */}
@@ -524,28 +685,14 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
           }}
         >
           {/* 渲染处理后的内容，将占位符替换为表单组件 */}
-          <div className="lex-docx-interactive-preview">
-            {processedContent.map((part, index) => {
-              if (part.type === "text") {
-                return (
-                  <span
-                    key={index}
-                    dangerouslySetInnerHTML={{ __html: part.content }}
-                  />
-                )
-              } else if (part.type === "placeholder" && part.fieldName) {
-                const metadata = placeholderMetadata[part.fieldName]
-                if (metadata) {
-                  return (
-                    <span key={index} className="inline-block">
-                      {renderInlineFormField(part.fieldName, metadata)}
-                    </span>
-                  )
-                }
-              }
-              return null
-            })}
-          </div>
+          <div 
+            ref={contentRef}
+            className="lex-docx-interactive-preview lex-docx-preview-content"
+            style={{
+              wordBreak: "break-word",
+            }}
+            dangerouslySetInnerHTML={{ __html: processedHtml }}
+          />
         </div>
       </div>
 
