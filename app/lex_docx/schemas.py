@@ -253,7 +253,7 @@ class DocumentGenerationCreate(BaseModel):
 class DocumentGenerationResponse(BaseSchema):
     """文档生成响应模型"""
     id: int
-    template_id: int
+    template_id: Optional[int]  # 可以为 NULL，表示模板已删除（生成记录作为快照保留）
     generated_by: int
     form_data: Dict[str, Any]
     document_url: str
@@ -299,5 +299,45 @@ class GenerationListQuery(BaseModel):
         """验证ID"""
         if v is not None and v <= 0:
             raise ValueError('ID必须大于0')
+        return v
+
+
+class BatchUpdateStatusRequest(BaseModel):
+    """批量更新状态请求"""
+    template_ids: List[int] = Field(..., description="模板ID列表")
+    new_status: str = Field(..., description="新状态：draft 或 published")
+
+    @field_validator('template_ids')
+    @classmethod
+    def validate_template_ids(cls, v: List[int]) -> List[int]:
+        """验证模板ID列表"""
+        if not v or len(v) == 0:
+            raise ValueError('模板ID列表不能为空')
+        if any(tid <= 0 for tid in v):
+            raise ValueError('模板ID必须大于0')
+        return v
+
+    @field_validator('new_status')
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        """验证状态值"""
+        valid_statuses = [TemplateStatus.DRAFT, TemplateStatus.PUBLISHED]
+        if v not in valid_statuses:
+            raise ValueError(f'状态必须是以下之一：{", ".join(valid_statuses)}')
+        return v
+
+
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+    template_ids: List[int] = Field(..., description="模板ID列表")
+
+    @field_validator('template_ids')
+    @classmethod
+    def validate_template_ids(cls, v: List[int]) -> List[int]:
+        """验证模板ID列表"""
+        if not v or len(v) == 0:
+            raise ValueError('模板ID列表不能为空')
+        if any(tid <= 0 for tid in v):
+            raise ValueError('模板ID必须大于0')
         return v
 

@@ -315,9 +315,17 @@ class LexDocxAPI {
   ): Promise<DocumentTemplate> {
     const formData = new FormData()
     formData.append("file", file)
-    if (options?.name) formData.append("name", options.name)
-    if (options?.description) formData.append("description", options.description)
-    if (options?.category) formData.append("category", options.category)
+    // name 是必填的，总是传递
+    if (options?.name !== undefined) {
+      formData.append("name", options.name)
+    }
+    // description 和 category 是可选的，只在有值时才传递
+    if (options?.description !== undefined && options.description.trim() !== "") {
+      formData.append("description", options.description.trim())
+    }
+    if (options?.category !== undefined && options.category.trim() !== "") {
+      formData.append("category", options.category.trim())
+    }
 
     const url = `${this.getBaseUrl()}/lex-docx/import`
     
@@ -441,6 +449,44 @@ class LexDocxAPI {
     }
 
     return response.blob()
+  }
+
+  /**
+   * 批量更新模板状态
+   */
+  async batchUpdateTemplateStatus(
+    templateIds: number[],
+    newStatus: "draft" | "published"
+  ): Promise<{ updated_count: number; total: number }> {
+    const url = `${this.getBaseUrl()}/lex-docx/batch/update-status`
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.createHeaders(),
+      body: JSON.stringify({
+        template_ids: templateIds,
+        new_status: newStatus,
+      }),
+    })
+
+    return this.handleResponse<{ updated_count: number; total: number }>(response)
+  }
+
+  /**
+   * 批量删除模板
+   */
+  async batchDeleteTemplates(
+    templateIds: number[]
+  ): Promise<{ deleted_count: number; total: number }> {
+    const url = `${this.getBaseUrl()}/lex-docx/batch/delete`
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.createHeaders(),
+      body: JSON.stringify({
+        template_ids: templateIds,
+      }),
+    })
+
+    return this.handleResponse<{ deleted_count: number; total: number }>(response)
   }
 }
 

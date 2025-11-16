@@ -37,7 +37,8 @@ class DocumentTemplate(Base):
     # 关系
     creator = relationship("Staff", foreign_keys=[created_by], backref="created_templates")
     updater = relationship("Staff", foreign_keys=[updated_by], backref="updated_templates")
-    generations = relationship("DocumentGeneration", back_populates="template", cascade="all, delete-orphan")
+    # 生成记录是快照，不级联删除
+    generations = relationship("DocumentGeneration", back_populates="template")
 
     # 索引
     __table_args__ = (
@@ -52,7 +53,8 @@ class DocumentGeneration(Base):
     __tablename__ = "document_generations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    template_id: Mapped[int] = mapped_column(Integer, ForeignKey("document_templates.id"), nullable=False, index=True)
+    # template_id 可以为 NULL，表示模板已删除（生成记录作为快照保留）
+    template_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("document_templates.id", ondelete="SET NULL"), nullable=True, index=True)
     generated_by: Mapped[int] = mapped_column(Integer, ForeignKey("staffs.id"), nullable=False, index=True)
     form_data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
     document_url: Mapped[str] = mapped_column(String(500), nullable=False)

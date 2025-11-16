@@ -22,18 +22,19 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, Loader2 } from "lucide-react"
+import { CalendarIcon, Loader2, FileText, Download } from "lucide-react"
 import { format } from "date-fns"
 import { zhCN } from "date-fns/locale"
 import { type DocumentTemplate, type PlaceholderMetadata } from "@/lib/api/lex-docx"
 import { cn } from "@/lib/utils"
-import { FileText } from "lucide-react"
 
 interface InteractiveTemplatePreviewProps {
   template: DocumentTemplate | null
   onSubmit?: (formData: Record<string, any>) => void | Promise<void>
   isGenerating?: boolean
   className?: string
+  onDownloadDocument?: () => void
+  isExporting?: boolean
 }
 
 export interface InteractiveTemplatePreviewRef {
@@ -46,6 +47,8 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   onSubmit,
   isGenerating = false,
   className,
+  onDownloadDocument,
+  isExporting = false,
 }, ref) => {
   const formRef = useRef<HTMLFormElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -660,7 +663,33 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
   }))
 
   return (
-    <form ref={formRef} onSubmit={handleFormSubmit} className={cn("flex flex-col h-full", className)}>
+    <form ref={formRef} onSubmit={handleFormSubmit} className={cn("flex flex-col h-full relative", className)}>
+      {/* 下载文书按钮（已发布状态，右上角） */}
+      {onDownloadDocument && (
+        <div className="absolute top-4 right-4 z-10">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onDownloadDocument}
+            disabled={isExporting}
+            className="shadow-md bg-white hover:bg-gray-50"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                下载中...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                下载文书
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* 文档内容区域 - WYSIWYG 编辑 */}
       <div className="flex-1 overflow-auto p-6 bg-white">
         <div
@@ -682,27 +711,6 @@ export const InteractiveTemplatePreview = forwardRef<InteractiveTemplatePreviewR
             dangerouslySetInnerHTML={{ __html: processedHtml }}
           />
         </div>
-      </div>
-
-      {/* 底部操作栏 */}
-      <div className="px-6 py-4 border-t bg-muted/30 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          随时可以生成，即使表单没有内容也可以生成空的 Word 文档
-        </p>
-        <Button
-          type="submit"
-          disabled={isGenerating}
-          className="ml-auto"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              生成中...
-            </>
-          ) : (
-            "生成文书"
-          )}
-        </Button>
       </div>
     </form>
   )

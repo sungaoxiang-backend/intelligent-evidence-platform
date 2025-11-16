@@ -363,27 +363,171 @@ async def delete_template(
             detail="模板不存在",
         )
     
-    # 如果模板已发布，不允许删除（或需要特殊权限）
-    if template.status == TemplateStatus.PUBLISHED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="已发布的模板不允许删除，请先将其状态改为草稿",
-        )
-    
     # 删除模板文件
     if template.content_path:
         file_path = Path(template.content_path)
         if file_path.exists():
             try:
                 file_path.unlink()
+                logger.info(f"已删除模板文件: {template.content_path}")
             except Exception as e:
                 logger.warning(f"删除模板文件失败: {e}")
     
     # 删除数据库记录
+    # 注意：关联的生成记录不会被删除，template_id 会被设置为 NULL（通过外键约束 SET NULL）
+    # 这样生成记录作为快照保留，可以继续访问，即使模板已删除
     await db.delete(template)
     await db.commit()
     
+    logger.info(f"已删除模板: ID={template_id}, name={template.name}, status={template.status}")
     return True
+
+
+async def batch_update_template_status(
+    db: AsyncSession,
+    template_ids: List[int],
+    new_status: str,
+    updated_by: int,
+) -> int:
+    """
+    批量更新模板状态
+    
+    Args:
+        db: 数据库会话
+        template_ids: 模板ID列表
+        new_status: 新状态（draft 或 published）
+        updated_by: 更新人ID
+        
+    Returns:
+        成功更新的数量
+        
+    Raises:
+        HTTPException: 如果验证失败
+    """
+    if not template_ids:
+        return 0
+    
+    # 验证状态值
+    if new_status not in [TemplateStatus.DRAFT, TemplateStatus.PUBLISHED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的状态值: {new_status}",
+        )
+    
+    # 获取所有模板
+    query = select(DocumentTemplate).where(DocumentTemplate.id.in_(template_ids))
+    result = await db.execute(query)
+    templates = list(result.scalars().all())
+    
+    if len(templates) != len(template_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="部分模板不存在",
+        )
+    
+    updated_count = 0
+    for template in templates:
+        # 如果状态没有变化，跳过
+        if template.status == new_status:
+            continue
+        
+        # 从草稿切换到已发布时的验证
+        if template.status == TemplateStatus.DRAFT and new_status == TemplateStatus.PUBLISHED:
+            # 验证模板至少包含一个占位符
+            if not template.content_html:
+                logger.warning(f"模板 {template.id} 内容为空，跳过发布")
+                continue
+            
+            # 提取占位符
+            placeholders = extract_placeholders(template.content_html)
+            if not placeholders:
+                logger.warning(f"模板 {template.id} 没有占位符，跳过发布")
+                continue
+            
+            # 验证占位符元数据是否存在
+            if not template.placeholder_metadata:
+                logger.warning(f"模板 {template.id} 占位符元数据未配置，跳过发布")
+                continue
+        
+        # 更新状态
+        template.status = new_status
+        template.updated_by = updated_by
+        updated_count += 1
+    
+    await db.commit()
+    
+    return updated_count
+
+
+async def batch_delete_templates(
+    db: AsyncSession,
+    template_ids: List[int],
+) -> int:
+    """
+    批量删除模板
+    
+    Args:
+        db: 数据库会话
+        template_ids: 模板ID列表
+        
+    Returns:
+        成功删除的数量
+        
+    Raises:
+        HTTPException: 如果验证失败
+    """
+    if not template_ids:
+        return 0
+    
+    # 获取所有模板
+    query = select(DocumentTemplate).where(DocumentTemplate.id.in_(template_ids))
+    result = await db.execute(query)
+    templates = list(result.scalars().all())
+    
+    if len(templates) != len(template_ids):
+        found_ids = {t.id for t in templates}
+        missing_ids = set(template_ids) - found_ids
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"部分模板不存在: {missing_ids}",
+        )
+    
+    deleted_count = 0
+    for template in templates:
+        # 删除模板文件
+        if template.content_path:
+            file_path = Path(template.content_path)
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                    logger.info(f"已删除模板文件: {template.content_path}")
+                except Exception as e:
+                    logger.warning(f"删除模板文件失败: {e}")
+        
+        # 删除数据库记录
+        # 注意：关联的生成记录不会被删除，template_id 会被设置为 NULL（通过外键约束 SET NULL）
+        # 这样生成记录作为快照保留，可以继续访问，即使模板已删除
+        try:
+            await db.delete(template)
+            deleted_count += 1
+            logger.info(f"已标记删除模板: ID={template.id}, name={template.name}, status={template.status}（关联的生成记录将保留，template_id 设置为 NULL）")
+        except Exception as e:
+            logger.error(f"删除模板失败: ID={template.id}, error={e}")
+            raise
+    
+    # 提交所有删除操作
+    try:
+        await db.commit()
+        logger.info(f"批量删除提交成功: 删除了 {deleted_count} 个模板")
+    except Exception as e:
+        logger.error(f"批量删除提交失败: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量删除提交失败: {str(e)}",
+        )
+    
+    return deleted_count
 
 
 async def update_template_status(
@@ -545,13 +689,17 @@ async def import_template(
             }
         
         # 使用文件名作为模板名称（如果没有提供）
-        template_name = name or Path(file.filename).stem
+        template_name = name.strip() if name and name.strip() else Path(file.filename).stem
+        
+        # 处理 description 和 category：如果是空字符串，转换为 None
+        template_description = description.strip() if description and description.strip() else None
+        template_category = category.strip() if category and category.strip() else None
         
         # 创建模板
         template_create = DocumentTemplateCreate(
             name=template_name,
-            description=description,
-            category=category,
+            description=template_description,
+            category=template_category,
             content_html=html_content,
             placeholder_metadata=placeholder_metadata_for_create,  # type: ignore
         )

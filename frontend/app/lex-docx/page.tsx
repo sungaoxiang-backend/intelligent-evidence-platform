@@ -30,11 +30,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Trash2, FileText, Loader2, Upload, Download, CheckCircle, FileX } from "lucide-react"
-import { TemplateList } from "@/components/lex-docx/TemplateList"
+import { Plus, FileText, Loader2, Upload, Send, RotateCcw, CheckSquare } from "lucide-react"
+import { TemplateList, type TemplateListRef } from "@/components/lex-docx/TemplateList"
 import { TemplatePreview } from "@/components/lex-docx/TemplatePreview"
 import { InteractiveTemplatePreview, type InteractiveTemplatePreviewRef } from "@/components/lex-docx/InteractiveTemplatePreview"
 import { SimpleTemplateEditor, type SimpleTemplateEditorRef } from "@/components/lex-docx/SimpleTemplateEditor"
+import { FileUploadZone } from "@/components/lex-docx/FileUploadZone"
 import {
   lexDocxApi,
   type DocumentTemplate,
@@ -55,18 +56,19 @@ export default function LexDocxPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [showStatusDialog, setShowStatusDialog] = useState(false)
-  const [showImportDialog, setShowImportDialog] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
-  const [isImporting, setIsImporting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importProgress, setImportProgress] = useState(0)
+  const [templateFile, setTemplateFile] = useState<File | null>(null)
   const editorRef = useRef<SimpleTemplateEditorRef>(null)
   const interactivePreviewRef = useRef<InteractiveTemplatePreviewRef>(null)
+  const templateListRef = useRef<TemplateListRef>(null)
+  
+  // 多选模式
+  const [isMultiSelect, setIsMultiSelect] = useState(false)
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(new Set())
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false)
 
   // 新建模板表单
   const [newTemplateForm, setNewTemplateForm] = useState({
@@ -74,6 +76,12 @@ export default function LexDocxPage() {
     description: "",
     category: "",
   })
+
+  // 重置新建模板表单
+  const resetCreateForm = () => {
+    setNewTemplateForm({ name: "", description: "", category: "" })
+    setTemplateFile(null)
+  }
 
   // 模板管理不需要复杂的权限管理，所有用户都可以发布模板
   const isSuperuser = true
@@ -151,7 +159,7 @@ export default function LexDocxPage() {
     // 目前预览组件会从 selectedTemplate 读取内容
   }
 
-  // 处理新建模板
+  // 处理新建模板（支持文件上传或创建空模板）
   const handleCreateTemplate = async () => {
     if (!newTemplateForm.name.trim()) {
       toast({
@@ -164,24 +172,39 @@ export default function LexDocxPage() {
 
     setIsCreating(true)
     try {
-      const newTemplate = await lexDocxApi.createTemplate({
+      let newTemplate: DocumentTemplate
+
+      if (templateFile) {
+        // 如果有文件，使用导入API
+        newTemplate = await lexDocxApi.importTemplate(templateFile, {
+          name: newTemplateForm.name.trim(),
+          description: newTemplateForm.description.trim() || undefined,
+          category: newTemplateForm.category.trim() || undefined,
+        })
+        handleSuccess("模板已导入，可以开始编辑")
+      } else {
+        // 如果没有文件，创建空模板
+        newTemplate = await lexDocxApi.createTemplate({
         name: newTemplateForm.name.trim(),
         description: newTemplateForm.description.trim() || undefined,
         category: newTemplateForm.category.trim() || undefined,
         status: "draft",
       })
+        handleSuccess("模板已创建，可以开始编辑")
+      }
 
       // 选择新创建的模板
       setSelectedTemplate(newTemplate)
       setIsEditMode(true) // 自动进入编辑模式
 
       // 重置表单
-      setNewTemplateForm({ name: "", description: "", category: "" })
+      resetCreateForm()
       setShowCreateDialog(false)
-
-      handleSuccess("模板已创建，可以开始编辑")
+      
+      // 刷新模板列表
+      templateListRef.current?.refresh()
     } catch (error) {
-      handleApiError(error, "模板创建失败")
+      handleApiError(error, templateFile ? "模板导入失败" : "模板创建失败")
     } finally {
       setIsCreating(false)
     }
@@ -200,6 +223,9 @@ export default function LexDocxPage() {
       setShowDeleteDialog(false)
 
       handleSuccess("模板已删除")
+      
+      // 刷新模板列表
+      templateListRef.current?.refresh()
     } catch (error) {
       handleApiError(error, "模板删除失败")
     } finally {
@@ -207,81 +233,73 @@ export default function LexDocxPage() {
     }
   }
 
-  // 处理状态切换
-  const handleStatusChange = async (newStatus: "draft" | "published") => {
-    if (!selectedTemplate) return
-
-    setIsUpdatingStatus(true)
-    try {
-      await lexDocxApi.updateTemplateStatus(selectedTemplate.id, newStatus)
-
-      // 刷新模板数据
-      const updated = await lexDocxApi.getTemplate(selectedTemplate.id)
-      if (updated) {
-        setSelectedTemplate(updated)
-        setIsEditMode(false) // 切换到预览模式
-      }
-
-      setShowStatusDialog(false)
-
-      handleSuccess(`模板已${newStatus === "published" ? "发布" : "设为草稿"}`)
-    } catch (error) {
-      handleApiError(error, "状态更新失败")
-    } finally {
-      setIsUpdatingStatus(false)
-    }
-  }
-
-  // 处理模板导入
-  const handleImportTemplate = async () => {
-    if (!importFile) {
+  // 批量操作处理器
+  const handleBatchAction = async (
+    action: "publish" | "unpublish" | "delete",
+    templateIds: number[],
+    onSuccess?: () => void
+  ) => {
+    if (templateIds.length === 0) {
       toast({
-        title: "导入失败",
-        description: "请选择要导入的文件",
+        title: "提示",
+        description: "请先选择模板",
         variant: "destructive",
       })
       return
     }
 
-    setIsImporting(true)
-    setImportProgress(0)
+    setIsBatchProcessing(true)
     try {
-      // 模拟上传进度
-      const progressInterval = setInterval(() => {
-        setImportProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return 90
+      if (action === "delete") {
+        // 确认删除
+        if (!confirm(`确定要删除选中的 ${templateIds.length} 个模板吗？此操作无法撤销。`)) {
+          setIsBatchProcessing(false)
+          return
+        }
+
+        const result = await lexDocxApi.batchDeleteTemplates(templateIds)
+        handleSuccess(`成功删除 ${result.deleted_count} 个模板`)
+        
+        // 如果当前选中的模板被删除，清空选择
+        if (selectedTemplate && templateIds.includes(selectedTemplate.id)) {
+          setSelectedTemplate(null)
+        }
+      } else {
+        const newStatus = action === "publish" ? "published" : "draft"
+        const result = await lexDocxApi.batchUpdateTemplateStatus(templateIds, newStatus)
+        handleSuccess(
+          `成功${action === "publish" ? "发布" : "撤销"} ${result.updated_count} 个模板`
+        )
+        
+        // 如果当前选中的模板状态改变，刷新数据
+        if (selectedTemplate && templateIds.includes(selectedTemplate.id)) {
+          const updated = await lexDocxApi.getTemplate(selectedTemplate.id)
+          if (updated) {
+            setSelectedTemplate(updated)
           }
-          return prev + 10
-        })
-      }, 200)
+        }
+      }
 
-      const importedTemplate = await lexDocxApi.importTemplate(importFile)
-
-      clearInterval(progressInterval)
-      setImportProgress(100)
-
-      // 选择新导入的模板
-      setSelectedTemplate(importedTemplate)
-      setIsEditMode(true) // 自动进入编辑模式
-
-      // 重置表单
-      setImportFile(null)
-      setShowImportDialog(false)
-      setImportProgress(0)
-
-      toast({
-        title: "导入成功",
-        description: "模板已导入，可以开始编辑",
-      })
+      // 清空选择
+      setSelectedTemplateIds(new Set())
+      
+      // 调用成功回调（用于刷新列表）
+      onSuccess?.()
     } catch (error) {
-      handleApiError(error, "模板导入失败")
+      handleApiError(error, "批量操作失败")
     } finally {
-      setIsImporting(false)
-      setImportProgress(0)
+      setIsBatchProcessing(false)
     }
   }
+
+  // 切换多选模式
+  const handleToggleMultiSelect = () => {
+    setIsMultiSelect(!isMultiSelect)
+    if (!isMultiSelect) {
+      setSelectedTemplateIds(new Set())
+    }
+  }
+
 
   // 处理文档生成
   const handleGenerateDocument = async (formData: Record<string, any>) => {
@@ -343,33 +361,41 @@ export default function LexDocxPage() {
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-3rem)]">
       {/* 左侧边栏：模板列表 */}
-      <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r bg-background flex flex-col">
+      <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r bg-background flex flex-col shadow-sm">
         {/* 顶部操作栏 */}
-        <div className="p-4 border-b space-y-2">
+        <div className="p-4 border-b bg-muted/30 space-y-2">
           <Button
-            onClick={() => setShowCreateDialog(true)}
-            className="w-full"
+            onClick={() => {
+              resetCreateForm()
+              setShowCreateDialog(true)
+            }}
+            className="w-full shadow-sm"
             size="sm"
           >
             <Plus className="h-4 w-4 mr-2" />
             新建模板
           </Button>
           <Button
-            onClick={() => setShowImportDialog(true)}
-            variant="outline"
+            onClick={handleToggleMultiSelect}
+            variant={isMultiSelect ? "default" : "outline"}
             className="w-full"
             size="sm"
           >
-            <Upload className="h-4 w-4 mr-2" />
-            导入模板
+            <CheckSquare className="h-4 w-4 mr-2" />
+            {isMultiSelect ? "退出多选" : "多选"}
           </Button>
         </div>
 
         {/* 模板列表 */}
         <div className="flex-1 overflow-hidden">
           <TemplateList
+            ref={templateListRef}
             onTemplateSelect={handleTemplateSelect}
             selectedTemplateId={selectedTemplate?.id}
+            isMultiSelect={isMultiSelect}
+            selectedTemplateIds={selectedTemplateIds}
+            onSelectionChange={setSelectedTemplateIds}
+            onBatchAction={handleBatchAction}
           />
         </div>
       </div>
@@ -377,129 +403,62 @@ export default function LexDocxPage() {
       {/* 右侧内容区：预览/编辑 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部工具栏 */}
-        {selectedTemplate && (
-          <div className="p-4 border-b bg-background flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        {selectedTemplate && !isEditMode && (
+          <div className="p-4 border-b bg-muted/30 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
               <FileText className="h-5 w-5 text-muted-foreground" />
               <h2 className="text-lg font-semibold">{selectedTemplate.name}</h2>
               <span
                 className={cn(
-                  "text-xs px-2 py-1 rounded",
+                  "text-xs px-2.5 py-1 rounded-full font-medium",
                   selectedTemplate.status === "published"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-yellow-100 text-yellow-800"
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
                 )}
               >
                 {selectedTemplate.status === "published" ? "已发布" : "草稿"}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* 编辑模式工具栏 */}
+        {isEditMode && selectedTemplate && selectedTemplate.status === "draft" && (
+          <div className="p-4 border-b bg-muted/30 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">{selectedTemplate.name}</h2>
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                草稿
+              </span>
+            </div>
 
             <div className="flex items-center gap-2">
-              {/* 编辑模式下显示取消和保存按钮 */}
-              {isEditMode && selectedTemplate.status === "draft" ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelEdit}
-                    disabled={isSaving}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => {
-                      editorRef.current?.save()
-                    }}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        保存中...
-                      </>
-                    ) : (
-                      "保存"
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {/* 预览模式下显示操作按钮 */}
-                  {selectedTemplate.status === "draft" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleEditClick}
-                    >
-                      编辑
-                    </Button>
-                  )}
-
-                  {/* 状态切换（仅超级用户） */}
-                  {isSuperuser && (
-                    <Button
-                      variant={selectedTemplate.status === "published" ? "outline" : "default"}
-                      size="sm"
-                      onClick={() => setShowStatusDialog(true)}
-                      disabled={isUpdatingStatus}
-                    >
-                      {isUpdatingStatus ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          更新中...
-                        </>
-                      ) : selectedTemplate.status === "published" ? (
-                        <>
-                          <FileX className="h-4 w-4 mr-2" />
-                          设为草稿
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          发布模板
-                        </>
-                      )}
-                    </Button>
-                  )}
-
-                  {/* 草稿模板显示"下载模板" */}
-                  {selectedTemplate.status === "draft" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleExportTemplate}
-                      disabled={isExporting}
-                      title="下载模板文件（用于备份或分享）"
-                    >
-                      {isExporting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          下载中...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4 mr-2" />
-                          下载模板
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  
-                  {/* 已发布模板不显示顶部按钮，使用组件内部的按钮 */}
-
-                  {/* 删除按钮 */}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    删除
-                  </Button>
-                </>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelEdit}
+                disabled={isSaving}
+              >
+                取消
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  editorRef.current?.save()
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  "保存"
+                )}
+              </Button>
             </div>
           </div>
         )}
@@ -520,12 +479,15 @@ export default function LexDocxPage() {
               <InteractiveTemplatePreview
                 ref={interactivePreviewRef}
                 template={selectedTemplate}
-                onSubmit={handleGenerateDocument}
-                isGenerating={isGenerating}
+                onDownloadDocument={handleExportTemplate}
+                isExporting={isExporting}
               />
             ) : (
               <TemplatePreview
                 template={selectedTemplate}
+                onEdit={selectedTemplate.status === "draft" ? handleEditClick : undefined}
+                onDownloadTemplate={handleExportTemplate}
+                isExporting={isExporting}
               />
             )
           ) : (
@@ -540,16 +502,44 @@ export default function LexDocxPage() {
       </div>
 
       {/* 新建模板对话框 */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          setShowCreateDialog(open)
+          if (!open) {
+            resetCreateForm()
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>新建模板</DialogTitle>
-            <DialogDescription>
-              创建一个新的文档模板，创建后可以开始编辑内容
+            <DialogTitle className="text-xl">新建模板</DialogTitle>
+            <DialogDescription className="text-sm">
+              创建一个新的文档模板。可以选择上传 DOCX 文件，或创建空白模板后编辑内容
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-6 py-4">
+            {/* 文件上传区域 */}
+            <div>
+              <Label>模板文件（可选）</Label>
+              <div className="mt-2">
+                <FileUploadZone
+                  accept=".docx"
+                  maxSize={10}
+                  onFileSelect={setTemplateFile}
+                  selectedFile={templateFile}
+                  onRemove={() => setTemplateFile(null)}
+                  disabled={isCreating}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                上传 DOCX 文件将自动提取占位符。如果不上传文件，将创建空白模板。
+              </p>
+            </div>
+
+            {/* 模板元信息 */}
+            <div className="space-y-4">
             <div>
               <Label htmlFor="template-name">模板名称 *</Label>
               <Input
@@ -563,6 +553,7 @@ export default function LexDocxPage() {
                 }
                 placeholder="请输入模板名称"
                 className="mt-1"
+                  disabled={isCreating}
               />
             </div>
 
@@ -579,6 +570,7 @@ export default function LexDocxPage() {
                 }
                 placeholder="请输入模板描述（可选）"
                 className="mt-1"
+                  disabled={isCreating}
               />
             </div>
 
@@ -595,14 +587,20 @@ export default function LexDocxPage() {
                 }
                 placeholder="请输入模板分类（可选）"
                 className="mt-1"
+                  disabled={isCreating}
               />
+              </div>
             </div>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowCreateDialog(false)}
+              onClick={() => {
+                setShowCreateDialog(false)
+                resetCreateForm()
+              }}
+              disabled={isCreating}
             >
               取消
             </Button>
@@ -610,10 +608,10 @@ export default function LexDocxPage() {
               {isCreating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  创建中...
+                  {templateFile ? "导入中..." : "创建中..."}
                 </>
               ) : (
-                "创建"
+                templateFile ? "导入模板" : "创建模板"
               )}
             </Button>
           </DialogFooter>
@@ -654,165 +652,7 @@ export default function LexDocxPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 状态切换对话框 */}
-      <AlertDialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>切换模板状态</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedTemplate?.status === "published" ? (
-                <>
-                  确定要将模板 "{selectedTemplate?.name}" 设为草稿吗？
-                  <span className="block mt-2">
-                    设为草稿后，该模板将无法用于生成文档。
-                  </span>
-                </>
-              ) : (
-                <>
-                  确定要发布模板 "{selectedTemplate?.name}" 吗？
-                  <span className="block mt-2">
-                    发布后，该模板将可用于生成文档。请确保模板内容完整且占位符已正确配置。
-                  </span>
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() =>
-                handleStatusChange(
-                  selectedTemplate?.status === "published" ? "draft" : "published"
-                )
-              }
-              disabled={isUpdatingStatus}
-            >
-              {isUpdatingStatus ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  更新中...
-                </>
-              ) : selectedTemplate?.status === "published" ? (
-                "设为草稿"
-              ) : (
-                "发布模板"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
-      {/* 导入模板对话框 */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>导入模板</DialogTitle>
-            <DialogDescription>
-              上传 DOCX 格式的模板文件，系统将自动提取占位符并创建模板
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="import-file">选择文件 *</Label>
-              <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 mb-2">
-                  {importFile ? importFile.name : "点击上传或拖拽文件到此处"}
-                </p>
-                <p className="text-sm text-gray-500 mb-4">
-                  支持 DOCX 格式，最大 10MB
-                </p>
-                <Input
-                  type="file"
-                  id="import-file"
-                  accept=".docx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) {
-                      // 验证文件类型
-                      if (!file.name.endsWith(".docx")) {
-                        toast({
-                          title: "文件格式错误",
-                          description: "只支持 DOCX 格式的文件",
-                          variant: "destructive",
-                        })
-                        return
-                      }
-                      // 验证文件大小（10MB）
-                      if (file.size > 10 * 1024 * 1024) {
-                        toast({
-                          title: "文件过大",
-                          description: "文件大小不能超过 10MB",
-                          variant: "destructive",
-                        })
-                        return
-                      }
-                      setImportFile(file)
-                    }
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => document.getElementById("import-file")?.click()}
-                >
-                  选择文件
-                </Button>
-              </div>
-              {importFile && (
-                <div className="mt-2 text-sm text-muted-foreground">
-                  已选择: {importFile.name} ({(importFile.size / 1024 / 1024).toFixed(2)} MB)
-                </div>
-              )}
-            </div>
-
-            {/* 上传进度 */}
-            {isImporting && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span>上传中...</span>
-                  <span>{importProgress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${importProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowImportDialog(false)
-                setImportFile(null)
-                setImportProgress(0)
-              }}
-              disabled={isImporting}
-            >
-              取消
-            </Button>
-            <Button
-              onClick={handleImportTemplate}
-              disabled={isImporting || !importFile}
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  导入中...
-                </>
-              ) : (
-                "导入"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

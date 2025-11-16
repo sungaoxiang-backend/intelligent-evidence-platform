@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { FileText } from "lucide-react"
+import { FileText, Pencil, Download, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { type DocumentTemplate } from "@/lib/api/lex-docx"
 import { cn } from "@/lib/utils"
 import "@/app/lex-docx/docx-styles.css"
@@ -9,11 +10,17 @@ import "@/app/lex-docx/docx-styles.css"
 interface TemplatePreviewProps {
   template: DocumentTemplate | null
   className?: string
+  onEdit?: () => void
+  onDownloadTemplate?: () => void
+  isExporting?: boolean
 }
 
 export function TemplatePreview({
   template,
   className,
+  onEdit,
+  onDownloadTemplate,
+  isExporting = false,
 }: TemplatePreviewProps) {
 
   // 处理 HTML 内容，高亮显示占位符
@@ -100,7 +107,45 @@ export function TemplatePreview({
   }
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>
+    <div className={cn("flex flex-col h-full relative", className)}>
+      {/* 操作按钮（仅在草稿状态时显示） */}
+      {template?.status === "draft" && (onEdit || onDownloadTemplate) && (
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          {onDownloadTemplate && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDownloadTemplate}
+              disabled={isExporting}
+              className="shadow-md bg-white hover:bg-gray-50"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  下载中...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  下载模板
+                </>
+              )}
+            </Button>
+          )}
+          {onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              className="shadow-md bg-white hover:bg-gray-50"
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              编辑模板
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* 预览内容区域 */}
       <div className="flex-1 overflow-auto p-6 bg-white">
         <div

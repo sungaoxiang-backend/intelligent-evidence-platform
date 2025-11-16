@@ -4,7 +4,7 @@
 from typing import Annotated, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from loguru import logger
 
@@ -12,6 +12,8 @@ from app.core.deps import DBSession, get_current_staff
 from app.core.response import ListResponse, Pagination, SingleResponse
 from app.lex_docx import services
 from app.lex_docx.schemas import (
+    BatchDeleteRequest,
+    BatchUpdateStatusRequest,
     DocumentGenerationCreate,
     DocumentGenerationResponse,
     DocumentTemplateCreate,
@@ -440,9 +442,9 @@ async def preview_template(
 @router.post("/import", response_model=SingleResponse[DocumentTemplateResponse], status_code=status.HTTP_201_CREATED)
 async def import_template(
     file: UploadFile = File(...),
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    category: Optional[str] = None,
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
     db: DBSession = None,
     current_staff: Annotated[Staff, Depends(get_current_staff)] = None,
 ):
@@ -514,6 +516,69 @@ async def export_template(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"导出模板失败: {str(e)}",
+        )
+
+
+@router.post("/batch/update-status", response_model=SingleResponse[dict])
+async def batch_update_template_status(
+    obj_in: BatchUpdateStatusRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """批量更新模板状态"""
+    try:
+        from app.lex_docx.models import TemplateStatus
+        
+        # 验证状态值
+        if obj_in.new_status not in [TemplateStatus.DRAFT, TemplateStatus.PUBLISHED]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"无效的状态值: {obj_in.new_status}",
+            )
+        
+        updated_count = await services.batch_update_template_status(
+            db=db,
+            template_ids=obj_in.template_ids,
+            new_status=obj_in.new_status,
+            updated_by=current_staff.id,
+        )
+        
+        return SingleResponse(
+            data={"updated_count": updated_count, "total": len(obj_in.template_ids)}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"批量更新模板状态失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量更新模板状态失败: {str(e)}",
+        )
+
+
+@router.post("/batch/delete", response_model=SingleResponse[dict])
+async def batch_delete_templates(
+    obj_in: BatchDeleteRequest,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+):
+    """批量删除模板"""
+    try:
+        deleted_count = await services.batch_delete_templates(
+            db=db,
+            template_ids=obj_in.template_ids,
+        )
+        
+        return SingleResponse(
+            data={"deleted_count": deleted_count, "total": len(obj_in.template_ids)}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"批量删除模板失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量删除模板失败: {str(e)}",
         )
 
 
