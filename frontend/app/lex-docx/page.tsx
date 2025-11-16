@@ -291,6 +291,9 @@ export default function LexDocxPage() {
       // 清空选择
       setSelectedTemplateIds(new Set())
       
+      // 自动退出多选模式
+      setIsMultiSelect(false)
+      
       // 调用成功回调（用于刷新列表）
       onSuccess?.()
     } catch (error) {

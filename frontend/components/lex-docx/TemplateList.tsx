@@ -146,11 +146,6 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
     onSelectionChange?.(inverted)
   }
 
-  // 取消多选
-  const handleCancelMultiSelect = () => {
-    onSelectionChange?.(new Set())
-  }
-
   // 批量操作
   const handleBatchPublish = () => {
     const selectedIds = Array.from(selectedTemplateIds)
@@ -275,11 +270,11 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
       {/* 多选操作栏 */}
       {isMultiSelect && (
         <div className="px-4 py-2 border-b bg-muted/30">
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+              className="h-7 px-2 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50 shrink-0"
               onClick={handleSelectAll}
             >
               全选
@@ -287,26 +282,18 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+              className="h-7 px-2 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50 shrink-0"
               onClick={handleInvertSelection}
             >
               反选
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-slate-600 hover:text-red-600 hover:bg-red-50"
-              onClick={handleCancelMultiSelect}
-            >
-              取消
-            </Button>
             {selectedCount > 0 && (
               <>
-                <div className="h-4 w-px bg-border mx-1" />
+                <div className="h-4 w-px bg-border mx-1 shrink-0" />
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50"
+                  className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50 shrink-0 whitespace-nowrap"
                   onClick={handleBatchPublish}
                   disabled={selectedCount === 0}
                 >
@@ -315,7 +302,7 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs text-orange-600 hover:bg-orange-50"
+                  className="h-7 px-2 text-xs text-orange-600 hover:bg-orange-50 shrink-0 whitespace-nowrap"
                   onClick={handleBatchUnpublish}
                   disabled={selectedCount === 0}
                 >
@@ -324,7 +311,7 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs text-red-600 hover:bg-red-50"
+                  className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 shrink-0 whitespace-nowrap"
                   onClick={handleBatchDelete}
                   disabled={selectedCount === 0}
                 >
@@ -352,7 +339,7 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
             <p>暂无模板</p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="p-2 space-y-2">
             {templates.map((template) => {
               const isSelected = isMultiSelect
                 ? selectedTemplateIds.has(template.id)
@@ -363,11 +350,17 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
                   key={template.id}
                   onClick={() => handleTemplateClick(template)}
                   className={cn(
-                    "w-full p-4 text-left hover:bg-accent transition-colors cursor-pointer",
-                    isSelected && !isMultiSelect && "bg-accent",
-                    isMultiSelect && isSelected && "bg-blue-50 dark:bg-blue-950"
+                    "w-full p-3 rounded-lg border text-left transition-all duration-200 cursor-pointer relative overflow-hidden",
+                    isSelected
+                      ? "border-blue-400 shadow-md ring-1 ring-blue-200 bg-blue-50/50"
+                      : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30 hover:shadow-md"
                   )}
                 >
+                  {/* 选中指示条 */}
+                  {isSelected && (
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 to-blue-600" />
+                  )}
+
                   <div className="flex items-start gap-3">
                     {/* 多选复选框 */}
                     {isMultiSelect && (
@@ -385,21 +378,21 @@ export const TemplateList = forwardRef<TemplateListRef, TemplateListProps>(({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium truncate">{template.name}</h3>
+                        <h3 className="font-medium truncate text-sm">{template.name}</h3>
                         <Badge
                           variant={getStatusBadgeVariant(template.status)}
-                          className="shrink-0"
+                          className="shrink-0 text-xs"
                         >
                           {getStatusLabel(template.status)}
                         </Badge>
                       </div>
                       {template.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-1">
                           {template.description}
                         </p>
                       )}
                       {template.category && (
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground">
                           分类: {template.category}
                         </p>
                       )}
