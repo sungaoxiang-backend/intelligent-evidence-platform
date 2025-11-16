@@ -34,7 +34,7 @@ import { Plus, Trash2, FileText, Loader2, Upload, Download, CheckCircle, FileX }
 import { TemplateList } from "@/components/lex-docx/TemplateList"
 import { TemplatePreview } from "@/components/lex-docx/TemplatePreview"
 import { InteractiveTemplatePreview, type InteractiveTemplatePreviewRef } from "@/components/lex-docx/InteractiveTemplatePreview"
-import { TemplateEditor, type TemplateEditorRef } from "@/components/lex-docx/TemplateEditor"
+import { SimpleTemplateEditor, type SimpleTemplateEditorRef } from "@/components/lex-docx/SimpleTemplateEditor"
 import {
   lexDocxApi,
   type DocumentTemplate,
@@ -65,7 +65,7 @@ export default function LexDocxPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importProgress, setImportProgress] = useState(0)
-  const editorRef = useRef<TemplateEditorRef>(null)
+  const editorRef = useRef<SimpleTemplateEditorRef>(null)
   const interactivePreviewRef = useRef<InteractiveTemplatePreviewRef>(null)
 
   // 新建模板表单
@@ -85,12 +85,32 @@ export default function LexDocxPage() {
   }
 
   // 处理编辑按钮点击
-  const handleEditClick = () => {
-    setIsEditMode(true)
+  const handleEditClick = async () => {
+    if (!selectedTemplate) return
+    
+    // 进入编辑模式前，重新从DOCX加载HTML（确保格式完整）
+    try {
+      const templateForEditing = await lexDocxApi.getTemplate(selectedTemplate.id, true)
+      setSelectedTemplate(templateForEditing)
+      setIsEditMode(true)
+    } catch (error) {
+      handleApiError(error, "加载模板失败")
+    }
   }
 
   // 处理取消编辑
-  const handleCancelEdit = () => {
+  const handleCancelEdit = async () => {
+    // 取消编辑时，重新加载模板（恢复原始内容）
+    if (selectedTemplate) {
+      try {
+        const originalTemplate = await lexDocxApi.getTemplate(selectedTemplate.id)
+        if (originalTemplate) {
+          setSelectedTemplate(originalTemplate)
+        }
+      } catch (error) {
+        handleApiError(error, "加载模板失败")
+      }
+    }
     setIsEditMode(false)
   }
 
@@ -509,7 +529,7 @@ export default function LexDocxPage() {
         <div className="flex-1 overflow-hidden">
           {selectedTemplate ? (
             isEditMode && selectedTemplate.status === "draft" ? (
-              <TemplateEditor
+              <SimpleTemplateEditor
                 ref={editorRef}
                 template={selectedTemplate}
                 onSave={handleSaveEdit}

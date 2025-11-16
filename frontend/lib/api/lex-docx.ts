@@ -209,9 +209,11 @@ class LexDocxAPI {
 
   /**
    * 获取模板详情
+   * @param id 模板ID
+   * @param forEditing 是否用于编辑（如果是，则从DOCX重新生成HTML以确保格式）
    */
-  async getTemplate(id: number): Promise<DocumentTemplate> {
-    const url = `${this.getBaseUrl()}/lex-docx/${id}`
+  async getTemplate(id: number, forEditing: boolean = false): Promise<DocumentTemplate> {
+    const url = `${this.getBaseUrl()}/lex-docx/${id}${forEditing ? '?for_editing=true' : ''}`
     const response = await fetch(url, {
       method: "GET",
       headers: this.createHeaders(),

@@ -29,6 +29,7 @@ from app.lex_docx.utils import (
     extract_placeholders,
     html_to_docx,
     parse_placeholder_metadata,
+    update_docx_content_from_html,
     validate_template_content,
 )
 
@@ -210,6 +211,16 @@ async def update_template(
                 elif isinstance(v, PlaceholderMetadata):
                     existing_metadata[k] = v
         
+        # 重要：保存时，同时更新HTML和DOCX文件
+        # 编辑时，从DOCX重新生成HTML（包含格式）
+        # 保存时，更新数据库HTML + 更新DOCX文件（保留格式）
+        # 预览时，使用数据库中的HTML
+        
+        # 更新数据库中的HTML
+        update_data["content_html"] = obj_in.content_html
+        logger.info(f"模板 {db_obj.id} 保存时更新HTML内容")
+        
+        # 从编辑后的HTML重新解析占位符元数据
         placeholder_metadata = parse_placeholder_metadata(
             obj_in.content_html,
             existing_metadata,
@@ -221,22 +232,33 @@ async def update_template(
             }
         update_data["placeholder_metadata"] = placeholder_metadata
         
-        # 更新 HTML 内容
-        update_data["content_html"] = obj_in.content_html
-        
-        # 更新 DOCX 文件
-        try:
-            docx_bytes = html_to_docx(obj_in.content_html)
-            file_path = get_template_file_path(db_obj.id)
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_bytes(docx_bytes)
-            update_data["content_path"] = str(file_path)
-        except Exception as e:
-            logger.error(f"更新模板文件失败: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"更新模板文件失败: {str(e)}",
-            )
+        # 同时更新DOCX文件（保留格式）
+        if db_obj.content_path:
+            from pathlib import Path
+            from app.lex_docx.utils import update_docx_content_from_html
+            
+            file_path = Path(db_obj.content_path)
+            if file_path.exists():
+                try:
+                    # 读取现有DOCX文件
+                    docx_bytes = file_path.read_bytes()
+                    # 使用update_docx_content_from_html更新内容（保留格式）
+                    updated_docx_bytes = update_docx_content_from_html(
+                        docx_bytes,
+                        obj_in.content_html
+                    )
+                    # 保存更新后的DOCX文件
+                    file_path.write_bytes(updated_docx_bytes)
+                    logger.info(f"模板 {db_obj.id} 已更新DOCX文件（保留格式）")
+                except Exception as e:
+                    logger.error(f"模板 {db_obj.id} 更新DOCX文件失败: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    # 不抛出异常，至少HTML已经保存了
+            else:
+                logger.warning(f"模板 {db_obj.id} 的DOCX文件不存在: {file_path}")
+        else:
+            logger.warning(f"模板 {db_obj.id} 没有DOCX文件路径，无法更新DOCX文件")
     elif obj_in.placeholder_metadata is not None:
         # 如果只更新了元数据，直接使用新值
         placeholder_metadata = obj_in.placeholder_metadata
@@ -499,22 +521,27 @@ async def import_template(
             detail=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）",
         )
     
-    # 重置文件指针
+    # 重置文件指针（如果需要再次读取）
     await file.seek(0)
     
+    # 保存原始文件内容的副本（用于后续保存DOCX文件）
+    original_docx_bytes = file_content
+    
     try:
-        # 将 DOCX 转换为 HTML
+        # 将 DOCX 转换为 HTML（用于提取内容和占位符）
         html_content = docx_bytes_to_html(file_content)
         
         # 提取占位符
         placeholders = extract_placeholders(html_content)
         
         # 解析占位符元数据（创建默认配置）
-        placeholder_metadata = parse_placeholder_metadata(html_content)
-        # 转换为字典格式
-        if placeholder_metadata:
-            placeholder_metadata = {
-                k: v.model_dump() for k, v in placeholder_metadata.items()
+        placeholder_metadata_dict = parse_placeholder_metadata(html_content)
+        # 转换为字典格式（用于JSONB存储）
+        placeholder_metadata_for_create = None
+        if placeholder_metadata_dict:
+            placeholder_metadata_for_create = {
+                k: v.model_dump() if hasattr(v, 'model_dump') else v
+                for k, v in placeholder_metadata_dict.items()
             }
         
         # 使用文件名作为模板名称（如果没有提供）
@@ -526,15 +553,42 @@ async def import_template(
             description=description,
             category=category,
             content_html=html_content,
-            placeholder_metadata=placeholder_metadata,
+            placeholder_metadata=placeholder_metadata_for_create,  # type: ignore
         )
         
-        # 调用创建模板方法
+        # 调用创建模板方法（先创建数据库记录以获取ID）
         template = await create_template(
             db=db,
             obj_in=template_create,
             created_by=created_by,
         )
+        
+        # 重要：直接保存原始DOCX文件，而不是从HTML转换
+        # 这样可以保留所有格式信息
+        try:
+            file_path = get_template_file_path(template.id)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            # 直接保存原始DOCX文件内容
+            file_path.write_bytes(original_docx_bytes)
+            template.content_path = str(file_path)
+            await db.commit()
+            await db.refresh(template)
+            logger.info(f"模板 {template.id} 已保存原始DOCX文件（保留格式）")
+        except Exception as e:
+            logger.error(f"保存原始DOCX文件失败: {e}")
+            # 如果失败，回退到从HTML生成（会丢失格式，但至少能保存）
+            try:
+                docx_bytes = html_to_docx(html_content)
+                file_path = get_template_file_path(template.id)
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_bytes(docx_bytes)
+                template.content_path = str(file_path)
+                await db.commit()
+                await db.refresh(template)
+                logger.warning(f"模板 {template.id} 回退到从HTML生成DOCX（格式可能丢失）")
+            except Exception as e2:
+                logger.error(f"回退方案也失败: {e2}")
+                # 不抛出异常，至少HTML已经保存了
         
         logger.info(f"模板导入成功: ID={template.id}, 名称={template_name}, 占位符数量={len(placeholders)}")
         

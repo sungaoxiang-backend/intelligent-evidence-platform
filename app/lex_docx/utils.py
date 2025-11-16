@@ -22,23 +22,17 @@ def _get_alignment_style(alignment) -> str:
     """
     获取段落对齐方式对应的 CSS 样式
     
+    注意：此函数已被 FormatMapper.docx_alignment_to_css 替代
+    保留此函数是为了向后兼容，但应该逐步迁移到 FormatMapper
+    
     Args:
         alignment: WD_ALIGN_PARAGRAPH 枚举值或 None
         
     Returns:
         CSS text-align 值
     """
-    if alignment is None:
-        return "left"
-    
-    if alignment == WD_ALIGN_PARAGRAPH.CENTER:
-        return "center"
-    elif alignment == WD_ALIGN_PARAGRAPH.RIGHT:
-        return "right"
-    elif alignment == WD_ALIGN_PARAGRAPH.JUSTIFY:
-        return "justify"
-    else:
-        return "left"
+    from app.lex_docx.format_mapper import FormatMapper
+    return FormatMapper.docx_alignment_to_css(alignment)
 
 
 def _get_vertical_alignment_style(vertical_alignment) -> str:
@@ -744,9 +738,385 @@ def docx_bytes_to_html(docx_bytes: bytes) -> str:
         raise
 
 
+def update_docx_content_from_html(docx_bytes: bytes, html_content: str) -> bytes:
+    """
+    更新现有DOCX文件的内容，同时保留格式结构（表格、对齐、缩进等）
+    
+    这是保存编辑时的关键函数，确保格式不会丢失。
+    
+    Args:
+        docx_bytes: 现有DOCX文件的字节数据
+        html_content: 编辑后的HTML内容
+        
+    Returns:
+        更新后的DOCX文件的字节数据
+    """
+    try:
+        from docx import Document
+        from docx.oxml.ns import qn
+        import re
+        
+        # 读取现有DOCX文件
+        docx_file = io.BytesIO(docx_bytes)
+        doc = Document(docx_file)
+        
+        # 从HTML中提取文本内容（按段落和表格单元格）
+        # 解析HTML，提取所有段落和表格单元格的文本
+        html_paragraphs = []
+        html_tables = []
+        
+        # 提取文档级别的段落和标题（不在表格内的）
+        # 先提取表格，然后提取不在表格内的段落和标题
+        table_pattern = r'<table[^>]*>.*?</table>'
+        tables_html = list(re.finditer(table_pattern, html_content, flags=re.DOTALL))
+        
+        # 提取不在表格内的段落和标题（按顺序，包含格式信息）
+        from app.lex_docx.format_mapper import FormatMapper
+        
+        last_pos = 0
+        for table_match in tables_html:
+            # 提取表格前的内容（包括段落和标题）
+            before_table = html_content[last_pos:table_match.start()]
+            # 提取标题（h1-h6）
+            heading_pattern = r'<(h[1-6])([^>]*)>(.*?)</\1>'
+            for match in re.finditer(heading_pattern, before_table, flags=re.DOTALL):
+                heading_tag = match.group(1)
+                heading_attrs = match.group(2)
+                heading_text = re.sub(r'<[^>]+>', '', match.group(3))
+                heading_text = heading_text.replace('&nbsp;', ' ').strip()
+                if heading_text:
+                    format_info = FormatMapper.extract_paragraph_format_from_html(f'<{heading_tag} {heading_attrs}>')
+                    html_paragraphs.append({
+                        'text': heading_text,
+                        'format': format_info
+                    })
+            # 提取段落
+            para_pattern = r'<p([^>]*)>(.*?)</p>'
+            for match in re.finditer(para_pattern, before_table, flags=re.DOTALL):
+                para_attrs = match.group(1)
+                para_text = re.sub(r'<[^>]+>', '', match.group(2))
+                para_text = para_text.replace('&nbsp;', ' ').strip()
+                if para_text:
+                    format_info = FormatMapper.extract_paragraph_format_from_html(f'<p {para_attrs}>')
+                    html_paragraphs.append({
+                        'text': para_text,
+                        'format': format_info
+                    })
+            last_pos = table_match.end()
+        
+        # 提取最后一个表格后的段落和标题
+        if last_pos < len(html_content):
+            after_tables = html_content[last_pos:]
+            # 提取标题（h1-h6）
+            heading_pattern = r'<(h[1-6])([^>]*)>(.*?)</\1>'
+            for match in re.finditer(heading_pattern, after_tables, flags=re.DOTALL):
+                heading_tag = match.group(1)
+                heading_attrs = match.group(2)
+                heading_text = re.sub(r'<[^>]+>', '', match.group(3))
+                heading_text = heading_text.replace('&nbsp;', ' ').strip()
+                if heading_text:
+                    format_info = FormatMapper.extract_paragraph_format_from_html(f'<{heading_tag} {heading_attrs}>')
+                    html_paragraphs.append({
+                        'text': heading_text,
+                        'format': format_info
+                    })
+            # 提取段落
+            para_pattern = r'<p([^>]*)>(.*?)</p>'
+            for match in re.finditer(para_pattern, after_tables, flags=re.DOTALL):
+                para_attrs = match.group(1)
+                para_text = re.sub(r'<[^>]+>', '', match.group(2))
+                para_text = para_text.replace('&nbsp;', ' ').strip()
+                if para_text:
+                    format_info = FormatMapper.extract_paragraph_format_from_html(f'<p {para_attrs}>')
+                    html_paragraphs.append({
+                        'text': para_text,
+                        'format': format_info
+                    })
+        
+        # 提取表格内容（保留单元格内的段落结构）
+        table_pattern = r'<table[^>]*>(.*?)</table>'
+        for table_match in re.finditer(table_pattern, html_content, flags=re.DOTALL):
+            table_html = table_match.group(1)
+            table_rows = []
+            row_pattern = r'<tr[^>]*>(.*?)</tr>'
+            for row_match in re.finditer(row_pattern, table_html, flags=re.DOTALL):
+                row_html = row_match.group(1)
+                row_cells = []
+                cell_pattern = r'<(td|th)[^>]*>(.*?)</\1>'
+                for cell_match in re.finditer(cell_pattern, row_html, flags=re.DOTALL):
+                    cell_content = cell_match.group(2)
+                    # 提取单元格内的所有段落（包含格式信息）
+                    cell_paragraphs = []
+                    para_pattern = r'<p([^>]*)>(.*?)</p>'
+                    for para_match in re.finditer(para_pattern, cell_content, flags=re.DOTALL):
+                        para_attrs = para_match.group(1)
+                        para_html_content = para_match.group(2)
+                        
+                        # 提取格式信息
+                        format_info = {}
+                        style_match = re.search(r'style="([^"]*)"', para_attrs)
+                        if style_match:
+                            from app.lex_docx.format_mapper import FormatMapper
+                            format_info = FormatMapper.extract_paragraph_format_from_html(f'<p {para_attrs}>')
+                        
+                        # 提取文本内容（处理换行）
+                        # 先处理 <br> 标签，转换为换行标记
+                        para_text = para_html_content.replace('<br>', '\n').replace('<br/>', '\n').replace('<br />', '\n')
+                        # 移除其他HTML标签，但保留换行
+                        para_text = re.sub(r'<[^>]+>', '', para_text)
+                        para_text = para_text.replace('&nbsp;', ' ')
+                        
+                        # 如果包含换行，分割为多个段落
+                        if '\n' in para_text:
+                            lines = para_text.split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line:
+                                    cell_paragraphs.append({
+                                        'text': line,
+                                        'format': format_info.copy()  # 每个段落都保留格式信息
+                                    })
+                        else:
+                            para_text = para_text.strip()
+                            if para_text:
+                                cell_paragraphs.append({
+                                    'text': para_text,
+                                    'format': format_info
+                                })
+                    
+                    # 如果没有段落，提取纯文本
+                    if not cell_paragraphs:
+                        cell_text = re.sub(r'<[^>]+>', '', cell_content)
+                        cell_text = cell_text.replace('&nbsp;', ' ').strip()
+                        if cell_text:
+                            cell_paragraphs.append({
+                                'text': cell_text,
+                                'format': {}
+                            })
+                    row_cells.append(cell_paragraphs)
+                if row_cells:
+                    table_rows.append(row_cells)
+            if table_rows:
+                html_tables.append(table_rows)
+        
+        # 更新文档级别的段落
+        # 如果HTML段落数少于DOCX段落数，只删除空段落，保留有内容的段落
+        # 如果HTML段落数多于DOCX段落数，添加新段落（使用第一个段落的格式）
+        para_idx = 0
+        doc_paragraphs = list(doc.paragraphs)  # 转换为列表，避免迭代时修改
+        
+        # 使用统一的格式映射器
+        from app.lex_docx.format_mapper import FormatMapper
+        
+        # 更新现有段落
+        for para in doc_paragraphs:
+            if para_idx < len(html_paragraphs):
+                # 获取HTML段落信息（可能是字符串或字典）
+                html_para_info = html_paragraphs[para_idx]
+                if isinstance(html_para_info, dict):
+                    text = html_para_info['text']
+                    format_info = html_para_info.get('format', {})
+                else:
+                    # 兼容旧格式（字符串）
+                    text = html_para_info
+                    format_info = {}
+                
+                # 保留格式，只更新文本
+                # 清除现有runs（但保留段落样式，如Heading 1, Heading 2等）
+                original_style = para.style
+                original_style_name = original_style.name if original_style else None
+                para.clear()
+                # 恢复段落样式（如果是标题样式，需要保留）
+                if original_style and original_style_name and original_style_name.startswith('Heading'):
+                    para.style = original_style
+                
+                # 应用格式信息（对齐、缩进等）
+                FormatMapper.apply_format_to_docx_paragraph(para, format_info)
+                
+                # 处理占位符和文本（保留原始格式，不修改颜色）
+                parts = re.split(r'(\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\})', text)
+                for part in parts:
+                    if not part:
+                        continue
+                    # 占位符和普通文本都直接添加，保留原始格式
+                    para.add_run(part)
+                para_idx += 1
+            else:
+                # HTML中没有对应段落
+                # 只删除空段落，保留有内容的段落（可能是标题或其他重要内容）
+                if not para.text.strip():
+                    # 空段落，可以删除
+                    para_element = para._element
+                    para_element.getparent().remove(para_element)
+                else:
+                    # 有内容的段落，保留（可能是标题或其他重要内容）
+                    # 但清空内容，避免显示旧内容
+                    para.clear()
+        
+        # 如果HTML段落数多于DOCX段落数，添加新段落
+        if len(html_paragraphs) > len(doc_paragraphs):
+            # 使用第一个段落的格式作为新段落的格式
+            base_para = doc_paragraphs[0] if doc_paragraphs else None
+            for extra_idx in range(len(doc_paragraphs), len(html_paragraphs)):
+                # 获取HTML段落信息
+                html_para_info = html_paragraphs[extra_idx]
+                if isinstance(html_para_info, dict):
+                    text = html_para_info['text']
+                    format_info = html_para_info.get('format', {})
+                else:
+                    text = html_para_info
+                    format_info = {}
+                
+                # 创建新段落
+                if base_para:
+                    # 复制段落格式
+                    new_para = doc.add_paragraph()
+                    # 先复制基础格式
+                    if base_para.alignment is not None:
+                        new_para.alignment = base_para.alignment
+                    if base_para.paragraph_format.left_indent is not None:
+                        new_para.paragraph_format.left_indent = base_para.paragraph_format.left_indent
+                    if base_para.paragraph_format.first_line_indent is not None:
+                        new_para.paragraph_format.first_line_indent = base_para.paragraph_format.first_line_indent
+                else:
+                    new_para = doc.add_paragraph()
+                
+                # 应用HTML中的格式信息（覆盖基础格式）
+                FormatMapper.apply_format_to_docx_paragraph(new_para, format_info)
+                
+                # 处理占位符和文本（保留原始格式，不修改颜色）
+                parts = re.split(r'(\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\})', text)
+                for part in parts:
+                    if not part:
+                        continue
+                    # 占位符和普通文本都直接添加，保留原始格式
+                    new_para.add_run(part)
+        
+        # 更新表格内容（保留格式结构）
+        table_idx = 0
+        for table in doc.tables:
+            if table_idx < len(html_tables):
+                html_table = html_tables[table_idx]
+                row_idx = 0
+                for row in table.rows:
+                    if row_idx < len(html_table):
+                        html_row = html_table[row_idx]
+                        col_idx = 0
+                        for cell in row.cells:
+                            if col_idx < len(html_row):
+                                # 更新单元格内容，保留格式
+                                html_cell_paragraphs = html_row[col_idx]  # 这是一个段落列表
+                                
+                                # 保留现有段落格式，更新内容
+                                # 如果HTML段落数少于DOCX段落数，保留多余的段落（可能包含格式信息）
+                                # 如果HTML段落数多于DOCX段落数，添加新段落（使用第一个段落的格式）
+                                
+                                # 使用统一的格式映射器
+                                from app.lex_docx.format_mapper import FormatMapper
+                                
+                                # 先更新现有段落
+                                # 注意：需要先收集要删除的段落，避免在迭代时修改列表
+                                para_idx = 0
+                                paragraphs_to_remove = []
+                                cell_paragraphs_list = list(cell.paragraphs)  # 转换为列表，避免迭代时修改
+                                for para in cell_paragraphs_list:
+                                    if para_idx < len(html_cell_paragraphs):
+                                        # 获取HTML段落信息（可能是字符串或字典）
+                                        html_para_info = html_cell_paragraphs[para_idx]
+                                        if isinstance(html_para_info, dict):
+                                            text = html_para_info['text']
+                                            format_info = html_para_info.get('format', {})
+                                        else:
+                                            # 兼容旧格式（字符串）
+                                            text = html_para_info
+                                            format_info = {}
+                                        
+                                        # 保留格式，只更新文本
+                                        para.clear()
+                                        
+                                        # 应用格式信息（对齐、缩进等）
+                                        FormatMapper.apply_format_to_docx_paragraph(para, format_info)
+                                        
+                                        # 处理占位符和文本（保留原始格式，不修改颜色）
+                                        parts = re.split(r'(\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\})', text)
+                                        for part in parts:
+                                            if not part:
+                                                continue
+                                            # 占位符和普通文本都直接添加，保留原始格式
+                                            para.add_run(part)
+                                        para_idx += 1
+                                    else:
+                                        # HTML中没有对应段落，标记为删除（用户已删除）
+                                        paragraphs_to_remove.append(para)
+                                
+                                # 删除标记的段落
+                                for para in paragraphs_to_remove:
+                                    para_element = para._element
+                                    para_element.getparent().remove(para_element)
+                                
+                                # 如果HTML段落数多于DOCX段落数，添加新段落
+                                if len(html_cell_paragraphs) > len(cell.paragraphs):
+                                    # 使用第一个段落的格式作为新段落的格式
+                                    base_para = cell.paragraphs[0] if cell.paragraphs else None
+                                    for extra_idx in range(len(cell.paragraphs), len(html_cell_paragraphs)):
+                                        # 获取HTML段落信息
+                                        html_para_info = html_cell_paragraphs[extra_idx]
+                                        if isinstance(html_para_info, dict):
+                                            text = html_para_info['text']
+                                            format_info = html_para_info.get('format', {})
+                                        else:
+                                            text = html_para_info
+                                            format_info = {}
+                                        
+                                        # 创建新段落
+                                        if base_para:
+                                            # 复制段落格式
+                                            new_para = cell.add_paragraph()
+                                            # 先复制基础格式
+                                            if base_para.alignment is not None:
+                                                new_para.alignment = base_para.alignment
+                                            if base_para.paragraph_format.left_indent is not None:
+                                                new_para.paragraph_format.left_indent = base_para.paragraph_format.left_indent
+                                            if base_para.paragraph_format.first_line_indent is not None:
+                                                new_para.paragraph_format.first_line_indent = base_para.paragraph_format.first_line_indent
+                                        else:
+                                            new_para = cell.add_paragraph()
+                                        
+                                        # 应用HTML中的格式信息（覆盖基础格式）
+                                        FormatMapper.apply_format_to_docx_paragraph(new_para, format_info)
+                                        
+                                        # 处理占位符和文本（保留原始格式，不修改颜色）
+                                        parts = re.split(r'(\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\})', text)
+                                        for part in parts:
+                                            if not part:
+                                                continue
+                                            # 占位符和普通文本都直接添加，保留原始格式
+                                            new_para.add_run(part)
+                                col_idx += 1
+                    row_idx += 1
+                table_idx += 1
+        
+        # 保存更新后的DOCX
+        docx_bytes_updated = io.BytesIO()
+        doc.save(docx_bytes_updated)
+        docx_bytes_updated.seek(0)
+        
+        return docx_bytes_updated.read()
+    except Exception as e:
+        logger.error(f"更新DOCX内容失败: {e}")
+        raise
+
+
 def html_to_docx(html_content: str) -> bytes:
     """
     将 HTML 内容转换为 DOCX 格式的字节数据
+    
+    ⚠️ 废弃警告：此函数已废弃，格式保留能力有限。
+    应该使用 update_docx_content_from_html 来更新现有DOCX文件，以保留格式。
+    此函数仅用于以下场景：
+    1. 手动创建模板时（create_template）
+    2. 导入模板失败时的回退方案（import_template）
+    3. 导出模板时如果没有DOCX文件（export_template）
     
     注意：这是一个简化实现，主要用于保存模板内容。
     复杂的 HTML 格式可能无法完全保留。
@@ -789,10 +1159,8 @@ def html_to_docx(html_content: str) -> bytes:
                 
                 # 检查是否是占位符
                 if re.match(r'\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\}', part):
-                    # 占位符：添加为普通文本（保持 {{field_name}} 格式）
-                    run = paragraph.add_run(part)
-                    # 可以设置占位符的特殊样式（如高亮）
-                    run.font.color.rgb = RGBColor(0, 102, 204)  # 蓝色
+                    # 占位符：添加为普通文本（保持 {{field_name}} 格式，不修改颜色）
+                    paragraph.add_run(part)
                 else:
                     # 普通文本
                     # 简单的 HTML 标签处理

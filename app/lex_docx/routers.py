@@ -148,6 +148,7 @@ async def get_template(
     template_id: int,
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)],
+    for_editing: bool = Query(False, description="是否用于编辑（如果是，则从DOCX重新生成HTML以确保格式）"),
 ):
     """获取模板详情"""
     try:
@@ -158,6 +159,71 @@ async def get_template(
                 detail="模板不存在",
             )
         
+        # 如果用于编辑，优先使用数据库中的HTML（保留用户编辑）
+        # 只有在数据库HTML无格式时，才从DOCX重新生成
+        content_html = template.content_html
+        if for_editing:
+            # 首先检查数据库中的HTML是否包含格式
+            db_has_table = '<table' in (template.content_html or '')
+            db_has_style = 'style=' in (template.content_html or '')
+            
+            if db_has_table or db_has_style:
+                # 数据库中的HTML包含格式，直接使用（保留用户编辑）
+                logger.info(
+                    f"模板 {template_id} 编辑时使用数据库中的HTML（包含格式，保留用户编辑）"
+                )
+                content_html = template.content_html
+            elif template.content_path:
+                # 数据库中的HTML无格式，尝试从DOCX重新生成
+                from app.lex_docx.utils import docx_bytes_to_html
+                from pathlib import Path
+                
+                file_path = Path(template.content_path)
+                if file_path.exists():
+                    try:
+                        docx_bytes = file_path.read_bytes()
+                        generated_html = docx_bytes_to_html(docx_bytes)
+                        
+                        # 检查生成的HTML是否包含格式
+                        has_table = '<table' in generated_html
+                        has_style = 'style=' in generated_html
+                        
+                        if has_table or has_style:
+                            # DOCX文件正常，使用生成的HTML
+                            content_html = generated_html
+                            logger.info(
+                                f"模板 {template_id} 编辑时从DOCX重新生成HTML（包含格式）"
+                            )
+                        else:
+                            # DOCX文件也无格式，使用数据库中的HTML（即使无格式）
+                            logger.warning(
+                                f"模板 {template_id} DOCX和数据库HTML都无格式，"
+                                f"使用数据库中的HTML"
+                            )
+                            content_html = template.content_html
+                    except Exception as e:
+                        logger.warning(
+                            f"模板 {template_id} 从DOCX重新生成HTML失败，使用数据库中的HTML: {e}"
+                        )
+                        import traceback
+                        logger.warning(traceback.format_exc())
+                        # 如果失败，使用数据库中的HTML
+                else:
+                    logger.warning(f"模板 {template_id} 的DOCX文件不存在: {file_path}")
+            else:
+                # 没有DOCX文件，使用数据库中的HTML
+                logger.info(f"模板 {template_id} 编辑时使用数据库中的HTML（无DOCX文件）")
+            
+            logger.info(f"最终返回的HTML长度: {len(content_html) if content_html else 0}")
+            logger.info(f"最终返回的HTML包含表格: {'<table' in content_html if content_html else False}")
+            logger.info(f"最终返回的HTML包含样式: {'style=' in content_html if content_html else False}")
+            logger.info(f"最终返回的HTML前500字符: {content_html[:500] if content_html else ''}")
+        else:
+            logger.info(f"模板 {template_id} 获取HTML（非编辑模式），使用数据库中的HTML")
+            logger.info(f"数据库HTML长度: {len(content_html) if content_html else 0}")
+            logger.info(f"数据库HTML包含表格: {'<table' in content_html if content_html else False}")
+            logger.info(f"数据库HTML包含样式: {'style=' in content_html if content_html else False}")
+        
         return SingleResponse(
             data=DocumentTemplateResponse(
                 id=template.id,
@@ -166,7 +232,7 @@ async def get_template(
                 category=template.category,
                 status=template.status,
                 content_path=template.content_path,
-                content_html=template.content_html,
+                content_html=content_html,
                 placeholder_metadata=template.placeholder_metadata,
                 created_by=template.created_by,
                 updated_by=template.updated_by,
