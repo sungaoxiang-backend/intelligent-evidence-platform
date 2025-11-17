@@ -5,7 +5,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import mammoth
 from docx import Document
@@ -1360,4 +1360,245 @@ def validate_template_content(html_content: str) -> tuple[bool, Optional[str]]:
             return False, f"占位符 '{{{{ {placeholder} }}}}' 无效: {e}"
     
     return True, None
+
+
+def _chinese_to_placeholder_name(chinese_text: str) -> str:
+    """
+    将中文标签转换为占位符名称（英文）
+    
+    使用简单的拼音映射和规则：
+    - 移除标点符号
+    - 将常见中文词汇映射为英文
+    - 使用下划线连接多个词
+    
+    Args:
+        chinese_text: 中文标签文本
+        
+    Returns:
+        占位符名称（英文，符合命名规范）
+    """
+    # 常见中文到英文的映射
+    common_mappings = {
+        '姓名': 'name',
+        '性别': 'gender',
+        '年龄': 'age',
+        '出生日期': 'birthday',
+        '民族': 'nation',
+        '住所地': 'address',
+        '经常居住地': 'current_residence',
+        '身份证号': 'id_card',
+        '联系电话': 'contact_phone',
+        '联系方式': 'contact',
+        '邮箱': 'email',
+        '地址': 'address',
+        '邮政编码': 'postal_code',
+        '名称': 'name',
+        '统一社会信用代码': 'unified_social_credit_code',
+        '法定代表人': 'legal_representative',
+        '负责人': 'representative',
+        '职务': 'position',
+        '工作单位': 'employer',
+        '证件类型': 'id_type',
+        '证件号码': 'id_number',
+        '注册地': 'registration_place',
+        '登记地': 'registration_place',
+    }
+    
+    # 清理文本：移除标点符号和空格
+    cleaned = re.sub(r'[：:()（）【】\[\]（）]', '', chinese_text)
+    cleaned = cleaned.strip()
+    
+    # 如果完全匹配，直接返回
+    if cleaned in common_mappings:
+        return common_mappings[cleaned]
+    
+    # 尝试部分匹配（如果包含常见词汇）
+    for key, value in common_mappings.items():
+        if key in cleaned:
+            # 提取前缀（如果有）
+            prefix = ''
+            if '原告' in cleaned:
+                prefix = 'plaintiff_'
+            elif '被告' in cleaned:
+                prefix = 'defendant_'
+            elif '申请人' in cleaned:
+                prefix = 'applicant_'
+            elif '被申请人' in cleaned:
+                prefix = 'respondent_'
+            elif '第三人' in cleaned:
+                prefix = 'third_party_'
+            
+            # 移除前缀部分
+            remaining = cleaned.replace('原告', '').replace('被告', '').replace('申请人', '').replace('被申请人', '').replace('第三人', '')
+            remaining = remaining.strip()
+            
+            if remaining in common_mappings:
+                return prefix + common_mappings[remaining]
+            elif remaining:
+                # 如果还有剩余文本，尝试生成名称
+                # 简单处理：使用拼音首字母或直接使用value
+                return prefix + value
+    
+    # 如果没有匹配，生成一个简单的名称
+    # 移除所有非字母数字字符，用下划线替换
+    # 注意：这里不能保留中文字符，必须全部转换为英文
+    name = re.sub(r'[^\w]', '_', cleaned)
+    
+    # 如果包含中文字符，需要移除（因为占位符名称必须是英文）
+    # 使用正则表达式移除所有中文字符
+    name = re.sub(r'[\u4e00-\u9fff]', '', name)
+    
+    # 如果名称为空或只包含下划线，使用默认名称
+    if not name or name == '_' * len(name) or not name.strip('_'):
+        name = 'field'
+    
+    # 确保以字母或下划线开头
+    if not re.match(r'^[a-zA-Z_]', name):
+        name = 'field_' + name
+    
+    # 转换为小写，移除多余下划线
+    name = re.sub(r'_+', '_', name).lower().strip('_')
+    
+    # 最终验证：确保名称只包含字母、数字、下划线
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+    
+    # 如果清理后名称为空，使用默认名称
+    if not name:
+        name = 'field'
+    
+    # 再次确保以字母或下划线开头
+    if not re.match(r'^[a-zA-Z_]', name):
+        name = 'field_' + name
+    
+    return name
+
+
+def identify_placeholder_positions(html_content: str) -> List[Dict[str, Any]]:
+    """
+    识别HTML内容中可能的占位符位置
+    
+    规则：
+    1. 查找包含冒号（：或:）的段落
+    2. 冒号之前的部分作为标签（label）
+    3. 冒号之后的部分作为内容，需要分析其类型
+    
+    Args:
+        html_content: HTML格式的模板内容
+        
+    Returns:
+        占位符位置列表，每个元素包含：
+        - label: 标签文本
+        - content: 内容文本
+        - placeholder_name: 生成的占位符名称
+        - html_match: 匹配的HTML片段（用于替换）
+    """
+    import re
+    from html import unescape
+    
+    positions = []
+    
+    # 匹配包含冒号的段落
+    # 支持中文冒号（：）和英文冒号（:）
+    # 匹配格式：<p>标签：内容</p> 或 <p>标签:内容</p>
+    pattern = r'<p[^>]*>([^<]*[：:][^<]*)</p>'
+    
+    matches = list(re.finditer(pattern, html_content))
+    
+    for match in matches:
+        full_match = match.group(0)
+        content_text = match.group(1)
+        
+        # 提取标签和内容
+        # 支持中文冒号和英文冒号
+        colon_match = re.search(r'([^：:]+)[：:](.+)', content_text)
+        if not colon_match:
+            continue
+        
+        label = colon_match.group(1).strip()
+        content = colon_match.group(2).strip()
+        
+        # 清理HTML实体
+        label = unescape(label)
+        content = unescape(content)
+        
+        # 移除HTML标签（如果有）
+        label = re.sub(r'<[^>]+>', '', label).strip()
+        content = re.sub(r'<[^>]+>', '', content).strip()
+        
+        # 跳过空标签
+        if not label:
+            continue
+        
+        # 过滤掉不应该识别为占位符的内容
+        # 1. 法律条文引用（包含"第X条"、"规定"等）
+        if re.search(r'第[一二三四五六七八九十\d]+条|规定|法律|法规|条例', label):
+            continue
+        # 2. 说明性文字（过长或包含特殊字符）
+        if len(label) > 50:  # 标签过长，可能是说明文字
+            continue
+        # 3. 纯标点符号或特殊字符
+        if re.match(r'^[：:()（）【】\[\]★\s]+$', label):
+            continue
+        
+        # 生成占位符名称
+        placeholder_name = _chinese_to_placeholder_name(label)
+        
+        # 验证占位符名称是否有效（必须只包含字母、数字、下划线，且以字母或下划线开头）
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', placeholder_name):
+            # 如果生成的名称无效，使用默认名称加序号
+            placeholder_name = f"field_{len(positions) + 1}"
+        
+        # 确保占位符名称唯一（如果重复，添加序号）
+        existing_names = {pos['placeholder_name'] for pos in positions}
+        base_name = placeholder_name
+        counter = 1
+        while placeholder_name in existing_names:
+            placeholder_name = f"{base_name}_{counter}"
+            counter += 1
+        
+        positions.append({
+            'label': label,
+            'content': content,
+            'placeholder_name': placeholder_name,
+            'html_match': full_match,
+            'match_start': match.start(),
+            'match_end': match.end(),
+        })
+    
+    return positions
+
+
+def generate_placeholders_from_positions(
+    html_content: str,
+    positions: List[Dict[str, Any]]
+) -> str:
+    """
+    根据识别的位置生成占位符，替换HTML内容
+    
+    Args:
+        html_content: 原始HTML内容
+        positions: 占位符位置列表（从identify_placeholder_positions获取）
+        
+    Returns:
+        包含占位符的HTML内容
+    """
+    # 从后往前替换，避免索引问题
+    result = html_content
+    for pos in sorted(positions, key=lambda x: x['match_start'], reverse=True):
+        # 构建新的HTML：保留标签部分，用占位符替换内容部分
+        placeholder = f"{{{{{pos['placeholder_name']}}}}}"
+        
+        # 提取原始HTML的标签属性
+        original_match = pos['html_match']
+        tag_match = re.search(r'<p([^>]*)>', original_match)
+        tag_attrs = tag_match.group(1) if tag_match else ''
+        
+        # 构建新的HTML片段：<p>标签：{{placeholder}}</p>
+        label = pos['label']
+        new_content = f"<p{tag_attrs}>{label}：{placeholder}</p>"
+        
+        # 替换
+        result = result[:pos['match_start']] + new_content + result[pos['match_end']:]
+    
+    return result
 

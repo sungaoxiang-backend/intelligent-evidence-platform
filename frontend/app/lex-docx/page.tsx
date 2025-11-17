@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, FileText, Loader2, Upload, Send, RotateCcw, CheckSquare } from "lucide-react"
+import { Plus, FileText, Loader2, Upload, Send, RotateCcw, CheckSquare, Sparkles } from "lucide-react"
 import { TemplateList, type TemplateListRef } from "@/components/lex-docx/TemplateList"
 import { TemplatePreview } from "@/components/lex-docx/TemplatePreview"
 import { InteractiveTemplatePreview, type InteractiveTemplatePreviewRef } from "@/components/lex-docx/InteractiveTemplatePreview"
@@ -77,11 +78,13 @@ export default function LexDocxPage() {
     description: "",
     category: "",
   })
+  const [smartImport, setSmartImport] = useState(false)
 
   // 重置新建模板表单
   const resetCreateForm = () => {
     setNewTemplateForm({ name: "", description: "", category: "" })
     setTemplateFile(null)
+    setSmartImport(false)
   }
 
   // 模板管理不需要复杂的权限管理，所有用户都可以发布模板
@@ -181,8 +184,9 @@ export default function LexDocxPage() {
           name: newTemplateForm.name.trim(),
           description: newTemplateForm.description.trim() || undefined,
           category: newTemplateForm.category.trim() || undefined,
+          smartImport: smartImport,
         })
-        handleSuccess("模板已导入，可以开始编辑")
+        handleSuccess(smartImport ? "模板已智能导入，占位符已自动识别和配置" : "模板已导入，可以开始编辑")
       } else {
         // 如果没有文件，创建空模板
         newTemplate = await lexDocxApi.createTemplate({
@@ -589,6 +593,29 @@ export default function LexDocxPage() {
                 上传 DOCX 文件将自动提取占位符。如果不上传文件，将创建空白模板。
               </p>
             </div>
+
+            {/* 智能导入选项 */}
+            {templateFile && (
+              <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
+                <div className="space-y-0.5 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="smart-import" className="text-base font-medium cursor-pointer">
+                      智能导入
+                    </Label>
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    启用后，系统将自动识别文档中的占位符位置，并智能配置字段类型和元数据
+                  </p>
+                </div>
+                <Switch
+                  id="smart-import"
+                  checked={smartImport}
+                  onCheckedChange={setSmartImport}
+                  disabled={isCreating}
+                />
+              </div>
+            )}
 
             {/* 模板元信息 */}
             <div className="space-y-4">

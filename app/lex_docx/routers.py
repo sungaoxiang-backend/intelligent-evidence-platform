@@ -445,6 +445,7 @@ async def import_template(
     name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
+    smart_import: bool = Form(False, description="是否启用智能导入（自动识别和配置占位符）"),
     db: DBSession = None,
     current_staff: Annotated[Staff, Depends(get_current_staff)] = None,
 ):
@@ -457,6 +458,7 @@ async def import_template(
             name=name,
             description=description,
             category=category,
+            smart_import=smart_import,
         )
         
         return SingleResponse(

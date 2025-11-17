@@ -631,6 +631,7 @@ async def import_template(
     name: Optional[str] = None,
     description: Optional[str] = None,
     category: Optional[str] = None,
+    smart_import: bool = False,
 ) -> DocumentTemplate:
     """
     导入模板（从 DOCX 文件）
@@ -682,8 +683,95 @@ async def import_template(
         # 将 DOCX 转换为 HTML（用于提取内容和占位符）
         html_content = docx_bytes_to_html(file_content)
         
-        # 提取占位符
-        placeholders = extract_placeholders(html_content)
+        # 初始化positions变量（用于智能导入）
+        positions = None
+        
+        # 智能导入：如果启用，自动识别占位符位置并生成占位符
+        if smart_import:
+            logger.info("启用智能导入，开始识别占位符位置...")
+            
+            # 1. 识别占位符位置
+            from app.lex_docx.utils import identify_placeholder_positions, generate_placeholders_from_positions
+            positions = identify_placeholder_positions(html_content)
+            
+            if positions:
+                logger.info(f"识别到 {len(positions)} 个可能的占位符位置")
+                
+                # 2. 生成占位符，替换HTML内容
+                html_content = generate_placeholders_from_positions(html_content, positions)
+                logger.info("已生成占位符并更新HTML内容")
+                
+                # 3. 调用agent识别占位符元数据
+                try:
+                    # 注意：模块名包含连字符，需要使用importlib
+                    import importlib
+                    docx_processor_module = importlib.import_module('app.agentic.agents.docx-processor')
+                    DocxProcessor = docx_processor_module.DocxProcessor
+                    docx_processor = DocxProcessor()
+                    
+                    # 准备给agent的内容：只包含识别到的占位符位置信息
+                    # 构建一个简化的HTML片段，包含标签和内容，方便agent识别类型
+                    agent_content_parts = []
+                    for pos in positions:
+                        agent_content_parts.append(f"<p>{pos['label']}：{pos['content']}</p>")
+                    agent_content = "\n".join(agent_content_parts)
+                    
+                    logger.info("调用agent识别占位符元数据...")
+                    agent_metadata_list = await docx_processor.arun(agent_content)
+                    
+                    # 4. 将agent识别的元数据映射到占位符名称
+                    placeholder_metadata_dict = {}
+                    for i, pos in enumerate(positions):
+                        placeholder_name = pos['placeholder_name']
+                        
+                        # 尝试从agent结果中找到对应的元数据（通过label匹配）
+                        matched_metadata = None
+                        for agent_meta in agent_metadata_list:
+                            if agent_meta.label == pos['label'] or agent_meta.label.strip() == pos['label'].strip():
+                                matched_metadata = agent_meta
+                                break
+                        
+                        # 如果找到匹配的元数据，使用它；否则创建默认元数据
+                        if matched_metadata:
+                            placeholder_metadata_dict[placeholder_name] = matched_metadata
+                            logger.info(f"占位符 {placeholder_name} 使用agent识别的元数据: {matched_metadata.type}")
+                        else:
+                            # 创建默认元数据
+                            placeholder_metadata_dict[placeholder_name] = PlaceholderMetadata(
+                                type='text',
+                                label=pos['label'],
+                                required=False,
+                                default_value=None
+                            )
+                            logger.info(f"占位符 {placeholder_name} 使用默认元数据")
+                    
+                    # 转换为字典格式（用于JSONB存储）
+                    placeholder_metadata_for_create = {
+                        k: v.model_dump() if hasattr(v, 'model_dump') else v
+                        for k, v in placeholder_metadata_dict.items()
+                    }
+                    
+                    logger.info(f"智能导入完成，识别到 {len(placeholder_metadata_for_create)} 个占位符")
+                except Exception as e:
+                    logger.error(f"智能导入过程中agent识别失败: {e}", exc_info=True)
+                    # 如果agent失败，回退到默认处理
+                    placeholder_metadata_dict = parse_placeholder_metadata(html_content)
+                    placeholder_metadata_for_create = {
+                        k: v.model_dump() if hasattr(v, 'model_dump') else v
+                        for k, v in placeholder_metadata_dict.items()
+                    } if placeholder_metadata_dict else {}
+                    logger.warning("智能导入agent失败，使用默认元数据配置")
+            else:
+                logger.info("未识别到占位符位置，使用默认处理")
+                # 如果没有识别到位置，使用默认处理
+                placeholder_metadata_dict = parse_placeholder_metadata(html_content)
+                placeholder_metadata_for_create = {
+                    k: v.model_dump() if hasattr(v, 'model_dump') else v
+                    for k, v in placeholder_metadata_dict.items()
+                } if placeholder_metadata_dict else {}
+        else:
+            # 传统导入：提取现有占位符
+            placeholders = extract_placeholders(html_content)
         
         # 解析占位符元数据（创建默认配置）
         placeholder_metadata_dict = parse_placeholder_metadata(html_content)
@@ -717,19 +805,41 @@ async def import_template(
             created_by=created_by,
         )
         
-        # 重要：直接保存原始DOCX文件，而不是从HTML转换
-        # 这样可以保留所有格式信息
+        # 保存DOCX文件
+        # 如果是智能导入，需要更新DOCX文件以包含新生成的占位符
         try:
             file_path = get_template_file_path(template.id)
             file_path.parent.mkdir(parents=True, exist_ok=True)
-            # 直接保存原始DOCX文件内容
-            file_path.write_bytes(original_docx_bytes)
-            template.content_path = str(file_path)
-            await db.commit()
-            await db.refresh(template)
-            logger.info(f"模板 {template.id} 已保存原始DOCX文件（保留格式）")
+            
+            if smart_import and positions:
+                # 智能导入：更新DOCX文件以包含占位符（保留格式）
+                try:
+                    updated_docx_bytes = update_docx_content_from_html(
+                        original_docx_bytes,
+                        html_content
+                    )
+                    file_path.write_bytes(updated_docx_bytes)
+                    template.content_path = str(file_path)
+                    await db.commit()
+                    await db.refresh(template)
+                    logger.info(f"模板 {template.id} 已更新DOCX文件（包含占位符，保留格式）")
+                except Exception as e:
+                    logger.error(f"更新DOCX文件失败: {e}", exc_info=True)
+                    # 如果更新失败，回退到保存原始文件
+                    file_path.write_bytes(original_docx_bytes)
+                    template.content_path = str(file_path)
+                    await db.commit()
+                    await db.refresh(template)
+                    logger.warning(f"模板 {template.id} 回退到保存原始DOCX文件")
+            else:
+                # 传统导入：直接保存原始DOCX文件，保留所有格式信息
+                file_path.write_bytes(original_docx_bytes)
+                template.content_path = str(file_path)
+                await db.commit()
+                await db.refresh(template)
+                logger.info(f"模板 {template.id} 已保存原始DOCX文件（保留格式）")
         except Exception as e:
-            logger.error(f"保存原始DOCX文件失败: {e}")
+            logger.error(f"保存DOCX文件失败: {e}")
             # 如果失败，回退到从HTML生成（会丢失格式，但至少能保存）
             try:
                 docx_bytes = html_to_docx(html_content)
@@ -744,7 +854,9 @@ async def import_template(
                 logger.error(f"回退方案也失败: {e2}")
                 # 不抛出异常，至少HTML已经保存了
         
-        logger.info(f"模板导入成功: ID={template.id}, 名称={template_name}, 占位符数量={len(placeholders)}")
+        # 获取最终的占位符数量
+        final_placeholders = extract_placeholders(template.content_html) if template.content_html else set()
+        logger.info(f"模板导入成功: ID={template.id}, 名称={template_name}, 占位符数量={len(final_placeholders)}, 智能导入={smart_import}")
         
         return template
         

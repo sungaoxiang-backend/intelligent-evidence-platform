@@ -56,6 +56,8 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
   const [placeholderNameError, setPlaceholderNameError] = useState("")
   const contentEditableRef = useRef<HTMLDivElement>(null)
   const [originalContent, setOriginalContent] = useState<string>("")
+  // 保存插入占位符时的光标位置
+  const savedRangeRef = useRef<Range | null>(null)
 
   // 从模板加载占位符元数据
   useEffect(() => {
@@ -70,11 +72,31 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
   const markPlaceholders = useCallback(() => {
     if (!contentEditableRef.current) return
     
+    // 首先，移除所有已存在的占位符标记，恢复为纯文本格式
+    // 这样可以避免嵌套问题
+    const existingPlaceholders = contentEditableRef.current.querySelectorAll(
+      ".lex-docx-placeholder-editor"
+    )
+    existingPlaceholders.forEach((el) => {
+      const placeholderText = el.textContent || ""
+      const textNode = document.createTextNode(placeholderText)
+      el.parentNode?.replaceChild(textNode, el)
+    })
+    
     const placeholderRegex = /\{\{([^}]+)\}\}/g
     const walker = document.createTreeWalker(
       contentEditableRef.current,
       NodeFilter.SHOW_TEXT,
-      null
+      {
+        acceptNode: (node) => {
+          // 跳过已经在占位符span内的文本节点
+          const parent = node.parentElement
+          if (parent && parent.classList.contains("lex-docx-placeholder-editor")) {
+            return NodeFilter.FILTER_REJECT
+          }
+          return NodeFilter.FILTER_ACCEPT
+        },
+      }
     )
     
     const textNodes: Text[] = []
@@ -95,6 +117,11 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
       if (matches.length > 0) {
         const parent = textNode.parentNode
         if (!parent) continue
+        
+        // 检查父节点是否已经是占位符span
+        if (parent instanceof HTMLElement && parent.classList.contains("lex-docx-placeholder-editor")) {
+          continue
+        }
         
         let lastIndex = 0
         const fragment = document.createDocumentFragment()
@@ -185,9 +212,17 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
   }, [template?.id, template?.content_html, markPlaceholders])
 
   // 处理占位符，添加可点击标记
+  // 注意：这里只处理纯文本格式的占位符，不处理已经是span的占位符（避免嵌套）
   const processPlaceholdersForEditing = (html: string): string => {
+    // 先移除所有已存在的占位符标记（如果HTML中已经包含）
+    let cleaned = html.replace(
+      /<span class="lex-docx-placeholder-editor"[^>]*>(\{\{[^}]+\}\})<\/span>/g,
+      "$1"
+    )
+    
+    // 然后只处理纯文本格式的占位符
     const placeholderRegex = /\{\{([^}]+)\}\}/g
-    return html.replace(placeholderRegex, (match, fieldName) => {
+    return cleaned.replace(placeholderRegex, (match, fieldName) => {
       const trimmedName = fieldName.trim()
       return `<span class="lex-docx-placeholder-editor" data-placeholder="${trimmedName}" contenteditable="false" tabindex="0">${match}</span>`
     })
@@ -268,11 +303,37 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
       // 获取HTML内容，移除占位符标记的额外属性，恢复原始格式
       let html = contentEditableRef.current.innerHTML
       
+      console.log('=== 保存前HTML ===')
+      console.log('HTML长度:', html.length)
+      console.log('包含占位符span:', html.includes('lex-docx-placeholder-editor'))
+      console.log('占位符元数据数量:', Object.keys(placeholderMetadata).length)
+      
       // 恢复占位符为原始格式 {{field_name}}
+      // 匹配所有可能的占位符span，包括嵌套的情况
+      // 使用非贪婪匹配，确保只匹配最内层的span
+      let previousHtml = ""
+      let iterationCount = 0
+      while (html !== previousHtml && iterationCount < 10) {
+        previousHtml = html
+        html = html.replace(
+          /<span[^>]*class="[^"]*lex-docx-placeholder-editor[^"]*"[^>]*>(\{\{[^}]+\}\})<\/span>/gi,
+          "$1"
+        )
+        iterationCount++
+      }
+      
+      // 处理可能的嵌套情况（如果还有span标签包裹占位符）
       html = html.replace(
-        /<span class="lex-docx-placeholder-editor"[^>]*>(\{\{[^}]+\}\})<\/span>/g,
+        /<span[^>]*>(\{\{[^}]+\}\})<\/span>/g,
         "$1"
       )
+      
+      console.log('=== 保存后HTML ===')
+      console.log('HTML长度:', html.length)
+      console.log('包含占位符:', html.includes('{{'))
+      // 提取所有占位符
+      const placeholderMatches = html.match(/\{\{([^}]+)\}\}/g)
+      console.log('占位符列表:', placeholderMatches)
       
       if (onSave) {
         await onSave(html, placeholderMetadata)
@@ -302,96 +363,33 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
 
   // 处理插入占位符
   const handleInsertPlaceholder = () => {
+    // 保存当前光标位置
+    if (contentEditableRef.current) {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        // 检查选择范围是否在编辑器内
+        if (contentEditableRef.current.contains(range.commonAncestorContainer)) {
+          // 克隆 Range 对象，因为原始的 Range 在 DOM 变化后可能失效
+          savedRangeRef.current = range.cloneRange()
+        } else {
+          savedRangeRef.current = null
+        }
+      } else {
+        // 如果没有选择范围，尝试在编辑器末尾创建范围
+        const range = document.createRange()
+        range.selectNodeContents(contentEditableRef.current)
+        range.collapse(false) // 折叠到末尾
+        savedRangeRef.current = range
+      }
+    }
+    
     setEditingPlaceholderName(null)
     setPlaceholderName("")
     setPlaceholderNameError("")
     setShowPlaceholderDialog(true)
   }
 
-  // 处理占位符对话框确认
-  const handlePlaceholderConfirm = () => {
-    if (!placeholderName.trim()) {
-      setPlaceholderNameError("占位符名称不能为空")
-      return
-    }
-
-    if (!validatePlaceholderName(placeholderName.trim())) {
-      setPlaceholderNameError("占位符名称只能包含字母、数字和下划线，且不能以数字开头")
-      return
-    }
-
-    const fieldName = placeholderName.trim()
-
-    // 如果正在编辑现有占位符，更新元数据
-    if (editingPlaceholderName && editingPlaceholderName !== fieldName) {
-      // 更新占位符名称
-      if (contentEditableRef.current) {
-        const placeholderElements = contentEditableRef.current.querySelectorAll(
-          `.lex-docx-placeholder-editor[data-placeholder="${editingPlaceholderName}"]`
-        )
-        placeholderElements.forEach((el) => {
-          el.setAttribute("data-placeholder", fieldName)
-          el.textContent = `{{${fieldName}}}`
-        })
-      }
-      
-      // 更新元数据
-      if (placeholderMetadata[editingPlaceholderName]) {
-        const metadata = placeholderMetadata[editingPlaceholderName]
-        delete placeholderMetadata[editingPlaceholderName]
-        setPlaceholderMetadata({
-          ...placeholderMetadata,
-          [fieldName]: metadata,
-        })
-      }
-    }
-
-    // 插入或更新占位符
-    if (contentEditableRef.current) {
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        range.deleteContents()
-        
-        const placeholderSpan = document.createElement("span")
-        placeholderSpan.className = "lex-docx-placeholder-editor"
-        placeholderSpan.setAttribute("data-placeholder", fieldName)
-        placeholderSpan.setAttribute("contenteditable", "false")
-        placeholderSpan.setAttribute("tabindex", "0") // 支持键盘导航
-        placeholderSpan.textContent = `{{${fieldName}}}`
-        
-        placeholderSpan.addEventListener("click", (e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          setEditingPlaceholderName(fieldName)
-          setPlaceholderName(fieldName)
-          setShowPlaceholderDialog(true)
-        })
-        
-        range.insertNode(placeholderSpan)
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
-    }
-
-    // 如果占位符不存在，创建默认元数据
-    if (!placeholderMetadata[fieldName]) {
-      setPlaceholderMetadata({
-        ...placeholderMetadata,
-        [fieldName]: {
-          type: "text",
-          label: fieldName.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-          required: false,
-          default_value: null,
-        },
-      })
-    }
-
-    setShowPlaceholderDialog(false)
-    setPlaceholderName("")
-    setPlaceholderNameError("")
-    setEditingPlaceholderName(null)
-  }
 
   if (!template) {
     return (
@@ -452,42 +450,28 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
             <DialogDescription>
               {editingPlaceholderName
                 ? "修改占位符名称和配置"
-                : "输入占位符名称，格式为字母、数字和下划线的组合"}
+                : "输入占位符名称并配置字段属性"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* 占位符名称输入（仅在插入新占位符时显示，编辑时隐藏，因为 PlaceholderConfig 会显示） */}
-            {!editingPlaceholderName && (
-              <div>
-                <Label htmlFor="placeholder-name">占位符名称</Label>
-                <Input
-                  id="placeholder-name"
-                  value={placeholderName}
-                  onChange={(e) => {
-                    setPlaceholderName(e.target.value)
-                    setPlaceholderNameError("")
-                  }}
-                  placeholder="例如: plaintiff_name"
-                  className={cn(placeholderNameError && "border-red-500")}
-                />
-                {placeholderNameError && (
-                  <p className="text-sm text-red-500 mt-1">{placeholderNameError}</p>
-                )}
-              </div>
-            )}
-            {placeholderName.trim() && validatePlaceholderName(placeholderName.trim()) && (
-              <PlaceholderConfig
-                placeholderName={placeholderName.trim()}
-                metadata={placeholderMetadata[placeholderName.trim()] || {
-                  type: "text",
-                  label: placeholderName.trim().replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-                  required: false,
-                  default_value: null,
-                }}
-                allowNameEdit={!!editingPlaceholderName}
+            {/* 直接显示完整配置表单，与编辑模式一致 */}
+            <PlaceholderConfig
+              placeholderName={editingPlaceholderName || placeholderName.trim() || ""}
+              metadata={editingPlaceholderName 
+                ? placeholderMetadata[editingPlaceholderName]
+                : (placeholderName.trim() && placeholderMetadata[placeholderName.trim()]) || {
+                    type: "text",
+                    label: placeholderName.trim() 
+                      ? placeholderName.trim().replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                      : "",
+                    required: false,
+                    default_value: undefined,
+                  }
+              }
+              allowNameEdit={true}
                 onNameChange={(newName) => {
                   // 验证新名称
-                  if (!validatePlaceholderName(newName.trim())) {
+                  if (newName.trim() && !validatePlaceholderName(newName.trim())) {
                     setPlaceholderNameError("占位符名称只能包含字母、数字和下划线，且不能以数字开头")
                   } else {
                     setPlaceholderNameError("")
@@ -496,12 +480,17 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
                 }}
                 onSave={(name, metadata) => {
                   // 验证最终名称
-                  if (!validatePlaceholderName(name.trim())) {
+                  const trimmedName = name.trim()
+                  if (!trimmedName) {
+                    setPlaceholderNameError("占位符名称不能为空")
+                    return
+                  }
+                  if (!validatePlaceholderName(trimmedName)) {
                     setPlaceholderNameError("占位符名称只能包含字母、数字和下划线，且不能以数字开头")
                     return
                   }
                   
-                  const finalName = name.trim()
+                  const finalName = trimmedName
                   
                   // 如果正在编辑现有占位符且名称改变，需要更新占位符名称
                   if (editingPlaceholderName && editingPlaceholderName !== finalName) {
@@ -548,21 +537,143 @@ export const SimpleTemplateEditor = forwardRef<SimpleTemplateEditorRef, SimpleTe
                     })
                   }
                   
-                  // 保存后关闭对话框
-                  setShowPlaceholderDialog(false)
-                  setPlaceholderName("")
-                  setPlaceholderNameError("")
-                  setEditingPlaceholderName(null)
+                  // 如果是新建占位符，插入到编辑器
+                  if (!editingPlaceholderName) {
+                    // 先关闭对话框，避免焦点问题
+                    setShowPlaceholderDialog(false)
+                    setPlaceholderName("")
+                    setPlaceholderNameError("")
+                    setEditingPlaceholderName(null)
+                    
+                    // 延迟插入，确保对话框已关闭，焦点可以回到编辑器
+                    setTimeout(() => {
+                      if (contentEditableRef.current) {
+                        // 确保编辑器获得焦点
+                        contentEditableRef.current.focus()
+                        
+                        const selection = window.getSelection()
+                        let range: Range | null = null
+                        
+                        // 优先使用保存的光标位置
+                        if (savedRangeRef.current) {
+                          try {
+                            // 验证保存的范围是否仍然有效
+                            const savedRange = savedRangeRef.current
+                            if (contentEditableRef.current.contains(savedRange.commonAncestorContainer)) {
+                              range = savedRange
+                            } else {
+                              // 如果保存的范围无效，尝试恢复
+                              // 通过查找最近的文本节点来恢复位置
+                              const container = savedRange.commonAncestorContainer
+                              if (container && contentEditableRef.current.contains(container)) {
+                                range = savedRange.cloneRange()
+                              }
+                            }
+                          } catch (e) {
+                            // 如果恢复失败，使用当前选择
+                            console.warn("恢复保存的光标位置失败:", e)
+                          }
+                        }
+                        
+                        // 如果没有保存的范围或恢复失败，尝试获取当前选择范围
+                        if (!range && selection && selection.rangeCount > 0) {
+                          range = selection.getRangeAt(0)
+                          // 检查选择范围是否在编辑器内
+                          if (!contentEditableRef.current.contains(range.commonAncestorContainer)) {
+                            range = null
+                          }
+                        }
+                        
+                        // 如果仍然没有有效的选择范围，在编辑器末尾插入
+                        if (!range) {
+                          range = document.createRange()
+                          range.selectNodeContents(contentEditableRef.current)
+                          range.collapse(false) // 折叠到末尾
+                        }
+                        
+                        // 删除选择的内容（如果有）
+                        range.deleteContents()
+                        
+                        // 创建占位符元素
+                        const placeholderSpan = document.createElement("span")
+                        placeholderSpan.className = "lex-docx-placeholder-editor"
+                        placeholderSpan.setAttribute("data-placeholder", finalName)
+                        placeholderSpan.setAttribute("contenteditable", "false")
+                        placeholderSpan.setAttribute("tabindex", "0")
+                        placeholderSpan.textContent = `{{${finalName}}}`
+                        
+                        // 添加点击事件
+                        placeholderSpan.addEventListener("click", (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setEditingPlaceholderName(finalName)
+                          setPlaceholderName(finalName)
+                          setShowPlaceholderDialog(true)
+                        })
+                        
+                        // 插入占位符
+                        range.insertNode(placeholderSpan)
+                        
+                        // 将光标移动到占位符之后
+                        const newRange = document.createRange()
+                        newRange.setStartAfter(placeholderSpan)
+                        newRange.collapse(true)
+                        
+                        // 更新选择，确保光标在正确位置
+                        if (selection) {
+                          selection.removeAllRanges()
+                          selection.addRange(newRange)
+                        }
+                        
+                        // 清除保存的范围
+                        savedRangeRef.current = null
+                        
+                        // 触发内容变化事件，确保占位符被标记
+                        if (onContentChange) {
+                          onContentChange(contentEditableRef.current.innerHTML)
+                        }
+                        
+                        // 立即标记占位符，确保DOM已更新
+                        requestAnimationFrame(() => {
+                          markPlaceholders()
+                          // 再次确保焦点在编辑器上
+                          if (contentEditableRef.current) {
+                            contentEditableRef.current.focus()
+                            // 将光标移动到占位符之后
+                            const finalRange = document.createRange()
+                            const insertedPlaceholder = contentEditableRef.current.querySelector(
+                              `.lex-docx-placeholder-editor[data-placeholder="${finalName}"]`
+                            )
+                            if (insertedPlaceholder) {
+                              finalRange.setStartAfter(insertedPlaceholder)
+                              finalRange.collapse(true)
+                              const finalSelection = window.getSelection()
+                              if (finalSelection) {
+                                finalSelection.removeAllRanges()
+                                finalSelection.addRange(finalRange)
+                              }
+                            }
+                          }
+                        })
+                      }
+                    }, 100)
+                  } else {
+                    // 编辑现有占位符，直接关闭对话框
+                    setShowPlaceholderDialog(false)
+                    setPlaceholderName("")
+                    setPlaceholderNameError("")
+                    setEditingPlaceholderName(null)
+                  }
                 }}
                 onCancel={() => {
                   setShowPlaceholderDialog(false)
                   setPlaceholderName("")
                   setPlaceholderNameError("")
                   setEditingPlaceholderName(null)
+                  // 清除保存的光标位置
+                  savedRangeRef.current = null
                 }}
               />
-            )}
-            {/* PlaceholderConfig 内部已有保存和取消按钮，不需要外部按钮 */}
           </div>
         </DialogContent>
       </Dialog>

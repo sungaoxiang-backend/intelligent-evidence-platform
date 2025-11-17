@@ -311,6 +311,7 @@ class LexDocxAPI {
       name?: string
       description?: string
       category?: string
+      smartImport?: boolean
     }
   ): Promise<DocumentTemplate> {
     const formData = new FormData()
@@ -325,6 +326,10 @@ class LexDocxAPI {
     }
     if (options?.category !== undefined && options.category.trim() !== "") {
       formData.append("category", options.category.trim())
+    }
+    // smart_import 参数
+    if (options?.smartImport !== undefined) {
+      formData.append("smart_import", options.smartImport ? "true" : "false")
     }
 
     const url = `${this.getBaseUrl()}/lex-docx/import`
