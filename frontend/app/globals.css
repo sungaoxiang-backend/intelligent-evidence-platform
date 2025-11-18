@@ -152,6 +152,42 @@ html {
     background-color: #f1f3f5;
   }
 
+  /* 动态列宽支持 */
+  table[data-col-widths] {
+    td:nth-child(1) { width: var(--col-width-0, auto); }
+    td:nth-child(2) { width: var(--col-width-1, auto); }
+    td:nth-child(3) { width: var(--col-width-2, auto); }
+    td:nth-child(4) { width: var(--col-width-3, auto); }
+    td:nth-child(5) { width: var(--col-width-4, auto); }
+    td:nth-child(6) { width: var(--col-width-5, auto); }
+    td:nth-child(7) { width: var(--col-width-6, auto); }
+    td:nth-child(8) { width: var(--col-width-7, auto); }
+
+    th:nth-child(1) { width: var(--col-width-0, auto); }
+    th:nth-child(2) { width: var(--col-width-1, auto); }
+    th:nth-child(3) { width: var(--col-width-2, auto); }
+    th:nth-child(4) { width: var(--col-width-3, auto); }
+    th:nth-child(5) { width: var(--col-width-4, auto); }
+    th:nth-child(6) { width: var(--col-width-5, auto); }
+    th:nth-child(7) { width: var(--col-width-6, auto); }
+    th:nth-child(8) { width: var(--col-width-7, auto); }
+  }
+
+  /* 简单的样式支持 - 避免复杂的CSS */
+  .ProseMirror p[style*="margin-left"],
+  .ProseMirror p[style*="text-indent"] {
+    /* 支持段落缩进样式 */
+  }
+
+  .ProseMirror h1[style*="text-align"],
+  .ProseMirror h2[style*="text-align"],
+  .ProseMirror h3[style*="text-align"],
+  .ProseMirror h4[style*="text-align"],
+  .ProseMirror h5[style*="text-align"],
+  .ProseMirror h6[style*="text-align"] {
+    /* 支持标题对齐样式 */
+  }
+
   .selectedCell:after {
     z-index: 2;
     position: absolute;
@@ -174,7 +210,52 @@ html {
     pointer-events: none;
   }
 
-  p {
-    margin: 0;
+  /* 支持内联样式覆盖 */
+  p[style*="margin-left"],
+  p[style*="text-indent"],
+  p[style*="text-align"] {
+    /* 确保内联样式优先级高于默认样式 */
+  }
+
+  /* 表格样式支持 */
+  table[style*="table-layout: fixed"] {
+    table-layout: fixed !important;
+  }
+
+  /* 单元格垂直对齐支持 */
+  td[style*="vertical-align"],
+  th[style*="vertical-align"] {
+    vertical-align: inherit !important;
+  }
+}
+
+/* A4 纸张容器样式 */
+.a4-container {
+  /* A4 纸张尺寸：210mm × 297mm */
+  /* 在 96 DPI 下：794px × 1123px */
+  width: 794px;
+  min-height: 1123px;
+  /* 标准 A4 内边距：上下左右各 20mm (约 76px) */
+  padding: 76px;
+  /* 确保内容区域可以正常显示 */
+  box-sizing: border-box;
+  /* 纸张阴影效果 */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* 确保内容可以正常显示，不限制高度 */
+  overflow: visible;
+}
+
+/* 响应式：在小屏幕上调整 A4 容器 */
+@media (max-width: 1024px) {
+  .a4-container {
+    width: 100%;
+    max-width: 794px;
+    padding: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .a4-container {
+    padding: 20px;
   }
 }

@@ -9,6 +9,9 @@ import { DocumentEditor } from "@/components/template-editor/document-editor"
 import { FileUploadZone } from "@/components/template-editor/file-upload-zone"
 import { API_CONFIG } from "@/lib/config"
 
+// 暂时禁用复杂的验证函数，使用简单的内容处理
+// function validateAndCleanProseMirrorContent(content: any): any { ... }
+
 export default function TemplateEditorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [prosemirrorJson, setProsemirrorJson] = useState<any>(null)

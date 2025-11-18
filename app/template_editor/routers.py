@@ -85,23 +85,43 @@ async def export_docx(
     """
     try:
         # 导出为 docx
+        logger.info("开始导出 DOCX")
         docx_bytes = template_editor_service.export_prosemirror_to_docx(
             request.prosemirror_json
         )
+        logger.info(f"DOCX 导出成功，大小: {len(docx_bytes)} bytes")
 
         # 确定文件名
         filename = request.filename or "document.docx"
         if not filename.endswith(".docx"):
             filename = f"{filename}.docx"
+        
+        logger.info(f"文件名: {filename}, 类型: {type(filename)}")
 
+        # 处理文件名编码（避免 latin-1 编码错误）
+        # 使用 RFC 5987 格式编码文件名，支持 UTF-8
+        from urllib.parse import quote
+        encoded_filename = quote(filename, safe='')
+        logger.info(f"编码后的文件名: {encoded_filename}")
+        
+        # 构建 Content-Disposition header
+        # 只使用 filename* 部分，避免 latin-1 编码错误
+        # 或者使用 ASCII 安全的文件名作为 fallback
+        safe_filename = "document.docx"  # ASCII 安全的文件名
+        content_disposition = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        logger.info(f"Content-Disposition: {content_disposition}")
+        
         # 返回文件响应
-        return Response(
+        logger.info("准备返回响应")
+        response = Response(
             content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
+                "Content-Disposition": content_disposition
             },
         )
+        logger.info("响应创建成功")
+        return response
 
     except ValueError as e:
         logger.error(f"导出 docx 失败: {str(e)}")

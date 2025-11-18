@@ -4,13 +4,11 @@
 """
 
 import io
-import logging
 from typing import Dict, Any
 from docx import Document
+from loguru import logger
 
 from .mappers import DocxToProseMirrorMapper, ProseMirrorToDocxMapper
-
-logger = logging.getLogger(__name__)
 
 
 class TemplateEditorService:
@@ -79,17 +77,58 @@ class TemplateEditorService:
                 )
 
             # 使用映射器转换为 docx
+            logger.info("开始转换 ProseMirror JSON 到 DOCX")
             doc = self.pm_to_docx_mapper.map_document(prosemirror_json)
+            logger.info("DOCX 文档创建成功")
+            
+            # 验证表格列宽（在保存前）
+            if doc.tables:
+                from docx.oxml.ns import qn
+                ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+                for table_idx, table in enumerate(doc.tables):
+                    tbl = table._tbl
+                    tbl_grid = tbl.tblGrid
+                    if tbl_grid is not None:
+                        grid_cols = tbl_grid.findall(f'.//{ns}gridCol')
+                        logger.info(f"[SERVICE] 保存前验证 - 表格{table_idx} tblGrid 列宽:")
+                        for i, grid_col in enumerate(grid_cols):
+                            width = grid_col.get(qn('w:w'))
+                            width_type = grid_col.get(qn('w:type'))
+                            logger.info(f"[SERVICE]   列 {i}: width={width}, type={width_type}")
 
             # 保存到字节流
+            logger.info("开始保存 DOCX 到字节流")
             output = io.BytesIO()
             doc.save(output)
+            logger.info("DOCX 保存到字节流成功")
             output.seek(0)
+            docx_bytes = output.getvalue()
+            logger.info(f"DOCX 字节流大小: {len(docx_bytes)} bytes")
+            
+            # 验证保存后的列宽（重新读取）
+            from docx import Document
+            doc_verify = Document(io.BytesIO(docx_bytes))
+            if doc_verify.tables:
+                from docx.oxml.ns import qn
+                ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+                for table_idx, table in enumerate(doc_verify.tables):
+                    tbl = table._tbl
+                    tbl_grid = tbl.tblGrid
+                    if tbl_grid is not None:
+                        grid_cols = tbl_grid.findall(f'.//{ns}gridCol')
+                        logger.info(f"[SERVICE] 保存后验证 - 表格{table_idx} tblGrid 列宽:")
+                        for i, grid_col in enumerate(grid_cols):
+                            width = grid_col.get(qn('w:w'))
+                            width_type = grid_col.get(qn('w:type'))
+                            logger.info(f"[SERVICE]   列 {i}: width={width}, type={width_type}")
+            
+            return docx_bytes
 
-            return output.getvalue()
-
+        except UnicodeEncodeError as e:
+            logger.error(f"编码错误 - 位置: {e.start}-{e.end}, 对象: {e.object}, 错误: {str(e)}")
+            raise ValueError(f"无法导出 docx 文件: 编码错误 - {str(e)}") from e
         except Exception as e:
-            logger.error(f"导出 docx 文件失败: {str(e)}")
+            logger.error(f"导出 docx 文件失败: {str(e)}", exc_info=True)
             raise ValueError(f"无法导出 docx 文件: {str(e)}") from e
 
 
