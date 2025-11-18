@@ -1,778 +1,614 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import {
+  FileText,
+  Edit,
+  Trash2,
+  Upload,
+  Eye,
+  EyeOff,
+  Loader2,
+  Plus,
+  Save,
+} from "lucide-react"
+import { DocumentEditor } from "@/components/template-editor/document-editor"
+import { DocumentPreview } from "@/components/template-editor/document-preview"
+import { FileUploadZone } from "@/components/template-editor/file-upload-zone"
+import {
+  templateApi,
+  type DocumentTemplate,
+} from "@/lib/template-api"
+import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { useToast } from "@/hooks/use-toast"
-import { documentTemplateApi, type TemplateInfo, type TemplateSchema } from "@/lib/document-template-api"
-import { getCaseDataForDocument, mapCaseAndCardsToFormData, clearCaseDataForDocument } from "@/lib/document-template-mapper"
-import { API_CONFIG } from "@/lib/config"
-import { FileText, Download, Save, Loader2, AlertCircle, Sparkles, ChevronDown } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function DocumentTemplatesPage() {
-  const [caseId, setCaseId] = useState<string | null>(null)
-  
-  const [templates, setTemplates] = useState<TemplateInfo[]>([])
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
-  const [templateSchema, setTemplateSchema] = useState<TemplateSchema | null>(null)
-  const [formData, setFormData] = useState<Record<string, any>>({})
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
-  const [isPrefilled, setIsPrefilled] = useState(false) // 标记是否已预填充
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState<any>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadForm, setUploadForm] = useState({
+    name: "",
+    description: "",
+    category: "",
+  })
   const { toast } = useToast()
 
-  // 从 URL 获取案件ID
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      const id = params.get('caseId')
-      if (id) {
-        setCaseId(id)
-      }
-    }
-  }, [])
-
   // 加载模板列表
+  const loadTemplates = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await templateApi.getTemplates()
+      setTemplates(response.data)
+      // 如果当前选中的模板被删除，清除选中状态
+      if (selectedTemplate && !response.data.find(t => t.id === selectedTemplate.id)) {
+        setSelectedTemplate(null)
+        setIsEditing(false)
+      }
+    } catch (error: any) {
+      toast({
+        title: "加载失败",
+        description: error.message || "无法加载模板列表",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedTemplate, toast])
+
   useEffect(() => {
     loadTemplates()
+  }, [loadTemplates])
+
+  // 选择模板
+  const handleSelectTemplate = useCallback((template: DocumentTemplate) => {
+    setSelectedTemplate(template)
+    setIsEditing(false)
+    setEditedContent(null)
   }, [])
 
-  // 根据案件类型默认选择模板
-  useEffect(() => {
-    if (templates.length > 0 && caseId && !selectedTemplate) {
-      const storedData = getCaseDataForDocument(caseId)
-      if (storedData && storedData.caseData) {
-        const caseType = storedData.caseData.case_type
-        
-        // 根据案件类型匹配模板
-        let defaultTemplate: TemplateInfo | null = null
-        
-        if (caseType === 'debt') {
-          // 民间借贷纠纷 -> 查找包含"民间借贷"的模板
-          defaultTemplate = templates.find(t => 
-            t.name.includes('民间借贷') || 
-            t.template_id.includes('private_lending') ||
-            t.category === '民间借贷纠纷'
-          ) || null
-        } else if (caseType === 'contract') {
-          // 买卖合同纠纷 -> 查找包含"买卖合同"的模板
-          defaultTemplate = templates.find(t => 
-            t.name.includes('买卖合同') || 
-            t.template_id.includes('sales_contract') ||
-            t.category === '买卖合同纠纷'
-          ) || null
-        }
-        
-        // 如果找到匹配的模板，设置为选中；否则选择第一个
-        if (defaultTemplate) {
-          setSelectedTemplate(defaultTemplate)
-          console.log('[DocumentTemplates] 根据案件类型自动选择模板:', {
-            caseType,
-            templateId: defaultTemplate.template_id,
-            templateName: defaultTemplate.name
-          })
-        } else if (templates.length > 0) {
-          setSelectedTemplate(templates[0])
-        }
-      } else if (templates.length > 0) {
-        // 如果没有案件数据，默认选择第一个模板
-        setSelectedTemplate(templates[0])
-      }
-    } else if (templates.length > 0 && !selectedTemplate) {
-      // 如果没有caseId，默认选择第一个模板
-      setSelectedTemplate(templates[0])
-    }
-  }, [templates, caseId, selectedTemplate])
-
-  // 加载选中的模板详情
-  useEffect(() => {
+  // 开始编辑
+  const handleStartEdit = useCallback(() => {
     if (selectedTemplate) {
-      // 切换模板时重置预填充状态
-      setIsPrefilled(false)
-      loadTemplateDetail(selectedTemplate.template_id)
+      setIsEditing(true)
+      setEditedContent(selectedTemplate.prosemirror_json)
     }
   }, [selectedTemplate])
 
-  const loadTemplates = async () => {
+  // 取消编辑
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false)
+    setEditedContent(null)
+  }, [])
+
+  // 保存编辑
+  const handleSaveEdit = useCallback(async () => {
+    if (!selectedTemplate || !editedContent) return
+
+    setIsLoading(true)
     try {
-      setLoading(true)
-      const data = await documentTemplateApi.getTemplateList()
-      setTemplates(data)
-      // 不再在这里设置默认模板，由useEffect根据案件类型选择
+      await templateApi.updateTemplate(selectedTemplate.id, {
+        prosemirror_json: editedContent,
+      })
+      
+      // 先更新本地状态，立即退出编辑模式并显示预览
+      setIsEditing(false)
+      setEditedContent(null)
+      
+      // 重新加载模板列表
+      await loadTemplates()
+      
+      // 获取最新的模板数据并更新选中状态
+      const updated = await templateApi.getTemplate(selectedTemplate.id)
+      setSelectedTemplate(updated.data)
+      
+      toast({
+        title: "保存成功",
+        description: "模板已更新",
+      })
     } catch (error: any) {
       toast({
-        title: "加载失败",
-        description: error.message || "获取模板列表失败",
+        title: "保存失败",
+        description: error.message || "无法保存模板",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }
+  }, [selectedTemplate, editedContent, toast, loadTemplates])
 
-  const loadTemplateDetail = async (template_id: string) => {
+  // 切换状态（发布/撤回）
+  const handleToggleStatus = useCallback(async (template: DocumentTemplate, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsLoading(true)
     try {
-      setLoading(true)
-      const schema = await documentTemplateApi.getTemplateDetail(template_id)
-      setTemplateSchema(schema)
-      // 先初始化表单数据为空值
-      initializeFormData(schema)
-      
-      // 然后尝试预填充数据（如果有案件ID）
-      if (caseId) {
-        const storedData = getCaseDataForDocument(caseId)
-      if (storedData && storedData.caseData) {
-        // 使用映射函数生成预填充数据
-        const prefilledData = mapCaseAndCardsToFormData(
-          storedData.caseData,
-          storedData.cardList,
-          schema,
-          storedData.slotCards
-        )
-          
-          // 合并预填充数据（覆盖空值）
-          setFormData((prev) => {
-            const merged = { ...prev, ...prefilledData }
-            console.log('[DocumentTemplates] 预填充数据:', {
-              caseId,
-              prefilledData,
-              merged,
-              storedData: {
-                caseData: storedData.caseData,
-                cardListCount: storedData.cardList.length
-              }
-            })
-            return merged
-          })
-          
-          setIsPrefilled(true)
-          
-          toast({
-            title: "数据已预填充",
-            description: "已从案件和证据卡片中提取信息并填充到表单",
-          })
-        } else {
-          console.log('[DocumentTemplates] 未找到存储的数据:', { caseId })
-        }
+      const newStatus = template.status === "draft" ? "published" : "draft"
+      await templateApi.updateTemplate(template.id, {
+        status: newStatus,
+      })
+      toast({
+        title: "状态已更新",
+        description: `模板已${newStatus === "published" ? "发布" : "撤回"}`,
+      })
+      await loadTemplates()
+      // 如果更新的是当前选中的模板，更新选中状态
+      if (selectedTemplate?.id === template.id) {
+        const updated = await templateApi.getTemplate(template.id)
+        setSelectedTemplate(updated.data)
       }
     } catch (error: any) {
       toast({
-        title: "加载失败",
-        description: error.message || "获取模板详情失败",
+        title: "操作失败",
+        description: error.message || "无法更新模板状态",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }
+  }, [toast, loadTemplates, selectedTemplate])
 
-  const initializeFormData = (schema: TemplateSchema) => {
-    const data: Record<string, any> = {}
-    schema.blocks.forEach((block) => {
-      block.rows.forEach((row) => {
-        row.fields.forEach((field) => {
-          // 如果已经有预填充的数据，不要覆盖
-          if (formData[field.field_id] !== undefined) {
-            return
-          }
-          
-          if (field.default) {
-            data[field.field_id] = field.default
-          } else if (field.type === "checkbox") {
-            data[field.field_id] = []
-          } else {
-            data[field.field_id] = ""
-          }
-        })
-      })
-    })
-    
-    // 合并现有数据（保留预填充的数据）
-    setFormData((prev) => ({
-      ...prev,
-      ...data,
-    }))
-  }
+  // 删除模板
+  const handleDeleteClick = useCallback((template: DocumentTemplate, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setTemplateToDelete(template)
+    setDeleteDialogOpen(true)
+  }, [])
 
-  const handleFieldChange = (field_id: string, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field_id]: value,
-    }))
-  }
+  const handleConfirmDelete = useCallback(async () => {
+    if (!templateToDelete) return
 
-  const handleCheckboxChange = (field_id: string, value: string, checked: boolean) => {
-    setFormData((prev) => {
-      const current = prev[field_id] || []
-      if (checked) {
-        return { ...prev, [field_id]: [...current, value] }
-      } else {
-        return { ...prev, [field_id]: current.filter((v: string) => v !== value) }
-      }
-    })
-  }
-
-  const handleSave = () => {
-    // 保存逻辑
-    toast({
-      title: "保存成功",
-      description: "表单数据已保存",
-    })
-  }
-
-  const generateMockData = (schema: TemplateSchema): Record<string, any> => {
-    const mockData: Record<string, any> = {}
-    
-    // Mock数据映射
-    const mockValues: Record<string, any> = {
-      // 原告（自然人）
-      plaintiff_name: "张三",
-      plaintiff_gender: "男",
-      plaintiff_birthday: "1990-01-01",
-      plaintiff_nation: "汉族",
-      plaintiff_address: "北京市朝阳区某某街道123号",
-      plaintiff_current_residence: "北京市朝阳区某某街道123号",
-      plaintiff_id_card: "110101199001011234",
-      plaintiff_contact_phone: "13800138000",
-      
-      // 原告（法人、非法人组织）
-      plaintiff_company_name: "北京某某科技有限公司",
-      plaintiff_company_address: "北京市海淀区某某路456号",
-      plaintiff_unified_social_credit_code: "91110000MA01234567",
-      plaintiff_legal_representative: "李四",
-      plaintiff_position: "董事长",
-      plaintiff_legal_rep_gender: "男",
-      plaintiff_legal_rep_birthday: "1980-05-15",
-      plaintiff_legal_rep_nation: "汉族",
-      plaintiff_legal_rep_address: "北京市海淀区某某路789号",
-      plaintiff_legal_rep_current_residence: "北京市海淀区某某路789号",
-      plaintiff_legal_rep_id_card: "110101198005151234",
-      
-      // 委托诉讼代理人
-      plaintiff_agent_name: "王五",
-      plaintiff_agent_gender: "女",
-      plaintiff_agent_birthday: "1985-08-20",
-      plaintiff_agent_nation: "汉族",
-      plaintiff_agent_address: "北京市西城区某某街100号",
-      plaintiff_agent_current_residence: "北京市西城区某某街100号",
-      plaintiff_agent_id_card: "110101198508201234",
-      plaintiff_agent_contact_phone: "13900139000",
-      
-      // 被告（自然人）
-      defendant_name: "赵六",
-      defendant_gender: "男",
-      defendant_birthday: "1992-03-10",
-      defendant_nation: "汉族",
-      defendant_address: "上海市浦东新区某某大道200号",
-      defendant_current_residence: "上海市浦东新区某某大道200号",
-      defendant_id_card: "310115199203101234",
-      defendant_contact_phone: "13700137000",
-      
-      // 被告（法人、非法人组织）
-      defendant_company_name: "上海某某贸易有限公司",
-      defendant_company_address: "上海市浦东新区某某路300号",
-      defendant_unified_social_credit_code: "91310000MA98765432",
-      defendant_legal_representative: "钱七",
-      defendant_position: "总经理",
-      defendant_legal_rep_gender: "女",
-      defendant_legal_rep_birthday: "1988-11-25",
-      defendant_legal_rep_nation: "汉族",
-      defendant_legal_rep_address: "上海市黄浦区某某路400号",
-      defendant_legal_rep_current_residence: "上海市黄浦区某某路400号",
-      defendant_legal_rep_id_card: "310101198811251234",
-      
-      // 第三人（自然人）
-      third_party_name: "孙八",
-      third_party_gender: "男",
-      third_party_birthday: "1987-07-05",
-      third_party_nation: "汉族",
-      third_party_address: "广州市天河区某某路500号",
-      third_party_current_residence: "广州市天河区某某路500号",
-      third_party_id_card: "440106198707051234",
-      third_party_contact_phone: "13600136000",
-      
-      // 第三人（法人、非法人组织）
-      third_party_company_name: "广州某某实业有限公司",
-      third_party_company_address: "广州市天河区某某路600号",
-      third_party_unified_social_credit_code: "91440000MA11223344",
-      third_party_legal_representative: "周九",
-      third_party_position: "执行董事",
-      third_party_legal_rep_gender: "男",
-      third_party_legal_rep_birthday: "1983-12-30",
-      third_party_legal_rep_nation: "汉族",
-      third_party_legal_rep_address: "广州市越秀区某某路700号",
-      third_party_legal_rep_current_residence: "广州市越秀区某某路700号",
-      third_party_legal_rep_id_card: "440104198312301234",
-      
-      // 诉讼请求和依据
-      claim_content: "一、请求判令被告向原告支付货款人民币50,000元；\n二、请求判令被告支付逾期付款利息（自2024年1月1日起，按全国银行间同业拆借中心公布的一年期贷款市场报价利率计算至实际清偿之日止）；\n三、请求判令本案诉讼费由被告承担。",
-      facts_and_reasons: "原告与被告于2023年6月1日签订《买卖合同》，约定原告向被告供应货物，货款总额为人民币50,000元。合同签订后，原告已按约定向被告交付全部货物，但被告至今未支付货款。原告多次催讨未果，故诉至法院。",
-    }
-    
-    // 根据schema填充mock数据
-    schema.blocks.forEach((block) => {
-      block.rows.forEach((row) => {
-        row.fields.forEach((field) => {
-          const fieldId = field.field_id
-          
-          if (mockValues.hasOwnProperty(fieldId)) {
-            mockData[fieldId] = mockValues[fieldId]
-          } else {
-            // 对于未定义的字段，根据类型生成默认值
-            switch (field.type) {
-              case "select":
-                if (field.options && field.options.length > 0) {
-                  mockData[fieldId] = field.options[0].value
-                }
-                break
-              case "radio":
-                if (field.options && field.options.length > 0) {
-                  mockData[fieldId] = field.options[0].value
-                }
-                break
-              case "checkbox":
-                mockData[fieldId] = []
-                break
-              case "date":
-                mockData[fieldId] = "1990-01-01"
-                break
-              case "textarea":
-                mockData[fieldId] = "测试内容"
-                break
-              case "text":
-                mockData[fieldId] = "测试" + field.label
-                break
-              default:
-                mockData[fieldId] = ""
-            }
-          }
-          
-          // 处理嵌套选项
-          if (field.type === "checkbox" && field.options) {
-            field.options.forEach((option: any) => {
-              if (option.sub_options) {
-                const nestedKey = `${fieldId}_${option.value}`
-                if (option.sub_options.length > 0) {
-                  mockData[nestedKey] = option.sub_options[0].value
-                }
-              }
-            })
-          }
-        })
-      })
-    })
-    
-    return mockData
-  }
-
-  const handleMockData = () => {
-    if (!templateSchema) return
-    
-    const mockData = generateMockData(templateSchema)
-    setFormData(mockData)
-    
-    toast({
-      title: "模拟数据已填充",
-      description: "已填入测试数据，可直接生成文书",
-    })
-  }
-
-  const downloadDocumentFile = async (filename: string) => {
+    setIsLoading(true)
     try {
-      const url = `${documentTemplateApi.getBaseUrl()}/document-templates/download/${filename}`
-      const token = localStorage.getItem(API_CONFIG.TOKEN_KEY)
-      
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+      await templateApi.deleteTemplate(templateToDelete.id)
+      toast({
+        title: "删除成功",
+        description: "模板已删除",
       })
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("未授权，请重新登录")
-        }
-        throw new Error(`下载失败: ${response.statusText}`)
+      setDeleteDialogOpen(false)
+      setTemplateToDelete(null)
+      // 如果删除的是当前选中的模板，清除选中状态
+      if (selectedTemplate?.id === templateToDelete.id) {
+        setSelectedTemplate(null)
+        setIsEditing(false)
       }
-      
-      const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = filename
-      link.style.display = 'none'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(blobUrl)
+      await loadTemplates()
     } catch (error: any) {
       toast({
-        title: "下载失败",
-        description: error.message || "下载文件失败",
-        variant: "destructive",
-      })
-      throw error
-    }
-  }
-
-  const handleGenerate = async () => {
-    if (!selectedTemplate) return
-    
-    try {
-      setLoading(true)
-      setErrors([])
-      
-      // 不再强制验证，直接生成文书
-      const result = await documentTemplateApi.generateDocument(
-        selectedTemplate.template_id,
-        formData
-      )
-      
-      // 如果生成成功，下载文件
-      if (result.filename) {
-        await downloadDocumentFile(result.filename)
-      }
-      
-      toast({
-        title: "生成成功",
-        description: "文书生成成功，正在下载",
-      })
-    } catch (error: any) {
-      toast({
-        title: "生成失败",
-        description: error.message || "生成文书失败",
+        title: "删除失败",
+        description: error.message || "无法删除模板",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }
+  }, [templateToDelete, selectedTemplate, toast, loadTemplates])
 
-  const renderField = (field: any) => {
-    const value = formData[field.field_id] || field.default || ""
-    
-    switch (field.type) {
-      case "textarea":
-        return (
-          <Textarea
-            id={field.field_id}
-            placeholder={field.placeholder}
-            value={value}
-            onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
-            rows={field.rows || 3}
-          />
-        )
-      
-      case "select":
-        // 对于性别等只有2个选项的字段，使用单选按钮；其他使用下拉框
-        if (field.options && field.options.length <= 3 && (field.field_id.includes('gender') || field.label === '性别')) {
-          return (
-            <RadioGroup
-              value={value || ""}
-              onValueChange={(val) => handleFieldChange(field.field_id, val)}
-              className="flex items-center space-x-4"
-            >
-              {field.options?.map((option: any) => (
-                <div key={option.value} className="flex items-center space-x-2">
-                  <RadioGroupItem value={option.value} id={`${field.field_id}-${option.value}`} />
-                  <Label htmlFor={`${field.field_id}-${option.value}`} className="font-normal text-sm cursor-pointer">
-                    {option.label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          )
-        }
-        return (
-          <Select
-            value={value}
-            onValueChange={(val) => handleFieldChange(field.field_id, val)}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder={field.placeholder || "请选择"} />
-            </SelectTrigger>
-            <SelectContent>
-              {field.options?.map((option: any) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )
-      
-      case "radio":
-        return (
-          <RadioGroup
-            value={value || ""}
-            onValueChange={(val) => handleFieldChange(field.field_id, val)}
-            className="flex items-center space-x-4"
-          >
-            {field.options?.map((option: any) => (
-              <div key={option.value} className="flex items-center space-x-2">
-                <RadioGroupItem value={option.value} id={`${field.field_id}-${option.value}`} />
-                <Label htmlFor={`${field.field_id}-${option.value}`} className="font-normal text-sm cursor-pointer">
-                  {option.label}
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
-        )
-      
-      case "checkbox":
-        const checkboxValues = formData[field.field_id] || []
-        return (
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {field.options?.map((option: any) => (
-              <div key={option.value} className="flex items-center space-x-1 flex-wrap">
-                <Checkbox
-                  id={`${field.field_id}-${option.value}`}
-                  checked={checkboxValues.includes(option.value)}
-                  onCheckedChange={(checked) =>
-                    handleCheckboxChange(field.field_id, option.value, !!checked)
-                  }
-                />
-                <Label htmlFor={`${field.field_id}-${option.value}`} className="font-normal text-sm cursor-pointer">
-                  {option.label}
-                </Label>
-                {/* 处理嵌套选项（如"国有"下的"控股"、"参股"） */}
-                {option.sub_options && checkboxValues.includes(option.value) && (
-                  <RadioGroup
-                    value={formData[`${field.field_id}_${option.value}`] || ""}
-                    onValueChange={(val) => handleFieldChange(`${field.field_id}_${option.value}`, val)}
-                    className="ml-2 flex items-center space-x-2"
-                  >
-                    {option.sub_options.map((subOption: any) => (
-                      <div key={subOption.value} className="flex items-center space-x-1">
-                        <RadioGroupItem value={subOption.value} id={`${field.field_id}-${option.value}-${subOption.value}`} />
-                        <Label htmlFor={`${field.field_id}-${option.value}-${subOption.value}`} className="font-normal text-sm cursor-pointer">
-                          {subOption.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
-                )}
-              </div>
-            ))}
-          </div>
-        )
-      
-      case "date":
-      case "datetime":
-        return (
-          <Input
-            id={field.field_id}
-            type={field.type === "datetime" ? "datetime-local" : "date"}
-            value={value}
-            onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
-            placeholder={field.placeholder}
-          />
-        )
-      
-      case "number":
-        return (
-          <Input
-            id={field.field_id}
-            type="number"
-            value={value}
-            onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
-            placeholder={field.placeholder}
-          />
-        )
-      
-      default:
-        return (
-          <Input
-            id={field.field_id}
-            type="text"
-            value={value}
-            onChange={(e) => handleFieldChange(field.field_id, e.target.value)}
-            placeholder={field.placeholder}
-          />
-        )
+  // 上传文件
+  const handleFileSelect = useCallback((file: File) => {
+    setUploadFile(file)
+    // 自动填充名称（去除扩展名）
+    const nameWithoutExt = file.name.replace(/\.docx?$/i, "")
+    setUploadForm(prev => ({ ...prev, name: nameWithoutExt }))
+  }, [])
+
+  // 提交上传
+  const handleUploadSubmit = useCallback(async () => {
+    if (!uploadFile || !uploadForm.name.trim()) {
+      toast({
+        title: "请填写模板名称",
+        description: "模板名称不能为空",
+        variant: "destructive",
+      })
+      return
     }
-  }
+
+    setIsLoading(true)
+    try {
+      const response = await templateApi.parseAndSave(uploadFile, {
+        name: uploadForm.name.trim(),
+        description: uploadForm.description || undefined,
+        category: uploadForm.category || undefined,
+        status: "draft",
+        save_to_cos: true,
+      })
+      toast({
+        title: "上传成功",
+        description: "模板已创建",
+      })
+      setUploadDialogOpen(false)
+      setUploadFile(null)
+      setUploadForm({ name: "", description: "", category: "" })
+      await loadTemplates()
+      // 自动选中新创建的模板
+      setSelectedTemplate(response.data)
+    } catch (error: any) {
+      toast({
+        title: "上传失败",
+        description: error.message || "无法上传模板",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [uploadFile, uploadForm, toast, loadTemplates])
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">文书生成</h1>
-          {/* 模板选择下拉框 */}
-          <Select
-            value={selectedTemplate?.template_id || ""}
-            onValueChange={(value) => {
-              const template = templates.find(t => t.template_id === value)
-              if (template) {
-                setSelectedTemplate(template)
-              }
-            }}
-          >
-            <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="请选择模板" />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.map((template) => (
-                <SelectItem key={template.template_id} value={template.template_id}>
-                  <div className="flex items-center">
-                    <FileText className="mr-2 h-4 w-4" />
-                    {template.name}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="flex h-screen overflow-hidden">
+      {/* 左侧侧栏 - 模板列表 */}
+      <div className="w-80 border-r bg-gray-50 flex flex-col">
+        <div className="p-4 border-b bg-white">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              文书模板
+            </h2>
+            <Button
+              size="sm"
+              onClick={() => setUploadDialogOpen(true)}
+              className="h-8"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              新建
+            </Button>
+          </div>
         </div>
-        {selectedTemplate && (
-          <div className="flex items-center space-x-2">
-            <Button onClick={handleMockData} variant="outline" disabled={loading}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              填入模拟数据
-            </Button>
-            <Button onClick={handleSave} variant="outline" disabled={loading}>
-              <Save className="mr-2 h-4 w-4" />
-              保存
-            </Button>
-            <Button onClick={handleGenerate} disabled={loading}>
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
+
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && templates.length === 0 ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>暂无模板</p>
+              <p className="text-sm mt-1">点击"新建"按钮上传模板</p>
+            </div>
+          ) : (
+            <div className="p-2">
+              {templates.map((template) => (
+                <TemplateListItem
+                  key={template.id}
+                  template={template}
+                  isSelected={selectedTemplate?.id === template.id}
+                  onSelect={() => handleSelectTemplate(template)}
+                  onDelete={(e) => handleDeleteClick(template, e)}
+                  onToggleStatus={(e) => handleToggleStatus(template, e)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 右侧内容区域 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {selectedTemplate ? (
+          <>
+            {/* 预览/编辑头部 */}
+            <div className="p-4 border-b bg-white flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{selectedTemplate.name}</h3>
+                {selectedTemplate.description && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedTemplate.description}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-1 rounded",
+                      selectedTemplate.status === "published"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                    )}
+                  >
+                    {selectedTemplate.status === "published" ? "已发布" : "草稿"}
+                  </span>
+                  {selectedTemplate.category && (
+                    <span className="text-xs text-muted-foreground">
+                      {selectedTemplate.category}
+                    </span>
+                  )}
+                  {selectedTemplate.placeholders?.placeholders.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      占位符: {selectedTemplate.placeholders.placeholders.length} 个
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!isEditing && (
+                <Button onClick={handleStartEdit} variant="outline">
+                  <Edit className="h-4 w-4 mr-2" />
+                  编辑
+                </Button>
               )}
-              下载
-            </Button>
+              {isEditing && (
+                <div className="flex gap-2">
+                  <Button onClick={handleCancelEdit} variant="outline">
+                    取消
+                  </Button>
+                  <Button onClick={handleSaveEdit} disabled={isLoading}>
+                    <Save className="h-4 w-4 mr-2" />
+                    保存
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* 预览/编辑内容 */}
+            <div className="flex-1 overflow-auto p-6 bg-gray-50">
+              {isEditing ? (
+                <DocumentEditor
+                  initialContent={editedContent || selectedTemplate.prosemirror_json}
+                  onChange={setEditedContent}
+                  isLoading={isLoading}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    <DocumentPreview 
+                      key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
+                      content={selectedTemplate.prosemirror_json} 
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">请选择一个模板</p>
+              <p className="text-sm mt-2">从左侧列表中选择模板进行预览或编辑</p>
+            </div>
           </div>
         )}
       </div>
 
-      {/* 表单居中展示 */}
-      <div className="flex justify-center">
-        <div className="w-full max-w-5xl">
-          {templateSchema ? (
-            <div className="bg-white border border-gray-200 rounded-lg">
-              {/* 上部分：文书名称和说明信息 */}
-              <div className="p-6 border-b border-gray-200">
-                {/* 文书名称 */}
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold">{templateSchema.name}</h2>
-                </div>
+      {/* 删除确认对话框 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除模板 "{templateToDelete?.name}" 吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-                {/* 说明 */}
-                {templateSchema.instructions && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold mb-2">{templateSchema.instructions.title}</h3>
-                    <p className="text-sm text-gray-700 mb-2">{templateSchema.instructions.content}</p>
-                    <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
-                      {templateSchema.instructions.items?.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
-                {/* 特别提示 */}
-                {templateSchema.special_notice && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold mb-2">{templateSchema.special_notice.title}</h3>
-                    <p className="text-sm text-gray-700 whitespace-pre-line">
-                      {templateSchema.special_notice.content}
-                    </p>
-                  </div>
-                )}
+      {/* 上传对话框 */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>上传新模板</DialogTitle>
+            <DialogDescription>
+              上传 DOCX 文件并填写模板信息
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>模板文件</Label>
+              <div className="mt-2">
+                <FileUploadZone
+                  onFileSelect={handleFileSelect}
+                  isLoading={isLoading}
+                />
               </div>
-
-              {/* 错误提示 */}
-              {errors.length > 0 && (
-                <div className="p-4 bg-red-50 border-l-4 border-red-500">
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>验证失败</AlertTitle>
-                    <AlertDescription>
-                      <ul className="list-disc list-inside">
-                        {errors.map((error, index) => (
-                          <li key={index}>{error}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                </div>
+              {uploadFile && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  已选择: {uploadFile.name}
+                </p>
               )}
-
-              {/* 下部分：表格风格的表单 */}
-              <div className="p-6">
-                {templateSchema.blocks.map((block) => (
-                  <div key={block.block_id} className="mb-8 last:mb-0">
-                    {/* 一级标题（独占一行，居中） */}
-                    <div className="text-center py-4 mb-4 border-b border-gray-300">
-                      <h3 className="text-xl font-bold">{block.title}</h3>
-                    </div>
-
-                    {/* 表格风格的字段行 */}
-                    <div className="border border-gray-300">
-                      <table className="w-full border-collapse bg-white">
-                        <colgroup>
-                          <col style={{ width: `${Math.max(...block.rows.map(r => r.subtitle_width || 150))}px` }} />
-                          <col style={{ width: '120px' }} />
-                          <col />
-                        </colgroup>
-                        <tbody>
-                          {block.rows.map((row) => (
-                            <React.Fragment key={row.row_id}>
-                              {row.fields.map((field, fieldIndex) => (
-                                <tr key={field.field_id} className="border-b border-gray-200 last:border-b-0">
-                                  {/* 二级标题（第一行显示，使用rowspan） */}
-                                  {fieldIndex === 0 && (
-                                    <td
-                                      className="align-middle py-3 px-4 font-medium text-gray-900 text-left border-r border-gray-300 bg-gray-50"
-                                      rowSpan={row.fields.length}
-                                      style={{ verticalAlign: 'middle' }}
-                                    >
-                                      {row.subtitle}
-                                    </td>
-                                  )}
-                                  {/* 字段标签 */}
-                                  <td className="align-middle py-3 px-3 text-sm font-normal text-gray-700 text-left border-r border-gray-200 whitespace-nowrap">
-                                    {field.label}:
-                                  </td>
-                                  {/* 输入框（右对齐） */}
-                                  <td className="align-middle py-3 px-4">
-                                    <div className="flex justify-end">
-                                      {renderField(field)}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
-          ) : (
-            <Card>
-              <CardContent className="py-12 text-center">
-                {loading ? (
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                ) : (
-                  <p className="text-gray-500">请选择一个模板</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+            <div>
+              <Label htmlFor="name">模板名称 *</Label>
+              <Input
+                id="name"
+                value={uploadForm.name}
+                onChange={(e) =>
+                  setUploadForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="请输入模板名称"
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">模板描述</Label>
+              <Input
+                id="description"
+                value={uploadForm.description}
+                onChange={(e) =>
+                  setUploadForm((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="请输入模板描述（可选）"
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label htmlFor="category">分类</Label>
+              <Input
+                id="category"
+                value={uploadForm.category}
+                onChange={(e) =>
+                  setUploadForm((prev) => ({ ...prev, category: e.target.value }))
+                }
+                placeholder="请输入分类（可选）"
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUploadDialogOpen(false)
+                setUploadFile(null)
+                setUploadForm({ name: "", description: "", category: "" })
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={handleUploadSubmit} disabled={isLoading || !uploadFile}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  上传中...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  上传
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
+// 模板列表项组件
+interface TemplateListItemProps {
+  template: DocumentTemplate
+  isSelected: boolean
+  onSelect: () => void
+  onDelete: (e: React.MouseEvent) => void
+  onToggleStatus: (e: React.MouseEvent) => void
+}
+
+function TemplateListItem({
+  template,
+  isSelected,
+  onSelect,
+  onDelete,
+  onToggleStatus,
+}: TemplateListItemProps) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  return (
+    <div
+      className={cn(
+        "relative p-3 mb-2 rounded-lg cursor-pointer transition-colors",
+        isSelected
+          ? "bg-primary text-primary-foreground"
+          : "bg-white hover:bg-gray-100"
+      )}
+      onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <h4 className={cn("font-medium truncate", isSelected && "text-primary-foreground")}>
+            {template.name}
+          </h4>
+          {template.description && (
+            <p
+              className={cn(
+                "text-sm mt-1 line-clamp-2",
+                isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+              )}
+            >
+              {template.description}
+            </p>
+          )}
+          <div className="flex items-center gap-2 mt-2">
+            <span
+              className={cn(
+                "text-xs px-2 py-0.5 rounded",
+                isSelected
+                  ? template.status === "published"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-primary-foreground/10 text-primary-foreground"
+                  : template.status === "published"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-gray-100 text-gray-800"
+              )}
+            >
+              {template.status === "published" ? "已发布" : "草稿"}
+            </span>
+            {template.category && (
+              <span
+                className={cn(
+                  "text-xs",
+                  isSelected ? "text-primary-foreground/70" : "text-muted-foreground"
+                )}
+              >
+                {template.category}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 悬浮操作按钮 */}
+      {isHovered && (
+        <div className="absolute top-2 right-2 flex gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              "h-7 w-7 p-0",
+              isSelected && "text-primary-foreground hover:bg-primary-foreground/20"
+            )}
+            onClick={onToggleStatus}
+            title={template.status === "published" ? "撤回" : "发布"}
+          >
+            {template.status === "published" ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              "h-7 w-7 p-0 text-destructive",
+              isSelected && "text-destructive hover:bg-primary-foreground/20"
+            )}
+            onClick={onDelete}
+            title="删除"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}

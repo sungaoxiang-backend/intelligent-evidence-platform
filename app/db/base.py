@@ -7,4 +7,4 @@ from app.users.models import User  # noqa
 from app.cases.models import Case  # noqa
 from app.evidences.models import Evidence, EvidenceCard  # noqa - 导入 EvidenceCard 以确保关联表被检测到
 from app.wecom.models import WeComStaff, ExternalContact, CustomerSession, ContactWay, CustomerEventLog  # noqa
-from app.lex_docx.models import DocumentTemplate, DocumentGeneration  # noqa
+from app.template_editor.models import DocumentTemplate  # noqa
