@@ -23,6 +23,7 @@ import {
 import { DocumentEditor } from "@/components/template-editor/document-editor"
 import { DocumentPreview } from "@/components/template-editor/document-preview"
 import { FileUploadZone } from "@/components/template-editor/file-upload-zone"
+import { PlaceholderList } from "@/components/template-editor/placeholder-list"
 import {
   templateApi,
   type DocumentTemplate,
@@ -364,56 +365,62 @@ export default function DocumentTemplatesPage() {
 
       {/* 主要内容区域 */}
       <div className="grid grid-cols-12 gap-4">
-        {/* 左侧侧栏 - 模板列表（参照卡片工厂样式） */}
-        <Card className="col-span-4">
-          <CardHeader className="pb-1.5 pt-2 px-2">
-            <div className="flex items-center justify-between w-full gap-1.5">
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                  {templates.length}
-                </Badge>
+        {/* 左侧侧栏 - 根据模式切换显示内容 */}
+        {isEditing && selectedTemplate ? (
+          // 编辑模式：显示占位符列表
+          <PlaceholderList templateId={selectedTemplate.id} />
+        ) : (
+          // 预览模式：显示模板列表
+          <Card className="col-span-4">
+            <CardHeader className="pb-1.5 pt-2 px-2">
+              <div className="flex items-center justify-between w-full gap-1.5">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                    {templates.length}
+                  </Badge>
+                </div>
+                <Button
+                  onClick={() => setUploadDialogOpen(true)}
+                  size="sm"
+                  className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  新建
+                </Button>
               </div>
-              <Button
-                onClick={() => setUploadDialogOpen(true)}
-                size="sm"
-                className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                新建
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-200px)]">
-              {isLoading && templates.length === 0 ? (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">暂无模板</p>
-                  <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
-                </div>
-              ) : (
-                <div className="p-3 space-y-2">
-                  {templates.map((template) => (
-                  <TemplateListItem
-                    key={template.id}
-                    template={template}
-                    isSelected={selectedTemplate?.id === template.id}
-                    placeholderCount={placeholderCounts[template.id] || 0}
-                    onSelect={() => handleSelectTemplate(template)}
-                    onDelete={(e) => handleDeleteClick(template, e)}
-                    onToggleStatus={(e) => handleToggleStatus(template, e)}
-                    onRename={handleRename}
-                  />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[calc(100vh-200px)]">
+                {isLoading && templates.length === 0 ? (
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">暂无模板</p>
+                    <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
+                  </div>
+                ) : (
+                  <div className="p-3 space-y-2">
+                    {templates.map((template) => (
+                    <TemplateListItem
+                      key={template.id}
+                      template={template}
+                      isSelected={selectedTemplate?.id === template.id}
+                      placeholderCount={placeholderCounts[template.id] || 0}
+                      onSelect={() => handleSelectTemplate(template)}
+                      onDelete={(e) => handleDeleteClick(template, e)}
+                      onToggleStatus={(e) => handleToggleStatus(template, e)}
+                      onRename={handleRename}
+                    />
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
 
         {/* 右侧内容区域 */}
         <div className="col-span-8 flex flex-col overflow-hidden">

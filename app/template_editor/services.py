@@ -580,6 +580,7 @@ class PlaceholderService:
         self,
         db: AsyncSession,
         placeholder_name: str,
+        new_placeholder_name: Optional[str] = None,
         type: Optional[str] = None,
         required: Optional[bool] = None,
         hint: Optional[str] = None,
@@ -591,7 +592,8 @@ class PlaceholderService:
         
         Args:
             db: 数据库会话
-            placeholder_name: 占位符名称
+            placeholder_name: 占位符名称（用于查找）
+            new_placeholder_name: 新的占位符名称（可选，用于重命名）
             type: 占位符类型
             required: 是否必填
             hint: 提示文本
@@ -604,6 +606,13 @@ class PlaceholderService:
         placeholder = await self.get_placeholder(db, placeholder_name)
         if not placeholder:
             return None
+        
+        # 如果提供了新名称且与旧名称不同，检查新名称是否已存在
+        if new_placeholder_name and new_placeholder_name != placeholder_name:
+            existing = await self.get_placeholder(db, new_placeholder_name)
+            if existing:
+                raise ValueError(f"占位符名称 '{new_placeholder_name}' 已存在")
+            placeholder.placeholder_name = new_placeholder_name
         
         if type is not None:
             placeholder.type = type
@@ -619,7 +628,7 @@ class PlaceholderService:
         await db.commit()
         await db.refresh(placeholder)
         
-        logger.info(f"更新占位符成功: {placeholder_name}")
+        logger.info(f"更新占位符成功: {placeholder_name}" + (f" -> {new_placeholder_name}" if new_placeholder_name else ""))
         return placeholder
     
     async def delete_placeholder(

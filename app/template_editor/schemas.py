@@ -133,6 +133,7 @@ class PlaceholderCreateRequest(BaseModel):
 class PlaceholderUpdateRequest(BaseModel):
     """更新占位符请求"""
     
+    placeholder_name: Optional[str] = Field(None, description="占位符名称", min_length=1, max_length=100)
     type: Optional[str] = Field(None, description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
     required: Optional[bool] = Field(None, description="是否必填")
     hint: Optional[str] = Field(None, description="提示文本")

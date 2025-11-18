@@ -285,5 +285,120 @@ export const templateApi = {
     const result = await response.json()
     return result
   },
+
+  // 创建或更新占位符
+  async createOrUpdatePlaceholder(request: {
+    placeholder_name: string
+    type: string
+    required?: boolean
+    hint?: string
+    options?: Array<{ label: string; value: string }>
+  }): Promise<{ code: number; message: string; data: any }> {
+    const response = await fetch(
+      buildApiUrl("/template-editor/placeholders"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "创建或更新占位符失败")
+    }
+
+    const result = await response.json()
+    return result
+  },
+
+  // 更新占位符
+  async updatePlaceholder(
+    placeholderName: string,
+    request: {
+      placeholder_name?: string
+      type?: string
+      required?: boolean
+      hint?: string
+      options?: Array<{ label: string; value: string }>
+    }
+  ): Promise<{ code: number; message: string; data: any }> {
+    const response = await fetch(
+      buildApiUrl(`/template-editor/placeholders/${placeholderName}`),
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "更新占位符失败")
+    }
+
+    const result = await response.json()
+    return result
+  },
+
+  // 删除占位符
+  async deletePlaceholder(placeholderName: string): Promise<void> {
+    const response = await fetch(
+      buildApiUrl(`/template-editor/placeholders/${placeholderName}`),
+      {
+        method: "DELETE",
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "删除占位符失败")
+    }
+  },
+
+  // 将占位符关联到模板
+  async associatePlaceholderToTemplate(
+    templateId: number,
+    placeholderName: string
+  ): Promise<void> {
+    const response = await fetch(
+      buildApiUrl(`/template-editor/templates/${templateId}/placeholders/${placeholderName}`),
+      {
+        method: "POST",
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "关联占位符到模板失败")
+    }
+  },
+
+  // 从模板中移除占位符关联
+  async disassociatePlaceholderFromTemplate(
+    templateId: number,
+    placeholderName: string
+  ): Promise<void> {
+    const response = await fetch(
+      buildApiUrl(`/template-editor/templates/${templateId}/placeholders/${placeholderName}`),
+      {
+        method: "DELETE",
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "移除占位符关联失败")
+    }
+  },
 }
 

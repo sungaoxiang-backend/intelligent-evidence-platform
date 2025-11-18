@@ -678,6 +678,7 @@ async def update_placeholder(
         placeholder = await placeholder_service.update_placeholder(
             db=db,
             placeholder_name=placeholder_name,
+            new_placeholder_name=request.placeholder_name,
             type=request.type,
             required=request.required,
             hint=request.hint,
