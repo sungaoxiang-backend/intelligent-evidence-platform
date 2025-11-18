@@ -3,17 +3,22 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import {
   FileText,
   Edit,
   Trash2,
   Upload,
-  Eye,
-  EyeOff,
   Loader2,
   Plus,
   Save,
+  Download,
+  Send,
+  Undo,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react"
 import { DocumentEditor } from "@/components/template-editor/document-editor"
 import { DocumentPreview } from "@/components/template-editor/document-preview"
@@ -43,6 +48,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function DocumentTemplatesPage() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -54,11 +67,6 @@ export default function DocumentTemplatesPage() {
   const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadForm, setUploadForm] = useState({
-    name: "",
-    description: "",
-    category: "",
-  })
   const { toast } = useToast()
 
   // 加载模板列表
@@ -108,6 +116,41 @@ export default function DocumentTemplatesPage() {
     setEditedContent(null)
   }, [])
 
+  // 导出模板
+  const handleExport = useCallback(async () => {
+    if (!selectedTemplate) return
+
+    setIsLoading(true)
+    try {
+      const blob = await templateApi.exportDocx(
+        selectedTemplate.prosemirror_json,
+        `${selectedTemplate.name}.docx`
+      )
+      
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${selectedTemplate.name}.docx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "导出成功",
+        description: "模板已导出为 DOCX",
+      })
+    } catch (error: any) {
+      toast({
+        title: "导出失败",
+        description: error.message || "无法导出模板",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedTemplate, toast])
+
   // 保存编辑
   const handleSaveEdit = useCallback(async () => {
     if (!selectedTemplate || !editedContent) return
@@ -128,11 +171,11 @@ export default function DocumentTemplatesPage() {
       // 获取最新的模板数据并更新选中状态
       const updated = await templateApi.getTemplate(selectedTemplate.id)
       setSelectedTemplate(updated.data)
-      
-      toast({
+          
+          toast({
         title: "保存成功",
         description: "模板已更新",
-      })
+          })
     } catch (error: any) {
       toast({
         title: "保存失败",
@@ -164,13 +207,39 @@ export default function DocumentTemplatesPage() {
         setSelectedTemplate(updated.data)
       }
     } catch (error: any) {
-      toast({
+    toast({
         title: "操作失败",
         description: error.message || "无法更新模板状态",
         variant: "destructive",
       })
     } finally {
       setIsLoading(false)
+    }
+  }, [toast, loadTemplates, selectedTemplate])
+
+  // 重命名模板
+  const handleRename = useCallback(async (id: number, newName: string) => {
+    try {
+      await templateApi.updateTemplate(id, {
+        name: newName,
+      })
+    toast({
+        title: "重命名成功",
+        description: "模板名称已更新",
+      })
+      await loadTemplates()
+      // 如果重命名的是当前选中的模板，更新选中状态
+      if (selectedTemplate?.id === id) {
+        const updated = await templateApi.getTemplate(id)
+        setSelectedTemplate(updated.data)
+      }
+    } catch (error: any) {
+      toast({
+        title: "重命名失败",
+        description: error.message || "无法重命名模板",
+        variant: "destructive",
+      })
+      throw error
     }
   }, [toast, loadTemplates, selectedTemplate])
 
@@ -213,17 +282,24 @@ export default function DocumentTemplatesPage() {
   // 上传文件
   const handleFileSelect = useCallback((file: File) => {
     setUploadFile(file)
-    // 自动填充名称（去除扩展名）
-    const nameWithoutExt = file.name.replace(/\.docx?$/i, "")
-    setUploadForm(prev => ({ ...prev, name: nameWithoutExt }))
   }, [])
 
   // 提交上传
   const handleUploadSubmit = useCallback(async () => {
-    if (!uploadFile || !uploadForm.name.trim()) {
+    if (!uploadFile) {
       toast({
-        title: "请填写模板名称",
-        description: "模板名称不能为空",
+        title: "请选择文件",
+        description: "请先选择要上传的 DOCX 文件",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // 检查文件格式
+    if (!uploadFile.name.toLowerCase().endsWith('.docx')) {
+      toast({
+        title: "文件格式错误",
+        description: "只支持 .docx 格式的文件",
         variant: "destructive",
       })
       return
@@ -231,10 +307,11 @@ export default function DocumentTemplatesPage() {
 
     setIsLoading(true)
     try {
+      // 自动使用文件名（去除扩展名）作为模板名称
+      const nameWithoutExt = uploadFile.name.replace(/\.docx?$/i, "")
+      
       const response = await templateApi.parseAndSave(uploadFile, {
-        name: uploadForm.name.trim(),
-        description: uploadForm.description || undefined,
-        category: uploadForm.category || undefined,
+        name: nameWithoutExt,
         status: "draft",
         save_to_cos: true,
       })
@@ -244,7 +321,6 @@ export default function DocumentTemplatesPage() {
       })
       setUploadDialogOpen(false)
       setUploadFile(null)
-      setUploadForm({ name: "", description: "", category: "" })
       await loadTemplates()
       // 自动选中新创建的模板
       setSelectedTemplate(response.data)
@@ -257,142 +333,157 @@ export default function DocumentTemplatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [uploadFile, uploadForm, toast, loadTemplates])
+  }, [uploadFile, toast, loadTemplates])
+    
+        return (
+    <div className="w-full space-y-4">
+      {/* 页面头部 - 面包屑导航 */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage>文书模板</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
 
-  return (
-    <div className="flex h-screen overflow-hidden">
-      {/* 左侧侧栏 - 模板列表 */}
-      <div className="w-80 border-r bg-gray-50 flex flex-col">
-        <div className="p-4 border-b bg-white">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              文书模板
-            </h2>
-            <Button
-              size="sm"
-              onClick={() => setUploadDialogOpen(true)}
-              className="h-8"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              新建
-            </Button>
-          </div>
-        </div>
+      {/* 主要内容区域 */}
+      <div className="grid grid-cols-12 gap-4">
+        {/* 左侧侧栏 - 模板列表（参照卡片工厂样式） */}
+        <Card className="col-span-4">
+          <CardHeader className="pb-1.5 pt-2 px-2">
+            <div className="flex items-center justify-between w-full gap-1.5">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                  {templates.length}
+                </Badge>
+              </div>
+              <Button
+                onClick={() => setUploadDialogOpen(true)}
+                size="sm"
+                className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                新建
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[calc(100vh-200px)]">
+              {isLoading && templates.length === 0 ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">暂无模板</p>
+                  <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {templates.map((template) => (
+                  <TemplateListItem
+                    key={template.id}
+                    template={template}
+                    isSelected={selectedTemplate?.id === template.id}
+                    onSelect={() => handleSelectTemplate(template)}
+                    onDelete={(e) => handleDeleteClick(template, e)}
+                    onToggleStatus={(e) => handleToggleStatus(template, e)}
+                    onRename={handleRename}
+                  />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
-        <div className="flex-1 overflow-y-auto">
-          {isLoading && templates.length === 0 ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : templates.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>暂无模板</p>
-              <p className="text-sm mt-1">点击"新建"按钮上传模板</p>
-            </div>
+        {/* 右侧内容区域 */}
+        <div className="col-span-8 flex flex-col overflow-hidden">
+          {selectedTemplate ? (
+            <>
+              {/* 预览/编辑内容 */}
+              <div className="flex-1 overflow-auto relative" style={{ backgroundColor: '#f5f5f5' }}>
+              {isEditing ? (
+                <>
+                  {/* 编辑模式头部 */}
+                  <div className="sticky top-0 z-10 p-4 border-b bg-white flex items-center justify-end gap-2">
+                    <Button onClick={handleCancelEdit} variant="outline">
+                      取消
+                    </Button>
+                    <Button onClick={handleSaveEdit} disabled={isLoading}>
+                      <Save className="h-4 w-4 mr-2" />
+                      保存
+                    </Button>
+                  </div>
+                  <div className="p-6">
+                    <DocumentEditor
+                      initialContent={editedContent || selectedTemplate.prosemirror_json}
+                      onChange={setEditedContent}
+                      isLoading={isLoading}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* A4纸样式的预览区域 */}
+                  <div className="flex-1 overflow-auto p-8">
+                    <div 
+                      className="mx-auto bg-white shadow-lg relative"
+                      style={{ 
+                        width: '210mm',
+                        minHeight: '297mm',
+                        maxWidth: '100%',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      {/* 操作按钮 - 放在A4纸右上角 */}
+                      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                        <Button 
+                          onClick={handleExport} 
+                          variant="outline"
+                          size="sm"
+                          disabled={isLoading}
+                          className="h-8 px-3 text-xs shadow-sm"
+                        >
+                          <Download className="h-3.5 w-3.5 mr-1.5" />
+                          导出
+                        </Button>
+                        <Button 
+                          onClick={handleStartEdit} 
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-3 text-xs shadow-sm"
+                        >
+                          <Edit className="h-3.5 w-3.5 mr-1.5" />
+                          编辑
+                        </Button>
+              </div>
+                      <div style={{ padding: '25mm' }}>
+                        <DocumentPreview 
+                          key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
+                          content={selectedTemplate.prosemirror_json} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+                )}
+              </div>
+            </>
           ) : (
-            <div className="p-2">
-              {templates.map((template) => (
-                <TemplateListItem
-                  key={template.id}
-                  template={template}
-                  isSelected={selectedTemplate?.id === template.id}
-                  onSelect={() => handleSelectTemplate(template)}
-                  onDelete={(e) => handleDeleteClick(template, e)}
-                  onToggleStatus={(e) => handleToggleStatus(template, e)}
-                />
-              ))}
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">请选择一个模板</p>
+                <p className="text-sm mt-2">从左侧列表中选择模板进行预览或编辑</p>
+              </div>
             </div>
           )}
         </div>
-      </div>
-
-      {/* 右侧内容区域 */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedTemplate ? (
-          <>
-            {/* 预览/编辑头部 */}
-            <div className="p-4 border-b bg-white flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">{selectedTemplate.name}</h3>
-                {selectedTemplate.description && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {selectedTemplate.description}
-                  </p>
-                )}
-                <div className="flex items-center gap-2 mt-2">
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded",
-                      selectedTemplate.status === "published"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    )}
-                  >
-                    {selectedTemplate.status === "published" ? "已发布" : "草稿"}
-                  </span>
-                  {selectedTemplate.category && (
-                    <span className="text-xs text-muted-foreground">
-                      {selectedTemplate.category}
-                    </span>
-                  )}
-                  {selectedTemplate.placeholders?.placeholders.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      占位符: {selectedTemplate.placeholders.placeholders.length} 个
-                    </span>
-                  )}
-                </div>
-              </div>
-              {!isEditing && (
-                <Button onClick={handleStartEdit} variant="outline">
-                  <Edit className="h-4 w-4 mr-2" />
-                  编辑
-                </Button>
-              )}
-              {isEditing && (
-                <div className="flex gap-2">
-                  <Button onClick={handleCancelEdit} variant="outline">
-                    取消
-                  </Button>
-                  <Button onClick={handleSaveEdit} disabled={isLoading}>
-                    <Save className="h-4 w-4 mr-2" />
-                    保存
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* 预览/编辑内容 */}
-            <div className="flex-1 overflow-auto p-6 bg-gray-50">
-              {isEditing ? (
-                <DocumentEditor
-                  initialContent={editedContent || selectedTemplate.prosemirror_json}
-                  onChange={setEditedContent}
-                  isLoading={isLoading}
-                />
-              ) : (
-                <Card>
-                  <CardContent className="p-6">
-                    <DocumentPreview 
-                      key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
-                      content={selectedTemplate.prosemirror_json} 
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">请选择一个模板</p>
-              <p className="text-sm mt-2">从左侧列表中选择模板进行预览或编辑</p>
-            </div>
           </div>
-        )}
-      </div>
 
       {/* 删除确认对话框 */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -412,11 +503,11 @@ export default function DocumentTemplatesPage() {
 
       {/* 上传对话框 */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>上传新模板</DialogTitle>
             <DialogDescription>
-              上传 DOCX 文件并填写模板信息
+              选择 DOCX 文件，模板名称将自动使用文件名
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -429,46 +520,14 @@ export default function DocumentTemplatesPage() {
                 />
               </div>
               {uploadFile && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  已选择: {uploadFile.name}
-                </p>
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm font-medium text-blue-900">已选择文件</p>
+                  <p className="text-sm text-blue-700 mt-1">{uploadFile.name}</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    模板名称将自动设置为: {uploadFile.name.replace(/\.docx?$/i, "")}
+                  </p>
+                </div>
               )}
-            </div>
-            <div>
-              <Label htmlFor="name">模板名称 *</Label>
-              <Input
-                id="name"
-                value={uploadForm.name}
-                onChange={(e) =>
-                  setUploadForm((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="请输入模板名称"
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">模板描述</Label>
-              <Input
-                id="description"
-                value={uploadForm.description}
-                onChange={(e) =>
-                  setUploadForm((prev) => ({ ...prev, description: e.target.value }))
-                }
-                placeholder="请输入模板描述（可选）"
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <Label htmlFor="category">分类</Label>
-              <Input
-                id="category"
-                value={uploadForm.category}
-                onChange={(e) =>
-                  setUploadForm((prev) => ({ ...prev, category: e.target.value }))
-                }
-                placeholder="请输入分类（可选）"
-                className="mt-2"
-              />
             </div>
           </div>
           <DialogFooter>
@@ -477,8 +536,8 @@ export default function DocumentTemplatesPage() {
               onClick={() => {
                 setUploadDialogOpen(false)
                 setUploadFile(null)
-                setUploadForm({ name: "", description: "", category: "" })
               }}
+              disabled={isLoading}
             >
               取消
             </Button>
@@ -498,7 +557,7 @@ export default function DocumentTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+          </div>
   )
 }
 
@@ -509,6 +568,7 @@ interface TemplateListItemProps {
   onSelect: () => void
   onDelete: (e: React.MouseEvent) => void
   onToggleStatus: (e: React.MouseEvent) => void
+  onRename: (id: number, newName: string) => Promise<void>
 }
 
 function TemplateListItem({
@@ -517,98 +577,221 @@ function TemplateListItem({
   onSelect,
   onDelete,
   onToggleStatus,
+  onRename,
 }: TemplateListItemProps) {
-  const [isHovered, setIsHovered] = useState(false)
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editedName, setEditedName] = useState(template.name)
+  const [isRenaming, setIsRenaming] = useState(false)
+
+  // 当模板名称变化时，同步更新编辑状态
+  useEffect(() => {
+    if (!isEditingName) {
+      setEditedName(template.name)
+    }
+  }, [template.name, isEditingName])
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditedName(template.name)
+    setIsEditingName(true)
+  }
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditedName(template.name)
+    setIsEditingName(false)
+  }
+
+  const handleSaveEdit = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!editedName.trim()) {
+      return
+    }
+    if (editedName.trim() === template.name) {
+      setIsEditingName(false)
+      return
+    }
+    setIsRenaming(true)
+    try {
+      await onRename(template.id, editedName.trim())
+      setIsEditingName(false)
+    } catch (error) {
+      setEditedName(template.name)
+    } finally {
+      setIsRenaming(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit(e as any)
+    } else if (e.key === 'Escape') {
+      handleCancelEdit(e as any)
+    }
+  }
 
   return (
     <div
       className={cn(
-        "relative p-3 mb-2 rounded-lg cursor-pointer transition-colors",
+        "w-full p-3 rounded-lg border text-left transition-all duration-200 hover:shadow-md group relative",
         isSelected
-          ? "bg-primary text-primary-foreground"
-          : "bg-white hover:bg-gray-100"
+          ? "border-blue-500 shadow-md ring-2 ring-blue-200 bg-blue-50"
+          : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30"
       )}
       onClick={onSelect}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3 pr-28">
         <div className="flex-1 min-w-0">
-          <h4 className={cn("font-medium truncate", isSelected && "text-primary-foreground")}>
-            {template.name}
-          </h4>
-          {template.description && (
-            <p
-              className={cn(
-                "text-sm mt-1 line-clamp-2",
-                isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-              )}
-            >
-              {template.description}
-            </p>
-          )}
-          <div className="flex items-center gap-2 mt-2">
-            <span
-              className={cn(
-                "text-xs px-2 py-0.5 rounded",
-                isSelected
-                  ? template.status === "published"
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-primary-foreground/10 text-primary-foreground"
-                  : template.status === "published"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-gray-100 text-gray-800"
-              )}
-            >
-              {template.status === "published" ? "已发布" : "草稿"}
-            </span>
-            {template.category && (
-              <span
-                className={cn(
-                  "text-xs",
-                  isSelected ? "text-primary-foreground/70" : "text-muted-foreground"
-                )}
-              >
-                {template.category}
-              </span>
-            )}
-          </div>
-        </div>
+          {/* ID */}
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-[9px] text-slate-500 font-medium">ID</span>
+            <span className="text-[10px] font-mono text-blue-600 font-semibold">#{template.id}</span>
       </div>
 
-      {/* 悬浮操作按钮 */}
-      {isHovered && (
-        <div className="absolute top-2 right-2 flex gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn(
-              "h-7 w-7 p-0",
-              isSelected && "text-primary-foreground hover:bg-primary-foreground/20"
-            )}
-            onClick={onToggleStatus}
-            title={template.status === "published" ? "撤回" : "发布"}
-          >
-            {template.status === "published" ? (
-              <EyeOff className="h-4 w-4" />
+          {/* 模板名称 */}
+          <div className="mb-1">
+            {isEditingName ? (
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "flex-1 min-w-0 text-[11px] font-medium px-1.5 py-0.5 border rounded",
+                    "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                    isSelected ? "text-blue-700 border-blue-300 bg-blue-50" : "text-slate-700 border-slate-300 bg-white"
+                  )}
+                  autoFocus
+                  disabled={isRenaming}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 w-5 p-0 flex-shrink-0"
+                  onClick={handleSaveEdit}
+                  disabled={isRenaming || !editedName.trim()}
+                  title="保存"
+                >
+                  <Check className="h-3 w-3 text-green-600" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 w-5 p-0 flex-shrink-0"
+                  onClick={handleCancelEdit}
+                  disabled={isRenaming}
+                  title="取消"
+                >
+                  <X className="h-3 w-3 text-red-600" />
+                </Button>
+              </div>
             ) : (
-              <Eye className="h-4 w-4" />
+              <h4 className={cn(
+                "text-[11px] font-medium truncate",
+                isSelected ? "text-blue-700" : "text-slate-700"
+              )}>
+                {template.name}
+              </h4>
             )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn(
-              "h-7 w-7 p-0 text-destructive",
-              isSelected && "text-destructive hover:bg-primary-foreground/20"
+                </div>
+
+          {/* 描述 */}
+          {template.description && (
+            <div className="mb-1">
+              <p className={cn(
+                "text-[10px] line-clamp-1",
+                isSelected ? "text-blue-600/80" : "text-slate-500"
+              )}>
+                {template.description}
+              </p>
+                  </div>
+                )}
+
+          {/* 元信息 */}
+          <div className="flex items-center gap-1 text-[10px] text-slate-500 flex-wrap">
+            {template.category && (
+              <>
+                <span>{template.category}</span>
+                <span>•</span>
+              </>
             )}
-            onClick={onDelete}
-            title="删除"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+            {template.placeholders?.placeholders && template.placeholders.placeholders.length > 0 && (
+              <span>占位符: {template.placeholders.placeholders.length} 个</span>
+                )}
+              </div>
+                </div>
+                    </div>
+
+      {/* 常驻操作按钮 - 右上角 */}
+      <div className="absolute top-2 right-2 flex gap-3">
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "h-6 w-6 p-0",
+            isSelected && "text-blue-700 hover:bg-blue-100"
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleStartEdit(e)
+          }}
+          title="重命名"
+          disabled={isEditingName}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "h-6 w-6 p-0",
+            isSelected && "text-blue-700 hover:bg-blue-100"
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleStatus(e)
+          }}
+          title={template.status === "published" ? "撤回" : "发布"}
+        >
+          {template.status === "published" ? (
+            <Undo className="h-3.5 w-3.5" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "h-6 w-6 p-0 text-red-600",
+            isSelected && "text-red-600 hover:bg-red-50"
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(e)
+          }}
+          title="删除"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
         </div>
-      )}
+
+      {/* 状态徽章 - 右下角 */}
+      <div className="absolute bottom-2 right-2">
+        <Badge
+          variant={template.status === "published" ? "default" : "secondary"}
+          className={cn(
+            "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4",
+            template.status === "published" 
+              ? "bg-green-500 hover:bg-green-600 text-white" 
+              : "bg-slate-200 text-slate-600"
+          )}
+        >
+          {template.status === "published" ? "已发布" : "草稿"}
+        </Badge>
+      </div>
     </div>
   )
 }
