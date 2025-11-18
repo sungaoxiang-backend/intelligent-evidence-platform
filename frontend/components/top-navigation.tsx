@@ -46,8 +46,8 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     if (pathname.startsWith("/users")) return "users"
     if (pathname.startsWith("/staff")) return "staff"
     if (pathname.startsWith("/profile")) return "profile"
-    if (pathname.startsWith("/lex-docx")) return "lex-docx"
     if (pathname.startsWith("/document-templates")) return "document-templates"
+    if (pathname.startsWith("/template-editor")) return "template-editor"
     return "workbench"
   }
   const activeModule = getActiveModule()
@@ -56,7 +56,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
-    { id: "lex-docx", label: "智能文书", icon: FileText, href: "/lex-docx" },
+    { id: "template-editor", label: "文书模板", icon: FileText, href: "/template-editor" },
   ]
 
   if (userRole === "admin") {
