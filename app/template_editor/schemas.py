@@ -75,7 +75,6 @@ class TemplateResponse(BaseModel):
     status: str = Field(..., description="状态：draft/published")
     prosemirror_json: Dict[str, Any] = Field(..., description="ProseMirror JSON 格式的文档内容")
     docx_url: Optional[str] = Field(None, description="原始 DOCX 文件在 COS 中的 URL")
-    placeholders: Optional[PlaceholderInfo] = Field(None, description="占位符信息")
     created_by_id: Optional[int] = Field(None, description="创建人ID")
     updated_by_id: Optional[int] = Field(None, description="更新人ID")
     created_at: datetime = Field(..., description="创建时间")
@@ -110,4 +109,67 @@ class ParseAndSaveRequest(BaseModel):
     category: Optional[str] = Field(None, description="分类名称", max_length=100)
     status: str = Field("draft", description="状态：draft/published")
     save_to_cos: bool = Field(True, description="是否将 DOCX 文件保存到 COS")
+
+
+# 占位符管理相关的 Schema
+
+class PlaceholderOption(BaseModel):
+    """占位符选项"""
+    
+    label: str = Field(..., description="选项标签")
+    value: str = Field(..., description="选项值")
+
+
+class PlaceholderCreateRequest(BaseModel):
+    """创建占位符请求"""
+    
+    placeholder_name: str = Field(..., description="占位符名称（唯一）", min_length=1, max_length=100)
+    type: str = Field(..., description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
+    required: bool = Field(False, description="是否必填")
+    hint: Optional[str] = Field(None, description="提示文本")
+    options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
+
+
+class PlaceholderUpdateRequest(BaseModel):
+    """更新占位符请求"""
+    
+    type: Optional[str] = Field(None, description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
+    required: Optional[bool] = Field(None, description="是否必填")
+    hint: Optional[str] = Field(None, description="提示文本")
+    options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
+
+
+class PlaceholderResponse(BaseModel):
+    """占位符响应"""
+    
+    id: int = Field(..., description="占位符ID")
+    placeholder_name: str = Field(..., description="占位符名称")
+    type: str = Field(..., description="占位符类型")
+    required: bool = Field(..., description="是否必填")
+    hint: Optional[str] = Field(None, description="提示文本")
+    options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表")
+    created_by_id: Optional[int] = Field(None, description="创建人ID")
+    updated_by_id: Optional[int] = Field(None, description="更新人ID")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
+    
+    class Config:
+        from_attributes = True
+
+
+class PlaceholderListResponse(BaseModel):
+    """占位符列表响应"""
+    
+    code: int = Field(200, description="状态码")
+    message: str = Field("查询成功", description="消息")
+    data: List[PlaceholderResponse] = Field(..., description="占位符列表")
+    total: int = Field(..., description="总数")
+
+
+class PlaceholderDetailResponse(BaseModel):
+    """占位符详情响应"""
+    
+    code: int = Field(200, description="状态码")
+    message: str = Field("查询成功", description="消息")
+    data: PlaceholderResponse = Field(..., description="占位符详情")
 

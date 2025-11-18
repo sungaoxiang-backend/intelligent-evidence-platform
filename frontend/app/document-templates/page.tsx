@@ -67,6 +67,7 @@ export default function DocumentTemplatesPage() {
   const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [placeholderCounts, setPlaceholderCounts] = useState<Record<number, number>>({})
   const { toast } = useToast()
 
   // 加载模板列表
@@ -80,6 +81,19 @@ export default function DocumentTemplatesPage() {
         setSelectedTemplate(null)
         setIsEditing(false)
       }
+      
+      // 为每个模板加载占位符数量
+      const counts: Record<number, number> = {}
+      for (const template of response.data) {
+        try {
+          const placeholderResponse = await templateApi.getPlaceholders({ template_id: template.id })
+          counts[template.id] = placeholderResponse.total || 0
+        } catch (error) {
+          // 如果获取占位符失败，设置为 0
+          counts[template.id] = 0
+        }
+      }
+      setPlaceholderCounts(counts)
     } catch (error: any) {
       toast({
         title: "加载失败",
@@ -388,6 +402,7 @@ export default function DocumentTemplatesPage() {
                     key={template.id}
                     template={template}
                     isSelected={selectedTemplate?.id === template.id}
+                    placeholderCount={placeholderCounts[template.id] || 0}
                     onSelect={() => handleSelectTemplate(template)}
                     onDelete={(e) => handleDeleteClick(template, e)}
                     onToggleStatus={(e) => handleToggleStatus(template, e)}
@@ -565,6 +580,7 @@ export default function DocumentTemplatesPage() {
 interface TemplateListItemProps {
   template: DocumentTemplate
   isSelected: boolean
+  placeholderCount: number
   onSelect: () => void
   onDelete: (e: React.MouseEvent) => void
   onToggleStatus: (e: React.MouseEvent) => void
@@ -574,6 +590,7 @@ interface TemplateListItemProps {
 function TemplateListItem({
   template,
   isSelected,
+  placeholderCount,
   onSelect,
   onDelete,
   onToggleStatus,
@@ -717,9 +734,9 @@ function TemplateListItem({
                 <span>•</span>
               </>
             )}
-            {template.placeholders?.placeholders && template.placeholders.placeholders.length > 0 && (
-              <span>占位符: {template.placeholders.placeholders.length} 个</span>
-                )}
+            {placeholderCount > 0 && (
+              <span>占位符: {placeholderCount} 个</span>
+            )}
               </div>
                 </div>
                     </div>

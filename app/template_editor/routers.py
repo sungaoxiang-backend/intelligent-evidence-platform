@@ -5,7 +5,7 @@
 import logging
 import io
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status as http_status, UploadFile, File, Form, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from app.core.deps import get_current_staff, get_db
 from app.staffs.models import Staff
 from app.integrations.cos import cos_service
-from .services import template_editor_service, template_service
+from .services import template_editor_service, template_service, placeholder_service
 from .schemas import (
     ParseDocxResponse, 
     ExportDocxRequest, 
@@ -24,6 +24,11 @@ from .schemas import (
     TemplateListResponse,
     TemplateDetailResponse,
     ParseAndSaveRequest,
+    PlaceholderCreateRequest,
+    PlaceholderUpdateRequest,
+    PlaceholderResponse,
+    PlaceholderListResponse,
+    PlaceholderDetailResponse,
 )
 from .models import DocumentTemplate
 
@@ -51,7 +56,7 @@ async def parse_docx(
         # 验证文件类型
         if not file.filename or not file.filename.endswith(".docx"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="文件必须是 .docx 格式",
             )
 
@@ -72,13 +77,13 @@ async def parse_docx(
     except ValueError as e:
         logger.error(f"解析 docx 失败: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
         logger.error(f"解析 docx 时发生错误: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"解析 docx 时发生错误: {str(e)}",
         )
 
@@ -114,7 +119,7 @@ async def parse_and_save_docx(
         # 验证文件类型
         if not file.filename or not file.filename.endswith(".docx"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="文件必须是 .docx 格式",
             )
 
@@ -153,11 +158,21 @@ async def parse_and_save_docx(
             created_by_id=current_staff.id,
         )
 
-        # 转换为响应格式
-        template_response = TemplateResponse.model_validate(template)
-        if template.placeholders:
-            from .schemas import PlaceholderInfo
-            template_response.placeholders = PlaceholderInfo.model_validate(template.placeholders)
+        # 转换为响应格式（排除 placeholders 关系字段，避免触发懒加载）
+        template_dict = {
+            'id': template.id,
+            'name': template.name,
+            'description': template.description,
+            'category': template.category,
+            'status': template.status,
+            'prosemirror_json': template.prosemirror_json,
+            'docx_url': template.docx_url,
+            'created_by_id': template.created_by_id,
+            'updated_by_id': template.updated_by_id,
+            'created_at': template.created_at,
+            'updated_at': template.updated_at,
+        }
+        template_response = TemplateResponse.model_validate(template_dict)
 
         return TemplateDetailResponse(
             code=200,
@@ -168,13 +183,13 @@ async def parse_and_save_docx(
     except ValueError as e:
         logger.error(f"解析 docx 失败: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
         logger.error(f"解析并保存 docx 时发生错误: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"解析并保存 docx 时发生错误: {str(e)}",
         )
 
@@ -237,20 +252,20 @@ async def export_docx(
     except ValueError as e:
         logger.error(f"导出 docx 失败: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
         logger.error(f"导出 docx 时发生错误: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"导出 docx 时发生错误: {str(e)}",
         )
 
 
 # 模板管理 API
 
-@router.post("/templates", response_model=TemplateDetailResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/templates", response_model=TemplateDetailResponse, status_code=http_status.HTTP_201_CREATED)
 async def create_template(
     request: TemplateCreateRequest,
     current_staff: Staff = Depends(get_current_staff),
@@ -279,10 +294,21 @@ async def create_template(
             created_by_id=current_staff.id,
         )
 
-        template_response = TemplateResponse.model_validate(template)
-        if template.placeholders:
-            from .schemas import PlaceholderInfo
-            template_response.placeholders = PlaceholderInfo.model_validate(template.placeholders)
+        # 转换为响应格式（排除 placeholders 关系字段，避免触发懒加载）
+        template_dict = {
+            'id': template.id,
+            'name': template.name,
+            'description': template.description,
+            'category': template.category,
+            'status': template.status,
+            'prosemirror_json': template.prosemirror_json,
+            'docx_url': template.docx_url,
+            'created_by_id': template.created_by_id,
+            'updated_by_id': template.updated_by_id,
+            'created_at': template.created_at,
+            'updated_at': template.updated_at,
+        }
+        template_response = TemplateResponse.model_validate(template_dict)
 
         return TemplateDetailResponse(
             code=201,
@@ -292,7 +318,7 @@ async def create_template(
     except Exception as e:
         logger.error(f"创建模板失败: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"创建模板失败: {str(e)}",
         )
 
@@ -338,13 +364,23 @@ async def list_templates(
         result = await db.execute(count_query)
         total = result.scalar() or 0
 
-        # 转换为响应格式
+        # 转换为响应格式（排除 placeholders 关系字段，避免触发懒加载）
         template_responses = []
         for template in templates:
-            template_response = TemplateResponse.model_validate(template)
-            if template.placeholders:
-                from .schemas import PlaceholderInfo
-                template_response.placeholders = PlaceholderInfo.model_validate(template.placeholders)
+            template_dict = {
+                'id': template.id,
+                'name': template.name,
+                'description': template.description,
+                'category': template.category,
+                'status': template.status,
+                'prosemirror_json': template.prosemirror_json,
+                'docx_url': template.docx_url,
+                'created_by_id': template.created_by_id,
+                'updated_by_id': template.updated_by_id,
+                'created_at': template.created_at,
+                'updated_at': template.updated_at,
+            }
+            template_response = TemplateResponse.model_validate(template_dict)
             template_responses.append(template_response)
 
         return TemplateListResponse(
@@ -356,7 +392,7 @@ async def list_templates(
     except Exception as e:
         logger.error(f"查询模板列表失败: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查询模板列表失败: {str(e)}",
         )
 
@@ -381,14 +417,25 @@ async def get_template(
     template = await template_service.get_template(db, template_id)
     if template is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"模板 {template_id} 不存在",
         )
 
-    template_response = TemplateResponse.model_validate(template)
-    if template.placeholders:
-        from .schemas import PlaceholderInfo
-        template_response.placeholders = PlaceholderInfo.model_validate(template.placeholders)
+    # 转换为响应格式（排除 placeholders 关系字段，避免触发懒加载）
+    template_dict = {
+        'id': template.id,
+        'name': template.name,
+        'description': template.description,
+        'category': template.category,
+        'status': template.status,
+        'prosemirror_json': template.prosemirror_json,
+        'docx_url': template.docx_url,
+        'created_by_id': template.created_by_id,
+        'updated_by_id': template.updated_by_id,
+        'created_at': template.created_at,
+        'updated_at': template.updated_at,
+    }
+    template_response = TemplateResponse.model_validate(template_dict)
 
     return TemplateDetailResponse(
         code=200,
@@ -419,7 +466,7 @@ async def update_template(
     template = await template_service.get_template(db, template_id)
     if template is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"模板 {template_id} 不存在",
         )
 
@@ -436,10 +483,21 @@ async def update_template(
             updated_by_id=current_staff.id,
         )
 
-        template_response = TemplateResponse.model_validate(updated_template)
-        if updated_template.placeholders:
-            from .schemas import PlaceholderInfo
-            template_response.placeholders = PlaceholderInfo.model_validate(updated_template.placeholders)
+        # 转换为响应格式（排除 placeholders 关系字段，避免触发懒加载）
+        template_dict = {
+            'id': updated_template.id,
+            'name': updated_template.name,
+            'description': updated_template.description,
+            'category': updated_template.category,
+            'status': updated_template.status,
+            'prosemirror_json': updated_template.prosemirror_json,
+            'docx_url': updated_template.docx_url,
+            'created_by_id': updated_template.created_by_id,
+            'updated_by_id': updated_template.updated_by_id,
+            'created_at': updated_template.created_at,
+            'updated_at': updated_template.updated_at,
+        }
+        template_response = TemplateResponse.model_validate(template_dict)
 
         return TemplateDetailResponse(
             code=200,
@@ -449,12 +507,12 @@ async def update_template(
     except Exception as e:
         logger.error(f"更新模板失败: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"更新模板失败: {str(e)}",
         )
 
 
-@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/templates/{template_id}", status_code=http_status.HTTP_204_NO_CONTENT)
 async def delete_template(
     template_id: int,
     current_staff: Staff = Depends(get_current_staff),
@@ -471,7 +529,7 @@ async def delete_template(
     template = await template_service.get_template(db, template_id)
     if template is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"模板 {template_id} 不存在",
         )
 
@@ -479,13 +537,262 @@ async def delete_template(
         success = await template_service.delete_template(db, template_id)
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="删除模板失败",
             )
     except Exception as e:
         logger.error(f"删除模板失败: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"删除模板失败: {str(e)}",
+        )
+
+
+# 占位符管理 API
+
+@router.post("/placeholders", response_model=PlaceholderDetailResponse, status_code=http_status.HTTP_201_CREATED)
+async def create_or_update_placeholder(
+    request: PlaceholderCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_staff: Staff = Depends(get_current_staff),
+):
+    """
+    创建或更新占位符（以 placeholder_name 为唯一标识）
+    
+    如果占位符已存在，则更新；否则创建新占位符
+    """
+    try:
+        # 转换 options
+        options_dict = None
+        if request.options:
+            options_dict = [opt.dict() for opt in request.options]
+        
+        placeholder = await placeholder_service.create_or_update_placeholder(
+            db=db,
+            placeholder_name=request.placeholder_name,
+            type=request.type,
+            required=request.required,
+            hint=request.hint,
+            options=options_dict,
+            created_by_id=current_staff.id,
+        )
+        
+        return PlaceholderDetailResponse(
+            code=200,
+            message="操作成功",
+            data=PlaceholderResponse.model_validate(placeholder),
+        )
+    except Exception as e:
+        logger.error(f"创建或更新占位符失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建或更新占位符失败: {str(e)}"
+        )
+
+
+@router.get("/placeholders", response_model=PlaceholderListResponse)
+async def list_placeholders(
+    template_id: Optional[int] = Query(None, description="模板ID（可选，如果提供则只返回该模板关联的占位符）"),
+    skip: int = Query(0, ge=0, description="跳过记录数"),
+    limit: int = Query(100, ge=1, le=1000, description="返回记录数限制"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    列出占位符
+    
+    如果提供 template_id，则只返回该模板关联的占位符
+    """
+    try:
+        placeholders, total = await placeholder_service.list_placeholders(
+            db=db,
+            template_id=template_id,
+            skip=skip,
+            limit=limit,
+        )
+        
+        return PlaceholderListResponse(
+            code=200,
+            message="查询成功",
+            data=[PlaceholderResponse.model_validate(p) for p in placeholders],
+            total=total,
+        )
+    except Exception as e:
+        logger.error(f"查询占位符列表失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"查询占位符列表失败: {str(e)}"
+        )
+
+
+@router.get("/placeholders/{placeholder_name}", response_model=PlaceholderDetailResponse)
+async def get_placeholder(
+    placeholder_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    根据占位符名称获取占位符详情
+    """
+    try:
+        placeholder = await placeholder_service.get_placeholder(
+            db=db,
+            placeholder_name=placeholder_name,
+        )
+        
+        if not placeholder:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"占位符不存在: {placeholder_name}"
+            )
+        
+        return PlaceholderDetailResponse(
+            code=200,
+            message="查询成功",
+            data=PlaceholderResponse.model_validate(placeholder),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询占位符详情失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"查询占位符详情失败: {str(e)}"
+        )
+
+
+@router.put("/placeholders/{placeholder_name}", response_model=PlaceholderDetailResponse)
+async def update_placeholder(
+    placeholder_name: str,
+    request: PlaceholderUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_staff: Staff = Depends(get_current_staff),
+):
+    """
+    更新占位符
+    """
+    try:
+        # 转换 options
+        options_dict = None
+        if request.options is not None:
+            options_dict = [opt.dict() for opt in request.options]
+        
+        placeholder = await placeholder_service.update_placeholder(
+            db=db,
+            placeholder_name=placeholder_name,
+            type=request.type,
+            required=request.required,
+            hint=request.hint,
+            options=options_dict,
+            updated_by_id=current_staff.id,
+        )
+        
+        if not placeholder:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"占位符不存在: {placeholder_name}"
+            )
+        
+        return PlaceholderDetailResponse(
+            code=200,
+            message="更新成功",
+            data=PlaceholderResponse.model_validate(placeholder),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新占位符失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新占位符失败: {str(e)}"
+        )
+
+
+@router.delete("/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def delete_placeholder(
+    placeholder_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    删除占位符
+    """
+    try:
+        success = await placeholder_service.delete_placeholder(
+            db=db,
+            placeholder_name=placeholder_name,
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"占位符不存在: {placeholder_name}"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除占位符失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除占位符失败: {str(e)}"
+        )
+
+
+@router.post("/templates/{template_id}/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def associate_placeholder_to_template(
+    template_id: int,
+    placeholder_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    将占位符关联到模板
+    """
+    try:
+        success = await placeholder_service.associate_placeholder_to_template(
+            db=db,
+            template_id=template_id,
+            placeholder_name=placeholder_name,
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="模板或占位符不存在"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"关联占位符到模板失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"关联占位符到模板失败: {str(e)}"
+        )
+
+
+@router.delete("/templates/{template_id}/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def disassociate_placeholder_from_template(
+    template_id: int,
+    placeholder_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    从模板中移除占位符关联
+    """
+    try:
+        success = await placeholder_service.disassociate_placeholder_from_template(
+            db=db,
+            template_id=template_id,
+            placeholder_name=placeholder_name,
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="模板或占位符不存在，或关联关系不存在"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"移除占位符关联失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"移除占位符关联失败: {str(e)}"
         )
 

@@ -10,9 +10,10 @@ from docx import Document
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from .mappers import DocxToProseMirrorMapper, ProseMirrorToDocxMapper
-from .models import DocumentTemplate
+from .models import DocumentTemplate, TemplatePlaceholder
 
 
 class TemplateEditorService:
@@ -235,6 +236,7 @@ class TemplateService:
         """
         # 提取占位符
         placeholder_info = template_editor_service.extract_placeholders(prosemirror_json)
+        placeholder_names = placeholder_info.get('placeholders', [])
         
         # 创建模板对象
         template = DocumentTemplate(
@@ -244,22 +246,69 @@ class TemplateService:
             status=status,
             prosemirror_json=prosemirror_json,
             docx_url=docx_url,
-            placeholders=placeholder_info,
             created_by_id=created_by_id,
             updated_by_id=created_by_id,
         )
         
         db.add(template)
+        await db.flush()  # 先 flush 以获取 template.id
+        
+        # 为每个占位符名称创建或获取 TemplatePlaceholder 对象并关联到模板
+        placeholder_objects = []
+        for placeholder_name in placeholder_names:
+            # 查询是否已存在
+            result = await db.execute(
+                select(TemplatePlaceholder).where(
+                    TemplatePlaceholder.placeholder_name == placeholder_name
+                )
+            )
+            placeholder = result.scalar_one_or_none()
+            
+            if not placeholder:
+                # 创建新占位符（只设置 placeholder_name，其他用默认值）
+                placeholder = TemplatePlaceholder(
+                    placeholder_name=placeholder_name,
+                    type="text",  # 默认类型
+                    required=False,  # 默认值
+                    hint=None,  # 默认值
+                    options=None,  # 默认值
+                    created_by_id=created_by_id,
+                    updated_by_id=created_by_id,
+                )
+                db.add(placeholder)
+                await db.flush()  # flush 以获取 placeholder.id
+                logger.info(f"创建占位符: {placeholder_name}")
+            else:
+                logger.info(f"使用已存在的占位符: {placeholder_name}")
+            
+            placeholder_objects.append(placeholder)
+        
+        # 关联占位符到模板（直接操作中间表，避免触发懒加载）
+        if placeholder_objects:
+            from .models import template_placeholder_association
+            # 直接插入到中间表，避免访问关系字段触发懒加载
+            for placeholder in placeholder_objects:
+                await db.execute(
+                    template_placeholder_association.insert().values(
+                        template_id=template.id,
+                        placeholder_id=placeholder.id
+                    )
+                )
+        
         await db.commit()
         await db.refresh(template)
         
-        logger.info(f"创建模板成功: {template.id}, 名称: {name}, 占位符数量: {len(placeholder_info.get('placeholders', []))}")
+        logger.info(f"创建模板成功: {template.id}, 名称: {name}, 占位符数量: {len(placeholder_names)}")
         
         return template
     
     async def get_template(self, db: AsyncSession, template_id: int) -> Optional[DocumentTemplate]:
         """根据ID获取文书模板"""
-        result = await db.execute(select(DocumentTemplate).where(DocumentTemplate.id == template_id))
+        result = await db.execute(
+            select(DocumentTemplate)
+            .where(DocumentTemplate.id == template_id)
+            .options(selectinload(DocumentTemplate.placeholders))
+        )
         return result.scalar_one_or_none()
     
     async def list_templates(
@@ -271,7 +320,7 @@ class TemplateService:
         limit: int = 100,
     ) -> List[DocumentTemplate]:
         """列出文书模板"""
-        query = select(DocumentTemplate)
+        query = select(DocumentTemplate).options(selectinload(DocumentTemplate.placeholders))
         
         if status:
             query = query.where(DocumentTemplate.status == status)
@@ -281,7 +330,7 @@ class TemplateService:
         query = query.offset(skip).limit(limit).order_by(DocumentTemplate.created_at.desc())
         
         result = await db.execute(query)
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
     
     async def update_template(
         self,
@@ -309,11 +358,60 @@ class TemplateService:
         if updated_by_id is not None:
             template.updated_by_id = updated_by_id
         
-        # 如果更新了 ProseMirror JSON，重新提取占位符
+        # 如果更新了 ProseMirror JSON，重新提取占位符并更新关联关系
         if prosemirror_json is not None:
             template.prosemirror_json = prosemirror_json
             placeholder_info = template_editor_service.extract_placeholders(prosemirror_json)
-            template.placeholders = placeholder_info
+            placeholder_names = placeholder_info.get('placeholders', [])
+            
+            # 清除旧的关联关系（直接操作中间表，避免触发懒加载）
+            from .models import template_placeholder_association
+            await db.execute(
+                template_placeholder_association.delete().where(
+                    template_placeholder_association.c.template_id == template.id
+                )
+            )
+            await db.flush()
+            
+            # 为每个占位符名称创建或获取 TemplatePlaceholder 对象并关联到模板
+            placeholder_objects = []
+            for placeholder_name in placeholder_names:
+                # 查询是否已存在
+                result = await db.execute(
+                    select(TemplatePlaceholder).where(
+                        TemplatePlaceholder.placeholder_name == placeholder_name
+                    )
+                )
+                placeholder = result.scalar_one_or_none()
+                
+                if not placeholder:
+                    # 创建新占位符（只设置 placeholder_name，其他用默认值）
+                    placeholder = TemplatePlaceholder(
+                        placeholder_name=placeholder_name,
+                        type="text",  # 默认类型
+                        required=False,  # 默认值
+                        hint=None,  # 默认值
+                        options=None,  # 默认值
+                        created_by_id=updated_by_id,
+                        updated_by_id=updated_by_id,
+                    )
+                    db.add(placeholder)
+                    await db.flush()  # flush 以获取 placeholder.id
+                    logger.info(f"创建占位符: {placeholder_name}")
+                else:
+                    logger.info(f"使用已存在的占位符: {placeholder_name}")
+                
+                placeholder_objects.append(placeholder)
+            
+            # 关联占位符到模板（直接操作中间表，避免触发懒加载）
+            if placeholder_objects:
+                for placeholder in placeholder_objects:
+                    await db.execute(
+                        template_placeholder_association.insert().values(
+                            template_id=template.id,
+                            placeholder_id=placeholder.id
+                        )
+                    )
         
         await db.commit()
         await db.refresh(template)
@@ -336,7 +434,305 @@ class TemplateService:
         return True
 
 
+class PlaceholderService:
+    """占位符服务"""
+    
+    async def create_or_update_placeholder(
+        self,
+        db: AsyncSession,
+        placeholder_name: str,
+        type: str,
+        required: bool = False,
+        hint: Optional[str] = None,
+        options: Optional[List[Dict[str, Any]]] = None,
+        created_by_id: Optional[int] = None,
+    ) -> TemplatePlaceholder:
+        """
+        创建或更新占位符（以 placeholder_name 为唯一标识）
+        
+        Args:
+            db: 数据库会话
+            placeholder_name: 占位符名称（唯一）
+            type: 占位符类型
+            required: 是否必填
+            hint: 提示文本
+            options: 选项列表
+            created_by_id: 创建人ID
+            
+        Returns:
+            TemplatePlaceholder: 占位符对象
+        """
+        from sqlalchemy import select
+        
+        # 查询是否已存在
+        result = await db.execute(
+            select(TemplatePlaceholder).where(
+                TemplatePlaceholder.placeholder_name == placeholder_name
+            )
+        )
+        placeholder = result.scalar_one_or_none()
+        
+        if placeholder:
+            # 更新现有占位符
+            placeholder.type = type
+            placeholder.required = required
+            placeholder.hint = hint
+            placeholder.options = options
+            placeholder.updated_by_id = created_by_id
+            await db.commit()
+            await db.refresh(placeholder)
+            logger.info(f"更新占位符成功: {placeholder_name}")
+        else:
+            # 创建新占位符
+            placeholder = TemplatePlaceholder(
+                placeholder_name=placeholder_name,
+                type=type,
+                required=required,
+                hint=hint,
+                options=options,
+                created_by_id=created_by_id,
+                updated_by_id=created_by_id,
+            )
+            db.add(placeholder)
+            await db.commit()
+            await db.refresh(placeholder)
+            logger.info(f"创建占位符成功: {placeholder_name}")
+        
+        return placeholder
+    
+    async def get_placeholder(
+        self,
+        db: AsyncSession,
+        placeholder_name: str,
+    ) -> Optional[TemplatePlaceholder]:
+        """
+        根据占位符名称获取占位符
+        
+        Args:
+            db: 数据库会话
+            placeholder_name: 占位符名称
+            
+        Returns:
+            Optional[TemplatePlaceholder]: 占位符对象，不存在返回 None
+        """
+        from sqlalchemy import select
+        
+        result = await db.execute(
+            select(TemplatePlaceholder).where(
+                TemplatePlaceholder.placeholder_name == placeholder_name
+            )
+        )
+        return result.scalar_one_or_none()
+    
+    async def list_placeholders(
+        self,
+        db: AsyncSession,
+        template_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[List[TemplatePlaceholder], int]:
+        """
+        列出占位符
+        
+        Args:
+            db: 数据库会话
+            template_id: 模板ID（可选，如果提供则只返回该模板关联的占位符）
+            skip: 跳过记录数
+            limit: 返回记录数限制
+            
+        Returns:
+            tuple[List[TemplatePlaceholder], int]: (占位符列表, 总数)
+        """
+        from sqlalchemy import select, func
+        from .models import template_placeholder_association
+        
+        if template_id:
+            # 查询指定模板关联的占位符
+            query = select(TemplatePlaceholder).join(
+                template_placeholder_association
+            ).where(
+                template_placeholder_association.c.template_id == template_id
+            )
+            count_query = select(func.count()).select_from(
+                TemplatePlaceholder
+            ).join(
+                template_placeholder_association
+            ).where(
+                template_placeholder_association.c.template_id == template_id
+            )
+        else:
+            # 查询所有占位符
+            query = select(TemplatePlaceholder)
+            count_query = select(func.count(TemplatePlaceholder.id))
+        
+        # 获取总数
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # 获取列表
+        query = query.order_by(TemplatePlaceholder.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(query)
+        placeholders = list(result.scalars().unique().all())
+        
+        return placeholders, total
+    
+    async def update_placeholder(
+        self,
+        db: AsyncSession,
+        placeholder_name: str,
+        type: Optional[str] = None,
+        required: Optional[bool] = None,
+        hint: Optional[str] = None,
+        options: Optional[List[Dict[str, Any]]] = None,
+        updated_by_id: Optional[int] = None,
+    ) -> Optional[TemplatePlaceholder]:
+        """
+        更新占位符
+        
+        Args:
+            db: 数据库会话
+            placeholder_name: 占位符名称
+            type: 占位符类型
+            required: 是否必填
+            hint: 提示文本
+            options: 选项列表
+            updated_by_id: 更新人ID
+            
+        Returns:
+            Optional[TemplatePlaceholder]: 更新后的占位符对象，不存在返回 None
+        """
+        placeholder = await self.get_placeholder(db, placeholder_name)
+        if not placeholder:
+            return None
+        
+        if type is not None:
+            placeholder.type = type
+        if required is not None:
+            placeholder.required = required
+        if hint is not None:
+            placeholder.hint = hint
+        if options is not None:
+            placeholder.options = options
+        if updated_by_id is not None:
+            placeholder.updated_by_id = updated_by_id
+        
+        await db.commit()
+        await db.refresh(placeholder)
+        
+        logger.info(f"更新占位符成功: {placeholder_name}")
+        return placeholder
+    
+    async def delete_placeholder(
+        self,
+        db: AsyncSession,
+        placeholder_name: str,
+    ) -> bool:
+        """
+        删除占位符
+        
+        Args:
+            db: 数据库会话
+            placeholder_name: 占位符名称
+            
+        Returns:
+            bool: 是否删除成功
+        """
+        placeholder = await self.get_placeholder(db, placeholder_name)
+        if not placeholder:
+            return False
+        
+        await db.delete(placeholder)
+        await db.commit()
+        
+        logger.info(f"删除占位符成功: {placeholder_name}")
+        return True
+    
+    async def associate_placeholder_to_template(
+        self,
+        db: AsyncSession,
+        template_id: int,
+        placeholder_name: str,
+    ) -> bool:
+        """
+        将占位符关联到模板
+        
+        Args:
+            db: 数据库会话
+            template_id: 模板ID
+            placeholder_name: 占位符名称
+            
+        Returns:
+            bool: 是否关联成功
+        """
+        from sqlalchemy import select
+        from .models import template_placeholder_association
+        
+        # 获取模板和占位符
+        template_result = await db.execute(
+            select(DocumentTemplate).where(DocumentTemplate.id == template_id)
+        )
+        template = template_result.scalar_one_or_none()
+        if not template:
+            return False
+        
+        placeholder = await self.get_placeholder(db, placeholder_name)
+        if not placeholder:
+            return False
+        
+        # 检查是否已关联
+        if placeholder in template.placeholders:
+            return True
+        
+        # 关联
+        template.placeholders.append(placeholder)
+        await db.commit()
+        
+        logger.info(f"关联占位符到模板成功: template_id={template_id}, placeholder_name={placeholder_name}")
+        return True
+    
+    async def disassociate_placeholder_from_template(
+        self,
+        db: AsyncSession,
+        template_id: int,
+        placeholder_name: str,
+    ) -> bool:
+        """
+        从模板中移除占位符关联
+        
+        Args:
+            db: 数据库会话
+            template_id: 模板ID
+            placeholder_name: 占位符名称
+            
+        Returns:
+            bool: 是否移除成功
+        """
+        from sqlalchemy import select
+        
+        # 获取模板
+        template_result = await db.execute(
+            select(DocumentTemplate).where(DocumentTemplate.id == template_id)
+        )
+        template = template_result.scalar_one_or_none()
+        if not template:
+            return False
+        
+        placeholder = await self.get_placeholder(db, placeholder_name)
+        if not placeholder:
+            return False
+        
+        # 移除关联
+        if placeholder in template.placeholders:
+            template.placeholders.remove(placeholder)
+            await db.commit()
+            logger.info(f"移除占位符关联成功: template_id={template_id}, placeholder_name={placeholder_name}")
+            return True
+        
+        return False
+
+
 # 创建服务实例
 template_editor_service = TemplateEditorService()
 template_service = TemplateService()
+placeholder_service = PlaceholderService()
 

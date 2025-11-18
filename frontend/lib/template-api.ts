@@ -21,10 +21,6 @@ export interface DocumentTemplate {
   status: "draft" | "published"
   prosemirror_json: any
   docx_url?: string
-  placeholders?: {
-    placeholders: string[]
-    metadata: Record<string, any>
-  }
   created_by_id?: number
   updated_by_id?: number
   created_at: string
@@ -263,6 +259,31 @@ export const templateApi = {
     }
 
     return await response.blob()
+  },
+
+  // 获取占位符列表（支持按 template_id 筛选）
+  async getPlaceholders(params?: {
+    template_id?: number
+    skip?: number
+    limit?: number
+  }): Promise<{ code: number; message: string; data: any[]; total: number }> {
+    const queryParams = new URLSearchParams()
+    if (params?.template_id !== undefined) queryParams.append("template_id", String(params.template_id))
+    if (params?.skip !== undefined) queryParams.append("skip", String(params.skip))
+    if (params?.limit !== undefined) queryParams.append("limit", String(params.limit))
+
+    const url = buildApiUrl(`/template-editor/placeholders${queryParams.toString() ? `?${queryParams.toString()}` : ""}`)
+    const response = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "获取占位符列表失败")
+    }
+
+    const result = await response.json()
+    return result
   },
 }
 
