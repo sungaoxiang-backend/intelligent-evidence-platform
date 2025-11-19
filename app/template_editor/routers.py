@@ -78,13 +78,21 @@ async def parse_docx(
         logger.error(f"解析 docx 失败: {str(e)}")
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail={
+                "code": "parse_failed",
+                "message": str(e),
+                "context": {"filename": file.filename},
+            },
         )
     except Exception as e:
         logger.error(f"解析 docx 时发生错误: {str(e)}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"解析 docx 时发生错误: {str(e)}",
+            detail={
+                "code": "parse_error",
+                "message": "解析 docx 时发生错误",
+                "context": {"filename": file.filename, "error": str(e)},
+            },
         )
 
 
@@ -184,13 +192,21 @@ async def parse_and_save_docx(
         logger.error(f"解析 docx 失败: {str(e)}")
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail={
+                "code": "parse_failed",
+                "message": str(e),
+                "context": {"filename": file.filename},
+            },
         )
     except Exception as e:
         logger.error(f"解析并保存 docx 时发生错误: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"解析并保存 docx 时发生错误: {str(e)}",
+            detail={
+                "code": "parse_save_error",
+                "message": "解析并保存 docx 时发生错误",
+                "context": {"filename": file.filename, "error": str(e)},
+            },
         )
 
 
@@ -212,9 +228,12 @@ async def export_docx(
     try:
         # 导出为 docx
         logger.info("开始导出 DOCX")
-        docx_bytes = template_editor_service.export_prosemirror_to_docx(
+        result = template_editor_service.export_prosemirror_to_docx(
             request.prosemirror_json
         )
+        docx_bytes = result if isinstance(result, bytes) else result["docx"]
+        warnings = [] if isinstance(result, bytes) else result.get("warnings", [])
+        logs = [] if isinstance(result, bytes) else result.get("logs", [])
         logger.info(f"DOCX 导出成功，大小: {len(docx_bytes)} bytes")
 
         # 确定文件名
@@ -239,12 +258,20 @@ async def export_docx(
         
         # 返回文件响应
         logger.info("准备返回响应")
+        headers = {
+            "Content-Disposition": content_disposition
+        }
+        if warnings:
+            headers["X-Template-Warnings"] = ",".join(
+                warning.get("code", "unknown") for warning in warnings
+            )
+        if logs:
+            headers["X-Template-Logs"] = str(len(logs))
+
         response = Response(
             content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={
-                "Content-Disposition": content_disposition
-            },
+            headers=headers,
         )
         logger.info("响应创建成功")
         return response

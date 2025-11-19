@@ -12,8 +12,9 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 from docx.table import Table, _Cell
 from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX, WD_LINE_SPACING
 from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from .mapping_config import (
@@ -24,6 +25,30 @@ from .mapping_config import (
     rgb_to_hex,
     hex_to_rgb,
 )
+
+W_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W_NS = f"{{{W_NAMESPACE}}}"
+W_NS_MAP = {"w": W_NAMESPACE}
+
+HIGHLIGHT_COLOR_MAP = {
+    "yellow": "#ffff00",
+    "pink": "#ff00ff",
+    "red": "#ff0000",
+    "blue": "#0000ff",
+    "darkblue": "#00008b",
+    "darkred": "#8b0000",
+    "darkyellow": "#b8860b",
+    "darkgreen": "#006400",
+    "darkcyan": "#008b8b",
+    "darkmagenta": "#8b008b",
+    "green": "#00ff00",
+    "cyan": "#00ffff",
+    "magenta": "#ff00ff",
+    "black": "#000000",
+    "white": "#ffffff",
+    "lightgray": "#d3d3d3",
+    "darkgray": "#a9a9a9",
+}
 
 
 class DocxToProseMirrorMapper:
@@ -103,6 +128,10 @@ class DocxToProseMirrorMapper:
         if spacing:
             attrs["spacing"] = spacing
 
+        line_height = self._get_line_height(para)
+        if line_height is not None:
+            attrs["lineHeight"] = line_height
+
         # 文本内容
         content = self._map_runs(para.runs)
 
@@ -121,6 +150,10 @@ class DocxToProseMirrorMapper:
                     attrs["level"] = level
                     # 移除 style 属性，因为已经转换为 heading
                     attrs.pop("style", None)
+
+        list_info = self._extract_list_info(para)
+        if list_info:
+            attrs["list"] = list_info
 
         # 如果段落为空，返回空段落（不包含文本节点）
         # ProseMirror 允许空段落，但不允许空文本节点
@@ -142,25 +175,154 @@ class DocxToProseMirrorMapper:
                 return min(max(level, 1), 6)
         return None
 
+    def _get_line_height(self, para: Paragraph) -> Optional[float]:
+        """提取行距并统一为 float"""
+        line_spacing = para.paragraph_format.line_spacing
+        if not line_spacing:
+            return None
+
+        try:
+            if hasattr(line_spacing, "pt"):
+                return float(line_spacing.pt)
+            if isinstance(line_spacing, (int, float)):
+                return float(line_spacing)
+        except (TypeError, ValueError):
+            logger.debug("无法解析行距，使用默认值")
+            return None
+
+        return None
+
+    def _extract_list_info(self, para: Paragraph) -> Optional[Dict[str, Any]]:
+        """提取段落的列表信息（若存在）"""
+        try:
+            p_pr = para._p.pPr  # type: ignore[attr-defined]
+            num_pr = getattr(p_pr, "numPr", None) if p_pr is not None else None
+
+            style = getattr(para, "style", None)
+            num_id = getattr(num_pr.numId, "val", None) if num_pr is not None else None
+            ilvl = (
+                getattr(num_pr.ilvl, "val", "0") if num_pr is not None else "0"
+            )
+
+            if num_id is None and style is not None:
+                style_num_ids = style.element.xpath("./w:pPr/w:numPr/w:numId/@w:val")
+                if style_num_ids:
+                    num_id = style_num_ids[0]
+                style_ilvls = style.element.xpath("./w:pPr/w:numPr/w:ilvl/@w:val")
+                if style_ilvls:
+                    ilvl = style_ilvls[0]
+
+            if num_id is None:
+                return None
+
+            try:
+                num_id_int = int(num_id)
+            except (TypeError, ValueError):
+                num_id_int = 0
+
+            try:
+                level = int(ilvl)
+            except (TypeError, ValueError):
+                level = 0
+
+            list_info: Dict[str, Any] = {
+                "numId": num_id_int,
+                "level": level,
+            }
+
+            numbering_part = getattr(para.part, "numbering_part", None)
+            list_type = "ordered"
+            fmt_value = None
+            marker_value = None
+
+            if numbering_part is not None:
+                numbering = numbering_part.element
+                abstract_id = None
+                for num in numbering.findall(f".//{W_NS}num"):
+                    if num.get(qn("w:numId")) == str(num_id):
+                        abstract_num = num.find(f"./{W_NS}abstractNumId")
+                        if abstract_num is not None:
+                            abstract_id = abstract_num.get(qn("w:val"))
+                        break
+
+                if abstract_id is not None:
+                    target_level = str(ilvl or "0")
+                    lvl_node = None
+                    for abstract in numbering.findall(f".//{W_NS}abstractNum"):
+                        if abstract.get(qn("w:abstractNumId")) == abstract_id:
+                            for lvl in abstract.findall(f"./{W_NS}lvl"):
+                                if lvl.get(qn("w:ilvl")) == target_level:
+                                    lvl_node = lvl
+                                    break
+                            if lvl_node is None:
+                                lvl_node = abstract.find(f"./{W_NS}lvl")
+                            break
+
+                    if lvl_node is not None:
+                        num_fmt = lvl_node.find(f"./{W_NS}numFmt")
+                        if num_fmt is not None:
+                            fmt_value = num_fmt.get(qn("w:val"))
+                        lvl_text = lvl_node.find(f"./{W_NS}lvlText")
+                        if lvl_text is not None:
+                            marker_value = lvl_text.get(qn("w:val"))
+
+            if fmt_value:
+                list_info["format"] = fmt_value
+                if fmt_value == "bullet":
+                    list_type = "unordered"
+            list_info["type"] = list_type
+
+            if marker_value:
+                list_info["marker"] = marker_value
+
+            return list_info
+        except Exception as exc:
+            logger.warning(f"解析列表信息失败: {exc}")
+            return {"type": "ordered", "__fallback": True}
+
+    def _get_highlight_color(self, run: Run) -> Optional[str]:
+        """提取高亮颜色"""
+        try:
+            highlight = run.font.highlight_color
+            if not highlight or highlight == WD_COLOR_INDEX.AUTO:
+                return None
+
+            name = getattr(highlight, "name", None)
+            if not name:
+                name = str(highlight).split()[0]
+            if not name:
+                return None
+            return HIGHLIGHT_COLOR_MAP.get(name.lower())
+        except Exception:
+            return None
+
     def _map_runs(self, runs: List[Run]) -> List[Dict[str, Any]]:
         """映射文本运行"""
         content = []
         for run in runs:
-            # 跳过空文本（ProseMirror 不允许空文本节点）
-            if not run.text or run.text.strip() == "":
+            if run.text is None:
                 continue
 
-            text_node: Dict[str, Any] = {
-                "type": "text",
-                "text": run.text,
-            }
+            text_value = run.text
+            if text_value == "":
+                continue
 
-            # 提取标记
-            marks = self._map_marks(run)
-            if marks:
-                text_node["marks"] = marks
+            parts = text_value.split("\n")
+            for idx, part in enumerate(parts):
+                if part:
+                    text_node: Dict[str, Any] = {
+                        "type": "text",
+                        "text": part,
+                    }
 
-            content.append(text_node)
+                    marks = self._map_marks(run)
+                    if marks:
+                        text_node["marks"] = marks
+
+                    content.append(text_node)
+
+                if idx < len(parts) - 1:
+                    content.append({"type": "hardBreak"})
 
         return content
 
@@ -181,10 +343,9 @@ class DocxToProseMirrorMapper:
         style_attrs = {}
 
         # 字体颜色
-        if run.font.color and run.font.color.rgb:
-            color_hex = rgb_to_hex(run.font.color)
-            if color_hex:
-                style_attrs["color"] = color_hex
+        color_hex = rgb_to_hex(run.font.color) if run.font.color else None
+        if color_hex:
+            style_attrs["color"] = color_hex
 
         # 字体大小
         if run.font.size:
@@ -207,6 +368,15 @@ class DocxToProseMirrorMapper:
                 style_attrs["fontFamily"] = run.style.font.name
         except (AttributeError, TypeError):
             pass
+
+        highlight_color = self._get_highlight_color(run)
+        if highlight_color:
+            style_attrs["backgroundColor"] = highlight_color
+
+        if getattr(run.font, "small_caps", False):
+            style_attrs["smallCaps"] = True
+        if getattr(run.font, "all_caps", False):
+            style_attrs["allCaps"] = True
 
         # 如果有样式属性，添加到marks中
         if style_attrs:
@@ -274,16 +444,19 @@ class DocxToProseMirrorMapper:
             rows.append({"type": "tableRow", "content": cells})
 
         attrs: Dict[str, Any] = {"border": True}
+        if table.style and table.style.name:
+            attrs["style"] = table.style.name
         
         # 提取表格列宽信息（从 tblGrid）
         # DOCX 中的列宽单位是 twips (dxa)，1 twip = 1/20 point = 1/1440 inch
         try:
             tbl = table._tbl
+            tbl_pr = tbl.tblPr
             tbl_grid = tbl.tblGrid
             logger.info(f"[PARSE] 开始提取列宽，tbl_grid 是否存在: {tbl_grid is not None}")
             if tbl_grid is not None:
                 col_widths = []
-                grid_cols = tbl_grid.findall(f'.//{ns}gridCol')
+                grid_cols = tbl_grid.findall(f'.//{W_NS}gridCol')
                 logger.info(f"[PARSE] 找到 {len(grid_cols)} 个 gridCol 元素")
                 for i, grid_col in enumerate(grid_cols):
                     width = grid_col.get(qn('w:w'))
@@ -303,6 +476,20 @@ class DocxToProseMirrorMapper:
                     logger.warning("[PARSE] ⚠️ 未提取到任何列宽")
             else:
                 logger.warning("[PARSE] ⚠️ tblGrid 不存在，无法提取列宽")
+
+            if tbl_pr is not None:
+                tbl_w = tbl_pr.find(f"./{W_NS}tblW")
+                if tbl_w is not None:
+                    width_val = tbl_w.get(qn("w:w"))
+                    width_type = tbl_w.get(qn("w:type"))
+                    if width_val:
+                        attrs["tableWidth"] = {
+                            "width": int(width_val),
+                            "type": width_type or "auto",
+                        }
+                tbl_layout = tbl_pr.find(f"./{W_NS}tblLayout")
+                if tbl_layout is not None and tbl_layout.get(qn("w:type")):
+                    attrs["tableLayout"] = tbl_layout.get(qn("w:type"))
         except (AttributeError, Exception) as e:
             logger.error(f"[PARSE] ❌ 提取列宽时出错: {str(e)}", exc_info=True)
 
@@ -367,8 +554,16 @@ class DocxToProseMirrorMapper:
             # 如果无法检测，使用默认值
 
         # 背景色（暂时跳过，python-docx 的 _Cell 对象没有直接的 shading 属性）
-        # 如果需要支持背景色，需要通过 _tc.tcPr.shading 访问，但需要更复杂的处理
-        # 暂时不提取背景色，确保基本功能可用
+        fill = None
+        if tc_pr is not None:
+            shading = tc_pr.find(f"./{W_NS}shd")
+            if shading is not None:
+                fill = shading.get(qn("w:fill"))
+
+        if fill and fill.lower() != "auto":
+            fill_str = fill.lstrip("#").upper()
+            if len(fill_str) == 6:
+                attrs["backgroundColor"] = f"#{fill_str}"
 
         # 提取单元格宽度（tcW）- 完全基于原始数据，不做任何计算
         if tc_pr is not None:
@@ -531,6 +726,9 @@ class DocxToProseMirrorMapper:
 class ProseMirrorToDocxMapper:
     """ProseMirror JSON → docx 映射器"""
 
+    def __init__(self) -> None:
+        self.export_warnings: List[Dict[str, Any]] = []
+
     def map_document(self, prosemirror_json: Dict[str, Any]) -> Document:
         """
         从 ProseMirror JSON 映射到 docx 文档
@@ -541,23 +739,42 @@ class ProseMirrorToDocxMapper:
         Returns:
             Document 对象
         """
+        self.export_warnings = []
         doc = Document()
-
-        # 设置默认样式（中文字体）
-        style = doc.styles["Normal"]
-        style.font.name = "宋体"
-        style.font.size = Pt(12)
 
         # 遍历内容节点
         content = prosemirror_json.get("content", [])
-        for node in content:
+        for idx, node in enumerate(content):
             node_type = node.get("type")
-            if node_type == "paragraph" or node_type == "heading":
-                self.map_paragraph_node(node, doc)
-            elif node_type == "table":
-                self.map_table_node(node, doc)
+            try:
+                if node_type == "paragraph" or node_type == "heading":
+                    self.map_paragraph_node(node, doc)
+                elif node_type == "table":
+                    self.map_table_node(node, doc)
+                else:
+                    self._log_warning(
+                        "unsupported_node",
+                        f"暂不支持的节点类型: {node_type}",
+                        {"index": idx, "type": node_type},
+                    )
+            except Exception as exc:
+                self._log_warning(
+                    "node_export_failed",
+                    f"节点导出失败: {node_type}",
+                    {"index": idx, "type": node_type, "error": str(exc)},
+                )
 
         return doc
+
+    def _log_warning(self, code: str, message: str, meta: Optional[Dict[str, Any]] = None) -> None:
+        entry = {
+            "code": code,
+            "message": message,
+            "meta": meta or {},
+        }
+        self.export_warnings.append(entry)
+        logger.warning(f"[EXPORT] {code}: {message} - {meta}")
+
 
     def map_paragraph_node(
         self, node: Dict[str, Any], container: Any
@@ -591,10 +808,31 @@ class ProseMirrorToDocxMapper:
             para.alignment = alignment
 
         # 缩进 - 分别处理左缩进和首行缩进
-        if "indent" in attrs:
-            para.paragraph_format.left_indent = Pt(attrs["indent"])
-        if "firstLineIndent" in attrs:
-            para.paragraph_format.first_line_indent = Pt(attrs["firstLineIndent"])
+        indent_value = attrs.get("indent")
+        if indent_value is not None:
+            try:
+                para.paragraph_format.left_indent = Pt(float(indent_value))
+            except (TypeError, ValueError):
+                logger.warning(f"无法设置左缩进: {indent_value}")
+
+        first_line_indent = attrs.get("firstLineIndent")
+        if first_line_indent is not None:
+            try:
+                para.paragraph_format.first_line_indent = Pt(float(first_line_indent))
+            except (TypeError, ValueError):
+                logger.warning(f"无法设置首行缩进: {first_line_indent}")
+
+        line_height = attrs.get("lineHeight")
+        if line_height is not None:
+            try:
+                numeric_line_height = float(line_height)
+                if numeric_line_height < 5:
+                    para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+                    para.paragraph_format.line_spacing = numeric_line_height
+                else:
+                    para.paragraph_format.line_spacing = Pt(numeric_line_height)
+            except (TypeError, ValueError):
+                logger.warning(f"无法设置行距: {line_height}")
 
         # 样式（如果是 heading，映射为 Word 的标题样式）
         if node.get("type") == "heading":
@@ -617,22 +855,60 @@ class ProseMirrorToDocxMapper:
                     logger.warning(f"样式 '{style_name}' 不存在，使用默认样式")
             # 对于 'Table Text' 等特殊样式，直接使用默认样式，不报错
 
+        list_attrs = attrs.get("list")
+        if list_attrs:
+            self._apply_list_format(para, list_attrs)
+
         # 间距 - 完全按照ProseMirror JSON中的值设置
-        if "spacing" in attrs:
-            spacing = attrs["spacing"]
-            if "before" in spacing:
-                para.paragraph_format.space_before = Pt(spacing["before"])
-            if "after" in spacing:
-                para.paragraph_format.space_after = Pt(spacing["after"])
+        spacing = attrs.get("spacing")
+        if isinstance(spacing, dict):
+            before = spacing.get("before")
+            after = spacing.get("after")
+            if before is not None:
+                try:
+                    para.paragraph_format.space_before = Pt(float(before))
+                except (TypeError, ValueError):
+                    logger.warning(f"无法设置段前间距: {before}")
+            if after is not None:
+                try:
+                    para.paragraph_format.space_after = Pt(float(after))
+                except (TypeError, ValueError):
+                    logger.warning(f"无法设置段后间距: {after}")
 
         # 添加文本内容
         content = node.get("content", [])
         for text_node in content:
-            if text_node.get("type") == "text":
+            node_type = text_node.get("type")
+            if node_type == "text":
                 run = para.add_run(text_node.get("text", ""))
                 self._apply_marks(run, text_node.get("marks", []))
+                if not run.font.color or not run.font.color.rgb:
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+            elif node_type == "hardBreak":
+                para.add_run().add_break()
 
         return para
+
+    def _apply_list_format(self, para: Paragraph, list_info: Dict[str, Any]) -> None:
+        list_type = list_info.get("type")
+        level = int(list_info.get("level", 0))
+
+        preferred_style = list_info.get("style")
+        fallback_style = "List Number" if list_type == "ordered" else "List Bullet"
+        style_to_apply = preferred_style or fallback_style
+
+        if style_to_apply:
+            try:
+                para.style = style_to_apply
+            except Exception:
+                logger.warning(f"列表样式 '{style_to_apply}' 不存在，使用默认样式")
+
+        try:
+            indent_base = 18  # approx 0.25 inch
+            para.paragraph_format.left_indent = Pt(indent_base * (level + 1))
+            para.paragraph_format.first_line_indent = Pt(-indent_base / 2)
+        except Exception:
+            pass
 
     def map_table_node(self, node: Dict[str, Any], doc: Document) -> Table:
         """
@@ -648,6 +924,8 @@ class ProseMirrorToDocxMapper:
         rows = node.get("content", [])
         if not rows:
             return None
+
+        table_attrs = node.get("attrs", {})
 
         # 计算实际需要的列数（考虑 colspan）
         # 这是表格的最大列数，用于创建基础表格结构
@@ -665,14 +943,17 @@ class ProseMirrorToDocxMapper:
         # 然后按照实际结构填充，合并单元格通过 gridSpan 和 vMerge 实现
         table = doc.add_table(rows=len(rows), cols=max_cols)
 
-        # 设置表格边框样式（实线边框）
-        from docx.oxml import OxmlElement
-        
+        table_style_name = table_attrs.get("style")
+        if table_style_name:
+            try:
+                table.style = table_style_name
+            except Exception:
+                logger.warning(f"[EXPORT] 表格样式 '{table_style_name}' 不存在，使用默认样式")
+
         ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
         
         # 应用列宽（如果存在，从原始表格提取的）
         # 注意：必须在创建表格后立即设置，在填充内容之前
-        table_attrs = node.get("attrs", {})
         logger.info(f"[EXPORT] 表格节点 attrs: {table_attrs}")
         col_widths = table_attrs.get("colWidths")
         logger.info(f"[EXPORT] 从 attrs 获取的 colWidths: {col_widths}, max_cols: {max_cols}")
@@ -715,37 +996,36 @@ class ProseMirrorToDocxMapper:
             tbl_pr = OxmlElement('w:tblPr')
             tbl.insert(0, tbl_pr)
         
-        # 设置表格宽度和布局（确保列宽生效）
-        # 如果列宽存在，计算并设置表格总宽度
-        if col_widths:
-            total_width = sum(col_widths)
+        table_width_info = table_attrs.get("tableWidth")
+        table_width_value = None
+        table_width_type = "auto"
+        if table_width_info:
+            table_width_value = table_width_info.get("width")
+            table_width_type = table_width_info.get("type", "auto")
+        if table_width_value is None and col_widths:
+            table_width_value = sum(col_widths)
+            table_width_type = "dxa"
+
+        if table_width_value is not None:
             existing_tbl_w = tbl_pr.find(f'.//{ns}tblW')
-            if existing_tbl_w is not None:
-                # 更新已存在的表格宽度
-                existing_tbl_w.set(qn('w:w'), str(total_width))
-                existing_tbl_w.set(qn('w:type'), 'dxa')
-                logger.info(f"[EXPORT] 更新表格总宽度: {total_width} twips")
-            else:
-                # 创建新的表格宽度
-                tbl_w = OxmlElement('w:tblW')
-                tbl_w.set(qn('w:w'), str(total_width))
-                tbl_w.set(qn('w:type'), 'dxa')
-                tbl_pr.append(tbl_w)
-                logger.info(f"[EXPORT] 设置表格总宽度: {total_width} twips")
-        
-        # 设置表格布局为 fixed（固定列宽，确保列宽生效）
-        # 注意：autofit 会根据内容调整列宽，fixed 使用固定列宽
-        existing_tbl_layout = tbl_pr.find(f'.//{ns}tblLayout')
-        if existing_tbl_layout is not None:
-            # 更新已存在的布局为 fixed
-            existing_tbl_layout.set(qn('w:type'), 'fixed')
-            logger.info(f"[EXPORT] 更新表格布局为 fixed（固定列宽）")
-        else:
-            # 创建新的布局
-            tbl_layout = OxmlElement('w:tblLayout')
-            tbl_layout.set(qn('w:type'), 'fixed')
-            tbl_pr.append(tbl_layout)
-            logger.info(f"[EXPORT] 设置表格布局为 fixed（固定列宽）")
+            if existing_tbl_w is None:
+                existing_tbl_w = OxmlElement('w:tblW')
+                tbl_pr.append(existing_tbl_w)
+            existing_tbl_w.set(qn('w:w'), str(table_width_value))
+            existing_tbl_w.set(qn('w:type'), table_width_type)
+            logger.info(f"[EXPORT] 设置表格总宽度: {table_width_value} ({table_width_type})")
+
+        layout_type = table_attrs.get("tableLayout")
+        if not layout_type and col_widths:
+            layout_type = "fixed"
+
+        if layout_type:
+            existing_tbl_layout = tbl_pr.find(f'.//{ns}tblLayout')
+            if existing_tbl_layout is None:
+                existing_tbl_layout = OxmlElement('w:tblLayout')
+                tbl_pr.append(existing_tbl_layout)
+            existing_tbl_layout.set(qn('w:type'), layout_type)
+            logger.info(f"[EXPORT] 设置表格布局: {layout_type}")
         
         # 设置边框
         tbl_borders = OxmlElement('w:tblBorders')
@@ -918,6 +1198,10 @@ class ProseMirrorToDocxMapper:
                 if tc_pr is None:
                     tc_pr = OxmlElement('w:tcPr')
                     tc.insert(0, tc_pr)
+
+                background_color = attrs.get("backgroundColor")
+                if background_color:
+                    self._set_cell_background_color(cell, background_color)
                 
                 # 标记这个单元格已处理
                 processed_tc_indices.add(actual_cell_index)
@@ -1162,9 +1446,6 @@ class ProseMirrorToDocxMapper:
 
     def _apply_marks(self, run: Run, marks: List[Dict[str, Any]]) -> None:
         """应用文本标记到 Run 对象"""
-        # 检查是否已经设置了颜色
-        has_color = False
-
         for mark in marks:
             mark_type = mark.get("type")
             if mark_type == "bold":
@@ -1182,7 +1463,6 @@ class ProseMirrorToDocxMapper:
                     rgb_color = hex_to_rgb(attrs["color"])
                     if rgb_color:
                         run.font.color.rgb = rgb_color
-                        has_color = True
 
                 if "fontSize" in attrs:
                     # 解析字体大小（如 "14pt"）
@@ -1199,14 +1479,33 @@ class ProseMirrorToDocxMapper:
                         run.font.name = attrs["fontFamily"]
                     except (AttributeError, TypeError):
                         logger.warning(f"无法设置字体名称: {attrs['fontFamily']}")
-        
-        # 如果没有颜色标记，确保设置为黑色（默认）
-        if not has_color:
-            run.font.color.rgb = RGBColor(0, 0, 0)
+
+                if attrs.get("smallCaps"):
+                    run.font.small_caps = True
+                if attrs.get("allCaps"):
+                    run.font.all_caps = True
 
     def _set_cell_background_color(self, cell: _Cell, color_hex: str) -> None:
-        """设置单元格背景色（暂时不实现，需要更复杂的 XML 操作）"""
-        # python-docx 的 _Cell 对象没有直接的 shading 属性
-        # 设置背景色需要通过 _tc.tcPr.shading 操作 XML，暂时跳过
-        pass
+        """设置单元格背景色"""
+        if not color_hex:
+            return
+
+        color = color_hex.lstrip("#").upper()
+        if len(color) != 6:
+            return
+
+        tc = cell._tc
+        tc_pr = tc.tcPr
+        if tc_pr is None:
+            tc_pr = OxmlElement("w:tcPr")
+            tc.insert(0, tc_pr)
+
+        shading = tc_pr.find(f"./{W_NS}shd")
+        if shading is None:
+            shading = OxmlElement("w:shd")
+            tc_pr.append(shading)
+
+        shading.set(qn("w:val"), "clear")
+        shading.set(qn("w:color"), "auto")
+        shading.set(qn("w:fill"), color)
 

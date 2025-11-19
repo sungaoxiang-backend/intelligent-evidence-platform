@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from .mappers import DocxToProseMirrorMapper, ProseMirrorToDocxMapper
+from .logging import template_log_service
 from .models import DocumentTemplate, TemplatePlaceholder
 
 
@@ -107,8 +108,16 @@ class TemplateEditorService:
             # 从字节流创建 Document 对象
             doc = Document(io.BytesIO(docx_bytes))
 
+            template_log_service.clear()
+            template_log_service.add_record("parse", "read_docx", "start")
             # 使用映射器转换为 ProseMirror JSON
             prosemirror_json = self.docx_to_pm_mapper.map_document(doc)
+            template_log_service.add_record(
+                "parse",
+                "read_docx",
+                "success",
+                {"elements": len(prosemirror_json.get("content", []))},
+            )
 
             # 记录解析结果（用于调试）
             content_count = len(prosemirror_json.get("content", []))
@@ -125,7 +134,7 @@ class TemplateEditorService:
 
     def export_prosemirror_to_docx(
         self, prosemirror_json: Dict[str, Any]
-    ) -> bytes:
+    ) -> Dict[str, Any]:
         """
         从 ProseMirror JSON 导出为 docx 文件
 
@@ -133,7 +142,7 @@ class TemplateEditorService:
             prosemirror_json: ProseMirror JSON 格式的文档
 
         Returns:
-            docx 文件的字节流
+            包含 docx 字节流和警告信息的字典
 
         Raises:
             ValueError: 如果 JSON 格式无效
@@ -150,7 +159,10 @@ class TemplateEditorService:
 
             # 使用映射器转换为 docx
             logger.info("开始转换 ProseMirror JSON 到 DOCX")
+            template_log_service.clear()
+            template_log_service.add_record("export", "map_document", "start")
             doc = self.pm_to_docx_mapper.map_document(prosemirror_json)
+            template_log_service.add_record("export", "map_document", "success")
             logger.info("DOCX 文档创建成功")
             
             # 验证表格列宽（在保存前）
@@ -176,6 +188,9 @@ class TemplateEditorService:
             output.seek(0)
             docx_bytes = output.getvalue()
             logger.info(f"DOCX 字节流大小: {len(docx_bytes)} bytes")
+            template_log_service.add_record(
+                "export", "save_doc", "success", {"size": len(docx_bytes)}
+            )
             
             # 验证保存后的列宽（重新读取）
             from docx import Document
@@ -194,7 +209,15 @@ class TemplateEditorService:
                             width_type = grid_col.get(qn('w:type'))
                             logger.info(f"[SERVICE]   列 {i}: width={width}, type={width_type}")
             
-            return docx_bytes
+            warnings = getattr(self.pm_to_docx_mapper, "export_warnings", [])
+            for warning in warnings:
+                template_log_service.with_warning(warning)
+
+            return {
+                "docx": docx_bytes,
+                "warnings": warnings,
+                "logs": template_log_service.get_records(),
+            }
 
         except UnicodeEncodeError as e:
             logger.error(f"编码错误 - 位置: {e.start}-{e.end}, 对象: {e.object}, 错误: {str(e)}")

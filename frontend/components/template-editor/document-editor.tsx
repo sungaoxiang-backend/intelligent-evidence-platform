@@ -1,14 +1,16 @@
 "use client"
 
 import { useEditor, EditorContent } from "@tiptap/react"
+import type { Editor as TiptapEditor, JSONContent } from "@tiptap/core"
 import { useEffect, useRef } from "react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
 import Placeholder from "@tiptap/extension-placeholder"
-import Table from "@tiptap/extension-table"
+import TextStyle from "@tiptap/extension-text-style"
+import Color from "@tiptap/extension-color"
+import HardBreak from "@tiptap/extension-hard-break"
 import TableRow from "@tiptap/extension-table-row"
-import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,8 +18,6 @@ import {
   Italic,
   Underline as UnderlineIcon,
   Strikethrough,
-  List,
-  ListOrdered,
   Undo,
   Redo,
   AlignLeft,
@@ -32,15 +32,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import {
+  HeadingWithAttrs,
+  ParagraphWithAttrs,
+  TableCellWithAttrs,
+  TableWithAttrs,
+  templateBaseStyles,
+} from "./extensions"
+import { normalizeHardBreaks } from "./utils"
 
 interface DocumentEditorProps {
-  initialContent?: any
-  onChange?: (content: any) => void
+  initialContent?: JSONContent | null
+  onChange?: (content: JSONContent) => void
   isLoading?: boolean
 }
 
-const Toolbar = ({ editor }: { editor: any }) => {
+const FONT_FAMILIES = [
+  "SimSun",
+  "SimHei",
+  "FangSong",
+  "KaiTi",
+  "Arial",
+  "Times New Roman",
+]
+
+const FONT_SIZES = ["12", "14", "16", "18", "20", "24", "28", "32"]
+
+const Toolbar = ({ editor }: { editor: TiptapEditor | null }) => {
   if (!editor) return null
 
   const setHeading = (level: string) => {
@@ -182,37 +209,36 @@ export function DocumentEditor({
   const editorRef = useRef<HTMLDivElement>(null)
   const contentSetRef = useRef(false)
 
+  const normalizeContent = (content?: JSONContent | null) => {
+    if (!content) return content
+    return normalizeHardBreaks(
+      JSON.parse(JSON.stringify(content))
+    )
+  }
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4, 5, 6] },
-        table: {
-          resizable: false,
-          handleWidth: 5,
-          cellMinWidth: 100,
-          lastColumnResizable: false,
-        },
+        heading: false,
+        paragraph: false,
       }),
-      Table.configure({
+      HardBreak.configure({
+        keepMarks: true,
+      }),
+      ParagraphWithAttrs,
+      HeadingWithAttrs,
+      TableWithAttrs.configure({
         resizable: false,
-        HTMLAttributes: {
-          class: "border-collapse border border-gray-300 w-full my-4",
-        },
+        HTMLAttributes: {},
       }),
       TableRow.configure({
-        HTMLAttributes: {
-          class: "border-b border-gray-300",
-        },
+        HTMLAttributes: {},
       }),
       TableHeader.configure({
-        HTMLAttributes: {
-          class: "border border-gray-300 bg-gray-100 font-bold p-2",
-        },
+        HTMLAttributes: {},
       }),
-      TableCell.configure({
-        HTMLAttributes: {
-          class: "border border-gray-300 p-2",
-        },
+      TableCellWithAttrs.configure({
+        HTMLAttributes: {},
       }),
       TextAlign.configure({
         types: ["heading", "paragraph", "tableCell"],
@@ -220,6 +246,8 @@ export function DocumentEditor({
         defaultAlignment: 'left',
       }),
       Underline,
+      TextStyle,
+      Color,
       Placeholder.configure({
         placeholder: "开始编辑文档...",
       }),
@@ -230,30 +258,87 @@ export function DocumentEditor({
     onUpdate: ({ editor }) => {
       try {
         const json = editor.getJSON()
-        onChange?.(json)
+        const normalized = normalizeHardBreaks(
+          JSON.parse(JSON.stringify(json))
+        )
+        if (normalized) {
+          onChange?.(normalized)
+        }
       } catch (error) {
         console.error("Editor error:", error)
       }
     },
-    onCreate: ({ editor }) => {
+    onCreate: () => {
       console.log("Editor created")
     },
     editorProps: {
       attributes: {
-        style: "font-family: 'Times New Roman', serif; line-height: 1.6; padding: 16px;",
+        class: "template-doc",
+        style: "padding: 16px;",
       },
     },
   })
+
+  const paragraphAttrs = editor?.getAttributes("paragraph") ?? {}
+  const spacingAttrs = paragraphAttrs.spacing ?? {}
+  const textStyleAttrs = editor?.getAttributes("textStyle") ?? {}
+
+  const updateTextStyle = (attrs: Record<string, string>) => {
+    if (!editor) return
+    editor.chain().focus().setMark("textStyle", { ...textStyleAttrs, ...attrs }).run()
+  }
+
+  const updateParagraphAttrs = (attrs: Record<string, unknown>) => {
+    if (!editor) return
+    editor.chain().focus().updateAttributes("paragraph", { ...paragraphAttrs, ...attrs }).run()
+  }
+
+  const handleFontFamilyChange = (value: string) => {
+    updateTextStyle({ fontFamily: value })
+  }
+
+  const handleFontSizeChange = (value: string) => {
+    const size = value.endsWith("pt") ? value : `${value}pt`
+    updateTextStyle({ fontSize: size })
+  }
+
+  const handleColorChange = (value: string) => {
+    updateTextStyle({ color: value })
+  }
+
+  const handleLineHeightChange = (value: string) => {
+    const numeric = parseFloat(value)
+    if (!Number.isNaN(numeric)) {
+      updateParagraphAttrs({ lineHeight: numeric })
+    }
+  }
+
+  const handleSpacingChange = (key: "before" | "after", value: string) => {
+    const numeric = parseFloat(value)
+    if (!Number.isNaN(numeric)) {
+      updateParagraphAttrs({
+        spacing: { ...spacingAttrs, [key]: numeric },
+      })
+    }
+  }
+
+  const handleIndentChange = (key: "indent" | "firstLineIndent", value: string) => {
+    const numeric = parseFloat(value)
+    if (!Number.isNaN(numeric)) {
+      updateParagraphAttrs({ [key]: numeric })
+    }
+  }
 
   // 只设置一次内容，避免重复设置导致光标跳转
   useEffect(() => {
     if (editor && initialContent && !isLoading && !contentSetRef.current) {
       console.log("Setting content:", initialContent)
 
+      const normalized = normalizeContent(initialContent) || initialContent
+
       try {
-        // 使用 transaction 直接替换内容，避免触发额外的更新
         const tr = editor.state.tr
-        const newDoc = editor.schema.nodeFromJSON(initialContent)
+        const newDoc = editor.schema.nodeFromJSON(normalized)
 
         if (newDoc.content) {
           tr.replaceWith(0, editor.state.doc.content.size, newDoc.content)
@@ -263,8 +348,7 @@ export function DocumentEditor({
         }
       } catch (error) {
         console.error("Failed to set content:", error)
-        // 备用方案
-        editor.commands.setContent(initialContent)
+        editor.commands.setContent(normalized)
         contentSetRef.current = true
       }
     }
@@ -289,13 +373,124 @@ export function DocumentEditor({
   return (
     <div className="w-full border border-gray-300 rounded-md bg-white">
       <Toolbar editor={editor} />
-      <div
-        ref={editorRef}
-        className="border-t border-gray-300 relative"
-        style={{ height: '600px', overflow: 'auto' }}
-      >
-        <EditorContent editor={editor} />
-      </div>
+      <Tabs defaultValue="content">
+        <TabsList className="w-full">
+          <TabsTrigger value="content" className="flex-1">
+            内容
+          </TabsTrigger>
+          <TabsTrigger value="styles" className="flex-1">
+            样式
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="content">
+          <div
+            ref={editorRef}
+            className="border-t border-gray-300 relative"
+            style={{ height: "600px", overflow: "auto" }}
+          >
+            <EditorContent editor={editor} />
+          </div>
+        </TabsContent>
+        <TabsContent value="styles">
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>字体</Label>
+              <Select
+                value={textStyleAttrs.fontFamily || "SimSun"}
+                onValueChange={handleFontFamilyChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择字体" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_FAMILIES.map((font) => (
+                    <SelectItem key={font} value={font}>
+                      {font}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>字号 (pt)</Label>
+              <Select
+                value={(textStyleAttrs.fontSize || "14pt").replace("pt", "")}
+                onValueChange={handleFontSizeChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择字号" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_SIZES.map((size) => (
+                    <SelectItem key={size} value={size}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>字体颜色</Label>
+              <Input
+                type="color"
+                value={textStyleAttrs.color || "#000000"}
+                onChange={(e) => handleColorChange(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>行距 (pt)</Label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={paragraphAttrs.lineHeight ?? 16}
+                onBlur={(e) => handleLineHeightChange(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>段前 (pt)</Label>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                defaultValue={spacingAttrs.before ?? 0}
+                onBlur={(e) => handleSpacingChange("before", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>段后 (pt)</Label>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                defaultValue={spacingAttrs.after ?? 0}
+                onBlur={(e) => handleSpacingChange("after", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>左缩进 (pt)</Label>
+              <Input
+                type="number"
+                step={1}
+                defaultValue={paragraphAttrs.indent ?? 0}
+                onBlur={(e) => handleIndentChange("indent", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>首行缩进 (pt)</Label>
+              <Input
+                type="number"
+                step={1}
+                defaultValue={paragraphAttrs.firstLineIndent ?? 0}
+                onBlur={(e) =>
+                  handleIndentChange("firstLineIndent", e.target.value)
+                }
+              />
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+      <style jsx global>{templateBaseStyles}</style>
     </div>
   )
 }

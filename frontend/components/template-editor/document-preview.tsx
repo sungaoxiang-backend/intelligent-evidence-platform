@@ -1,54 +1,61 @@
 "use client"
 
 import { useEditor, EditorContent } from "@tiptap/react"
+import type { JSONContent } from "@tiptap/core"
 import { useEffect, useRef } from "react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
-import Table from "@tiptap/extension-table"
+import TextStyle from "@tiptap/extension-text-style"
+import Color from "@tiptap/extension-color"
 import TableRow from "@tiptap/extension-table-row"
-import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
+import HardBreak from "@tiptap/extension-hard-break"
+import {
+  HeadingWithAttrs,
+  ParagraphWithAttrs,
+  TableCellWithAttrs,
+  TableWithAttrs,
+  templateBaseStyles,
+} from "./extensions"
+import { normalizeHardBreaks } from "./utils"
 
 interface DocumentPreviewProps {
-  content: any
+  content?: JSONContent | null
 }
 
 export function DocumentPreview({ content }: DocumentPreviewProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const previousContentRef = useRef<string | null>(null)
 
+  const normalizeContent = (value?: JSONContent | null) => {
+    if (!value) return value
+    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+  }
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4, 5, 6] },
-        table: {
-          resizable: false,
-          handleWidth: 5,
-          cellMinWidth: 100,
-          lastColumnResizable: false,
-        },
+        heading: false,
+        paragraph: false,
       }),
-      Table.configure({
+      HardBreak.configure({
+        keepMarks: true,
+      }),
+      ParagraphWithAttrs,
+      HeadingWithAttrs,
+      TableWithAttrs.configure({
         resizable: false,
-        HTMLAttributes: {
-          class: "border-collapse border border-gray-300 w-full my-4",
-        },
+        HTMLAttributes: {},
       }),
       TableRow.configure({
-        HTMLAttributes: {
-          class: "border-b border-gray-300",
-        },
+        HTMLAttributes: {},
       }),
       TableHeader.configure({
-        HTMLAttributes: {
-          class: "border border-gray-300 bg-gray-100 font-bold p-2",
-        },
+        HTMLAttributes: {},
       }),
-      TableCell.configure({
-        HTMLAttributes: {
-          class: "border border-gray-300 p-2",
-        },
+      TableCellWithAttrs.configure({
+        HTMLAttributes: {},
       }),
       TextAlign.configure({
         types: ["heading", "paragraph", "tableCell"],
@@ -56,13 +63,16 @@ export function DocumentPreview({ content }: DocumentPreviewProps) {
         defaultAlignment: 'left',
       }),
       Underline,
+      TextStyle,
+      Color,
     ],
     content: { type: "doc", content: [] },
     editable: false, // 预览模式，不可编辑
     autofocus: false,
     editorProps: {
       attributes: {
-        style: "font-family: 'Times New Roman', serif; line-height: 1.6; padding: 16px;",
+        class: "template-doc",
+        style: "padding: 16px;",
       },
     },
   })
@@ -82,7 +92,7 @@ export function DocumentPreview({ content }: DocumentPreviewProps) {
 
       try {
         // 使用 setContent 方法更新内容，这会正确处理内容变化
-        editor.commands.setContent(content)
+        editor.commands.setContent(normalizeContent(content) || content)
       } catch (error) {
         console.error("Failed to set content:", error)
         // 如果 setContent 失败，尝试使用 transaction
@@ -110,12 +120,10 @@ export function DocumentPreview({ content }: DocumentPreviewProps) {
 
   return (
     <div className="w-full">
-      <div
-        ref={editorRef}
-        className="relative"
-      >
+      <div ref={editorRef} className="relative">
         <EditorContent editor={editor} />
       </div>
+      <style jsx global>{templateBaseStyles}</style>
     </div>
   )
 }
