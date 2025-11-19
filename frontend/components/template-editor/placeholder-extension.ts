@@ -53,7 +53,8 @@ const shouldBlockKey = (event: KeyboardEvent) => {
 
 const buildPluginState = (
   doc: Parameters<typeof DecorationSet.create>[0],
-  options: PlaceholderExtensionOptions
+  options: PlaceholderExtensionOptions,
+  selection?: { from: number; to: number } | null
 ): PlaceholderPluginState => {
   const decorations: Decoration[] = []
   const ranges: PlaceholderRange[] = []
@@ -83,6 +84,15 @@ const buildPluginState = (
       }
       if (meta?.id && meta.id === highlightedId) {
         classes.push("template-placeholder-chip--highlighted")
+      }
+
+      // 检查光标是否正好在这个占位符后面
+      const cursorAfterPlaceholder = selection && 
+        selection.from === selection.to && 
+        selection.from === end
+
+      if (cursorAfterPlaceholder) {
+        classes.push("template-placeholder-chip--cursor-after")
       }
 
       decorations.push(
@@ -145,11 +155,22 @@ export const PlaceholderExtension = Extension.create<PlaceholderExtensionOptions
     const plugin = new Plugin<PlaceholderPluginState>({
       key: placeholderPluginKey,
       state: {
-        init: (_, state) => buildPluginState(state.doc, this.options),
+        init: (_, state) => {
+          const selection = state.selection
+          return buildPluginState(state.doc, this.options, {
+            from: selection.from,
+            to: selection.to,
+          })
+        },
         apply: (tr, prev, _oldState, newState) => {
           const forceUpdate = tr.getMeta(placeholderPluginKey)?.forceUpdate
-          if (tr.docChanged || forceUpdate) {
-            return buildPluginState(newState.doc, this.options)
+          const selectionChanged = !_oldState.selection.eq(newState.selection)
+          if (tr.docChanged || forceUpdate || selectionChanged) {
+            const selection = newState.selection
+            return buildPluginState(newState.doc, this.options, {
+              from: selection.from,
+              to: selection.to,
+            })
           }
           return prev
         },

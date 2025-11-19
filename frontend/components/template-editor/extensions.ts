@@ -298,5 +298,27 @@ export const templateBaseStyles = `
   .template-doc .template-placeholder-chip--highlighted {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
   }
+  /* 只在光标位于占位符后面时显示光标指示器 */
+  .template-doc .template-placeholder-chip--cursor-after::after {
+    content: "";
+    display: inline-block;
+    width: 1px;
+    min-width: 1px;
+    height: 1.2em;
+    vertical-align: baseline;
+    margin-left: 2px;
+    background-color: currentColor;
+    opacity: 0.6;
+    animation: blink-cursor 1s infinite;
+  }
+  @keyframes blink-cursor {
+    0%, 50% { opacity: 0.6; }
+    51%, 100% { opacity: 0; }
+  }
+  /* 当编辑器失去焦点时，隐藏光标动画 */
+  .template-doc:not(:focus-within) .template-placeholder-chip--cursor-after::after {
+    animation: none;
+    opacity: 0;
+  }
 `
 

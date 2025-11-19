@@ -468,6 +468,8 @@ class PlaceholderService:
         required: bool = False,
         hint: Optional[str] = None,
         options: Optional[List[Dict[str, Any]]] = None,
+        label: Optional[str] = None,
+        default_value: Optional[str] = None,
         created_by_id: Optional[int] = None,
     ) -> TemplatePlaceholder:
         """
@@ -500,6 +502,8 @@ class PlaceholderService:
             placeholder.type = type
             placeholder.required = required
             placeholder.hint = hint
+            placeholder.label = label if label is not None else placeholder.label
+            placeholder.default_value = default_value if default_value is not None else placeholder.default_value
             placeholder.options = options
             placeholder.updated_by_id = created_by_id
             await db.commit()
@@ -509,9 +513,11 @@ class PlaceholderService:
             # 创建新占位符
             placeholder = TemplatePlaceholder(
                 placeholder_name=placeholder_name,
+                label=label or placeholder_name,
                 type=type,
                 required=required,
                 hint=hint,
+                default_value=default_value,
                 options=options,
                 created_by_id=created_by_id,
                 updated_by_id=created_by_id,
@@ -608,6 +614,8 @@ class PlaceholderService:
         required: Optional[bool] = None,
         hint: Optional[str] = None,
         options: Optional[List[Dict[str, Any]]] = None,
+        label: Optional[str] = None,
+        default_value: Optional[str] = None,
         updated_by_id: Optional[int] = None,
     ) -> Optional[TemplatePlaceholder]:
         """
@@ -643,6 +651,10 @@ class PlaceholderService:
             placeholder.required = required
         if hint is not None:
             placeholder.hint = hint
+        if label is not None:
+            placeholder.label = label
+        if default_value is not None:
+            placeholder.default_value = default_value
         if options is not None:
             placeholder.options = options
         if updated_by_id is not None:
@@ -699,24 +711,34 @@ class PlaceholderService:
         from sqlalchemy import select
         from .models import template_placeholder_association
         
-        # 获取模板和占位符
+        # 校验模板存在
         template_result = await db.execute(
-            select(DocumentTemplate).where(DocumentTemplate.id == template_id)
+            select(DocumentTemplate.id).where(DocumentTemplate.id == template_id)
         )
-        template = template_result.scalar_one_or_none()
-        if not template:
+        if not template_result.scalar_one_or_none():
             return False
         
         placeholder = await self.get_placeholder(db, placeholder_name)
         if not placeholder:
             return False
         
-        # 检查是否已关联
-        if placeholder in template.placeholders:
+        # 检查是否已存在关联
+        existing = await db.execute(
+            select(template_placeholder_association.c.template_id).where(
+                (template_placeholder_association.c.template_id == template_id)
+                & (template_placeholder_association.c.placeholder_id == placeholder.id)
+            )
+        )
+        if existing.scalar_one_or_none():
             return True
         
-        # 关联
-        template.placeholders.append(placeholder)
+        # 直接操作中间表插入关联，避免懒加载
+        await db.execute(
+            template_placeholder_association.insert().values(
+                template_id=template_id,
+                placeholder_id=placeholder.id,
+            )
+        )
         await db.commit()
         
         logger.info(f"关联占位符到模板成功: template_id={template_id}, placeholder_name={placeholder_name}")
@@ -740,22 +762,26 @@ class PlaceholderService:
             bool: 是否移除成功
         """
         from sqlalchemy import select
+        from .models import template_placeholder_association
         
-        # 获取模板
+        # 校验模板存在
         template_result = await db.execute(
-            select(DocumentTemplate).where(DocumentTemplate.id == template_id)
+            select(DocumentTemplate.id).where(DocumentTemplate.id == template_id)
         )
-        template = template_result.scalar_one_or_none()
-        if not template:
+        if not template_result.scalar_one_or_none():
             return False
         
         placeholder = await self.get_placeholder(db, placeholder_name)
         if not placeholder:
             return False
         
-        # 移除关联
-        if placeholder in template.placeholders:
-            template.placeholders.remove(placeholder)
+        delete_result = await db.execute(
+            template_placeholder_association.delete().where(
+                (template_placeholder_association.c.template_id == template_id)
+                & (template_placeholder_association.c.placeholder_id == placeholder.id)
+            )
+        )
+        if delete_result.rowcount:
             await db.commit()
             logger.info(f"移除占位符关联成功: template_id={template_id}, placeholder_name={placeholder_name}")
             return True

@@ -597,9 +597,11 @@ async def create_or_update_placeholder(
         placeholder = await placeholder_service.create_or_update_placeholder(
             db=db,
             placeholder_name=request.placeholder_name,
+            label=request.label,
             type=request.type,
             required=request.required,
             hint=request.hint,
+            default_value=request.default_value,
             options=options_dict,
             created_by_id=current_staff.id,
         )
@@ -706,9 +708,11 @@ async def update_placeholder(
             db=db,
             placeholder_name=placeholder_name,
             new_placeholder_name=request.placeholder_name,
+            label=request.label,
             type=request.type,
             required=request.required,
             hint=request.hint,
+            default_value=request.default_value,
             options=options_dict,
             updated_by_id=current_staff.id,
         )
