@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useMemo, useId } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,22 +10,11 @@ import {
   Loader2,
   Pencil,
   Trash2,
-  Check,
-  X,
+  RefreshCw,
   Hash,
 } from "lucide-react"
-import { templateApi } from "@/lib/template-api"
 import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -44,176 +33,179 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  usePlaceholderManager,
+  type PlaceholderMeta,
+  type PlaceholderPayload,
+} from "./placeholder-manager"
+import {
+  PlaceholderFormFields,
+  PlaceholderFormState,
+  createEmptyPlaceholderForm,
+  isValidFieldKey,
+  normalizePlaceholderOptions,
+} from "./placeholder-form"
 
-interface Placeholder {
-  id: number
-  placeholder_name: string
-  type: string
-  required: boolean
-  hint?: string
-  options?: Array<{ label: string; value: string }>
-  created_at: string
-  updated_at: string
-}
+export function PlaceholderList() {
+  const {
+    orderedPlaceholders,
+    selectedId,
+    highlightedId,
+    selectPlaceholder,
+    highlightPlaceholder,
+    loadBackendPlaceholders,
+    createPlaceholder,
+    updatePlaceholder,
+    deletePlaceholder,
+    isSyncing,
+    isMutating,
+  } = usePlaceholderManager()
 
-interface PlaceholderListProps {
-  templateId: number
-}
-
-export function PlaceholderList({ templateId }: PlaceholderListProps) {
-  const [placeholders, setPlaceholders] = useState<Placeholder[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [editingPlaceholder, setEditingPlaceholder] = useState<Placeholder | null>(null)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [placeholderToDelete, setPlaceholderToDelete] = useState<Placeholder | null>(null)
   const { toast } = useToast()
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editingPlaceholder, setEditingPlaceholder] = useState<PlaceholderMeta | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [placeholderToDelete, setPlaceholderToDelete] = useState<PlaceholderMeta | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 表单状态
-  const [formData, setFormData] = useState({
-    placeholder_name: "",
-    type: "text",
-    required: false,
-    hint: "",
-    options: [] as Array<{ label: string; value: string }>,
-  })
+  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm())
 
-  // 加载占位符列表
-  const loadPlaceholders = useCallback(async () => {
-    if (!templateId) return
-    
-    setIsLoading(true)
+  const placeholderCount = orderedPlaceholders.length
+  const formId = useId()
+  const fieldIds = useMemo(
+    () => ({
+      label: `${formId}-label`,
+      fieldKey: `${formId}-field-key`,
+      type: `${formId}-type`,
+      defaultValue: `${formId}-default`,
+      description: `${formId}-description`,
+    }),
+    [formId]
+  )
+
+  const handleRefresh = async () => {
     try {
-      const response = await templateApi.getPlaceholders({ template_id: templateId })
-      setPlaceholders(response.data || [])
+      await loadBackendPlaceholders()
+      toast({
+        title: "已刷新",
+        description: "占位符列表已同步最新状态",
+      })
     } catch (error: any) {
       toast({
-        title: "加载失败",
-        description: error.message || "无法加载占位符列表",
+        title: "刷新失败",
+        description: error.message || "无法刷新占位符列表",
         variant: "destructive",
       })
-    } finally {
-      setIsLoading(false)
     }
-  }, [templateId, toast])
+  }
 
-  useEffect(() => {
-    loadPlaceholders()
-  }, [loadPlaceholders])
+  const resetForm = () => {
+    setFormData(createEmptyPlaceholderForm())
+  }
 
-  // 打开创建对话框
   const handleOpenCreate = () => {
-    setFormData({
-      placeholder_name: "",
-      type: "text",
-      required: false,
-      hint: "",
-      options: [],
-    })
+    setEditingPlaceholder(null)
+    resetForm()
     setCreateDialogOpen(true)
   }
 
-  // 打开编辑对话框
-  const handleOpenEdit = (placeholder: Placeholder) => {
+  const handleOpenEdit = (placeholder: PlaceholderMeta) => {
     setEditingPlaceholder(placeholder)
+    const backend = placeholder.backendMeta
     setFormData({
-      placeholder_name: placeholder.placeholder_name,
-      type: placeholder.type,
-      required: placeholder.required,
-      hint: placeholder.hint || "",
-      options: placeholder.options || [],
+      fieldKey: backend?.placeholder_name || placeholder.fieldKey,
+      label: backend?.label || placeholder.label || placeholder.fieldKey,
+      type: backend?.type || placeholder.dataType || "text",
+      required: backend?.required ?? false,
+      description: backend?.hint || placeholder.description || "",
+      defaultValue: backend?.default_value || placeholder.defaultValue || "",
+      options: backend?.options || [],
     })
     setCreateDialogOpen(true)
   }
 
-  // 关闭对话框
   const handleCloseDialog = () => {
     setCreateDialogOpen(false)
     setEditingPlaceholder(null)
-    setFormData({
-      placeholder_name: "",
-      type: "text",
-      required: false,
-      hint: "",
-      options: [],
-    })
+    resetForm()
   }
 
-  // 提交表单（创建或更新）
+  const normalizedOptions = useMemo(
+    () => normalizePlaceholderOptions(formData),
+    [formData.options]
+  )
+
   const handleSubmit = async () => {
-    if (!formData.placeholder_name.trim()) {
+    if (!formData.fieldKey.trim()) {
       toast({
-        title: "请输入占位符名称",
+        title: "请输入字段标识",
         variant: "destructive",
       })
       return
     }
 
-    setIsLoading(true)
+    if (!isValidFieldKey(formData.fieldKey.trim())) {
+      toast({
+        title: "字段标识格式错误",
+        description: "仅允许使用字母、数字和下划线，且不能以数字开头",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
     try {
+      const payload: PlaceholderPayload = {
+        placeholder_name: formData.fieldKey.trim(),
+        label: formData.label.trim() || formData.fieldKey.trim(),
+        type: formData.type,
+        required: formData.required,
+        hint: formData.description?.trim() || undefined,
+        default_value: formData.defaultValue?.trim() || undefined,
+        options: normalizedOptions.length ? normalizedOptions : undefined,
+      }
+
       if (editingPlaceholder) {
-        // 更新占位符（包括名称）
-        await templateApi.updatePlaceholder(editingPlaceholder.placeholder_name, {
-          placeholder_name: formData.placeholder_name !== editingPlaceholder.placeholder_name 
-            ? formData.placeholder_name 
-            : undefined,
-          type: formData.type,
-          required: formData.required,
-          hint: formData.hint || undefined,
-          options: formData.options.length > 0 ? formData.options : undefined,
-        })
+        await updatePlaceholder(editingPlaceholder.fieldKey, payload)
         toast({
           title: "更新成功",
-          description: "占位符已更新",
+          description: `已更新占位符 ${payload.placeholder_name}`,
         })
       } else {
-        // 创建占位符并关联到模板
-        await templateApi.createOrUpdatePlaceholder({
-          placeholder_name: formData.placeholder_name,
-          type: formData.type,
-          required: formData.required,
-          hint: formData.hint || undefined,
-          options: formData.options.length > 0 ? formData.options : undefined,
-        })
-        // 关联到模板
-        await templateApi.associatePlaceholderToTemplate(templateId, formData.placeholder_name)
+        await createPlaceholder(payload)
         toast({
           title: "创建成功",
-          description: "占位符已创建并关联到模板",
+          description: `占位符 ${payload.placeholder_name} 已添加`,
         })
       }
       handleCloseDialog()
-      await loadPlaceholders()
     } catch (error: any) {
       toast({
         title: editingPlaceholder ? "更新失败" : "创建失败",
-        description: error.message || "操作失败",
+        description: error.message || "请稍后再试",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
-  // 删除占位符（从模板中移除关联）
-  const handleDeleteClick = (placeholder: Placeholder) => {
+  const handleDeleteClick = (placeholder: PlaceholderMeta) => {
     setPlaceholderToDelete(placeholder)
     setDeleteDialogOpen(true)
   }
 
   const handleConfirmDelete = async () => {
     if (!placeholderToDelete) return
-
-    setIsLoading(true)
+    setIsSubmitting(true)
     try {
-      await templateApi.disassociatePlaceholderFromTemplate(templateId, placeholderToDelete.placeholder_name)
+      await deletePlaceholder(placeholderToDelete.fieldKey)
       toast({
         title: "删除成功",
-        description: "占位符已从模板中移除",
+        description: `已移除占位符 ${placeholderToDelete.label ?? placeholderToDelete.fieldKey}`,
       })
       setDeleteDialogOpen(false)
       setPlaceholderToDelete(null)
-      await loadPlaceholders()
     } catch (error: any) {
       toast({
         title: "删除失败",
@@ -221,34 +213,9 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
-
-  // 添加选项
-  const handleAddOption = () => {
-    setFormData({
-      ...formData,
-      options: [...formData.options, { label: "", value: "" }],
-    })
-  }
-
-  // 更新选项
-  const handleUpdateOption = (index: number, field: "label" | "value", value: string) => {
-    const newOptions = [...formData.options]
-    newOptions[index] = { ...newOptions[index], [field]: value }
-    setFormData({ ...formData, options: newOptions })
-  }
-
-  // 删除选项
-  const handleRemoveOption = (index: number) => {
-    setFormData({
-      ...formData,
-      options: formData.options.filter((_, i) => i !== index),
-    })
-  }
-
-  const needsOptions = ["select", "radio", "checkbox"].includes(formData.type)
 
   return (
     <>
@@ -257,9 +224,21 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
           <div className="flex items-center justify-between w-full gap-1.5">
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                {placeholders.length}
+                {placeholderCount}
               </Badge>
+              {isMutating && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
             </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isSyncing}
+                className="h-6 w-6 p-0 text-slate-500 hover:text-blue-600"
+                title="刷新占位符"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+              </Button>
             <Button
               onClick={handleOpenCreate}
               size="sm"
@@ -268,15 +247,16 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
               <Plus className="h-3 w-3 mr-1" />
               新建
             </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-200px)]">
-            {isLoading && placeholders.length === 0 ? (
+            {isSyncing && placeholderCount === 0 ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : placeholders.length === 0 ? (
+            ) : placeholderCount === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <Hash className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">暂无占位符</p>
@@ -284,43 +264,73 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
               </div>
             ) : (
               <div className="p-3 space-y-2">
-                {placeholders.map((placeholder) => (
+                {orderedPlaceholders.map((placeholder) => {
+                  const backend = placeholder.backendMeta
+                  return (
                   <div
                     key={placeholder.id}
-                    className="w-full p-3 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30 hover:shadow-md transition-all duration-200 group relative"
-                  >
-                    <div className="flex items-start justify-between gap-3 pr-20">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-[9px] text-slate-500 font-medium">ID</span>
-                          <span className="text-[10px] font-mono text-blue-600 font-semibold">#{placeholder.id}</span>
-                          <span className="text-[9px] text-slate-400 mx-1">•</span>
-                          <span className="text-[9px] text-slate-500 font-medium">名称</span>
-                          <span className="text-[10px] font-mono text-blue-600 font-semibold">
-                            {placeholder.placeholder_name}
+                      className={cn(
+                        "w-full p-3 rounded-lg border bg-white transition-all duration-200 group relative cursor-pointer",
+                        selectedId === placeholder.id
+                          ? "border-blue-500 shadow-blue-100 shadow-sm"
+                          : "border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
+                      )}
+                      onMouseEnter={() => highlightPlaceholder(placeholder.id)}
+                      onMouseLeave={() => highlightPlaceholder(null)}
+                      onClick={() => selectPlaceholder(placeholder.id)}
+                    >
+                      <div className="flex-1 min-w-0 space-y-2 pr-20">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-slate-900">
+                            {placeholder.label}
                           </span>
+                          {placeholder.source === "backend" && (
+                            <Badge variant="outline" className="h-4 text-[9px] px-1.5">
+                              后端
+                            </Badge>
+                          )}
+                          {placeholder.source === "document" && (
+                            <Badge variant="outline" className="h-4 text-[9px] px-1.5">
+                              文档
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono text-blue-600">
+                          <span className="text-[10px] text-slate-500">字段</span>
+                          {"{{"}
+                          {placeholder.fieldKey}
+                          {"}}"}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
                           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
-                            {placeholder.type}
+                            {backend?.type || placeholder.dataType || "text"}
                           </Badge>
-                          {placeholder.required && (
+                          {backend?.required && (
                             <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4">
                               必填
                             </Badge>
                           )}
-                          {placeholder.hint && (
-                            <span className="text-slate-400 truncate">{placeholder.hint}</span>
+                          {placeholder.defaultValue && (
+                            <span className="text-slate-400 truncate">
+                              默认值：{placeholder.defaultValue}
+                            </span>
                           )}
                         </div>
-                      </div>
+                        {placeholder.description && (
+                          <p className="text-[11px] text-slate-500 line-clamp-2">
+                            {placeholder.description}
+                          </p>
+                        )}
                     </div>
                     <div className="absolute top-2 right-2 flex gap-2">
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-blue-600 hover:bg-blue-100"
-                        onClick={() => handleOpenEdit(placeholder)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenEdit(placeholder)
+                          }}
                         title="编辑"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -329,145 +339,44 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteClick(placeholder)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteClick(placeholder)
+                          }}
                         title="删除"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </ScrollArea>
         </CardContent>
       </Card>
 
-      {/* 创建/编辑对话框 */}
       <Dialog open={createDialogOpen} onOpenChange={handleCloseDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingPlaceholder ? "编辑占位符" : "新建占位符"}</DialogTitle>
             <DialogDescription>
-              {editingPlaceholder
-                ? "修改占位符的配置信息"
-                : "创建一个新的占位符并关联到当前模板"}
+              {editingPlaceholder ? "修改占位符配置信息" : "创建新的占位符"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>占位符名称</Label>
-              <Input
-                value={formData.placeholder_name}
-                onChange={(e) => setFormData({ ...formData, placeholder_name: e.target.value })}
-                placeholder="例如: plaintiff_name"
-                className="mt-2"
-              />
-            </div>
-
-            <div>
-              <Label>类型</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => setFormData({ ...formData, type: value, options: [] })}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">文本 (text)</SelectItem>
-                  <SelectItem value="textarea">多行文本 (textarea)</SelectItem>
-                  <SelectItem value="select">下拉选择 (select)</SelectItem>
-                  <SelectItem value="radio">单选 (radio)</SelectItem>
-                  <SelectItem value="checkbox">复选框 (checkbox)</SelectItem>
-                  <SelectItem value="date">日期 (date)</SelectItem>
-                  <SelectItem value="number">数字 (number)</SelectItem>
-                  <SelectItem value="file">文件 (file)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="required"
-                checked={formData.required}
-                onChange={(e) => setFormData({ ...formData, required: e.target.checked })}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="required" className="cursor-pointer">
-                必填
-              </Label>
-            </div>
-
-            <div>
-              <Label>提示文本（可选）</Label>
-              <Input
-                value={formData.hint}
-                onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
-                placeholder="例如: 请输入原告姓名"
-                className="mt-2"
-              />
-            </div>
-
-            {needsOptions && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>选项列表</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddOption}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    添加选项
-                  </Button>
-                </div>
-                <div className="space-y-2 mt-2">
-                  {formData.options.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Input
-                        placeholder="标签"
-                        value={option.label}
-                        onChange={(e) => handleUpdateOption(index, "label", e.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        placeholder="值"
-                        value={option.value}
-                        onChange={(e) => handleUpdateOption(index, "value", e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveOption(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  {formData.options.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      点击"添加选项"按钮添加选项
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <PlaceholderFormFields
+            formId={formId}
+            formData={formData}
+            onChange={setFormData}
+            disabled={isSubmitting}
+          />
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={handleCloseDialog}
-              disabled={isLoading}
-            >
+            <Button variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>
               取消
             </Button>
-            <Button onClick={handleSubmit} disabled={isLoading}>
-              {isLoading ? (
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   保存中...
@@ -480,19 +389,24 @@ export function PlaceholderList({ templateId }: PlaceholderListProps) {
         </DialogContent>
       </Dialog>
 
-      {/* 删除确认对话框 */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要从模板中移除占位符 "{placeholderToDelete?.placeholder_name}" 吗？
-              此操作只会移除关联关系，不会删除占位符本身。
+              确定要移除占位符 "
+              {placeholderToDelete?.label ?? placeholderToDelete?.fieldKey}
+              " 吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>删除</AlertDialogAction>
+            <AlertDialogCancel disabled={isSubmitting}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              删除
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

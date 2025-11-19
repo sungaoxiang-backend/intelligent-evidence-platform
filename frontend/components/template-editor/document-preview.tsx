@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
 import { useEffect, useRef } from "react"

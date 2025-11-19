@@ -279,5 +279,24 @@ export const templateBaseStyles = `
   .template-doc ol {
     padding-left: 20px;
   }
+  .template-doc .template-placeholder-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+    border-radius: 4px;
+    background-color: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+  .template-doc .template-placeholder-chip--selected,
+  .template-doc .template-placeholder-chip:hover {
+    background-color: rgba(59, 130, 246, 0.3);
+    border-color: rgba(37, 99, 235, 0.8);
+  }
+  .template-doc .template-placeholder-chip--highlighted {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+  }
 `
 

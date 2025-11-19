@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, FileText, Save, Download, Loader2, X } from "lucide-react"
 import { DocumentEditor } from "@/components/template-editor/document-editor"
+import { PlaceholderProvider } from "@/components/template-editor/placeholder-manager"
 import { FileUploadZone } from "@/components/template-editor/file-upload-zone"
 import { API_CONFIG } from "@/lib/config"
 
@@ -234,11 +235,13 @@ export default function TemplateEditorPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <PlaceholderProvider>
               <DocumentEditor
                 initialContent={prosemirrorJson}
                 onChange={handleContentChange}
                 isLoading={isLoading}
               />
+              </PlaceholderProvider>
             </CardContent>
           </Card>
         )}

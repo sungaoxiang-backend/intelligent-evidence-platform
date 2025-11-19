@@ -289,9 +289,11 @@ export const templateApi = {
   // 创建或更新占位符
   async createOrUpdatePlaceholder(request: {
     placeholder_name: string
+    label?: string
     type: string
     required?: boolean
     hint?: string
+    default_value?: string
     options?: Array<{ label: string; value: string }>
   }): Promise<{ code: number; message: string; data: any }> {
     const response = await fetch(
@@ -320,9 +322,11 @@ export const templateApi = {
     placeholderName: string,
     request: {
       placeholder_name?: string
+      label?: string
       type?: string
       required?: boolean
       hint?: string
+      default_value?: string
       options?: Array<{ label: string; value: string }>
     }
   ): Promise<{ code: number; message: string; data: any }> {

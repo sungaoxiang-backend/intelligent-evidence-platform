@@ -57,6 +57,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { PlaceholderProvider } from "@/components/template-editor/placeholder-manager"
 
 export default function DocumentTemplatesPage() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -365,12 +366,34 @@ export default function DocumentTemplatesPage() {
 
       {/* 主要内容区域 */}
       <div className="grid grid-cols-12 gap-4">
-        {/* 左侧侧栏 - 根据模式切换显示内容 */}
         {isEditing && selectedTemplate ? (
-          // 编辑模式：显示占位符列表
-          <PlaceholderList templateId={selectedTemplate.id} />
+          <PlaceholderProvider templateId={selectedTemplate.id}>
+            <>
+              <PlaceholderList />
+              <div className="col-span-8 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-auto relative" style={{ backgroundColor: '#f5f5f5' }}>
+                  <div className="sticky top-0 z-10 p-4 border-b bg-white flex items-center justify-end gap-2">
+                    <Button onClick={handleCancelEdit} variant="outline">
+                      取消
+                    </Button>
+                    <Button onClick={handleSaveEdit} disabled={isLoading}>
+                      <Save className="h-4 w-4 mr-2" />
+                      保存
+                    </Button>
+                  </div>
+                  <div className="p-6">
+                    <DocumentEditor
+                      initialContent={editedContent || selectedTemplate.prosemirror_json}
+                      onChange={setEditedContent}
+                      isLoading={isLoading}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          </PlaceholderProvider>
         ) : (
-          // 预览模式：显示模板列表
+          <>
           <Card className="col-span-4">
             <CardHeader className="pb-1.5 pt-2 px-2">
               <div className="flex items-center justify-between w-full gap-1.5">
@@ -420,37 +443,10 @@ export default function DocumentTemplatesPage() {
               </ScrollArea>
             </CardContent>
           </Card>
-        )}
 
-        {/* 右侧内容区域 */}
         <div className="col-span-8 flex flex-col overflow-hidden">
           {selectedTemplate ? (
-            <>
-              {/* 预览/编辑内容 */}
               <div className="flex-1 overflow-auto relative" style={{ backgroundColor: '#f5f5f5' }}>
-              {isEditing ? (
-                <>
-                  {/* 编辑模式头部 */}
-                  <div className="sticky top-0 z-10 p-4 border-b bg-white flex items-center justify-end gap-2">
-                    <Button onClick={handleCancelEdit} variant="outline">
-                      取消
-                    </Button>
-                    <Button onClick={handleSaveEdit} disabled={isLoading}>
-                      <Save className="h-4 w-4 mr-2" />
-                      保存
-                    </Button>
-                  </div>
-                  <div className="p-6">
-                    <DocumentEditor
-                      initialContent={editedContent || selectedTemplate.prosemirror_json}
-                      onChange={setEditedContent}
-                      isLoading={isLoading}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* A4纸样式的预览区域 */}
                   <div className="flex-1 overflow-auto p-8">
                     <div 
                       className="mx-auto bg-white shadow-lg relative"
@@ -461,7 +457,6 @@ export default function DocumentTemplatesPage() {
                         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                       }}
                     >
-                      {/* 操作按钮 - 放在A4纸右上角 */}
                       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
                         <Button 
                           onClick={handleExport} 
@@ -491,10 +486,7 @@ export default function DocumentTemplatesPage() {
                       </div>
                     </div>
                   </div>
-                </>
-                )}
               </div>
-            </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
@@ -505,6 +497,8 @@ export default function DocumentTemplatesPage() {
             </div>
           )}
         </div>
+          </>
+        )}
           </div>
 
       {/* 删除确认对话框 */}
