@@ -76,3 +76,8 @@ line-length = 88
 target-version = "py312"
 select = ["E", "F", "B", "I", "C4"]
 ignore = []
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.21.0",
+]

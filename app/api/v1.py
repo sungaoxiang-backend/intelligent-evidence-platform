@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.documents.routers import router as documents_router
 from app.documents_template.routers import router as documents_template_router
 from app.template_editor.routers import router as template_editor_router
+from app.document_generation.routers import router as document_generation_router
 from app.evidence_chains.routers import router as chain_router
 from app.evidences.routers import router as evidences_router
 from app.agentic.routers import router as agentic_router
@@ -30,6 +31,7 @@ api_router.include_router(chain_router, prefix="/chain", tags=["chain"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(documents_template_router, prefix="/document-templates", tags=["document-templates"])
 api_router.include_router(template_editor_router, prefix="/template-editor", tags=["template-editor"])
+api_router.include_router(document_generation_router, prefix="/document-generation", tags=["document-generation"])
 api_router.include_router(ocr_router, prefix="/ocr", tags=["ocr"])
 api_router.include_router(tasks_router)
 api_router.include_router(config_router, tags=["config"])

@@ -183,7 +183,7 @@ class Case(BaseSchema):
     user_id: int
     case_parties: List[CasePartyResponse]
     loan_amount: float
-    case_type: CaseType
+    case_type: Optional[CaseType] = None
     case_status: CaseStatus
     loan_date: Optional[datetime] = None
     court_name: Optional[str] = None

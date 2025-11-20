@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, Users, UserCheck, FileText, LogOut, Scale } from "lucide-react"
+import { LayoutDashboard, Users, UserCheck, FileText, LogOut, Scale, FileEdit } from "lucide-react"
 import Link from "next/link"
 
 interface SidebarProps {
@@ -16,6 +16,7 @@ export function Sidebar({ activeModule, setActiveModule }: SidebarProps) {
     { id: "staff", label: "员工管理", icon: UserCheck, href: "/staff" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
+    { id: "document-generation", label: "文书生成", icon: FileEdit, href: "/document-generation" },
   ]
 
   return (

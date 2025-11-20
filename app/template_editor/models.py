@@ -55,6 +55,12 @@ class DocumentTemplate(Base):
         secondary=template_placeholder_association,
         back_populates="templates"
     )
+    # 一对多关系：模板和文书生成记录
+    document_generations = relationship(
+        "DocumentGeneration",
+        back_populates="template",
+        lazy="noload"  # 默认不加载，避免性能问题
+    )
     
     __table_args__ = (
         Index("idx_document_templates_status", "status"),

@@ -1,0 +1,313 @@
+# 文书生成功能实施计划
+
+本实施计划将功能需求和设计转换为一系列增量的编码任务。任务按照测试驱动的方式组织，确保每个步骤都可验证，所有代码都集成到系统中。
+
+## 后端实现
+
+- [X] 
+  - 在 `app/document_generation/models.py` 中定义 `DocumentGeneration` 模型
+  - 添加与 Case、DocumentTemplate、Staff 的关系映射
+  - 实现唯一约束（case_id + template_id）
+  - 在 Case 模型中添加 `document_generations` 关系
+  - 创建 Alembic 迁移脚本，包含表、索引和约束
+  - 执行迁移并验证数据库表结构
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+- [X] 
+  - 在 `app/document_generation/schemas.py` 中创建请求 Schema：
+    - `DocumentGenerationCreateRequest`
+    - `DocumentGenerationUpdateRequest`
+    - `DocumentGenerationExportRequest`
+  - 创建响应 Schema：
+    - `DocumentGenerationResponse`
+    - `DocumentGenerationDetailResponse`
+    - `PublishedTemplateListResponse`
+  - 为所有字段添加验证规则和描述
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+- [ ] 
+  - 创建 `app/document_generation/services.py`
+  - 实现 `get_published_templates()` 方法：
+    - 查询 status='published' 的模板
+    - 支持分类过滤和关键词搜索
+    - 实现分页
+  - 实现 `get_generation_detail()` 方法：
+    - 预加载关联的 case、template、placeholders
+    - 返回完整的文书生成记录
+  - 编写单元测试验证查询逻辑
+  - _Requirements: 3.1, 3.2, 10.1_
+- [ ] 
+  - 实现 `create_or_get_generation()` 方法：
+    - 验证案件和模板存在性
+    - 检查模板是否已发布
+    - 查找现有记录或创建新记录（基于唯一约束）
+    - 记录创建人和更新人信息
+  - 实现 `update_generation_data()` 方法：
+    - 更新 form_data 字段
+    - 更新 updated_at 和 updated_by_id
+  - 编写单元测试验证创建、获取和更新逻辑
+  - 测试唯一约束的行为
+  - _Requirements: 2.1, 2.2, 2.3, 2.5, 7.1, 7.2, 7.5, 7.6_
+- [ ] 
+  - 在 `DocumentGenerationService` 中实现 `_replace_placeholders_in_json()` 私有方法
+  - 递归遍历 ProseMirror JSON 节点树
+  - 使用正则表达式匹配 `{{placeholder}}` 格式
+  - 根据 form_data 替换占位符：
+    - 如果有值，替换为实际内容
+    - 如果无值，保留占位符标记
+  - 处理多种数据类型（字符串、数组、日期等）
+  - 编写单元测试验证各种场景：
+    - 全部填写
+    - 部分填写
+    - 嵌套占位符
+    - 特殊字符处理
+  - _Requirements: 8.2, 8.3_
+- [ ] 
+  - 在 `DocumentGenerationService` 中实现 `generate_document()` 方法：
+    - 获取文书生成记录和关联数据
+    - 调用占位符替换逻辑
+    - 复用 `template_editor_service.export_prosemirror_to_docx()`
+    - 生成文件名（模板名_案件ID_时间戳）
+    - 上传到 COS 并返回 URL
+  - 添加错误处理（记录不存在、生成失败、上传失败）
+  - 编写集成测试验证完整流程
+  - _Requirements: 8.1, 8.4, 8.5, 8.6, 8.7, 8.8_
+- [ ] 
+  - 创建 `app/document_generation/routers.py`
+  - 实现 `GET /templates/published` 端点：
+    - 支持分页、分类过滤、搜索参数
+    - 返回已发布模板列表
+  - 实现 `POST /generations` 端点：
+    - 接收 case_id 和 template_id
+    - 调用 service 创建或获取记录
+    - 返回完整的文书生成详情
+  - 实现 `GET /generations/{generation_id}` 端点：
+    - 返回文书生成记录详情
+  - 实现 `PATCH /generations/{generation_id}` 端点：
+    - 更新草稿数据
+    - 返回更新后的记录
+  - 实现 `POST /generations/{generation_id}/export` 端点：
+    - 生成 DOCX 文书
+    - 返回下载 URL
+  - 所有端点添加员工身份验证（`get_current_staff` 依赖）
+  - 添加错误处理和日志记录
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 11.1_
+- [ ] 
+  - 在 `app/api/v1.py` 中导入 document_generation router
+  - 注册路由：`api_router.include_router(document_generation_router, prefix="/document-generation", tags=["document-generation"])`
+  - 启动后端服务并验证所有端点可访问
+  - 使用 API 测试工具测试各个端点
+  - _Requirements: 10.1_
+- [ ] 
+  - 创建 `tests/test_document_generation_api.py`
+  - 测试完整的文书生成流程：
+    - 获取已发布模板列表
+    - 创建文书生成记录
+    - 更新草稿数据
+    - 生成并导出文书
+  - 测试边界情况：
+    - 案件不存在
+    - 模板未发布
+    - 记录不存在
+  - 测试并发场景（同一案件同一模板）
+  - _Requirements: 2.3, 7.5, 8.7, 10.6_
+
+## 前端实现
+
+- [ ] 
+  - 创建 `frontend/lib/document-generation-api.ts`
+  - 实现 API 调用函数：
+    - `getPublishedTemplates()`
+    - `createOrGetGeneration()`
+    - `getGenerationDetail()`
+    - `updateGenerationData()`
+    - `exportGenerationDocument()`
+  - 统一错误处理和响应类型定义
+  - 添加 TypeScript 类型定义
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+- [ ] 
+  - 创建 `frontend/components/document-generation/placeholder-field-renderer.tsx`
+  - 实现各类型字段渲染：
+    - text - Input 组件
+    - textarea - Textarea 组件
+    - select - Select 组件
+    - radio - RadioGroup 组件
+    - checkbox - Checkbox 组件（支持多选）
+    - date - DatePicker 组件
+    - number - Input[type=number] 组件
+  - 显示 label、hint
+  - 支持默认值预填充
+  - 编写组件测试验证各类型渲染
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
+- [ ] 
+  - 创建 `frontend/components/document-generation/generation-form.tsx`
+  - 接收 placeholders 和 formData props
+  - 遍历 placeholders，使用 PlaceholderFieldRenderer 渲染每个字段
+  - 实现表单数据变更处理
+  - 支持字段分组和折叠面板（当字段较多时）
+  - 添加加载状态和空状态处理
+  - _Requirements: 5.1, 13.5_
+- [ ] 
+  - 创建 `frontend/components/document-generation/generation-preview.tsx`
+  - 接收 template 和 formData props
+  - 实现本地占位符替换逻辑：
+    - 深拷贝 prosemirror_json
+    - 递归替换占位符标记
+  - 复用 DocumentPreview 组件渲染（只读模式）
+  - 实时响应 formData 变化
+  - 支持滚动和缩放
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+- [ ] 
+  - 创建 `frontend/components/document-generation/case-selector.tsx`
+  - 实现案件下拉选择器：
+    - 加载案件列表
+    - 支持搜索过滤
+    - 显示案件基本信息
+  - 显示选中案件的详细信息卡片
+  - 处理加载状态和错误状态
+  - _Requirements: 4.2, 4.3, 4.4_
+- [ ] 
+  - 创建 `frontend/components/document-generation/template-list-sidebar.tsx`
+  - 复用 SidebarLayout 组件
+  - 实现模板列表项：
+    - 显示模板名称、分类、描述
+    - 高亮选中项
+  - 添加搜索框和分类过滤
+  - 实现分页加载或无限滚动
+  - 处理空状态和错误状态
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+- [ ] 
+  - 创建 `frontend/components/document-generation/generation-tabs.tsx`
+  - 使用 Tabs 组件实现表单/预览切换
+  - 添加标签图标和计数
+  - 响应式处理（移动端自动切换）
+  - _Requirements: 5.1, 6.1_
+- [ ] 
+  - 在主页面组件中实现防抖保存 hook
+  - 使用 `useDebouncedCallback` 实现 2 秒防抖
+  - 监听 formData 变化，自动调用 API 保存
+  - 显示保存状态提示（保存中、已保存、保存失败）
+  - 支持手动重试
+  - 处理网络错误和会话过期
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 13.6_
+- [ ] 
+  - 创建 `frontend/components/document-generation/document-generation-page.tsx`
+  - 组合所有子组件：
+    - TemplateListSidebar
+    - CaseSelector
+    - GenerationTabs
+    - GenerationForm
+    - GenerationPreview
+  - 实现状态管理：
+    - 选中的案件和模板
+    - 文书生成记录
+    - 表单数据
+    - 当前标签页
+  - 实现核心交互逻辑：
+    - 选择模板 → 创建或获取 generation
+    - 加载 generation → 填充 formData
+    - formData 变化 → 自动保存 + 更新预览
+  - 实现响应式布局（桌面端左右分栏，移动端堆叠）
+  - _Requirements: 4.1, 4.5, 12.1, 12.2, 12.3, 12.4, 12.5_
+- [ ] 
+  - 在主页面组件中添加"生成文书"按钮
+  - 实现生成文书处理函数：
+    - 调用 `exportGenerationDocument()` API
+    - 显示加载状态和进度
+    - 成功后触发浏览器下载
+  - 添加错误处理和重试机制
+  - 显示成功/失败提示
+  - _Requirements: 8.1, 8.4, 8.5, 8.6, 13.3, 13.4_
+- [ ] 
+  - 创建 `frontend/app/document-generation/page.tsx`
+  - 导入并渲染 DocumentGenerationPage 组件
+  - 实现客户端路由和状态管理
+  - 处理 URL 参数（支持从案件详情页传入 caseId）
+  - _Requirements: 1.1, 1.2, 4.1_
+- [ ] 
+  - 在 `frontend/components/top-navigation.tsx` 中添加"文书生成"菜单项：
+    - 添加到 navigationItems 数组
+    - 使用合适的图标（FileText）
+    - 设置路由路径 `/document-generation`
+  - 实现路由高亮逻辑
+  - 确保在所有屏幕尺寸下可见
+  - _Requirements: 1.1, 1.2, 1.3_
+- [ ] 
+  - 在 `frontend/components/case-detail.tsx` 中添加"生成文书"操作按钮
+  - 点击按钮跳转到 `/document-generation?caseId={caseId}`
+  - 在 DocumentGenerationPage 中读取 URL 参数并自动选中案件
+  - _Requirements: 4.1_
+- [ ] 
+  - 在 PlaceholderFieldRenderer 中添加格式验证：
+    - number 类型：验证是否为有效数字
+    - date 类型：验证日期格式
+  - 显示友好的错误提示
+  - 字段旁显示验证状态（错误时红色高亮）
+  - 修正后自动清除错误提示
+  - 不阻止保存和生成（仅提示）
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
+- [ ] 
+  - 添加骨架屏加载状态：
+    - 模板列表加载
+    - 表单加载
+    - 预览加载
+  - 添加 Toast 消息提示：
+    - 操作成功/失败
+    - 自动保存状态
+    - 会话即将过期警告
+  - 添加确认对话框：
+    - 切换案件前提示保存
+    - 离开页面前提示未保存内容
+  - 优化加载性能和动画过渡
+  - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.6_
+- [ ] 
+  - 为 PlaceholderFieldRenderer 编写单元测试
+  - 为 GenerationForm 编写集成测试
+  - 为 GenerationPreview 编写快照测试
+  - 测试草稿自动保存逻辑
+  - 测试错误处理和边界情况
+  - _Requirements: 5.1, 6.1, 7.1, 9.1_
+- [ ] 
+  - 创建 `e2e/document-generation.spec.ts`
+  - 测试完整的文书生成流程：
+    - 登录系统
+    - 进入文书生成页面
+    - 选择案件和模板
+    - 填写表单
+    - 验证自动保存
+    - 切换到预览
+    - 生成并下载文书
+  - 测试响应式布局
+  - 测试错误场景
+  - _Requirements: 所有需求的端到端验证_
+
+## 集成和验收
+
+- [ ] 
+  - 启动完整的前后端系统
+  - 创建测试数据（案件、模板、占位符）
+  - 手动执行完整的用户流程
+  - 验证所有功能点：
+    - 导航入口
+    - 案件选择
+    - 模板列表
+    - 表单填写
+    - 草稿保存
+    - 实时预览
+    - 文书生成
+    - 文件下载
+  - 验证响应式布局
+  - 验证错误处理
+  - _Requirements: 所有功能需求_
+- [ ] 
+  - 分析前端打包大小，优化导入
+  - 优化数据库查询（explain analyze）
+  - 添加必要的缓存策略
+  - 优化大文档的预览性能
+  - 测试并发生成场景
+  - _Requirements: 性能相关需求_
+- [ ] 
+  - 为所有 API 端点添加详细的文档字符串
+  - 为复杂函数添加注释
+  - 确保代码符合项目规范
+  - 进行代码审查和重构
+  - 更新 API 文档（如 Swagger）
+  - _Requirements: 代码质量_

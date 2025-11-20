@@ -87,6 +87,7 @@ class Case(Base):
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")
     association_evidence_features = relationship("AssociationEvidenceFeature", back_populates="case", cascade="all, delete-orphan")
     case_parties = relationship("CaseParty", back_populates="case", cascade="all, delete-orphan")
+    document_generations = relationship("DocumentGeneration", back_populates="case", cascade="all, delete-orphan")
 
 
 class CaseParty(Base):
