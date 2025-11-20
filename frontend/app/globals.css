@@ -24,6 +24,7 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.75rem;
+    --editor-sidebar-card-width: 360px;
   }
 
   .dark {
@@ -46,6 +47,18 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
+  }
+
+  @media (max-width: 1400px) {
+    :root {
+      --editor-sidebar-card-width: 320px;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    :root {
+      --editor-sidebar-card-width: calc(100% - 24px);
+    }
   }
 }
 

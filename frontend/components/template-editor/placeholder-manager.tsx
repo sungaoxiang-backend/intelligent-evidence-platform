@@ -67,6 +67,9 @@ interface PlaceholderDocumentBridge {
 interface PlaceholderContextValue {
   placeholders: Record<string, PlaceholderMeta>
   orderedPlaceholders: PlaceholderMeta[]
+  allSystemPlaceholders: PlaceholderMeta[]
+  associatedPlaceholders: PlaceholderMeta[]
+  unassociatedPlaceholders: PlaceholderMeta[]
   selectedId: string | null
   highlightedId: string | null
   editingId: string | null
@@ -74,6 +77,7 @@ interface PlaceholderContextValue {
   isMutating: boolean
   syncFromDoc: (doc?: JSONContent | null) => void
   loadBackendPlaceholders: (templateIdOverride?: number) => Promise<void>
+  loadAllSystemPlaceholders: () => Promise<void>
   createPlaceholder: (payload: PlaceholderPayload, options?: { insertIntoDocument?: boolean }) => Promise<void>
   updatePlaceholder: (
     fieldKey: string,
@@ -110,6 +114,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
   const [docPlaceholderMap, setDocPlaceholderMap] = useState<Record<string, PlaceholderMeta>>({})
   const [docOrderedIds, setDocOrderedIds] = useState<string[]>([])
   const [backendMap, setBackendMap] = useState<Record<string, BackendPlaceholderMeta>>({})
+  const [allSystemPlaceholdersMap, setAllSystemPlaceholdersMap] = useState<Record<string, BackendPlaceholderMeta>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -127,6 +132,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     setDocPlaceholderMap({})
     setDocOrderedIds([])
     setBackendMap({})
+    setAllSystemPlaceholdersMap({})
     setSelectedId(null)
     setHighlightedId(null)
     setEditingId(null)
@@ -180,6 +186,23 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     }
   }
 
+  const loadAllSystemPlaceholders = useCallback(async () => {
+    try {
+      const response = await templateApi.getPlaceholders({ limit: 1000 })
+      const items: BackendPlaceholderMeta[] = response.data || []
+      const map: Record<string, BackendPlaceholderMeta> = {}
+      items.forEach((item) => {
+        map[item.placeholder_name] = {
+          ...item,
+          options: item.options ?? undefined,
+        }
+      })
+      setAllSystemPlaceholdersMap(map)
+    } catch (error) {
+      console.error("Failed to load all system placeholders:", error)
+    }
+  }, [])
+
   const loadBackendPlaceholders = useCallback(
     async (templateIdOverride?: number) => {
       const targetId = templateIdOverride ?? currentTemplateId
@@ -197,13 +220,15 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
           }
         })
         setBackendMap(map)
+        // 同时加载所有系统占位符
+        await loadAllSystemPlaceholders()
       } catch (error) {
         console.error("Failed to load placeholders:", error)
       } finally {
         setIsSyncing(false)
       }
     },
-    [currentTemplateId]
+    [currentTemplateId, loadAllSystemPlaceholders]
   )
 
   useEffect(() => {
@@ -212,7 +237,9 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     } else {
       setBackendMap({})
     }
-  }, [templateId, loadBackendPlaceholders])
+    // 始终加载所有系统占位符
+    loadAllSystemPlaceholders()
+  }, [templateId, loadBackendPlaceholders, loadAllSystemPlaceholders])
 
   const selectPlaceholder = useCallback((id: string | null) => {
     setSelectedId(id)
@@ -266,7 +293,10 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         if (shouldInsert) {
           await invokeBridge("insert", payload)
         }
-        await loadBackendPlaceholders(targetTemplateId)
+        await Promise.all([
+          loadBackendPlaceholders(targetTemplateId),
+          loadAllSystemPlaceholders(),
+        ])
       } catch (error) {
         setBackendMap(snapshot)
         throw error
@@ -302,7 +332,10 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
       }))
       try {
         await templateApi.updatePlaceholder(fieldKey, payload)
-        await loadBackendPlaceholders()
+        await Promise.all([
+          loadBackendPlaceholders(),
+          loadAllSystemPlaceholders(),
+        ])
         if (
           payload.placeholder_name &&
           payload.placeholder_name.trim() &&
@@ -331,7 +364,10 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
       })
       try {
         await templateApi.deletePlaceholder(fieldKey)
-        await loadBackendPlaceholders()
+        await Promise.all([
+          loadBackendPlaceholders(),
+          loadAllSystemPlaceholders(),
+        ])
         await invokeBridge("remove", fieldKey)
       } catch (error) {
         setBackendMap(snapshot)
@@ -442,9 +478,39 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     return { ordered, map }
   }, [docOrderedIds, docPlaceholderMap, backendMap])
 
+  // 计算所有系统占位符列表
+  const allSystemPlaceholders = useMemo(() => {
+    return Object.keys(allSystemPlaceholdersMap).map((fieldKey) => {
+      const backend = allSystemPlaceholdersMap[fieldKey]
+      return {
+        id: `system-${fieldKey}`,
+        fieldKey,
+        label: backend.label ?? backend.placeholder_name ?? fieldKey,
+        description: backend.hint ?? undefined,
+        defaultValue: backend.default_value ?? undefined,
+        dataType: backend.type,
+        status: backendMap[fieldKey] ? "bound" : "pending" as PlaceholderStatus,
+        source: "backend" as const,
+        backendMeta: backend,
+      } as PlaceholderMeta
+    })
+  }, [allSystemPlaceholdersMap, backendMap])
+
+  // 区分关联和未关联的占位符
+  const associatedPlaceholders = useMemo(() => {
+    return allSystemPlaceholders.filter((p) => backendMap[p.fieldKey])
+  }, [allSystemPlaceholders, backendMap])
+
+  const unassociatedPlaceholders = useMemo(() => {
+    return allSystemPlaceholders.filter((p) => !backendMap[p.fieldKey])
+  }, [allSystemPlaceholders, backendMap])
+
   const value: PlaceholderContextValue = {
     placeholders: combined.map,
     orderedPlaceholders: combined.ordered,
+    allSystemPlaceholders,
+    associatedPlaceholders,
+    unassociatedPlaceholders,
     selectedId,
     highlightedId,
     editingId,
@@ -452,6 +518,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     isMutating,
     syncFromDoc,
     loadBackendPlaceholders,
+    loadAllSystemPlaceholders,
     createPlaceholder,
     updatePlaceholder,
     deletePlaceholder,

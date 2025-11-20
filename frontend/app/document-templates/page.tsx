@@ -19,6 +19,8 @@ import {
   Pencil,
   Check,
   X,
+  Circle,
+  CheckCircle2,
 } from "lucide-react"
 import { DocumentEditor } from "@/components/template-editor/document-editor"
 import { DocumentPreview } from "@/components/template-editor/document-preview"
@@ -370,31 +372,34 @@ export default function DocumentTemplatesPage() {
           <PlaceholderProvider templateId={selectedTemplate.id}>
             <>
               <PlaceholderList />
-              <div className="col-span-8 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-auto relative" style={{ backgroundColor: '#f5f5f5' }}>
-                  <div className="sticky top-0 z-10 p-4 border-b bg-white flex items-center justify-end gap-2">
-                    <Button onClick={handleCancelEdit} variant="outline">
-                      取消
-                    </Button>
-                    <Button onClick={handleSaveEdit} disabled={isLoading}>
-                      <Save className="h-4 w-4 mr-2" />
-                      保存
-                    </Button>
-                  </div>
-                  <div className="p-6">
+              <div className="col-span-8 flex flex-col">
+                <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+                  <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
+                    <CardTitle className="text-base font-semibold">编辑模板</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={handleCancelEdit} variant="outline" size="sm">
+                        取消
+                      </Button>
+                      <Button onClick={handleSaveEdit} disabled={isLoading} size="sm">
+                        <Save className="h-4 w-4 mr-2" />
+                        保存
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
                     <DocumentEditor
                       initialContent={editedContent || selectedTemplate.prosemirror_json}
                       onChange={setEditedContent}
                       isLoading={isLoading}
                     />
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             </>
           </PlaceholderProvider>
         ) : (
           <>
-          <Card className="col-span-4">
+          <Card className="col-span-4 overflow-hidden">
             <CardHeader className="pb-1.5 pt-2 px-2">
               <div className="flex items-center justify-between w-full gap-1.5">
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -412,7 +417,7 @@ export default function DocumentTemplatesPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-hidden">
               <ScrollArea className="h-[calc(100vh-200px)]">
                 {isLoading && templates.length === 0 ? (
                   <div className="flex items-center justify-center p-8">
@@ -425,7 +430,7 @@ export default function DocumentTemplatesPage() {
                     <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
                   </div>
                 ) : (
-                  <div className="p-3 space-y-2">
+                  <div className="p-3 space-y-2 flex flex-col items-center min-w-0 max-w-full overflow-x-hidden">
                     {templates.map((template) => (
                     <TemplateListItem
                       key={template.id}
@@ -444,57 +449,61 @@ export default function DocumentTemplatesPage() {
             </CardContent>
           </Card>
 
-        <div className="col-span-8 flex flex-col overflow-hidden">
+        <div className="col-span-8 flex flex-col">
           {selectedTemplate ? (
-              <div className="flex-1 overflow-auto relative" style={{ backgroundColor: '#f5f5f5' }}>
-                  <div className="flex-1 overflow-auto p-8">
-                    <div 
-                      className="mx-auto bg-white shadow-lg relative"
-                      style={{ 
-                        width: '210mm',
-                        minHeight: '297mm',
-                        maxWidth: '100%',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                      }}
-                    >
-                      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                        <Button 
-                          onClick={handleExport} 
-                          variant="outline"
-                          size="sm"
-                          disabled={isLoading}
-                          className="h-8 px-3 text-xs shadow-sm"
-                        >
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
-                          导出
-                        </Button>
-                        <Button 
-                          onClick={handleStartEdit} 
-                          variant="outline"
-                          size="sm"
-                          className="h-8 px-3 text-xs shadow-sm"
-                        >
-                          <Edit className="h-3.5 w-3.5 mr-1.5" />
-                          编辑
-                        </Button>
-              </div>
-                      <div style={{ padding: '25mm' }}>
-                        <DocumentPreview 
-                          key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
-                          content={selectedTemplate.prosemirror_json} 
-                        />
-                      </div>
+            <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+              <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
+                <CardTitle className="text-base font-semibold">预览模板</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    onClick={handleExport} 
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoading}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    导出
+                  </Button>
+                  <Button 
+                    onClick={handleStartEdit} 
+                    size="sm"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    编辑
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
+                <div className="flex justify-center">
+                  <div 
+                    className="bg-white shadow-lg"
+                    style={{ 
+                      width: '210mm',
+                      minHeight: '297mm',
+                      maxWidth: '100%',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    <div style={{ padding: '25mm' }}>
+                      <DocumentPreview 
+                        key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
+                        content={selectedTemplate.prosemirror_json} 
+                      />
                     </div>
                   </div>
-              </div>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">请选择一个模板</p>
-                <p className="text-sm mt-2">从左侧列表中选择模板进行预览或编辑</p>
-              </div>
-            </div>
+            <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+              <CardContent className="flex-1 flex items-center justify-center text-muted-foreground" style={{ minHeight: 0 }}>
+                <div className="text-center">
+                  <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg">请选择一个模板</p>
+                  <p className="text-sm mt-2">从左侧列表中选择模板进行预览或编辑</p>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
           </>
@@ -651,20 +660,28 @@ function TemplateListItem({
   return (
     <div
       className={cn(
-        "w-full p-3 rounded-lg border text-left transition-all duration-200 hover:shadow-md group relative",
+        "w-full max-w-full p-3 rounded-lg border text-left transition-all duration-200 hover:shadow-md group",
         isSelected
           ? "border-blue-500 shadow-md ring-2 ring-blue-200 bg-blue-50"
           : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30"
       )}
+      style={{
+        width: "var(--editor-sidebar-card-width)",
+        maxWidth: "100%",
+      }}
       onClick={onSelect}
     >
-      <div className="flex items-start justify-between gap-3 pr-28">
-        <div className="flex-1 min-w-0">
+      <div
+        className="grid w-full gap-3 items-start"
+        style={{ gridTemplateColumns: "minmax(0, 0.7fr) minmax(112px, 0.3fr)" }}
+      >
+        {/* 内容区域 - 70% */}
+        <div className="min-w-0 overflow-hidden">
           {/* ID */}
           <div className="flex items-center gap-1 mb-1">
             <span className="text-[9px] text-slate-500 font-medium">ID</span>
             <span className="text-[10px] font-mono text-blue-600 font-semibold">#{template.id}</span>
-      </div>
+          </div>
 
           {/* 模板名称 */}
           <div className="mb-1">
@@ -713,102 +730,115 @@ function TemplateListItem({
                 {template.name}
               </h4>
             )}
-                </div>
+          </div>
 
           {/* 描述 */}
           {template.description && (
             <div className="mb-1">
               <p className={cn(
-                "text-[10px] line-clamp-1",
+                "text-[10px] line-clamp-1 truncate",
                 isSelected ? "text-blue-600/80" : "text-slate-500"
               )}>
                 {template.description}
               </p>
-                  </div>
-                )}
+            </div>
+          )}
 
           {/* 元信息 */}
-          <div className="flex items-center gap-1 text-[10px] text-slate-500 flex-wrap">
+          <div className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0 overflow-hidden">
             {template.category && (
               <>
-                <span>{template.category}</span>
-                <span>•</span>
+                <span className="truncate min-w-0">{template.category}</span>
+                <span className="flex-shrink-0">•</span>
               </>
             )}
             {placeholderCount > 0 && (
-              <span>占位符: {placeholderCount} 个</span>
+              <span className="truncate min-w-0">占位符: {placeholderCount} 个</span>
             )}
-              </div>
-                </div>
-                    </div>
-
-      {/* 常驻操作按钮 - 右上角 */}
-      <div className="absolute top-2 right-2 flex gap-3">
-        <Button
-          size="sm"
-          variant="ghost"
-          className={cn(
-            "h-6 w-6 p-0",
-            isSelected && "text-blue-700 hover:bg-blue-100"
-          )}
-          onClick={(e) => {
-            e.stopPropagation()
-            handleStartEdit(e)
-          }}
-          title="重命名"
-          disabled={isEditingName}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className={cn(
-            "h-6 w-6 p-0",
-            isSelected && "text-blue-700 hover:bg-blue-100"
-          )}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleStatus(e)
-          }}
-          title={template.status === "published" ? "撤回" : "发布"}
-        >
-          {template.status === "published" ? (
-            <Undo className="h-3.5 w-3.5" />
-          ) : (
-            <Send className="h-3.5 w-3.5" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className={cn(
-            "h-6 w-6 p-0 text-red-600",
-            isSelected && "text-red-600 hover:bg-red-50"
-          )}
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete(e)
-          }}
-          title="删除"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+          </div>
         </div>
 
-      {/* 状态徽章 - 右下角 */}
-      <div className="absolute bottom-2 right-2">
-        <Badge
-          variant={template.status === "published" ? "default" : "secondary"}
-          className={cn(
-            "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4",
-            template.status === "published" 
-              ? "bg-green-500 hover:bg-green-600 text-white" 
-              : "bg-slate-200 text-slate-600"
-          )}
-        >
-          {template.status === "published" ? "已发布" : "草稿"}
-        </Badge>
+        {/* 按钮和状态区域 - 30% */}
+        <div className="min-w-[112px] flex flex-col items-end justify-between gap-2">
+          {/* 操作按钮 */}
+          <div className="flex flex-wrap gap-2 justify-end w-full">
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "h-6 w-6 p-0",
+                isSelected && "text-blue-700 hover:bg-blue-100"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleStartEdit(e)
+              }}
+              title="重命名"
+              disabled={isEditingName}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "h-6 w-6 p-0",
+                isSelected && "text-blue-700 hover:bg-blue-100"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleStatus(e)
+              }}
+              title={template.status === "published" ? "撤回" : "发布"}
+            >
+              {template.status === "published" ? (
+                <Undo className="h-3.5 w-3.5" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "h-6 w-6 p-0 text-red-600",
+                isSelected && "text-red-600 hover:bg-red-50"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(e)
+              }}
+              title="删除"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* 状态徽章 */}
+          <div className="mt-auto w-full flex justify-end">
+            <Badge
+              variant={template.status === "published" ? "default" : "secondary"}
+              className={cn(
+                "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4 flex items-center gap-1",
+                template.status === "published" 
+                  ? "bg-green-500 hover:bg-green-600 text-white" 
+                  : "bg-slate-200 text-slate-600"
+              )}
+            >
+              {template.status === "published" ? (
+                <>
+                  <CheckCircle2 className="h-3 w-3" />
+                  已发布
+                </>
+              ) : (
+                <>
+                  <Circle className="h-3 w-3" />
+                  草稿
+                </>
+              )}
+            </Badge>
+          </div>
+        </div>
       </div>
     </div>
   )
