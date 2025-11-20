@@ -85,9 +85,9 @@ export function CaseSelector({
         setSelectedCase(found)
       } else {
         // 如果当前列表中找不到，尝试单独加载
-        caseApi.getCase(selectedCaseId).then((result) => {
-          if (result) {
-            setSelectedCase(result)
+        caseApi.getCaseById(selectedCaseId).then((result) => {
+          if (result?.data) {
+            setSelectedCase(result.data)
           }
         }).catch((error) => {
           console.error("加载案件详情失败:", error)

@@ -41,6 +41,7 @@ import {
   Calendar as CalendarIcon,
   Trash2,
   FileText,
+  FileEdit,
   FileImage,
   File,
   FileSpreadsheet,
@@ -4619,6 +4620,15 @@ export function CardFactory({
                     >
                       <FileText className="h-3 w-3 mr-1.5" />
                       生成文书
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/document-generation?caseId=${caseId}`)}
+                      className="h-8 px-3 text-xs border-green-300 hover:border-green-400 hover:bg-green-50 text-green-600"
+                    >
+                      <FileEdit className="h-3 w-3 mr-1.5" />
+                      文书生成
                     </Button>
                     <Button
                       variant="outline"

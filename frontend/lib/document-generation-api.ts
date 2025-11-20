@@ -56,6 +56,11 @@ export interface TemplateListResponse {
   total: number
 }
 
+export interface TemplateListResult {
+  templates: TemplateInfo[]
+  total: number
+}
+
 export interface GenerationDetailResponse {
   code: number
   message: string

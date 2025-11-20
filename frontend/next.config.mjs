@@ -9,6 +9,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // API代理配置
+  async rewrites() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: 'http://localhost:8008/api/v1/:path*',
+      },
+    ]
+  },
   // 优化热重载配置
   webpack: (config, { dev, isServer }) => {
     if (dev && !isServer) {

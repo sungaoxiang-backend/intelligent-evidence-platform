@@ -1,12 +1,13 @@
 "use client"
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Download, Loader2, ArrowLeft, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
-import { TemplateListSidebar } from "./template-list-sidebar"
+import { TemplateSelectorDropdown } from "./template-selector-dropdown"
+import { EvidenceCardList, type EvidenceCard, type Evidence } from "./evidence-card-list"
 import { CaseSelector } from "./case-selector"
 import { DocumentGenerationViewer } from "./document-generation-viewer"
 import {
@@ -30,17 +31,138 @@ export function DocumentGenerationPage({
   initialTemplateId,
 }: DocumentGenerationPageProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
+
+  // 从URL参数获取案件ID
+  const caseIdFromUrl = searchParams.get("caseId")
 
   // 状态管理
   const [selectedCase, setSelectedCase] = useState<Case | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
+  const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [evidenceCards, setEvidenceCards] = useState<EvidenceCard[]>([])
+  const [evidences, setEvidences] = useState<Evidence[]>([])
   const [generation, setGeneration] = useState<DocumentGeneration | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [loadingEvidence, setLoadingEvidence] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // 加载模板列表
+  const loadTemplates = useCallback(async () => {
+    try {
+      setLoadingTemplates(true)
+      console.log("开始加载模板列表...")
+      const response = await documentGenerationApi.getPublishedTemplates({})
+      console.log("模板列表响应:", response)
+      console.log("模板数量:", response.data?.length || 0)
+      setTemplates(response.data || [])
+    } catch (error) {
+      console.error("加载模板列表失败:", error)
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : "加载模板列表失败",
+        variant: "destructive",
+      })
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [toast])
+
+  // 加载证据卡片
+  const loadEvidenceCards = useCallback(async (caseId: number) => {
+    try {
+      setLoadingEvidence(true)
+      console.log("开始加载证据卡片, 案件ID:", caseId)
+      
+      // 使用封装好的API方法，自动携带认证token
+      const { evidenceCardApi, evidenceApi } = await import("@/lib/api")
+      
+      // 获取证据卡片
+      const cardResult = await evidenceCardApi.getEvidenceCards({
+        case_id: caseId,
+        skip: 0,
+        limit: 1000,
+      })
+      console.log("证据卡片数据:", cardResult)
+      console.log("证据卡片数量:", cardResult.data?.length || 0)
+      setEvidenceCards(cardResult.data || [])
+
+      // 加载证据列表
+      try {
+        const evidenceResult = await evidenceApi.getEvidences({
+          page: 1,
+          pageSize: 1000,
+          case_id: caseId,
+        })
+        console.log("证据列表数量:", evidenceResult.data?.length || 0)
+        setEvidences(evidenceResult.data || [])
+      } catch (error) {
+        console.warn("加载证据列表失败:", error)
+        setEvidences([])
+      }
+    } catch (error) {
+      console.error("加载证据卡片失败:", error)
+      setEvidenceCards([])
+      setEvidences([])
+    } finally {
+      setLoadingEvidence(false)
+    }
+  }, [])
+
+  // 初始化：从URL参数或props加载案件
+  useEffect(() => {
+    const caseId = caseIdFromUrl ? parseInt(caseIdFromUrl, 10) : initialCaseId
+    if (caseId && !selectedCase) {
+      // 加载案件信息（使用API封装方法，自动携带认证）
+      import("@/lib/api").then(({ caseApi }) => {
+        caseApi.getCaseById(caseId)
+          .then((result) => {
+            if (result?.data) {
+              setSelectedCase(result.data)
+            } else {
+              throw new Error("案件数据格式错误")
+            }
+          })
+          .catch((error) => {
+            console.error("加载案件信息失败:", error)
+            toast({
+              title: "错误",
+              description: `加载案件信息失败: ${error.message}`,
+              variant: "destructive",
+            })
+          })
+      })
+    }
+  }, [caseIdFromUrl, initialCaseId, selectedCase, toast])
+
+  // 加载模板列表
+  useEffect(() => {
+    loadTemplates()
+  }, [loadTemplates])
+
+  // 当模板加载完成且有案件时，自动选择第一个模板
+  useEffect(() => {
+    if (templates.length > 0 && selectedCase && !selectedTemplate && !loadingTemplates) {
+      console.log("自动选择第一个模板:", templates[0].name)
+      setSelectedTemplate(templates[0])
+    }
+  }, [templates, selectedCase, selectedTemplate, loadingTemplates])
+
+  // 当选择案件时，加载证据卡片
+  useEffect(() => {
+    if (selectedCase?.id) {
+      loadEvidenceCards(selectedCase.id)
+    } else {
+      setEvidenceCards([])
+      setEvidences([])
+    }
+  }, [selectedCase?.id, loadEvidenceCards])
 
   // 创建或获取文书生成记录
   const createOrGetGeneration = async (caseId: number, templateId: number) => {
@@ -280,34 +402,47 @@ export function DocumentGenerationPage({
 
       {/* 主内容区 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：模板列表 */}
-        <div className="w-80 shrink-0 border-r">
-          <TemplateListSidebar
-            selectedTemplateId={selectedTemplate?.id}
-            onSelectTemplate={setSelectedTemplate}
-          />
+        {/* 左侧：模板选择 + 证据卡片列表 */}
+        <div className="w-80 shrink-0 border-r flex flex-col bg-white">
+          {/* 案件选择和模板选择 */}
+          <div className="p-4 border-b space-y-4">
+            <CaseSelector
+              selectedCaseId={selectedCase?.id}
+              onSelect={setSelectedCase}
+            />
+            <TemplateSelectorDropdown
+              templates={templates}
+              selectedTemplateId={selectedTemplate?.id}
+              onSelect={setSelectedTemplate}
+              loading={loadingTemplates}
+            />
+          </div>
+
+          {/* 证据卡片列表 */}
+          <div className="flex-1 overflow-hidden">
+            {loadingEvidence ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <EvidenceCardList cards={evidenceCards} evidences={evidences} />
+            )}
+          </div>
         </div>
 
         {/* 右侧：文档视图 */}
         <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-          {/* 案件选择器和进度指示 */}
-          <div className="p-4 bg-white border-b">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <CaseSelector
-                  selectedCaseId={selectedCase?.id}
-                  onSelect={setSelectedCase}
-                />
+          {/* 进度指示 */}
+          {selectedTemplate && generation && (
+            <div className="px-4 py-3 bg-white border-b">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">填写进度</span>
+                <Badge variant="outline" className="text-sm">
+                  已填写 {fieldStats.filled}/{fieldStats.total} 个字段
+                </Badge>
               </div>
-              {selectedTemplate && generation && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-sm">
-                    已填写 {fieldStats.filled}/{fieldStats.total} 个字段
-                  </Badge>
-                </div>
-              )}
             </div>
-          </div>
+          )}
 
           {/* 文档内容区 */}
           <div className="flex-1 overflow-y-auto">
@@ -317,10 +452,12 @@ export function DocumentGenerationPage({
               </div>
             ) : !selectedCase || !selectedTemplate ? (
               <div className="h-full flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
+                <div className="text-center text-muted-foreground max-w-md p-8">
                   <p className="text-lg font-medium mb-2">开始文书生成</p>
                   <p className="text-sm">
-                    请先从左侧选择一个模板，然后选择案件
+                    {!selectedCase
+                      ? "请先选择一个案件"
+                      : "请从上方下拉框选择一个模板"}
                   </p>
                 </div>
               </div>
