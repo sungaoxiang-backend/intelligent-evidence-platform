@@ -133,7 +133,7 @@ class TestDocumentExport:
             # 模拟导出 DOCX
             mock_docx_bytes = b"fake_docx_content"
             mock_template_service.export_prosemirror_to_docx.return_value = {
-                "docx_bytes": mock_docx_bytes,
+                "docx": mock_docx_bytes,
                 "warnings": []
             }
             
@@ -240,7 +240,7 @@ class TestDocumentExport:
             
             mock_docx_bytes = b"fake_docx_content_2"
             mock_template_service.export_prosemirror_to_docx.return_value = {
-                "docx_bytes": mock_docx_bytes,
+                "docx": mock_docx_bytes,
                 "warnings": []
             }
             mock_cos.upload_file.return_value = mock_url
@@ -326,7 +326,7 @@ class TestDocumentExport:
             
             mock_docx_bytes = b"fake_docx_content_3"
             mock_template_service.export_prosemirror_to_docx.return_value = {
-                "docx_bytes": mock_docx_bytes,
+                "docx": mock_docx_bytes,
                 "warnings": []
             }
             mock_cos.upload_file.return_value = "https://test.cos.ap-shanghai.myqcloud.com/documents/test.docx"
@@ -412,7 +412,7 @@ class TestDocumentExport:
             
             mock_docx_bytes = b"fake_docx_content_4"
             mock_template_service.export_prosemirror_to_docx.return_value = {
-                "docx_bytes": mock_docx_bytes,
+                "docx": mock_docx_bytes,
                 "warnings": test_warnings
             }
             mock_cos.upload_file.return_value = "https://test.cos.ap-shanghai.myqcloud.com/documents/test.docx"

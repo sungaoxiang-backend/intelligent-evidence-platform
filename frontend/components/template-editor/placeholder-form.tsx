@@ -96,14 +96,17 @@ export function PlaceholderFormFields({
   const updateOption = (index: number, field: "label" | "value", value: string) => {
     const next = [...(formData.options || [])]
     next[index] = { ...next[index], [field]: value }
-    updateField("options", next)
+    onChange({
+      ...formData,
+      options: next,
+    })
   }
 
   const removeOption = (index: number) => {
-    updateField(
-      "options",
-      formData.options?.filter((_, i) => i !== index) || []
-    )
+    onChange({
+      ...formData,
+      options: formData.options?.filter((_, i) => i !== index) || [],
+    })
   }
 
   const needsOptions = ["select", "radio", "checkbox"].includes(formData.type)
@@ -207,7 +210,10 @@ export function PlaceholderFormFields({
               variant="outline"
               size="sm"
               onClick={() =>
-                updateField("options", [...(formData.options || []), { label: "", value: "" }])
+                onChange({
+                  ...formData,
+                  options: [...(formData.options || []), { label: "", value: "" }],
+                })
               }
               disabled={disabled}
             >
@@ -217,7 +223,7 @@ export function PlaceholderFormFields({
           </div>
           <div className="space-y-2 mt-2">
             {(formData.options || []).map((option, index) => (
-              <div key={`${option.label}-${index}`} className="flex items-center gap-2">
+              <div key={index} className="flex items-center gap-2">
                 <Input
                   placeholder="标签"
                   value={option.label}

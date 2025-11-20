@@ -244,7 +244,8 @@ class DocumentGenerationService:
     def _replace_placeholders_in_json(
         self,
         prosemirror_json: Dict[str, Any],
-        form_data: Dict[str, Any]
+        form_data: Dict[str, Any],
+        placeholders: List[Any] = None
     ) -> Dict[str, Any]:
         """
         在 ProseMirror JSON 中替换占位符
@@ -252,12 +253,22 @@ class DocumentGenerationService:
         Args:
             prosemirror_json: ProseMirror JSON
             form_data: 表单数据
+            placeholders: 占位符元数据列表（可选）
             
         Returns:
             替换后的 ProseMirror JSON（深拷贝）
         """
         # 深拷贝以避免修改原始数据
         result = copy.deepcopy(prosemirror_json)
+        
+        # 构建占位符元数据映射
+        placeholder_map = {}
+        if placeholders:
+            for p in placeholders:
+                placeholder_map[p.placeholder_name] = {
+                    "type": p.type,
+                    "options": p.options or []
+                }
         
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""
@@ -269,6 +280,9 @@ class DocumentGenerationService:
                     # 获取占位符名称（去除空格）
                     placeholder_name = match.group(1).strip()
                     
+                    # 获取占位符元数据
+                    meta = placeholder_map.get(placeholder_name)
+                    
                     # 如果表单数据中有值，则替换
                     if placeholder_name in form_data:
                         value = form_data[placeholder_name]
@@ -276,8 +290,27 @@ class DocumentGenerationService:
                         # 处理不同类型的值
                         if value is None:
                             return match.group(0)  # None 保留占位符
+                        
+                        # 对于 radio/checkbox 类型，显示所有选项和选中状态
+                        if meta and meta["type"] in ["radio", "checkbox"] and meta["options"]:
+                            selected_values = [value] if meta["type"] == "radio" else (value if isinstance(value, list) else [value])
+                            
+                            # 格式化选项：☑ 已选 ☐ 未选
+                            formatted_options = []
+                            for opt in meta["options"]:
+                                opt_value = opt.get("value", "")
+                                opt_label = opt.get("label", opt_value)
+                                
+                                if opt_value in selected_values:
+                                    formatted_options.append(f"☑ {opt_label}")
+                                else:
+                                    formatted_options.append(f"☐ {opt_label}")
+                            
+                            return "  ".join(formatted_options)
+                        
+                        # 其他类型正常处理
                         elif isinstance(value, list):
-                            # 数组转换为逗号分隔的字符串
+                            # 数组转换为顿号分隔的字符串
                             return "、".join(str(v) for v in value)
                         elif isinstance(value, (int, float)):
                             # 数字转换为字符串
@@ -338,10 +371,11 @@ class DocumentGenerationService:
         # 获取模板的 ProseMirror JSON
         template_json = generation.template.prosemirror_json
         
-        # 使用表单数据替换占位符
+        # 使用表单数据替换占位符，传递占位符元数据用于格式化选项
         filled_json = self._replace_placeholders_in_json(
             template_json,
-            generation.form_data
+            generation.form_data,
+            generation.template.placeholders
         )
         
         logger.info(f"占位符替换完成，form_data 数量: {len(generation.form_data)}")
@@ -354,7 +388,7 @@ class DocumentGenerationService:
         editor_service = template_editor_service if template_editor_service is not None else get_template_editor_service()
         
         export_result = editor_service.export_prosemirror_to_docx(filled_json)
-        docx_bytes = export_result.get("docx_bytes")
+        docx_bytes = export_result.get("docx")  # 注意：键名是 "docx" 不是 "docx_bytes"
         warnings = export_result.get("warnings", [])
         
         if not docx_bytes:

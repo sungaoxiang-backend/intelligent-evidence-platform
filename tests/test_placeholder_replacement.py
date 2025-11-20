@@ -282,6 +282,87 @@ class TestPlaceholderReplacement:
         # 验证结果已被修改
         result_text = result["content"][0]["content"][0]["text"]
         assert result_text == "原告：张三"
+    
+    def test_replace_radio_with_all_options(self):
+        """测试单选字段显示所有选项和选中状态"""
+        # 创建 Mock 占位符对象
+        class MockPlaceholder:
+            def __init__(self, name, type_, options):
+                self.placeholder_name = name
+                self.type = type_
+                self.options = options
+        
+        prosemirror_json = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": "性别：{{applicant_gender}}"}
+                    ]
+                }
+            ]
+        }
+        
+        form_data = {"applicant_gender": "male"}
+        
+        placeholders = [
+            MockPlaceholder("applicant_gender", "radio", [
+                {"label": "男", "value": "male"},
+                {"label": "女", "value": "female"}
+            ])
+        ]
+        
+        result = document_generation_service._replace_placeholders_in_json(
+            prosemirror_json,
+            form_data,
+            placeholders
+        )
+        
+        # 验证占位符被替换为所有选项，并标记选中状态
+        text = result["content"][0]["content"][0]["text"]
+        assert text == "性别：☑ 男  ☐ 女"
+    
+    def test_replace_checkbox_with_all_options(self):
+        """测试复选框字段显示所有选项和选中状态"""
+        # 创建 Mock 占位符对象
+        class MockPlaceholder:
+            def __init__(self, name, type_, options):
+                self.placeholder_name = name
+                self.type = type_
+                self.options = options
+        
+        prosemirror_json = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": "住所地：{{applicant_residence}}"}
+                    ]
+                }
+            ]
+        }
+        
+        form_data = {"applicant_residence": ["factory", "park"]}
+        
+        placeholders = [
+            MockPlaceholder("applicant_residence", "checkbox", [
+                {"label": "工厂", "value": "factory"},
+                {"label": "园区", "value": "park"},
+                {"label": "市区", "value": "downtown"}
+            ])
+        ]
+        
+        result = document_generation_service._replace_placeholders_in_json(
+            prosemirror_json,
+            form_data,
+            placeholders
+        )
+        
+        # 验证占位符被替换为所有选项，并标记选中状态
+        text = result["content"][0]["content"][0]["text"]
+        assert text == "住所地：☑ 工厂  ☑ 园区  ☐ 市区"
 
 
 if __name__ == "__main__":

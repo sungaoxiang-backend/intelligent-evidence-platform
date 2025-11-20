@@ -1,16 +1,14 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Download, Loader2, ArrowLeft } from "lucide-react"
+import { Download, Loader2, ArrowLeft, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import { TemplateListSidebar } from "./template-list-sidebar"
 import { CaseSelector } from "./case-selector"
-import { GenerationTabs } from "./generation-tabs"
-import { GenerationForm } from "./generation-form"
-import { GenerationPreview } from "./generation-preview"
+import { DocumentGenerationViewer } from "./document-generation-viewer"
 import {
   documentGenerationApi,
   type TemplateInfo,
@@ -39,7 +37,6 @@ export function DocumentGenerationPage({
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
   const [generation, setGeneration] = useState<DocumentGeneration | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
-  const [activeTab, setActiveTab] = useState<"form" | "preview">("form")
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -102,14 +99,13 @@ export function DocumentGenerationPage({
   }, [hasUnsavedChanges])
 
   // 处理字段变化
-  const handleFieldChange = (fieldName: string, value: any) => {
+  const handleFieldChange = useCallback((fieldName: string, value: any) => {
     setFormData((prev) => ({
       ...prev,
       [fieldName]: value,
     }))
-    // 标记为有未保存的更改
     setHasUnsavedChanges(true)
-  }
+  }, [])
 
   // 手动保存草稿
   const handleSaveDraft = async () => {
@@ -145,12 +141,13 @@ export function DocumentGenerationPage({
     }
   }
 
-  // 计算已填写字段数量
-  const filledFieldsCount = useMemo(() => {
-    if (!selectedTemplate) return 0
-    return selectedTemplate.placeholders.filter(
+  // 计算已填写字段数量和总数
+  const fieldStats = useMemo(() => {
+    if (!selectedTemplate) return { filled: 0, total: 0 }
+    const filled = selectedTemplate.placeholders.filter(
       (p) => formData[p.placeholder_name] !== undefined && formData[p.placeholder_name] !== null && formData[p.placeholder_name] !== ""
     ).length
+    return { filled, total: selectedTemplate.placeholders.length }
   }, [selectedTemplate, formData])
 
   // 导出文书
@@ -167,12 +164,14 @@ export function DocumentGenerationPage({
     try {
       setExporting(true)
       
+      // 显示开始导出的提示
+      toast({
+        title: "开始导出",
+        description: "正在生成文书，请稍候...",
+      })
+      
       // 如果有未保存的更改，先保存草稿
       if (hasUnsavedChanges) {
-        toast({
-          title: "提示",
-          description: "正在保存草稿...",
-        })
         await documentGenerationApi.updateGenerationData(generation.id, {
           form_data: formData,
         })
@@ -190,7 +189,7 @@ export function DocumentGenerationPage({
         title: "导出成功",
         description: result.data.warnings.length > 0
           ? `文书已生成，但有 ${result.data.warnings.length} 个警告`
-          : "文书已成功生成",
+          : "文书已成功生成并开始下载",
       })
 
       // 如果有警告，显示警告信息
@@ -224,12 +223,14 @@ export function DocumentGenerationPage({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold">文书生成</h1>
-            <p className="text-sm text-muted-foreground">
-              {selectedCase && selectedTemplate
-                ? `${selectedCase.description || `案件 #${selectedCase.id}`} - ${selectedTemplate.name}`
-                : "请选择案件和模板"}
-            </p>
+            <h1 className="text-lg font-semibold">
+              {selectedTemplate ? selectedTemplate.name : "文书生成"}
+            </h1>
+            {selectedCase && (
+              <p className="text-sm text-muted-foreground">
+                {selectedCase.description || `案件 #${selectedCase.id}`}
+              </p>
+            )}
           </div>
         </div>
 
@@ -280,60 +281,61 @@ export function DocumentGenerationPage({
       {/* 主内容区 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：模板列表 */}
-        <div className="w-80 shrink-0">
+        <div className="w-80 shrink-0 border-r">
           <TemplateListSidebar
             selectedTemplateId={selectedTemplate?.id}
             onSelectTemplate={setSelectedTemplate}
           />
         </div>
 
-        {/* 中间和右侧：内容区 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 案件选择器 */}
-          <div className="p-4 border-b">
-            <CaseSelector
-              selectedCaseId={selectedCase?.id}
-              onSelect={setSelectedCase}
-            />
+        {/* 右侧：文档视图 */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+          {/* 案件选择器和进度指示 */}
+          <div className="p-4 bg-white border-b">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <CaseSelector
+                  selectedCaseId={selectedCase?.id}
+                  onSelect={setSelectedCase}
+                />
+              </div>
+              {selectedTemplate && generation && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-sm">
+                    已填写 {fieldStats.filled}/{fieldStats.total} 个字段
+                  </Badge>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* 表单和预览区 */}
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : !selectedCase || !selectedTemplate ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center text-muted-foreground">
-                <p className="text-lg font-medium mb-2">开始文书生成</p>
-                <p className="text-sm">
-                  请先选择一个模板和案件
-                </p>
+          {/* 文档内容区 */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-hidden p-4">
-              <GenerationTabs
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-                filledFieldsCount={filledFieldsCount}
-                totalFieldsCount={selectedTemplate.placeholders.length}
-                formContent={
-                  <GenerationForm
-                    placeholders={selectedTemplate.placeholders}
-                    formData={formData}
-                    onChange={handleFieldChange}
-                  />
-                }
-                previewContent={
-                  <GenerationPreview
-                    template={selectedTemplate}
-                    formData={formData}
-                  />
-                }
-              />
-            </div>
-          )}
+            ) : !selectedCase || !selectedTemplate ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-muted-foreground">
+                  <p className="text-lg font-medium mb-2">开始文书生成</p>
+                  <p className="text-sm">
+                    请先从左侧选择一个模板，然后选择案件
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8">
+                <DocumentGenerationViewer
+                  content={selectedTemplate.prosemirror_json}
+                  placeholders={selectedTemplate.placeholders}
+                  formData={formData}
+                  onFieldChange={handleFieldChange}
+                  readOnly={false}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

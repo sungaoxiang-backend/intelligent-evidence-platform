@@ -605,7 +605,7 @@ class TestGenerateDocument:
             # Mock template_editor_service 的导出功能
             with patch('app.document_generation.services.template_editor_service') as mock_editor:
                 mock_editor.export_prosemirror_to_docx = MagicMock(return_value={
-                    "docx_bytes": b'fake docx content',
+                    "docx": b'fake docx content',
                     "warnings": []
                 })
                 
@@ -668,7 +668,7 @@ class TestGenerateDocument:
             
             with patch('app.document_generation.services.template_editor_service') as mock_editor:
                 mock_editor.export_prosemirror_to_docx = MagicMock(return_value={
-                    "docx_bytes": b'fake docx',
+                    "docx": b'fake docx',
                     "warnings": []
                 })
                 
@@ -740,7 +740,7 @@ class TestGenerateDocument:
             
             with patch('app.document_generation.services.template_editor_service') as mock_editor:
                 mock_editor.export_prosemirror_to_docx = MagicMock(return_value={
-                    "docx_bytes": b'fake docx',
+                    "docx": b'fake docx',
                     "warnings": []
                 })
                 
