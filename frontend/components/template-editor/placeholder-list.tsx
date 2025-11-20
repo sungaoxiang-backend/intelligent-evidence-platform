@@ -20,6 +20,12 @@ import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import {
+  SidebarLayout,
+} from "@/components/common/sidebar-layout"
+import {
+  SidebarItem,
+} from "@/components/common/sidebar-item"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -266,166 +272,133 @@ export function PlaceholderList() {
     const displayId = associatedPlaceholder?.id || placeholder.id
     const isSelected = selectedId === displayId || selectedId === placeholder.id
     return (
-      <div
+      <SidebarItem
         key={placeholder.id}
-        className={cn(
-          "w-full max-w-full p-3 rounded-lg border text-left transition-all duration-200 hover:shadow-md group",
-          isSelected
-            ? "border-blue-500 shadow-md ring-2 ring-blue-200 bg-blue-50"
-            : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30"
-        )}
-        style={{
-          width: "var(--editor-sidebar-card-width)",
-          maxWidth: "100%",
-        }}
+        selected={isSelected}
+        onClick={() => selectPlaceholder(displayId)}
         onMouseEnter={() => highlightPlaceholder(displayId)}
         onMouseLeave={() => highlightPlaceholder(null)}
-        onClick={() => selectPlaceholder(displayId)}
-      >
-        <div
-          className="grid w-full gap-3 items-start"
-          style={{ gridTemplateColumns: "minmax(0, 0.7fr) minmax(112px, 0.3fr)" }}
-        >
-          {/* 内容区域 - 70% */}
-          <div className="min-w-0 overflow-hidden">
-            {/* 占位符名称 */}
-            <div className="mb-1">
-              <h4 className={cn(
-                "text-[11px] font-medium truncate",
-                isSelected ? "text-blue-700" : "text-slate-700"
-              )}>
-                {placeholder.label}
-              </h4>
-            </div>
-
-            {/* 字段标识 */}
-            <div className="mb-1 min-w-0 overflow-hidden">
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="text-[9px] text-slate-500 font-medium flex-shrink-0">字段</span>
-                <span className="text-[10px] font-mono text-blue-600 font-semibold truncate min-w-0">{"{{"}{placeholder.fieldKey}{"}}"}</span>
-              </div>
-            </div>
-
-            {/* 元信息 */}
-            <div className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0 overflow-hidden">
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
-                {backend?.type || placeholder.dataType || "text"}
-              </Badge>
-              {backend?.required && (
-                <>
-                  <span className="flex-shrink-0">•</span>
-                  <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
-                    必填
-                  </Badge>
-                </>
+        title={placeholder.label}
+        meta={
+          <>
+            <span className="text-[9px] text-slate-500 font-medium flex-shrink-0">字段</span>
+            <span className="text-[10px] font-mono text-blue-600 font-semibold truncate min-w-0 mr-2">{"{{"}{placeholder.fieldKey}{"}}"}</span>
+            
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
+              {backend?.type || placeholder.dataType || "text"}
+            </Badge>
+            {backend?.required && (
+              <>
+                <span className="flex-shrink-0 mx-1">•</span>
+                <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
+                  必填
+                </Badge>
+              </>
+            )}
+            {placeholder.defaultValue && (
+              <>
+                <span className="flex-shrink-0 mx-1">•</span>
+                <span className="truncate min-w-0">默认值: {placeholder.defaultValue}</span>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "h-6 w-6 p-0",
+                isSelected && "text-blue-700 hover:bg-blue-100"
               )}
-              {placeholder.defaultValue && (
-                <>
-                  <span className="flex-shrink-0">•</span>
-                  <span className="truncate min-w-0">默认值: {placeholder.defaultValue}</span>
-                </>
+              onClick={(e) => {
+                e.stopPropagation()
+                handleOpenEdit(placeholder)
+              }}
+              title="编辑"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "h-6 w-6 p-0 text-red-600",
+                isSelected && "text-red-600 hover:bg-red-50"
               )}
-            </div>
-          </div>
-
-          {/* 按钮和状态区域 - 30% */}
-          <div className="min-w-[112px] flex flex-col items-end justify-between gap-2">
-            {/* 操作按钮 */}
-            <div className="flex flex-wrap gap-2 justify-end w-full">
-              <Button
-                size="sm"
-                variant="ghost"
-                className={cn(
-                  "h-6 w-6 p-0",
-                  isSelected && "text-blue-700 hover:bg-blue-100"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleOpenEdit(placeholder)
-                }}
-                title="编辑"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className={cn(
-                  "h-6 w-6 p-0 text-red-600",
-                  isSelected && "text-red-600 hover:bg-red-50"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDeleteClick(placeholder)
-                }}
-                title="删除"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {/* 状态徽章 */}
-            <div className="mt-auto w-full flex justify-end">
-              <Badge
-                variant={associated ? "default" : "secondary"}
-                className={cn(
-                  "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4 flex items-center gap-1",
-                  associated
-                    ? "bg-green-500 hover:bg-green-600 text-white"
-                    : "bg-slate-200 text-slate-600"
-                )}
-              >
-                {associated ? (
-                  <>
-                    <CheckCircle2 className="h-3 w-3" />
-                    已关联
-                  </>
-                ) : (
-                  <>
-                    <Circle className="h-3 w-3" />
-                    未关联
-                  </>
-                )}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </div>
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteClick(placeholder)
+              }}
+              title="删除"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        }
+        status={
+          <Badge
+            variant={associated ? "default" : "secondary"}
+            className={cn(
+              "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4 flex items-center gap-1",
+              associated
+                ? "bg-green-500 hover:bg-green-600 text-white"
+                : "bg-slate-200 text-slate-600"
+            )}
+          >
+            {associated ? (
+              <>
+                <CheckCircle2 className="h-3 w-3" />
+                已关联
+              </>
+            ) : (
+              <>
+                <Circle className="h-3 w-3" />
+                未关联
+              </>
+            )}
+          </Badge>
+        }
+      />
     )
   }
 
   return (
     <>
-      <Card className="col-span-4">
-        <CardHeader className="pb-1.5 pt-2 px-2">
-          <div className="flex items-center justify-between w-full gap-1.5 mb-2">
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                {totalCount}
-              </Badge>
-              {isMutating && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isSyncing}
-                className="h-6 w-6 p-0 text-slate-500 hover:text-blue-600"
-                title="刷新占位符"
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
-              </Button>
-              <Button
-                onClick={handleOpenCreate}
-                size="sm"
-                className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                新建
-              </Button>
-            </div>
+      <SidebarLayout
+        className="col-span-4 h-[calc(100vh-200px)]"
+        title={
+          <>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+              {totalCount}
+            </Badge>
+            {isMutating && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isSyncing}
+              className="h-6 w-6 p-0 text-slate-500 hover:text-blue-600"
+              title="刷新占位符"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+            </Button>
+            <Button
+              onClick={handleOpenCreate}
+              size="sm"
+              className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              新建
+            </Button>
           </div>
+        }
+        subheader={
           <div className="relative">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <Input
@@ -435,33 +408,25 @@ export function PlaceholderList() {
               className="h-7 pl-8 text-xs"
             />
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isSyncing && totalCount === 0 ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : totalCount === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <Hash className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">暂无占位符</p>
-              <p className="text-xs mt-1">点击"新建"按钮添加占位符</p>
-            </div>
-          ) : (
-            <ScrollArea className="h-[calc(100vh-200px)]">
-              <div className="p-3 space-y-2 flex flex-col items-center">
-                {filteredPlaceholders.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-muted-foreground">
-                    {searchQuery ? "没有匹配的占位符" : "暂无占位符"}
-                  </div>
-                ) : (
-                  filteredPlaceholders.map(renderPlaceholderItem)
-                )}
-              </div>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
+        }
+        isLoading={isSyncing}
+        isEmpty={totalCount === 0 && !searchQuery}
+        emptyState={
+          <div className="p-8 text-center text-muted-foreground">
+            <Hash className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">暂无占位符</p>
+            <p className="text-xs mt-1">点击"新建"按钮添加占位符</p>
+          </div>
+        }
+      >
+        {filteredPlaceholders.length === 0 ? (
+          <div className="p-4 text-center text-xs text-muted-foreground">
+            {searchQuery ? "没有匹配的占位符" : "暂无占位符"}
+          </div>
+        ) : (
+          filteredPlaceholders.map(renderPlaceholderItem)
+        )}
+      </SidebarLayout>
 
       <Dialog open={createDialogOpen} onOpenChange={handleCloseDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

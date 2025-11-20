@@ -52,6 +52,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Breadcrumb,
   BreadcrumbList,
   BreadcrumbItem,
@@ -60,9 +67,12 @@ import {
 } from "@/components/ui/breadcrumb"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PlaceholderProvider } from "@/components/template-editor/placeholder-manager"
+import { SidebarLayout } from "@/components/common/sidebar-layout"
+import { SidebarItem } from "@/components/common/sidebar-item"
 
 export default function DocumentTemplatesPage() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all")
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -78,7 +88,11 @@ export default function DocumentTemplatesPage() {
   const loadTemplates = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await templateApi.getTemplates()
+      const params: any = {}
+      if (statusFilter !== "all") {
+        params.status = statusFilter
+      }
+      const response = await templateApi.getTemplates(params)
       setTemplates(response.data)
       // 如果当前选中的模板被删除，清除选中状态
       if (selectedTemplate && !response.data.find(t => t.id === selectedTemplate.id)) {
@@ -107,7 +121,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedTemplate, toast])
+  }, [selectedTemplate, toast, statusFilter])
 
   useEffect(() => {
     loadTemplates()
@@ -339,7 +353,15 @@ export default function DocumentTemplatesPage() {
       })
       setUploadDialogOpen(false)
       setUploadFile(null)
-      await loadTemplates()
+      
+      // 如果当前过滤器不是"全部"或"草稿"，则切换到"草稿"以显示新模板
+      if (statusFilter === 'published') {
+        setStatusFilter('draft')
+        // loadTemplates 将由 useEffect 触发，因为 statusFilter 改变了
+      } else {
+        await loadTemplates()
+      }
+      
       // 自动选中新创建的模板
       setSelectedTemplate(response.data)
     } catch (error: any) {
@@ -399,55 +421,61 @@ export default function DocumentTemplatesPage() {
           </PlaceholderProvider>
         ) : (
           <>
-          <Card className="col-span-4 overflow-hidden">
-            <CardHeader className="pb-1.5 pt-2 px-2">
-              <div className="flex items-center justify-between w-full gap-1.5">
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                    {templates.length}
-                  </Badge>
-                </div>
-                <Button
-                  onClick={() => setUploadDialogOpen(true)}
-                  size="sm"
-                  className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
+          <SidebarLayout
+            className="col-span-4 h-[calc(100vh-200px)]"
+            title={
+              <>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                  {templates.length}
+                </Badge>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value: "all" | "draft" | "published") => setStatusFilter(value)}
                 >
-                  <Plus className="h-3 w-3 mr-1" />
-                  新建
-                </Button>
+                  <SelectTrigger className="h-6 w-[80px] text-[10px] px-2 border-slate-200">
+                    <SelectValue placeholder="状态" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-[10px]">全部</SelectItem>
+                    <SelectItem value="draft" className="text-[10px]">草稿</SelectItem>
+                    <SelectItem value="published" className="text-[10px]">已发布</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            }
+            actions={
+              <Button
+                onClick={() => setUploadDialogOpen(true)}
+                size="sm"
+                className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                新建模板
+              </Button>
+            }
+            isLoading={isLoading}
+            isEmpty={templates.length === 0}
+            emptyState={
+              <div className="p-8 text-center text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">暂无模板</p>
+                <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
               </div>
-            </CardHeader>
-            <CardContent className="p-0 overflow-hidden">
-              <ScrollArea className="h-[calc(100vh-200px)]">
-                {isLoading && templates.length === 0 ? (
-                  <div className="flex items-center justify-center p-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : templates.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">暂无模板</p>
-                    <p className="text-xs mt-1">点击"新建"按钮上传模板</p>
-                  </div>
-                ) : (
-                  <div className="p-3 space-y-2 flex flex-col items-center min-w-0 max-w-full overflow-x-hidden">
-                    {templates.map((template) => (
-                    <TemplateListItem
-                      key={template.id}
-                      template={template}
-                      isSelected={selectedTemplate?.id === template.id}
-                      placeholderCount={placeholderCounts[template.id] || 0}
-                      onSelect={() => handleSelectTemplate(template)}
-                      onDelete={(e) => handleDeleteClick(template, e)}
-                      onToggleStatus={(e) => handleToggleStatus(template, e)}
-                      onRename={handleRename}
-                    />
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
+            }
+          >
+            {templates.map((template) => (
+              <TemplateListItem
+                key={template.id}
+                template={template}
+                isSelected={selectedTemplate?.id === template.id}
+                placeholderCount={placeholderCounts[template.id] || 0}
+                onSelect={() => handleSelectTemplate(template)}
+                onDelete={(e) => handleDeleteClick(template, e)}
+                onToggleStatus={(e) => handleToggleStatus(template, e)}
+                onRename={handleRename}
+              />
+            ))}
+          </SidebarLayout>
 
         <div className="col-span-8 flex flex-col">
           {selectedTemplate ? (
@@ -658,188 +686,142 @@ function TemplateListItem({
   }
 
   return (
-    <div
-      className={cn(
-        "w-full max-w-full p-3 rounded-lg border text-left transition-all duration-200 hover:shadow-md group",
-        isSelected
-          ? "border-blue-500 shadow-md ring-2 ring-blue-200 bg-blue-50"
-          : "border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/30"
-      )}
-      style={{
-        width: "var(--editor-sidebar-card-width)",
-        maxWidth: "100%",
-      }}
+    <SidebarItem
+      selected={isSelected}
       onClick={onSelect}
-    >
-      <div
-        className="grid w-full gap-3 items-start"
-        style={{ gridTemplateColumns: "minmax(0, 0.7fr) minmax(112px, 0.3fr)" }}
-      >
-        {/* 内容区域 - 70% */}
-        <div className="min-w-0 overflow-hidden">
-          {/* ID */}
-          <div className="flex items-center gap-1 mb-1">
-            <span className="text-[9px] text-slate-500 font-medium">ID</span>
-            <span className="text-[10px] font-mono text-blue-600 font-semibold">#{template.id}</span>
+      title={
+        isEditingName ? (
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "flex-1 min-w-0 text-[11px] font-medium px-1.5 py-0.5 border rounded",
+                "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                isSelected ? "text-blue-700 border-blue-300 bg-blue-50" : "text-slate-700 border-slate-300 bg-white"
+              )}
+              autoFocus
+              disabled={isRenaming}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 w-5 p-0 flex-shrink-0"
+              onClick={handleSaveEdit}
+              disabled={isRenaming || !editedName.trim()}
+              title="保存"
+            >
+              <Check className="h-3 w-3 text-green-600" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 w-5 p-0 flex-shrink-0"
+              onClick={handleCancelEdit}
+              disabled={isRenaming}
+              title="取消"
+            >
+              <X className="h-3 w-3 text-red-600" />
+            </Button>
           </div>
-
-          {/* 模板名称 */}
-          <div className="mb-1">
-            {isEditingName ? (
-              <div className="flex items-center gap-1 flex-1 min-w-0">
-                <input
-                  type="text"
-                  value={editedName}
-                  onChange={(e) => setEditedName(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    "flex-1 min-w-0 text-[11px] font-medium px-1.5 py-0.5 border rounded",
-                    "focus:outline-none focus:ring-1 focus:ring-blue-500",
-                    isSelected ? "text-blue-700 border-blue-300 bg-blue-50" : "text-slate-700 border-slate-300 bg-white"
-                  )}
-                  autoFocus
-                  disabled={isRenaming}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-5 w-5 p-0 flex-shrink-0"
-                  onClick={handleSaveEdit}
-                  disabled={isRenaming || !editedName.trim()}
-                  title="保存"
-                >
-                  <Check className="h-3 w-3 text-green-600" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-5 w-5 p-0 flex-shrink-0"
-                  onClick={handleCancelEdit}
-                  disabled={isRenaming}
-                  title="取消"
-                >
-                  <X className="h-3 w-3 text-red-600" />
-                </Button>
-              </div>
-            ) : (
-              <h4 className={cn(
-                "text-[11px] font-medium truncate",
-                isSelected ? "text-blue-700" : "text-slate-700"
-              )}>
-                {template.name}
-              </h4>
-            )}
-          </div>
-
-          {/* 描述 */}
-          {template.description && (
-            <div className="mb-1">
-              <p className={cn(
-                "text-[10px] line-clamp-1 truncate",
-                isSelected ? "text-blue-600/80" : "text-slate-500"
-              )}>
-                {template.description}
-              </p>
-            </div>
+        ) : template.name
+      }
+      description={template.description}
+      meta={
+        <>
+          <span className="text-[9px] text-slate-500 font-medium">ID</span>
+          <span className="text-[10px] font-mono text-blue-600 font-semibold mr-2">#{template.id}</span>
+          {template.category && (
+            <>
+              <span className="truncate min-w-0">{template.category}</span>
+              <span className="flex-shrink-0 mx-1">•</span>
+            </>
           )}
-
-          {/* 元信息 */}
-          <div className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0 overflow-hidden">
-            {template.category && (
-              <>
-                <span className="truncate min-w-0">{template.category}</span>
-                <span className="flex-shrink-0">•</span>
-              </>
+          {placeholderCount > 0 && (
+            <span className="truncate min-w-0">占位符: {placeholderCount} 个</span>
+          )}
+        </>
+      }
+      actions={
+        <>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              "h-6 w-6 p-0",
+              isSelected && "text-blue-700 hover:bg-blue-100"
             )}
-            {placeholderCount > 0 && (
-              <span className="truncate min-w-0">占位符: {placeholderCount} 个</span>
+            onClick={(e) => {
+              e.stopPropagation()
+              handleStartEdit(e)
+            }}
+            title="重命名"
+            disabled={isEditingName}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              "h-6 w-6 p-0",
+              isSelected && "text-blue-700 hover:bg-blue-100"
             )}
-          </div>
-        </div>
-
-        {/* 按钮和状态区域 - 30% */}
-        <div className="min-w-[112px] flex flex-col items-end justify-between gap-2">
-          {/* 操作按钮 */}
-          <div className="flex flex-wrap gap-2 justify-end w-full">
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-6 w-6 p-0",
-                isSelected && "text-blue-700 hover:bg-blue-100"
-              )}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleStartEdit(e)
-              }}
-              title="重命名"
-              disabled={isEditingName}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-6 w-6 p-0",
-                isSelected && "text-blue-700 hover:bg-blue-100"
-              )}
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleStatus(e)
-              }}
-              title={template.status === "published" ? "撤回" : "发布"}
-            >
-              {template.status === "published" ? (
-                <Undo className="h-3.5 w-3.5" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-6 w-6 p-0 text-red-600",
-                isSelected && "text-red-600 hover:bg-red-50"
-              )}
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(e)
-              }}
-              title="删除"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-
-          {/* 状态徽章 */}
-          <div className="mt-auto w-full flex justify-end">
-            <Badge
-              variant={template.status === "published" ? "default" : "secondary"}
-              className={cn(
-                "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4 flex items-center gap-1",
-                template.status === "published" 
-                  ? "bg-green-500 hover:bg-green-600 text-white" 
-                  : "bg-slate-200 text-slate-600"
-              )}
-            >
-              {template.status === "published" ? (
-                <>
-                  <CheckCircle2 className="h-3 w-3" />
-                  已发布
-                </>
-              ) : (
-                <>
-                  <Circle className="h-3 w-3" />
-                  草稿
-                </>
-              )}
-            </Badge>
-          </div>
-        </div>
-      </div>
-    </div>
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleStatus(e)
+            }}
+            title={template.status === "published" ? "撤回" : "发布"}
+          >
+            {template.status === "published" ? (
+              <Undo className="h-3.5 w-3.5" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              "h-6 w-6 p-0 text-red-600",
+              isSelected && "text-red-600 hover:bg-red-50"
+            )}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(e)
+            }}
+            title="删除"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      }
+      status={
+        <Badge
+          variant={template.status === "published" ? "default" : "secondary"}
+          className={cn(
+            "text-[9px] flex-shrink-0 font-medium px-1.5 py-0 h-4 flex items-center gap-1",
+            template.status === "published" 
+              ? "bg-green-500 hover:bg-green-600 text-white" 
+              : "bg-slate-200 text-slate-600"
+          )}
+        >
+          {template.status === "published" ? (
+            <>
+              <CheckCircle2 className="h-3 w-3" />
+              已发布
+            </>
+          ) : (
+            <>
+              <Circle className="h-3 w-3" />
+              草稿
+            </>
+          )}
+        </Badge>
+      }
+    />
   )
 }
