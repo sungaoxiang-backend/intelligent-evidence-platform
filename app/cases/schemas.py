@@ -3,7 +3,7 @@ from optparse import Option
 from tokenize import OP
 from typing import Optional, List, Callable, Awaitable, Any, Dict
 
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, computed_field, field_validator, Field
 from app.core.schemas import BaseSchema
 from app.cases.models import CaseType, PartyType, CaseStatus
 from app.users.schemas import User
@@ -271,10 +271,17 @@ class AssociationEvidenceFeatureCreate(BaseModel):
     
 
 class AutoProcessRequest(BaseModel):
-    """自动处理请求模型"""
+    """自动处理请求模型 - 用于API接口"""
     case_id: int
     evidence_ids: List[int]
-    send_progress: Optional[Callable[[dict], Awaitable[None]]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "case_id": 1,
+                "evidence_ids": [1, 2, 3]
+            }
+        }
     
     
 class AutoProcessResponse(BaseModel):

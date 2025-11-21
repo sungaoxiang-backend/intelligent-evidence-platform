@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Plus, Trash2 } from "lucide-react"
-import type { PlaceholderMeta } from "./placeholder-manager"
+import type { PlaceholderMeta, PlaceholderPayload } from "./placeholder-manager"
 
 export type PlaceholderFormState = {
   fieldKey: string
@@ -60,6 +60,16 @@ export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormSt
   description: meta.backendMeta?.hint || meta.description || "",
   defaultValue: meta.backendMeta?.default_value || meta.defaultValue || "",
   options: meta.backendMeta?.options || [],
+})
+
+export const buildPayloadFromFormState = (formData: PlaceholderFormState): PlaceholderPayload => ({
+  placeholder_name: formData.fieldKey.trim(),
+  label: formData.label.trim(),
+  type: formData.type,
+  required: Boolean(formData.required),
+  hint: formData.description?.trim() || undefined,
+  default_value: formData.defaultValue?.trim() || undefined,
+  options: normalizePlaceholderOptions(formData),
 })
 
 export interface PlaceholderFormFieldsProps {

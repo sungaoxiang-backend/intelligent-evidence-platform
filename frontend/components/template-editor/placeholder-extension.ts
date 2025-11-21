@@ -60,57 +60,99 @@ const buildPluginState = (
   const ranges: PlaceholderRange[] = []
   let globalIndex = 0
 
-  doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) return
-    let match: RegExpExecArray | null
-    PLACEHOLDER_REGEX.lastIndex = 0
+  try {
+    const docSize = doc.content.size
+    
+    doc.descendants((node, pos) => {
+      if (!node.isText || !node.text) return
+      let match: RegExpExecArray | null
+      PLACEHOLDER_REGEX.lastIndex = 0
 
-    while ((match = PLACEHOLDER_REGEX.exec(node.text)) !== null) {
-      const matchText = match[0]
-      const fieldKey = match[1]
-      const start = pos + (match.index ?? 0)
-      const end = start + matchText.length
-      const id = createPlaceholderId(fieldKey, globalIndex++)
+      while ((match = PLACEHOLDER_REGEX.exec(node.text)) !== null) {
+        try {
+          const matchText = match[0]
+          const fieldKey = match[1]
+          const start = pos + (match.index ?? 0)
+          const end = start + matchText.length
+          const id = createPlaceholderId(fieldKey, globalIndex++)
 
-      ranges.push({ id, fieldKey, from: start, to: end })
+          // ✅ 关键修复：验证位置有效性
+          if (typeof start !== 'number' || typeof end !== 'number') {
+            console.warn(`Invalid position for placeholder ${fieldKey}: start=${start}, end=${end}`)
+            continue
+          }
+          
+          if (start < 0 || end > docSize || start >= end) {
+            console.warn(`Out of range position for placeholder ${fieldKey}: start=${start}, end=${end}, docSize=${docSize}`)
+            continue
+          }
+          
+          // ✅ 验证位置是否在有效节点内
+          try {
+            doc.resolve(start)
+            doc.resolve(end)
+          } catch (error) {
+            console.warn(`Cannot resolve position for placeholder ${fieldKey}:`, error)
+            continue
+          }
 
-      const meta = options.getPlaceholderMetaById?.(id)
-      const selectedId = options.getSelectedId?.() ?? null
-      const highlightedId = options.getHighlightedId?.() ?? null
+          ranges.push({ id, fieldKey, from: start, to: end })
 
-      const classes = ["template-placeholder-chip"]
-      if (meta?.id && meta.id === selectedId) {
-        classes.push("template-placeholder-chip--selected")
+          const meta = options.getPlaceholderMetaById?.(id)
+          const selectedId = options.getSelectedId?.() ?? null
+          const highlightedId = options.getHighlightedId?.() ?? null
+
+          const classes = ["template-placeholder-chip"]
+          if (meta?.id && meta.id === selectedId) {
+            classes.push("template-placeholder-chip--selected")
+          }
+          if (meta?.id && meta.id === highlightedId) {
+            classes.push("template-placeholder-chip--highlighted")
+          }
+
+          // 检查光标是否正好在这个占位符后面
+          const cursorAfterPlaceholder = selection && 
+            selection.from === selection.to && 
+            selection.from === end
+
+          if (cursorAfterPlaceholder) {
+            classes.push("template-placeholder-chip--cursor-after")
+          }
+
+          decorations.push(
+            Decoration.inline(start, end, {
+              nodeName: "span",
+              class: classes.join(" "),
+              "data-placeholder-id": meta?.id ?? id,
+              "data-placeholder-field": fieldKey,
+              title: meta?.label ?? fieldKey,
+              contenteditable: "false",
+            })
+          )
+        } catch (error) {
+          console.error('Failed to create placeholder decoration:', error)
+        }
       }
-      if (meta?.id && meta.id === highlightedId) {
-        classes.push("template-placeholder-chip--highlighted")
+    })
+
+    try {
+      return {
+        decorations: DecorationSet.create(doc, decorations),
+        ranges,
       }
-
-      // 检查光标是否正好在这个占位符后面
-      const cursorAfterPlaceholder = selection && 
-        selection.from === selection.to && 
-        selection.from === end
-
-      if (cursorAfterPlaceholder) {
-        classes.push("template-placeholder-chip--cursor-after")
+    } catch (error) {
+      console.error('Failed to create DecorationSet:', error)
+      return {
+        decorations: DecorationSet.empty,
+        ranges,
       }
-
-      decorations.push(
-        Decoration.inline(start, end, {
-          nodeName: "span",
-          class: classes.join(" "),
-          "data-placeholder-id": meta?.id ?? id,
-          "data-placeholder-field": fieldKey,
-          title: meta?.label ?? fieldKey,
-          contenteditable: "false",
-        })
-      )
     }
-  })
-
-  return {
-    decorations: DecorationSet.create(doc, decorations),
-    ranges,
+  } catch (error) {
+    console.error('buildPluginState error:', error)
+    return {
+      decorations: DecorationSet.empty,
+      ranges: [],
+    }
   }
 }
 
@@ -156,27 +198,55 @@ export const PlaceholderExtension = Extension.create<PlaceholderExtensionOptions
       key: placeholderPluginKey,
       state: {
         init: (_, state) => {
-          const selection = state.selection
-          return buildPluginState(state.doc, this.options, {
-            from: selection.from,
-            to: selection.to,
-          })
-        },
-        apply: (tr, prev, _oldState, newState) => {
-          const forceUpdate = tr.getMeta(placeholderPluginKey)?.forceUpdate
-          const selectionChanged = !_oldState.selection.eq(newState.selection)
-          if (tr.docChanged || forceUpdate || selectionChanged) {
-            const selection = newState.selection
-            return buildPluginState(newState.doc, this.options, {
+          try {
+            const selection = state.selection
+            return buildPluginState(state.doc, this.options, {
               from: selection.from,
               to: selection.to,
             })
+          } catch (error) {
+            console.error('PlaceholderExtension init error:', error)
+            return {
+              decorations: DecorationSet.empty,
+              ranges: [],
+            }
           }
-          return prev
+        },
+        apply: (tr, prev, _oldState, newState) => {
+          try {
+            const forceUpdate = tr.getMeta(placeholderPluginKey)?.forceUpdate
+            const selectionChanged = !_oldState.selection.eq(newState.selection)
+            if (tr.docChanged || forceUpdate || selectionChanged) {
+              const selection = newState.selection
+              return buildPluginState(newState.doc, this.options, {
+                from: selection.from,
+                to: selection.to,
+              })
+            }
+            // 确保prev有效
+            return prev || {
+              decorations: DecorationSet.empty,
+              ranges: [],
+            }
+          } catch (error) {
+            console.error('PlaceholderExtension apply error:', error)
+            return prev || {
+              decorations: DecorationSet.empty,
+              ranges: [],
+            }
+          }
         },
       },
       props: {
-        decorations: (state) => plugin.getState(state)?.decorations ?? null,
+        decorations: (state) => {
+          try {
+            const pluginState = plugin.getState(state)
+            return pluginState?.decorations ?? DecorationSet.empty
+          } catch (error) {
+            console.error('PlaceholderExtension decorations error:', error)
+            return DecorationSet.empty
+          }
+        },
         handleClick: (view, _pos, event) => {
           const target = event.target as HTMLElement | null
           const span = target?.closest?.("[data-placeholder-id]") as HTMLElement | null

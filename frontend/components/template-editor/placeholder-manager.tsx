@@ -552,6 +552,20 @@ export function extractPlaceholdersFromDoc(doc: JSONContent): ExtractedPlacehold
   const walk = (node: JSONContent, cursor: number, path: number[]): number => {
     if (!node) return cursor
 
+    if (node.type === "placeholder") {
+      const fieldKey = (node.attrs as any)?.fieldKey
+      if (fieldKey) {
+        results.push({
+          placeholderId: createPlaceholderId(fieldKey, results.length),
+          fieldKey,
+          from: cursor,
+          to: cursor + 1,
+          path,
+        })
+      }
+      return cursor + 1
+    }
+
     if (typeof node.text === "string") {
       const text = node.text
       let match: RegExpExecArray | null

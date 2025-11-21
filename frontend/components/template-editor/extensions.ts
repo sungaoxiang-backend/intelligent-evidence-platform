@@ -320,5 +320,67 @@ export const templateBaseStyles = `
     animation: none;
     opacity: 0;
   }
+  
+  /* ============================================
+     新增：轻量化占位符样式
+     用于编辑模式，仅提供视觉高亮，不阻断编辑
+     ============================================ */
+  
+  /* 编辑模式：轻量高亮（占位符是可编辑文本） */
+  .template-doc .placeholder-highlight {
+    background-color: #fef3c7;
+    border-radius: 3px;
+    padding: 1px 3px;
+    color: #92400e;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.95em;
+    transition: background-color 0.15s ease;
+  }
+  
+  .template-doc .placeholder-highlight:hover {
+    background-color: #fde68a;
+  }
+  
+  /* 预览模式：chip 样式（通过伪元素渲染内容） */
+  .template-doc .placeholder-chip-preview {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    margin: 0 2px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0;
+    color: transparent;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  .template-doc .placeholder-chip-preview::after {
+    content: attr(data-placeholder-display);
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .template-doc .placeholder-chip-preview:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    background: linear-gradient(135deg, #5a67d8 0%, #6b3fa0 100%);
+  }
+
+  .template-doc .placeholder-chip-preview:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
 `
 

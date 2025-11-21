@@ -22,8 +22,10 @@ import {
   Circle,
   CheckCircle2,
 } from "lucide-react"
-import { DocumentEditor } from "@/components/template-editor/document-editor"
-import { DocumentPreview } from "@/components/template-editor/document-preview"
+// ✅ 使用新的简化编辑器和交互式预览组件
+import { DocumentEditorSimple } from "@/components/template-editor/document-editor-simple"
+import { DocumentPreviewEnhanced } from "@/components/template-editor/document-preview-enhanced"
+import { DocumentPreviewInteractive } from "@/components/template-editor/document-preview-interactive"
 import { FileUploadZone } from "@/components/template-editor/file-upload-zone"
 import { PlaceholderList } from "@/components/template-editor/placeholder-list"
 import {
@@ -67,22 +69,40 @@ import {
 } from "@/components/ui/breadcrumb"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PlaceholderProvider } from "@/components/template-editor/placeholder-manager"
+import {
+  convertPlaceholderNodesToText,
+  convertTextToPlaceholderNodes,
+  cloneJsonContent,
+} from "@/components/template-editor/placeholder-transform"
 import { SidebarLayout } from "@/components/common/sidebar-layout"
 import { SidebarItem } from "@/components/common/sidebar-item"
+
+// 定义三种模式
+type ViewMode = "preview" | "placeholder-management" | "document-edit"
 
 export default function DocumentTemplatesPage() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all")
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedContent, setEditedContent] = useState<any>(null)
+  
+  // ✅ 新增：模式状态（替代原来的 isEditing）
+  const [viewMode, setViewMode] = useState<ViewMode>("preview")
+  
+  // ✅ 临时编辑状态（用于两种编辑模式）
+  const [draftContent, setDraftContent] = useState<any>(null)
+  const [draftContentFormat, setDraftContentFormat] = useState<"nodes" | "text" | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [placeholderCounts, setPlaceholderCounts] = useState<Record<number, number>>({})
   const { toast } = useToast()
+
+  const normalizeTemplate = useCallback((template: DocumentTemplate): DocumentTemplate => ({
+    ...template,
+    prosemirror_json: convertTextToPlaceholderNodes(template.prosemirror_json),
+  }), [])
 
   // 加载模板列表
   const loadTemplates = useCallback(async () => {
@@ -93,16 +113,19 @@ export default function DocumentTemplatesPage() {
         params.status = statusFilter
       }
       const response = await templateApi.getTemplates(params)
-      setTemplates(response.data)
+      const normalizedTemplates = (response.data || []).map(normalizeTemplate)
+      setTemplates(normalizedTemplates)
       // 如果当前选中的模板被删除，清除选中状态
-      if (selectedTemplate && !response.data.find(t => t.id === selectedTemplate.id)) {
+      if (selectedTemplate && !normalizedTemplates.find(t => t.id === selectedTemplate.id)) {
         setSelectedTemplate(null)
-        setIsEditing(false)
+        setViewMode("preview")
+        setDraftContent(null)
+        setDraftContentFormat(null)
       }
       
       // 为每个模板加载占位符数量
       const counts: Record<number, number> = {}
-      for (const template of response.data) {
+      for (const template of normalizedTemplates) {
         try {
           const placeholderResponse = await templateApi.getPlaceholders({ template_id: template.id })
           counts[template.id] = placeholderResponse.total || 0
@@ -121,7 +144,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedTemplate, toast, statusFilter])
+  }, [selectedTemplate, toast, statusFilter, normalizeTemplate])
 
   useEffect(() => {
     loadTemplates()
@@ -130,22 +153,112 @@ export default function DocumentTemplatesPage() {
   // 选择模板
   const handleSelectTemplate = useCallback((template: DocumentTemplate) => {
     setSelectedTemplate(template)
-    setIsEditing(false)
-    setEditedContent(null)
+    setViewMode("preview") // ✅ 重置为预览模式
+    setDraftContent(null) // 清除临时编辑状态
+    setDraftContentFormat(null)
   }, [])
 
-  // 开始编辑
-  const handleStartEdit = useCallback(() => {
+  // ✅ 进入占位符管理模式
+  // ✅ 进入占位符管理模式（初始化临时状态）
+  const handleEnterPlaceholderMode = useCallback(() => {
     if (selectedTemplate) {
-      setIsEditing(true)
-      setEditedContent(selectedTemplate.prosemirror_json)
+      setDraftContent(cloneJsonContent(selectedTemplate.prosemirror_json))
+      setDraftContentFormat("nodes")
+      setViewMode("placeholder-management")
     }
   }, [selectedTemplate])
 
-  // 取消编辑
-  const handleCancelEdit = useCallback(() => {
-    setIsEditing(false)
-    setEditedContent(null)
+  // ✅ 进入文档编辑模式（初始化临时状态）
+  const handleEnterDocumentEditMode = useCallback(() => {
+    if (selectedTemplate) {
+      const textDoc = convertPlaceholderNodesToText(selectedTemplate.prosemirror_json)
+      setDraftContent(cloneJsonContent(textDoc))
+      setDraftContentFormat("text")
+      setViewMode("document-edit")
+    }
+  }, [selectedTemplate])
+
+  // ✅ 保存占位符管理的更改
+  const handleSavePlaceholderChanges = useCallback(async () => {
+    if (!selectedTemplate || !draftContent) return
+    
+    setIsLoading(true)
+    try {
+      const contentToSave =
+        draftContentFormat === "nodes"
+          ? draftContent
+          : convertTextToPlaceholderNodes(draftContent)
+      
+      const updated = await templateApi.updateTemplate(selectedTemplate.id, {
+        prosemirror_json: contentToSave,
+      })
+      const normalized = normalizeTemplate(updated.data)
+      setSelectedTemplate(normalized)
+      setDraftContent(null)
+      setDraftContentFormat(null)
+      setViewMode("preview")
+      toast({
+        title: "保存成功",
+        description: "占位符更改已保存",
+      })
+      await loadTemplates()
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message || "无法保存占位符更改",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedTemplate, draftContent, draftContentFormat, toast, loadTemplates, normalizeTemplate])
+
+  // ✅ 取消占位符管理的更改
+  const handleCancelPlaceholderChanges = useCallback(() => {
+    setDraftContent(null)
+    setDraftContentFormat(null)
+    setViewMode("preview")
+  }, [])
+
+  // ✅ 保存文档编辑
+  const handleSaveDocumentChanges = useCallback(async () => {
+    if (!selectedTemplate || !draftContent) return
+    
+    setIsLoading(true)
+    try {
+      const contentToSave =
+        draftContentFormat === "text"
+          ? convertTextToPlaceholderNodes(draftContent)
+          : draftContent
+      const updated = await templateApi.updateTemplate(selectedTemplate.id, {
+        prosemirror_json: contentToSave
+      })
+      const normalized = normalizeTemplate(updated.data)
+      setSelectedTemplate(normalized)
+      setDraftContent(null)
+      setDraftContentFormat(null)
+      setViewMode("preview")
+      toast({
+        title: "保存成功",
+        description: "文档更改已保存",
+      })
+      await loadTemplates()
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message || "无法保存文档更改",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedTemplate, draftContent, draftContentFormat, toast, loadTemplates, normalizeTemplate])
+
+  // ✅ 取消文档编辑
+  const handleCancelDocumentChanges = useCallback(() => {
+    setDraftContent(null)
+    setDraftContentFormat(null)
+    setViewMode("preview")
   }, [])
 
   // 导出模板
@@ -154,8 +267,9 @@ export default function DocumentTemplatesPage() {
 
     setIsLoading(true)
     try {
+      const docToExport = convertPlaceholderNodesToText(selectedTemplate.prosemirror_json)
       const blob = await templateApi.exportDocx(
-        selectedTemplate.prosemirror_json,
+        docToExport,
         `${selectedTemplate.name}.docx`
       )
       
@@ -183,42 +297,6 @@ export default function DocumentTemplatesPage() {
     }
   }, [selectedTemplate, toast])
 
-  // 保存编辑
-  const handleSaveEdit = useCallback(async () => {
-    if (!selectedTemplate || !editedContent) return
-
-    setIsLoading(true)
-    try {
-      await templateApi.updateTemplate(selectedTemplate.id, {
-        prosemirror_json: editedContent,
-      })
-      
-      // 先更新本地状态，立即退出编辑模式并显示预览
-      setIsEditing(false)
-      setEditedContent(null)
-      
-      // 重新加载模板列表
-      await loadTemplates()
-      
-      // 获取最新的模板数据并更新选中状态
-      const updated = await templateApi.getTemplate(selectedTemplate.id)
-      setSelectedTemplate(updated.data)
-          
-          toast({
-        title: "保存成功",
-        description: "模板已更新",
-          })
-    } catch (error: any) {
-      toast({
-        title: "保存失败",
-        description: error.message || "无法保存模板",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [selectedTemplate, editedContent, toast, loadTemplates])
-
   // 切换状态（发布/撤回）
   const handleToggleStatus = useCallback(async (template: DocumentTemplate, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -236,7 +314,7 @@ export default function DocumentTemplatesPage() {
       // 如果更新的是当前选中的模板，更新选中状态
       if (selectedTemplate?.id === template.id) {
         const updated = await templateApi.getTemplate(template.id)
-        setSelectedTemplate(updated.data)
+        setSelectedTemplate(normalizeTemplate(updated.data))
       }
     } catch (error: any) {
     toast({
@@ -247,7 +325,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [toast, loadTemplates, selectedTemplate])
+  }, [toast, loadTemplates, selectedTemplate, normalizeTemplate])
 
   // 重命名模板
   const handleRename = useCallback(async (id: number, newName: string) => {
@@ -263,7 +341,7 @@ export default function DocumentTemplatesPage() {
       // 如果重命名的是当前选中的模板，更新选中状态
       if (selectedTemplate?.id === id) {
         const updated = await templateApi.getTemplate(id)
-        setSelectedTemplate(updated.data)
+        setSelectedTemplate(normalizeTemplate(updated.data))
       }
     } catch (error: any) {
       toast({
@@ -273,7 +351,7 @@ export default function DocumentTemplatesPage() {
       })
       throw error
     }
-  }, [toast, loadTemplates, selectedTemplate])
+  }, [toast, loadTemplates, selectedTemplate, normalizeTemplate])
 
   // 删除模板
   const handleDeleteClick = useCallback((template: DocumentTemplate, e: React.MouseEvent) => {
@@ -297,7 +375,9 @@ export default function DocumentTemplatesPage() {
       // 如果删除的是当前选中的模板，清除选中状态
       if (selectedTemplate?.id === templateToDelete.id) {
         setSelectedTemplate(null)
-        setIsEditing(false)
+        setViewMode("preview")
+        setDraftContent(null)
+        setDraftContentFormat(null)
       }
       await loadTemplates()
     } catch (error: any) {
@@ -363,7 +443,9 @@ export default function DocumentTemplatesPage() {
       }
       
       // 自动选中新创建的模板
-      setSelectedTemplate(response.data)
+      setSelectedTemplate(normalizeTemplate(response.data))
+      setDraftContent(null)
+      setDraftContentFormat(null)
     } catch (error: any) {
       toast({
         title: "上传失败",
@@ -373,7 +455,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [uploadFile, toast, loadTemplates])
+  }, [uploadFile, toast, loadTemplates, normalizeTemplate])
     
         return (
     <div className="w-full space-y-4">
@@ -390,35 +472,144 @@ export default function DocumentTemplatesPage() {
 
       {/* 主要内容区域 */}
       <div className="grid grid-cols-12 gap-4">
-        {isEditing && selectedTemplate ? (
+        {/* ============================================
+            模式 3: 文档编辑模式
+            - 纯富文本编辑
+            - 不显示占位符列表
+            ============================================ */}
+        {viewMode === "document-edit" && selectedTemplate ? (
+          <PlaceholderProvider templateId={selectedTemplate.id}>
+            <div className="col-span-12 flex flex-col">
+              <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+                <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs font-mono">模式 3</Badge>
+                      <CardTitle className="text-base font-semibold">编辑文档</CardTitle>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      📝 富文本编辑 · 占位符使用 <code className="bg-yellow-100 px-1 rounded">{"{{名称}}"}</code> 格式 · 可像普通文本一样编辑
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={handleCancelDocumentChanges} variant="outline" size="sm" disabled={isLoading}>
+                      <X className="h-4 w-4 mr-2" />
+                      取消
+                    </Button>
+                    <Button onClick={handleSaveDocumentChanges} disabled={isLoading} size="sm">
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          保存
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
+                  <DocumentEditorSimple
+                    key={`editor-${selectedTemplate.id}`}
+                    initialContent={
+                      draftContent && draftContentFormat === "text"
+                        ? draftContent
+                        : cloneJsonContent(convertPlaceholderNodesToText(selectedTemplate.prosemirror_json))
+                    }
+                    onChange={(json) => {
+                      setDraftContent(json)
+                      setDraftContentFormat("text")
+                    }}
+                    isLoading={isLoading}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </PlaceholderProvider>
+        
+        /* ============================================
+            模式 2: 占位符管理模式
+            - 左侧：占位符列表（增删改查）
+            - 右侧：文档预览（chip可点击）
+            ============================================ */
+        ) : viewMode === "placeholder-management" && selectedTemplate ? (
           <PlaceholderProvider templateId={selectedTemplate.id}>
             <>
               <PlaceholderList />
               <div className="col-span-8 flex flex-col">
                 <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
                   <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
-                    <CardTitle className="text-base font-semibold">编辑模板</CardTitle>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs font-mono">模式 2</Badge>
+                        <CardTitle className="text-base font-semibold">管理占位符</CardTitle>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        🏷️ 占位符管理模式 · 点击 <span className="inline-flex items-center bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-0.5 rounded text-[10px]">chip</span> 快速配置 · 左侧列表管理所有占位符
+                      </p>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <Button onClick={handleCancelEdit} variant="outline" size="sm">
+                      <Button onClick={handleCancelPlaceholderChanges} variant="outline" size="sm" disabled={isLoading}>
+                        <X className="h-4 w-4 mr-2" />
                         取消
                       </Button>
-                      <Button onClick={handleSaveEdit} disabled={isLoading} size="sm">
-                        <Save className="h-4 w-4 mr-2" />
-                        保存
+                      <Button onClick={handleSavePlaceholderChanges} disabled={isLoading} size="sm">
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            保存中...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            保存更改
+                          </>
+                        )}
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
-                    <DocumentEditor
-                      initialContent={editedContent || selectedTemplate.prosemirror_json}
-                      onChange={setEditedContent}
-                      isLoading={isLoading}
-                    />
+                    <div className="flex justify-center">
+                      <div 
+                        className="bg-white shadow-lg"
+                        style={{ 
+                          width: '210mm',
+                          minHeight: '297mm',
+                          maxWidth: '100%',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <div style={{ padding: '25mm' }}>
+                          {/* ✅ 使用交互式预览组件，支持双击插入 */}
+                          <DocumentPreviewInteractive 
+                            key={`interactive-${selectedTemplate.id}`}
+                            content={
+                              draftContent && draftContentFormat === "nodes"
+                                ? draftContent
+                                : cloneJsonContent(selectedTemplate.prosemirror_json)
+                            }
+                            onChange={(json) => {
+                              setDraftContent(json)
+                              setDraftContentFormat("nodes")
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
             </>
           </PlaceholderProvider>
+        
+        /* ============================================
+            模式 1: 预览模式（默认）
+            - 纯预览，无占位符列表
+            - 提供模式切换按钮
+            ============================================ */
         ) : (
           <>
           <SidebarLayout
@@ -479,49 +670,69 @@ export default function DocumentTemplatesPage() {
 
         <div className="col-span-8 flex flex-col">
           {selectedTemplate ? (
-            <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
-              <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
-                <CardTitle className="text-base font-semibold">预览模板</CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    onClick={handleExport} 
-                    variant="outline"
-                    size="sm"
-                    disabled={isLoading}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    导出
-                  </Button>
-                  <Button 
-                    onClick={handleStartEdit} 
-                    size="sm"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    编辑
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
-                <div className="flex justify-center">
-                  <div 
-                    className="bg-white shadow-lg"
-                    style={{ 
-                      width: '210mm',
-                      minHeight: '297mm',
-                      maxWidth: '100%',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    <div style={{ padding: '25mm' }}>
-                      <DocumentPreview 
-                        key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
-                        content={selectedTemplate.prosemirror_json} 
-                      />
+            /* ✅ 预览模式也需要 PlaceholderProvider，虽然不启用交互 */
+            <PlaceholderProvider templateId={selectedTemplate.id}>
+              <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+                <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs font-mono">模式 1</Badge>
+                      <CardTitle className="text-base font-semibold">预览模板</CardTitle>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      👁️ 预览模式 · 只读查看 · 点击下方按钮进入编辑模式
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      onClick={handleExport} 
+                      variant="outline"
+                      size="sm"
+                      disabled={isLoading}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      导出
+                    </Button>
+                    <Button 
+                      onClick={handleEnterPlaceholderMode} 
+                      variant="outline"
+                      size="sm"
+                    >
+                      🏷️ 管理占位符
+                    </Button>
+                    <Button 
+                      onClick={handleEnterDocumentEditMode} 
+                      size="sm"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      编辑文档
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }}>
+                  <div className="flex justify-center">
+                    <div 
+                      className="bg-white shadow-lg"
+                      style={{ 
+                        width: '210mm',
+                        minHeight: '297mm',
+                        maxWidth: '100%',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      <div style={{ padding: '25mm' }}>
+                        {/* ✅ 预览模式：不启用占位符交互 */}
+                        <DocumentPreviewEnhanced 
+                          key={`preview-${selectedTemplate.id}-${selectedTemplate.updated_at}`}
+                          content={cloneJsonContent(selectedTemplate.prosemirror_json)}
+                          enablePlaceholderInteraction={false}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </PlaceholderProvider>
           ) : (
             <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
               <CardContent className="flex-1 flex items-center justify-center text-muted-foreground" style={{ minHeight: 0 }}>
