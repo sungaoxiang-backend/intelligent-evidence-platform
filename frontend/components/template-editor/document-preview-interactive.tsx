@@ -75,6 +75,15 @@ export function DocumentPreviewInteractive({
   const [insertPosition, setInsertPosition] = useState<number | null>(null)
   const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null) // 用于替换模式
   
+  // 光标指示器状态
+  const [cursorIndicator, setCursorIndicator] = useState<{
+    x: number
+    y: number
+    height: number
+    visible: boolean
+    isActive: boolean // 是否处于激活状态（右键点击或打开插入器时）
+  } | null>(null)
+  
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
@@ -193,6 +202,23 @@ export function DocumentPreviewInteractive({
       previousContentRef.current = null
     }
   }, [editor, content, normalizeContent])
+  
+  // 当插入位置变化时，更新光标指示器
+  useEffect(() => {
+    if (!editor || insertPosition === null || insertPosition < 0) return
+    
+    // 获取插入位置的坐标
+    const coords = editor.view.coordsAtPos(insertPosition)
+    if (coords) {
+      setCursorIndicator({
+        x: coords.left,
+        y: coords.top,
+        height: coords.bottom - coords.top,
+        visible: true,
+        isActive: inserterOpen, // 如果插入器打开，则激活
+      })
+    }
+  }, [editor, insertPosition, inserterOpen])
   
   // ✅ 以下回调依赖 editor，必须在 useEditor 之后定义
   
@@ -398,6 +424,58 @@ export function DocumentPreviewInteractive({
     }
   }, [editor])
   
+  // 处理鼠标移动 - 显示光标指示器
+  const handleMouseMove = useCallback((event: React.MouseEvent) => {
+    if (!editor || !editorRef.current) return
+    
+    // 检查鼠标是否在编辑器区域内
+    const rect = editorRef.current.getBoundingClientRect()
+    if (
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom
+    ) {
+      // 如果不在激活状态，隐藏光标指示器
+      if (!inserterOpen) {
+        setCursorIndicator(null)
+      }
+      return
+    }
+    
+    // 获取鼠标位置对应的文档位置
+    const pos = editor.view.posAtCoords({
+      left: event.clientX,
+      top: event.clientY,
+    })
+    
+    if (pos) {
+      // 获取该位置的坐标和高度
+      const coords = editor.view.coordsAtPos(pos.pos)
+      if (coords) {
+        setCursorIndicator(prev => ({
+          x: coords.left,
+          y: coords.top,
+          height: coords.bottom - coords.top,
+          visible: true,
+          // 保持激活状态（如果之前是激活的）
+          isActive: prev?.isActive || false,
+        }))
+      }
+    }
+  }, [editor, inserterOpen])
+  
+  // 处理鼠标离开编辑器区域
+  const handleMouseLeave = useCallback(() => {
+    // 如果不在插入模式，隐藏光标指示器
+    if (!inserterOpen) {
+      setCursorIndicator(null)
+    } else {
+      // 如果在插入模式，保持光标指示器但标记为非激活
+      setCursorIndicator(prev => prev ? { ...prev, isActive: false } : null)
+    }
+  }, [inserterOpen])
+  
   // 处理右键菜单打开
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     if (!editor) return
@@ -410,6 +488,17 @@ export function DocumentPreviewInteractive({
     
     if (pos) {
       setInsertPosition(pos.pos)
+      // 显示光标指示器（激活状态）
+      const coords = editor.view.coordsAtPos(pos.pos)
+      if (coords) {
+        setCursorIndicator({
+          x: coords.left,
+          y: coords.top,
+          height: coords.bottom - coords.top,
+          visible: true,
+          isActive: true, // 右键点击时激活
+        })
+      }
     }
   }, [editor])
   
@@ -426,11 +515,30 @@ export function DocumentPreviewInteractive({
     <>
       <ContextMenu>
         <ContextMenuTrigger onContextMenu={handleContextMenu}>
-          <div className={className}>
+          <div 
+            className={className}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+          >
             <div ref={editorRef} className="relative">
               <EditorContent editor={editor} />
             </div>
-            <style jsx global>{templateBaseStyles}</style>
+            <style jsx global>{`
+              ${templateBaseStyles}
+              
+              @keyframes cursor-blink {
+                0%, 50% { opacity: 0.6; }
+                51%, 100% { opacity: 0.2; }
+              }
+              @keyframes cursor-blink-active {
+                0%, 50% { opacity: 1; }
+                51%, 100% { opacity: 0.4; }
+              }
+              @keyframes fade-in {
+                from { opacity: 0; transform: translateY(-4px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
             
             {/* 提示文本 */}
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700">
@@ -446,6 +554,10 @@ export function DocumentPreviewInteractive({
           <ContextMenuItem onClick={() => {
             if (insertPosition !== null) {
               setInserterOpen(true)
+              // 保持光标指示器激活状态
+              if (cursorIndicator) {
+                setCursorIndicator({ ...cursorIndicator, isActive: true })
+              }
             }
           }}>
             <Plus className="h-4 w-4 mr-2" />
@@ -499,9 +611,47 @@ export function DocumentPreviewInteractive({
           setInserterOpen(false)
           setInsertPosition(null)
           setSelectedFieldKey(null)
+          // 关闭插入器时，延迟隐藏光标指示器
+          setTimeout(() => setCursorIndicator(null), 200)
         }}
         onSelect={handleSelectPlaceholder}
       />
+      
+      {/* 光标指示器 */}
+      {cursorIndicator && cursorIndicator.visible && (
+        <>
+          <div
+            className="fixed pointer-events-none z-50 transition-all duration-150"
+            style={{
+              left: `${cursorIndicator.x}px`,
+              top: `${cursorIndicator.y}px`,
+              width: cursorIndicator.isActive ? '3px' : '2px',
+              height: `${cursorIndicator.height}px`,
+              backgroundColor: cursorIndicator.isActive ? '#2563eb' : '#3b82f6',
+              boxShadow: cursorIndicator.isActive 
+                ? '0 0 8px rgba(37, 99, 235, 0.8)' 
+                : '0 0 4px rgba(59, 130, 246, 0.5)',
+              animation: cursorIndicator.isActive 
+                ? 'cursor-blink-active 0.8s infinite' 
+                : 'cursor-blink 1.2s infinite',
+              borderRadius: '1px',
+            }}
+          />
+          {/* 激活状态下的提示文本 */}
+          {cursorIndicator.isActive && (
+            <div
+              className="fixed pointer-events-none z-50 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap"
+              style={{
+                left: `${cursorIndicator.x + 8}px`,
+                top: `${cursorIndicator.y - 24}px`,
+                animation: 'fade-in 0.2s ease-in',
+              }}
+            >
+              在此处插入
+            </div>
+          )}
+        </>
+      )}
       
     </>
   )
