@@ -54,6 +54,8 @@ import {
   createEmptyPlaceholderForm,
   isValidFieldKey,
   normalizePlaceholderOptions,
+  buildFormStateFromMeta,
+  buildPayloadFromFormState,
 } from "./placeholder-form"
 
 export function PlaceholderList() {
@@ -113,11 +115,8 @@ export function PlaceholderList() {
   const formId = useId()
   const fieldIds = useMemo(
     () => ({
-      label: `${formId}-label`,
       fieldKey: `${formId}-field-key`,
       type: `${formId}-type`,
-      defaultValue: `${formId}-default`,
-      description: `${formId}-description`,
     }),
     [formId]
   )
@@ -153,16 +152,7 @@ export function PlaceholderList() {
 
   const handleOpenEdit = (placeholder: PlaceholderMeta) => {
     setEditingPlaceholder(placeholder)
-    const backend = placeholder.backendMeta
-    setFormData({
-      fieldKey: backend?.placeholder_name || placeholder.fieldKey,
-      label: backend?.label || placeholder.label || placeholder.fieldKey,
-      type: backend?.type || placeholder.dataType || "text",
-      required: backend?.required ?? false,
-      description: backend?.hint || placeholder.description || "",
-      defaultValue: backend?.default_value || placeholder.defaultValue || "",
-      options: backend?.options || [],
-    })
+    setFormData(buildFormStateFromMeta(placeholder))
     setCreateDialogOpen(true)
   }
 
@@ -171,11 +161,6 @@ export function PlaceholderList() {
     setEditingPlaceholder(null)
     resetForm()
   }
-
-  const normalizedOptions = useMemo(
-    () => normalizePlaceholderOptions(formData),
-    [formData.options]
-  )
 
   const handleSubmit = async () => {
     if (!formData.fieldKey.trim()) {
@@ -197,27 +182,19 @@ export function PlaceholderList() {
 
     setIsSubmitting(true)
     try {
-      const payload: PlaceholderPayload = {
-        placeholder_name: formData.fieldKey.trim(),
-        label: formData.label.trim() || formData.fieldKey.trim(),
-        type: formData.type,
-        required: formData.required,
-        hint: formData.description?.trim() || undefined,
-        default_value: formData.defaultValue?.trim() || undefined,
-        options: normalizedOptions.length ? normalizedOptions : undefined,
-      }
+      const payload = buildPayloadFromFormState(formData)
 
       if (editingPlaceholder) {
         await updatePlaceholder(editingPlaceholder.fieldKey, payload)
         toast({
           title: "更新成功",
-          description: `已更新占位符 ${payload.placeholder_name}`,
+          description: `已更新占位符 ${payload.name}`,
         })
       } else {
         await createPlaceholder(payload)
         toast({
           title: "创建成功",
-          description: `占位符 ${payload.placeholder_name} 已添加`,
+          description: `占位符 ${payload.name} 已添加`,
         })
       }
       handleCloseDialog()
@@ -287,20 +264,6 @@ export function PlaceholderList() {
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
               {backend?.type || placeholder.dataType || "text"}
             </Badge>
-            {backend?.required && (
-              <>
-                <span className="flex-shrink-0 mx-1">•</span>
-                <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
-                  必填
-                </Badge>
-              </>
-            )}
-            {placeholder.defaultValue && (
-              <>
-                <span className="flex-shrink-0 mx-1">•</span>
-                <span className="truncate min-w-0">默认值: {placeholder.defaultValue}</span>
-              </>
-            )}
           </>
         }
         actions={

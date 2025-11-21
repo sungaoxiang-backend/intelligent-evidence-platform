@@ -21,7 +21,7 @@ class DocumentGenerationUpdateRequest(BaseModel):
     
     form_data: Dict[str, Any] = Field(
         ..., 
-        description="占位符填写数据，格式：{placeholder_name: value}"
+        description="占位符填写数据，格式：{name: value}"
     )
 
 
@@ -66,12 +66,8 @@ class PlaceholderInfo(BaseModel):
     """占位符信息"""
     
     id: int
-    placeholder_name: str
-    label: Optional[str] = None
+    name: str
     type: str
-    required: bool
-    hint: Optional[str] = None
-    default_value: Optional[str] = None
     options: Optional[List[Dict[str, str]]] = None
     
     model_config = ConfigDict(from_attributes=True)

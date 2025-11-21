@@ -17,11 +17,7 @@ import type { PlaceholderMeta, PlaceholderPayload } from "./placeholder-manager"
 
 export type PlaceholderFormState = {
   fieldKey: string
-  label: string
   type: string
-  required: boolean
-  description: string
-  defaultValue: string
   options: Array<{ label: string; value: string }>
 }
 
@@ -38,11 +34,7 @@ export const placeholderTypeOptions = [
 
 export const createEmptyPlaceholderForm = (): PlaceholderFormState => ({
   fieldKey: "",
-  label: "",
   type: "text",
-  required: false,
-  description: "",
-  defaultValue: "",
   options: [],
 })
 
@@ -52,23 +44,26 @@ export const normalizePlaceholderOptions = (formData: PlaceholderFormState) =>
 export const isValidFieldKey = (value: string) =>
   /^[a-zA-Z_][a-zA-Z0-9_.-]*$/.test(value)
 
-export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormState => ({
-  fieldKey: meta.backendMeta?.placeholder_name || meta.fieldKey,
-  label: meta.backendMeta?.label || meta.label || meta.fieldKey,
-  type: meta.backendMeta?.type || meta.dataType || "text",
-  required: meta.backendMeta?.required ?? false,
-  description: meta.backendMeta?.hint || meta.description || "",
-  defaultValue: meta.backendMeta?.default_value || meta.defaultValue || "",
-  options: meta.backendMeta?.options || [],
-})
+export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormState => {
+  // 确保 options 数组中的每个对象都有正确的结构
+  const normalizeOptions = (options?: Array<{ label?: string; value?: string }>): Array<{ label: string; value: string }> => {
+    if (!options || !Array.isArray(options)) return []
+    return options.map(opt => ({
+      label: typeof opt?.label === 'string' ? opt.label : "",
+      value: typeof opt?.value === 'string' ? opt.value : "",
+    }))
+  }
+  
+  return {
+    fieldKey: meta.backendMeta?.name || meta.fieldKey,
+    type: meta.backendMeta?.type || meta.dataType || "text",
+    options: normalizeOptions(meta.backendMeta?.options),
+  }
+}
 
 export const buildPayloadFromFormState = (formData: PlaceholderFormState): PlaceholderPayload => ({
-  placeholder_name: formData.fieldKey.trim(),
-  label: formData.label.trim(),
+  name: formData.fieldKey.trim(),
   type: formData.type,
-  required: Boolean(formData.required),
-  hint: formData.description?.trim() || undefined,
-  default_value: formData.defaultValue?.trim() || undefined,
   options: normalizePlaceholderOptions(formData),
 })
 
@@ -87,11 +82,8 @@ export function PlaceholderFormFields({
 }: PlaceholderFormFieldsProps) {
   const fieldIds = useMemo(
     () => ({
-      label: `${formId ?? "placeholder"}-label`,
       fieldKey: `${formId ?? "placeholder"}-field-key`,
       type: `${formId ?? "placeholder"}-type`,
-      defaultValue: `${formId ?? "placeholder"}-default`,
-      description: `${formId ?? "placeholder"}-description`,
     }),
     [formId]
   )
@@ -105,7 +97,8 @@ export function PlaceholderFormFields({
 
   const updateOption = (index: number, field: "label" | "value", value: string) => {
     const next = [...(formData.options || [])]
-    next[index] = { ...next[index], [field]: value }
+    const currentOption = next[index] || { label: "", value: "" }
+    next[index] = { ...currentOption, [field]: value }
     onChange({
       ...formData,
       options: next,
@@ -125,33 +118,16 @@ export function PlaceholderFormFields({
     <div className="space-y-4 py-2">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <Label htmlFor={fieldIds.label}>显示名称</Label>
-          <Input
-            id={fieldIds.label}
-            value={formData.label}
-            onChange={(e) => updateField("label", e.target.value)}
-            placeholder="例如：原告姓名"
-            className="mt-2"
-            disabled={disabled}
-          />
-        </div>
-        <div>
-          <Label htmlFor={fieldIds.fieldKey}>字段标识</Label>
+          <Label htmlFor={fieldIds.fieldKey}>占位符名称</Label>
           <Input
             id={fieldIds.fieldKey}
             value={formData.fieldKey}
             onChange={(e) => updateField("fieldKey", e.target.value)}
-            placeholder="例如：plaintiff_name"
+            placeholder="例如：{{name}} 或 {{姓名}}"
             className="mt-2 font-mono"
             disabled={disabled}
           />
-          <p className="text-[11px] text-muted-foreground mt-1">
-            仅限字母、数字、点、横线和下划线，需以字母或下划线开头
-          </p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor={fieldIds.type}>数据类型 / 控件</Label>
           <Select
@@ -171,44 +147,6 @@ export function PlaceholderFormFields({
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label htmlFor={fieldIds.defaultValue}>默认值（可选）</Label>
-          <Input
-            id={fieldIds.defaultValue}
-            value={formData.defaultValue}
-            onChange={(e) => updateField("defaultValue", e.target.value)}
-            placeholder="例如：张三"
-            className="mt-2"
-            disabled={disabled}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          id={`${formId ?? "placeholder"}-required`}
-          checked={Boolean(formData.required)}
-          onChange={(e) => updateField("required", e.target.checked)}
-          className="h-4 w-4"
-          disabled={disabled}
-        />
-        <Label htmlFor={`${formId ?? "placeholder"}-required`} className="cursor-pointer">
-          必填
-        </Label>
-      </div>
-
-      <div>
-        <Label htmlFor={fieldIds.description}>描述（可选）</Label>
-        <Textarea
-          id={fieldIds.description}
-          value={formData.description}
-          onChange={(e) => updateField("description", e.target.value)}
-          placeholder="用于提示配置/填报人员该占位符的含义"
-          className="mt-2"
-          rows={3}
-          disabled={disabled}
-        />
       </div>
 
       {needsOptions && (
@@ -232,22 +170,28 @@ export function PlaceholderFormFields({
             </Button>
           </div>
           <div className="space-y-2 mt-2">
-            {(formData.options || []).map((option, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  placeholder="标签"
-                  value={option.label}
-                  onChange={(e) => updateOption(index, "label", e.target.value)}
-                  className="flex-1"
-                  disabled={disabled}
-                />
-                <Input
-                  placeholder="值"
-                  value={option.value}
-                  onChange={(e) => updateOption(index, "value", e.target.value)}
-                  className="flex-1"
-                  disabled={disabled}
-                />
+            {(formData.options || []).map((option, index) => {
+              // 确保 option 对象有正确的结构，防止中文字段名或其他异常结构
+              const safeOption: { label: string; value: string } = 
+                option && typeof option === 'object' && 'label' in option && 'value' in option
+                  ? { label: String(option.label || ""), value: String(option.value || "") }
+                  : { label: "", value: "" }
+              return (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder="标签"
+                    value={safeOption.label}
+                    onChange={(e) => updateOption(index, "label", e.target.value)}
+                    className="flex-1"
+                    disabled={disabled}
+                  />
+                  <Input
+                    placeholder="值"
+                    value={safeOption.value}
+                    onChange={(e) => updateOption(index, "value", e.target.value)}
+                    className="flex-1"
+                    disabled={disabled}
+                  />
                 <Button
                   type="button"
                   variant="ghost"
@@ -258,7 +202,8 @@ export function PlaceholderFormFields({
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-            ))}
+              )
+            })}
             {(formData.options?.length || 0) === 0 && (
               <p className="text-xs text-muted-foreground">点击“添加选项”新增选项</p>
             )}

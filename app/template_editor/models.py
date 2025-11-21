@@ -4,7 +4,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, JSON, Index, UniqueConstraint, Boolean, Table, Column, Integer
+from sqlalchemy import String, Text, ForeignKey, JSON, Index, UniqueConstraint, Table, Column, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
@@ -75,12 +75,14 @@ class TemplatePlaceholder(Base):
     __tablename__ = "template_placeholders"
     
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    placeholder_name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True, comment="占位符名称（唯一，如：name, date, creditor_gender）")
-    label: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, comment="占位符显示名称")
+    name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="占位符名称（唯一，如：{{姓名}} 对应 name 字段）",
+    )
     type: Mapped[str] = mapped_column(String(20), nullable=False, comment="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
-    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否必填")
-    hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="提示文本")
-    default_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="默认值")
     options: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True, comment="选项列表（用于 select, radio, checkbox 类型）")
     
     # 创建和更新信息
@@ -101,5 +103,5 @@ class TemplatePlaceholder(Base):
     updated_by = relationship("Staff", foreign_keys=[updated_by_id], back_populates=None)
     
     __table_args__ = (
-        Index("idx_template_placeholders_placeholder_name", "placeholder_name"),
+        Index("idx_template_placeholders_name", "name"),
     )

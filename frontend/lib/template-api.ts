@@ -287,13 +287,9 @@ export const templateApi = {
   },
 
   // 创建或更新占位符
-  async createOrUpdatePlaceholder(request: {
-    placeholder_name: string
-    label?: string
+  async createPlaceholder(request: {
+    name: string
     type: string
-    required?: boolean
-    hint?: string
-    default_value?: string
     options?: Array<{ label: string; value: string }>
   }): Promise<{ code: number; message: string; data: any }> {
     const response = await fetch(
@@ -310,7 +306,8 @@ export const templateApi = {
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.detail || "创建或更新占位符失败")
+      // 后端错误响应格式: {code, message, timestamp, data}
+      throw new Error(error.message || error.detail || "创建占位符失败")
     }
 
     const result = await response.json()
@@ -321,12 +318,8 @@ export const templateApi = {
   async updatePlaceholder(
     placeholderName: string,
     request: {
-      placeholder_name?: string
-      label?: string
+      name?: string
       type?: string
-      required?: boolean
-      hint?: string
-      default_value?: string
       options?: Array<{ label: string; value: string }>
     }
   ): Promise<{ code: number; message: string; data: any }> {
@@ -344,7 +337,8 @@ export const templateApi = {
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.detail || "更新占位符失败")
+      // 后端错误响应格式: {code, message, timestamp, data}
+      throw new Error(error.message || error.detail || "更新占位符失败")
     }
 
     const result = await response.json()

@@ -265,7 +265,7 @@ class DocumentGenerationService:
         placeholder_map = {}
         if placeholders:
             for p in placeholders:
-                placeholder_map[p.placeholder_name] = {
+                placeholder_map[p.name] = {
                     "type": p.type,
                     "options": p.options or []
                 }

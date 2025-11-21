@@ -45,7 +45,7 @@ class DocumentGeneration(Base):
         JSON,
         nullable=False,
         default=dict,
-        comment="占位符填写数据，格式：{placeholder_name: value}"
+        comment="占位符填写数据，格式：{name: value}"
     )
     
     # 创建和更新信息

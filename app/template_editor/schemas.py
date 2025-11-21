@@ -123,24 +123,16 @@ class PlaceholderOption(BaseModel):
 class PlaceholderCreateRequest(BaseModel):
     """创建占位符请求"""
     
-    placeholder_name: str = Field(..., description="占位符名称（唯一）", min_length=1, max_length=100)
-    label: Optional[str] = Field(None, description="占位符显示名称")
+    name: str = Field(..., description="占位符名称（唯一，对应文档中的 {{name}}）", min_length=1, max_length=100)
     type: str = Field(..., description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
-    required: bool = Field(False, description="是否必填")
-    hint: Optional[str] = Field(None, description="提示文本")
-    default_value: Optional[str] = Field(None, description="默认值")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
 
 
 class PlaceholderUpdateRequest(BaseModel):
     """更新占位符请求"""
     
-    placeholder_name: Optional[str] = Field(None, description="占位符名称", min_length=1, max_length=100)
-    label: Optional[str] = Field(None, description="占位符显示名称")
+    name: Optional[str] = Field(None, description="占位符名称", min_length=1, max_length=100)
     type: Optional[str] = Field(None, description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
-    required: Optional[bool] = Field(None, description="是否必填")
-    hint: Optional[str] = Field(None, description="提示文本")
-    default_value: Optional[str] = Field(None, description="默认值")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
 
 
@@ -148,12 +140,8 @@ class PlaceholderResponse(BaseModel):
     """占位符响应"""
     
     id: int = Field(..., description="占位符ID")
-    placeholder_name: str = Field(..., description="占位符名称")
-    label: Optional[str] = Field(None, description="占位符显示名称")
+    name: str = Field(..., description="占位符名称")
     type: str = Field(..., description="占位符类型")
-    required: bool = Field(..., description="是否必填")
-    hint: Optional[str] = Field(None, description="提示文本")
-    default_value: Optional[str] = Field(None, description="默认值")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表")
     created_by_id: Optional[int] = Field(None, description="创建人ID")
     updated_by_id: Optional[int] = Field(None, description="更新人ID")

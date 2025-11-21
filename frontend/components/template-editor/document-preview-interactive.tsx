@@ -7,7 +7,7 @@
  * 1. 双击打开占位符插入器
  * 2. 右键显示上下文菜单
  * 3. 在指定位置插入占位符
- * 4. 点击chip配置占位符
+ * 4. 点击chip显示操作菜单（替换/删除占位符引用）
  */
 
 import React, { useEffect, useRef, useCallback, useState } from "react"
@@ -33,14 +33,6 @@ import { PlaceholderNode } from "./placeholder-node-extension"
 import { usePlaceholderManager } from "./placeholder-manager"
 import { PlaceholderInserter } from "./placeholder-inserter"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -48,14 +40,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Edit } from "lucide-react"
-import {
-  PlaceholderFormFields,
-  PlaceholderFormState,
-  createEmptyPlaceholderForm,
-  buildFormStateFromMeta,
-  buildPayloadFromFormState,
-} from "./placeholder-form"
+import { Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 
@@ -88,12 +73,7 @@ export function DocumentPreviewInteractive({
   // 插入器状态
   const [inserterOpen, setInserterOpen] = useState(false)
   const [insertPosition, setInsertPosition] = useState<number | null>(null)
-  
-  // 占位符配置对话框状态
-  const [configDialogOpen, setConfigDialogOpen] = useState(false)
-  const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null)
-  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm())
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null) // 用于替换模式
   
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
@@ -121,10 +101,8 @@ export function DocumentPreviewInteractive({
     if (!meta?.backendMeta) return undefined
     
     return {
-      label: meta.backendMeta.label,
-      fieldType: meta.backendMeta.field_type,
-      description: meta.backendMeta.description,
-      required: meta.backendMeta.required,
+      name: meta.backendMeta.name,
+      type: meta.backendMeta.type,
     }
   }, [placeholderManager.placeholders])
   
@@ -216,29 +194,6 @@ export function DocumentPreviewInteractive({
   
   // ✅ 以下回调依赖 editor，必须在 useEditor 之后定义
   
-  // 编辑占位符配置
-  const handleEditPlaceholder = useCallback(() => {
-    if (!chipMenuFieldKey) return
-    
-    const meta = placeholderManager.placeholders[chipMenuFieldKey]
-    
-    if (meta?.backendMeta) {
-      // 已配置的占位符：编辑模式
-      setFormData(buildFormStateFromMeta(meta))
-      setSelectedFieldKey(chipMenuFieldKey)
-      setConfigDialogOpen(true)
-    } else {
-      // 未配置的占位符：创建模式
-      const emptyForm = createEmptyPlaceholderForm()
-      emptyForm.placeholder_name = chipMenuFieldKey
-      emptyForm.label = chipMenuFieldKey
-      setFormData(emptyForm)
-      setSelectedFieldKey(chipMenuFieldKey)
-      setConfigDialogOpen(true)
-    }
-    
-    setChipMenuOpen(false)
-  }, [chipMenuFieldKey, placeholderManager.placeholders])
   
   const collectPlaceholderNodes = useCallback((fieldKey: string) => {
     const matches: Array<{ pos: number; node: ProseMirrorNode }> = []
@@ -305,7 +260,7 @@ export function DocumentPreviewInteractive({
   }, [chipMenuFieldKey])
   
   // 处理选择占位符
-  const handleSelectPlaceholder = useCallback((fieldKey: string) => {
+  const handleSelectPlaceholder = useCallback(async (fieldKey: string) => {
     console.log('[handleSelectPlaceholder] Called with:', {
       fieldKey,
       insertPosition,
@@ -323,6 +278,21 @@ export function DocumentPreviewInteractive({
       // 替换模式
       if (insertPosition === -1 && selectedFieldKey) {
         console.log('[handleSelectPlaceholder] Replace mode: replacing', selectedFieldKey, 'with', fieldKey)
+        
+        // 确保新的占位符关联到当前模板（在管理占位符模式下）
+        try {
+          await placeholderManager.ensureAssociation(fieldKey)
+        } catch (error: any) {
+          console.error('Failed to ensure association:', error)
+          toast({
+            title: "关联失败",
+            description: error.message || "无法关联占位符到模板",
+            variant: "destructive",
+          })
+          setInsertPosition(null)
+          setSelectedFieldKey(null)
+          return
+        }
         
         const matches = collectPlaceholderNodes(selectedFieldKey)
         if (matches.length === 0) {
@@ -363,6 +333,19 @@ export function DocumentPreviewInteractive({
       if (insertPosition !== null && insertPosition >= 0) {
         console.log('[handleSelectPlaceholder] Insert mode: position =', insertPosition, 'fieldKey =', fieldKey)
         
+        // 确保占位符关联到当前模板（在管理占位符模式下）
+        try {
+          await placeholderManager.ensureAssociation(fieldKey)
+        } catch (error: any) {
+          console.error('Failed to ensure association:', error)
+          toast({
+            title: "关联失败",
+            description: error.message || "无法关联占位符到模板",
+            variant: "destructive",
+          })
+          return
+        }
+        
         const placeholderType = editor.state.schema.nodes.placeholder
         if (!placeholderType) {
           console.warn("Placeholder node type is not registered")
@@ -395,7 +378,7 @@ export function DocumentPreviewInteractive({
         variant: "destructive",
       })
     }
-  }, [editor, insertPosition, selectedFieldKey, onChange, toast, collectPlaceholderNodes])
+  }, [editor, insertPosition, selectedFieldKey, onChange, toast, collectPlaceholderNodes, placeholderManager])
   
   // 处理右键插入
   const handleContextMenuInsert = useCallback((event: MouseEvent) => {
@@ -428,51 +411,6 @@ export function DocumentPreviewInteractive({
     }
   }, [editor])
   
-  // 处理表单提交
-  const handleSubmit = useCallback(async () => {
-    if (!selectedFieldKey) return
-    
-    setIsSubmitting(true)
-    try {
-      const payload = buildPayloadFromFormState(formData)
-      
-      const meta = placeholderManager.placeholders[selectedFieldKey]
-      if (meta?.backendMeta) {
-        // 更新已有占位符
-        await placeholderManager.updatePlaceholder(selectedFieldKey, payload)
-        toast({
-          title: "更新成功",
-          description: "占位符配置已更新",
-        })
-      } else {
-        // 创建新占位符
-        await placeholderManager.createPlaceholder(payload, { insertIntoDocument: false })
-        toast({
-          title: "创建成功",
-          description: "占位符已配置",
-        })
-      }
-      
-      setConfigDialogOpen(false)
-      setSelectedFieldKey(null)
-    } catch (error: any) {
-      toast({
-        title: "保存失败",
-        description: error.message || "无法保存占位符配置",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }, [selectedFieldKey, formData, placeholderManager, toast])
-  
-  // 关闭对话框
-  const handleCloseDialog = useCallback(() => {
-    if (!isSubmitting) {
-      setConfigDialogOpen(false)
-      setSelectedFieldKey(null)
-    }
-  }, [isSubmitting])
   
   if (!editor) {
     return (
@@ -496,7 +434,8 @@ export function DocumentPreviewInteractive({
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700">
               💡 <strong>提示：</strong>
               右键点击文档插入占位符 · 
-              点击彩色chip显示操作菜单（编辑/删除/替换）
+              点击彩色chip显示操作菜单（替换/删除占位符引用） · 
+              编辑占位符配置请在左侧列表进行
             </div>
           </div>
         </ContextMenuTrigger>
@@ -524,13 +463,6 @@ export function DocumentPreviewInteractive({
           onMouseLeave={() => setChipMenuOpen(false)}
         >
           <button
-            onClick={handleEditPlaceholder}
-            className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-gray-100 transition-colors text-left"
-          >
-            <Edit className="h-4 w-4" />
-            编辑配置
-          </button>
-          <button
             onClick={handleReplacePlaceholder}
             className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-gray-100 transition-colors text-left"
           >
@@ -545,7 +477,7 @@ export function DocumentPreviewInteractive({
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            删除占位符
+            删除占位符引用
           </button>
         </div>
       )}
@@ -569,46 +501,6 @@ export function DocumentPreviewInteractive({
         onSelect={handleSelectPlaceholder}
       />
       
-      {/* 占位符配置对话框 */}
-      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {placeholderManager.placeholders[selectedFieldKey || ""]?.backendMeta
-                ? "编辑占位符"
-                : "配置占位符"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedFieldKey && (
-                <>
-                  配置占位符 <code className="bg-gray-100 px-2 py-0.5 rounded text-sm">{selectedFieldKey}</code> 的元数据
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <PlaceholderFormFields
-            formId="interactive-placeholder"
-            formData={formData}
-            onChange={setFormData}
-            disabled={isSubmitting}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>
-              取消
-            </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  保存中...
-                </>
-              ) : (
-                "保存"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

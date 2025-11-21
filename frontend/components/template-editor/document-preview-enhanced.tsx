@@ -4,9 +4,9 @@
  * 增强版文档预览组件
  * 
  * 设计原则：
- * 1. 预览模式 = 查看 + 占位符配置
+ * 1. 预览模式 = 查看 + 占位符高亮
  * 2. 将 {{fieldKey}} 渲染为可交互的 chip
- * 3. 点击 chip 可以快速打开配置对话框
+ * 3. 点击 chip 高亮显示，编辑配置统一在左侧列表进行
  * 4. 显示占位符的丰富信息（类型、标签、描述）
  */
 
@@ -31,24 +31,6 @@ import {
 import { normalizeHardBreaks } from "./utils"
 import { PlaceholderNode } from "./placeholder-node-extension"
 import { usePlaceholderManager } from "./placeholder-manager"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
-import {
-  PlaceholderFormFields,
-  PlaceholderFormState,
-  createEmptyPlaceholderForm,
-  buildFormStateFromMeta,
-  buildPayloadFromFormState,
-} from "./placeholder-form"
-import { useToast } from "@/hooks/use-toast"
 
 interface DocumentPreviewEnhancedProps {
   /** 文档内容（ProseMirror JSON） */
@@ -77,13 +59,6 @@ export function DocumentPreviewEnhanced({
   // ✅ 始终调用 hook（符合 React 规则）
   // 调用者需要确保包裹 PlaceholderProvider
   const placeholderManager = usePlaceholderManager()
-  const { toast } = useToast()
-  
-  // 占位符配置对话框状态
-  const [configDialogOpen, setConfigDialogOpen] = useState(false)
-  const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null)
-  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm())
-  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
@@ -91,27 +66,11 @@ export function DocumentPreviewEnhanced({
     return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
   }, [])
   
-  // 处理占位符点击
+  // 处理占位符点击 - 不再打开编辑对话框，只高亮显示
   const handlePlaceholderClick = useCallback((fieldKey: string) => {
     if (!enablePlaceholderInteraction || !placeholderManager) return
-    
-    // 查找占位符元数据
-    const meta = placeholderManager.placeholders[fieldKey]
-    
-    if (meta?.backendMeta) {
-      // 已配置的占位符：编辑模式
-      setFormData(buildFormStateFromMeta(meta))
-      setSelectedFieldKey(fieldKey)
-      setConfigDialogOpen(true)
-    } else {
-      // 未配置的占位符：创建模式
-      const emptyForm = createEmptyPlaceholderForm()
-      emptyForm.placeholder_name = fieldKey
-      emptyForm.label = fieldKey
-      setFormData(emptyForm)
-      setSelectedFieldKey(fieldKey)
-      setConfigDialogOpen(true)
-    }
+    // 只高亮显示，不打开编辑对话框
+    placeholderManager.selectPlaceholder(fieldKey)
   }, [enablePlaceholderInteraction, placeholderManager])
   
   // 处理占位符悬停
@@ -133,10 +92,8 @@ export function DocumentPreviewEnhanced({
     if (!meta?.backendMeta) return undefined
     
     return {
-      label: meta.backendMeta.label,
-      fieldType: meta.backendMeta.field_type,
-      description: meta.backendMeta.description,
-      required: meta.backendMeta.required,
+      name: meta.backendMeta.name,
+      type: meta.backendMeta.type,
     }
   }, [placeholderManager])
   
@@ -217,51 +174,6 @@ export function DocumentPreviewEnhanced({
     }
   }, [editor, content, normalizeContent])
   
-  // 处理表单提交
-  const handleSubmit = useCallback(async () => {
-    if (!selectedFieldKey || !placeholderManager) return
-    
-    setIsSubmitting(true)
-    try {
-      const payload = buildPayloadFromFormState(formData)
-      
-      const meta = placeholderManager.placeholders[selectedFieldKey]
-      if (meta?.backendMeta) {
-        // 更新已有占位符
-        await placeholderManager.updatePlaceholder(selectedFieldKey, payload)
-        toast({
-          title: "更新成功",
-          description: "占位符配置已更新",
-        })
-      } else {
-        // 创建新占位符
-        await placeholderManager.createPlaceholder(payload, { insertIntoDocument: false })
-        toast({
-          title: "创建成功",
-          description: "占位符已配置",
-        })
-      }
-      
-      setConfigDialogOpen(false)
-      setSelectedFieldKey(null)
-    } catch (error: any) {
-      toast({
-        title: "保存失败",
-        description: error.message || "无法保存占位符配置",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }, [selectedFieldKey, formData, placeholderManager, toast])
-  
-  // 关闭对话框
-  const handleCloseDialog = useCallback(() => {
-    if (!isSubmitting) {
-      setConfigDialogOpen(false)
-      setSelectedFieldKey(null)
-    }
-  }, [isSubmitting])
   
   if (!editor) {
     return (
@@ -280,48 +192,6 @@ export function DocumentPreviewEnhanced({
         <style jsx global>{templateBaseStyles}</style>
       </div>
       
-      {/* 占位符配置对话框 */}
-      {enablePlaceholderInteraction && (
-        <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {placeholderManager.placeholders[selectedFieldKey || ""]?.backendMeta
-                  ? "编辑占位符"
-                  : "配置占位符"}
-              </DialogTitle>
-            <DialogDescription>
-              {selectedFieldKey && placeholderManager && (
-                <>
-                  配置占位符 <code className="bg-gray-100 px-2 py-0.5 rounded text-sm">{selectedFieldKey}</code> 的元数据
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <PlaceholderFormFields
-            formId="preview-placeholder"
-            formData={formData}
-            onChange={setFormData}
-            disabled={isSubmitting}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>
-              取消
-            </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  保存中...
-                </>
-              ) : (
-                "保存"
-              )}
-            </Button>
-          </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   )
 }

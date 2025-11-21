@@ -578,44 +578,44 @@ async def delete_template(
 # 占位符管理 API
 
 @router.post("/placeholders", response_model=PlaceholderDetailResponse, status_code=http_status.HTTP_201_CREATED)
-async def create_or_update_placeholder(
+async def create_placeholder(
     request: PlaceholderCreateRequest,
     db: AsyncSession = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ):
     """
-    创建或更新占位符（以 placeholder_name 为唯一标识）
+    创建占位符
     
-    如果占位符已存在，则更新；否则创建新占位符
+    如果占位符已存在，返回 HTTP 409 Conflict 错误
     """
     try:
-        # 转换 options
-        options_dict = None
-        if request.options:
-            options_dict = [opt.dict() for opt in request.options]
+        options_dict = [opt.dict() for opt in request.options] if request.options else None
         
-        placeholder = await placeholder_service.create_or_update_placeholder(
+        placeholder = await placeholder_service.create_placeholder(
             db=db,
-            placeholder_name=request.placeholder_name,
-            label=request.label,
+            name=request.name,
             type=request.type,
-            required=request.required,
-            hint=request.hint,
-            default_value=request.default_value,
             options=options_dict,
             created_by_id=current_staff.id,
         )
         
         return PlaceholderDetailResponse(
             code=200,
-            message="操作成功",
+            message="创建成功",
             data=PlaceholderResponse.model_validate(placeholder),
         )
+    except ValueError as e:
+        # 占位符已存在的情况
+        logger.warning(f"创建占位符失败: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
     except Exception as e:
-        logger.error(f"创建或更新占位符失败: {e}", exc_info=True)
+        logger.error(f"创建占位符失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"创建或更新占位符失败: {str(e)}"
+            detail=f"创建占位符失败: {str(e)}"
         )
 
 
@@ -653,9 +653,9 @@ async def list_placeholders(
         )
 
 
-@router.get("/placeholders/{placeholder_name}", response_model=PlaceholderDetailResponse)
+@router.get("/placeholders/{name}", response_model=PlaceholderDetailResponse)
 async def get_placeholder(
-    placeholder_name: str,
+    name: str,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -664,13 +664,13 @@ async def get_placeholder(
     try:
         placeholder = await placeholder_service.get_placeholder(
             db=db,
-            placeholder_name=placeholder_name,
+            placeholder_name=name,
         )
         
         if not placeholder:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=f"占位符不存在: {placeholder_name}"
+                detail=f"占位符不存在: {name}"
             )
         
         return PlaceholderDetailResponse(
@@ -688,9 +688,9 @@ async def get_placeholder(
         )
 
 
-@router.put("/placeholders/{placeholder_name}", response_model=PlaceholderDetailResponse)
+@router.put("/placeholders/{name}", response_model=PlaceholderDetailResponse)
 async def update_placeholder(
-    placeholder_name: str,
+    name: str,
     request: PlaceholderUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
@@ -706,13 +706,9 @@ async def update_placeholder(
         
         placeholder = await placeholder_service.update_placeholder(
             db=db,
-            placeholder_name=placeholder_name,
-            new_placeholder_name=request.placeholder_name,
-            label=request.label,
+            placeholder_name=name,
+            new_name=request.name,
             type=request.type,
-            required=request.required,
-            hint=request.hint,
-            default_value=request.default_value,
             options=options_dict,
             updated_by_id=current_staff.id,
         )
@@ -720,7 +716,7 @@ async def update_placeholder(
         if not placeholder:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=f"占位符不存在: {placeholder_name}"
+                detail=f"占位符不存在: {name}"
             )
         
         return PlaceholderDetailResponse(
@@ -738,9 +734,9 @@ async def update_placeholder(
         )
 
 
-@router.delete("/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+@router.delete("/placeholders/{name}", status_code=http_status.HTTP_204_NO_CONTENT)
 async def delete_placeholder(
-    placeholder_name: str,
+    name: str,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -749,13 +745,13 @@ async def delete_placeholder(
     try:
         success = await placeholder_service.delete_placeholder(
             db=db,
-            placeholder_name=placeholder_name,
+            placeholder_name=name,
         )
         
         if not success:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=f"占位符不存在: {placeholder_name}"
+                detail=f"占位符不存在: {name}"
             )
     except HTTPException:
         raise
@@ -767,10 +763,10 @@ async def delete_placeholder(
         )
 
 
-@router.post("/templates/{template_id}/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+@router.post("/templates/{template_id}/placeholders/{name}", status_code=http_status.HTTP_204_NO_CONTENT)
 async def associate_placeholder_to_template(
     template_id: int,
-    placeholder_name: str,
+    name: str,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -780,7 +776,7 @@ async def associate_placeholder_to_template(
         success = await placeholder_service.associate_placeholder_to_template(
             db=db,
             template_id=template_id,
-            placeholder_name=placeholder_name,
+            placeholder_name=name,
         )
         
         if not success:
@@ -798,10 +794,10 @@ async def associate_placeholder_to_template(
         )
 
 
-@router.delete("/templates/{template_id}/placeholders/{placeholder_name}", status_code=http_status.HTTP_204_NO_CONTENT)
+@router.delete("/templates/{template_id}/placeholders/{name}", status_code=http_status.HTTP_204_NO_CONTENT)
 async def disassociate_placeholder_from_template(
     template_id: int,
-    placeholder_name: str,
+    name: str,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -811,7 +807,7 @@ async def disassociate_placeholder_from_template(
         success = await placeholder_service.disassociate_placeholder_from_template(
             db=db,
             template_id=template_id,
-            placeholder_name=placeholder_name,
+            placeholder_name=name,
         )
         
         if not success:

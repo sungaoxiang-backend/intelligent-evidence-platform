@@ -424,12 +424,8 @@ export function DocumentEditor({
     setPlaceholderSubmitting(true)
     const normalizedOptions = normalizePlaceholderOptions(placeholderFormData)
     const payload: PlaceholderPayload = {
-      placeholder_name: placeholderFormData.fieldKey.trim(),
-      label: placeholderFormData.label.trim() || placeholderFormData.fieldKey.trim(),
+      name: placeholderFormData.fieldKey.trim(),
       type: placeholderFormData.type,
-      required: placeholderFormData.required,
-      hint: placeholderFormData.description?.trim() || undefined,
-      default_value: placeholderFormData.defaultValue?.trim() || undefined,
       options: normalizedOptions.length ? normalizedOptions : undefined,
     }
     try {
@@ -437,13 +433,13 @@ export function DocumentEditor({
         await placeholderManager.createPlaceholder(payload, { insertIntoDocument: true })
         toast({
           title: "占位符已创建",
-          description: `已插入 {{${payload.placeholder_name}}}`,
+          description: `已插入 {{${payload.name}}}`,
         })
       } else if (editingPlaceholder) {
         await placeholderManager.updatePlaceholder(editingPlaceholder.fieldKey, payload)
         toast({
           title: "占位符已更新",
-          description: `已更新 ${payload.placeholder_name}`,
+          description: `已更新 ${payload.name}`,
         })
       }
       handlePlaceholderDialogClose()
@@ -674,7 +670,7 @@ export function DocumentEditor({
   const insertPlaceholderAtSelection = useCallback(
     async (payload: PlaceholderPayload) => {
       if (!editor) return
-      const placeholderText = `{{${payload.placeholder_name}}}`
+      const placeholderText = `{{${payload.name}}}`
       editor.chain().focus(undefined, { scrollIntoView: false }).insertContent(placeholderText).run()
     },
     [editor]
@@ -684,7 +680,7 @@ export function DocumentEditor({
     async (fieldKey: string) => {
       try {
         await placeholderManager.ensureAssociation(fieldKey)
-        await insertPlaceholderAtSelection({ placeholder_name: fieldKey })
+        await insertPlaceholderAtSelection({ name: fieldKey, type: "text" })
         requestPlaceholderRefresh(editor)
         toast({
           title: "已插入占位符",
@@ -757,7 +753,7 @@ export function DocumentEditor({
 
   const renamePlaceholderBlocks = useCallback(
     async (oldFieldKey: string, payload: PlaceholderPayload) => {
-      const newName = payload.placeholder_name?.trim()
+      const newName = payload.name?.trim()
       if (!newName) return
       const ranges = findPlaceholderRangesInDoc(oldFieldKey)
       applyRanges(ranges, `{{${newName}}}`)

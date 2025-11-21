@@ -3,10 +3,8 @@
 import { Node, mergeAttributes } from "@tiptap/core"
 
 export interface PlaceholderNodeMeta {
-  label?: string
-  fieldType?: string
-  description?: string
-  required?: boolean
+  name?: string
+  type?: string
 }
 
 export interface PlaceholderNodeOptions {
@@ -31,9 +29,9 @@ const getFieldTypeIcon = (fieldType?: string) => {
 }
 
 const buildDisplayLabel = (fieldKey: string, meta?: PlaceholderNodeMeta) => {
-  const label = meta?.label || fieldKey
-  const icon = getFieldTypeIcon(meta?.fieldType)
-  return `${icon} ${label}${meta?.required ? " *" : ""}`
+  const label = meta?.name || fieldKey
+  const icon = getFieldTypeIcon(meta?.type)
+  return `${icon} ${label}`
 }
 
 const applyMetaToChip = (
@@ -43,17 +41,8 @@ const applyMetaToChip = (
 ) => {
   chip.setAttribute("data-field-key", fieldKey)
   chip.setAttribute("data-placeholder-display", buildDisplayLabel(fieldKey, meta))
-  chip.setAttribute("data-placeholder-label", meta?.label || fieldKey)
-  if (meta?.required) {
-    chip.setAttribute("data-placeholder-required", "true")
-  } else {
-    chip.removeAttribute("data-placeholder-required")
-  }
-  if (meta?.description) {
-    chip.title = `${meta.label || fieldKey}\n${meta.description}\n\n点击显示操作菜单`
-  } else {
-    chip.title = `${meta?.label || fieldKey}\n\n点击显示操作菜单`
-  }
+  chip.setAttribute("data-placeholder-label", meta?.name || fieldKey)
+  chip.title = `${meta?.name || fieldKey}\n\n点击显示操作菜单`
 }
 
 export const PlaceholderNode = Node.create<PlaceholderNodeOptions>({

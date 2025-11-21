@@ -107,17 +107,16 @@ export function PlaceholderInserter({
       setFormData({
         ...createEmptyPlaceholderForm(),
         fieldKey: normalized,
-        label: searchQuery.trim(),
       })
     }
   }, [searchQuery])
   
   // 提交创建
   const handleSubmitCreate = useCallback(async () => {
-    if (!formData.fieldKey?.trim() || !formData.label?.trim()) {
+    if (!formData.fieldKey?.trim()) {
       toast({
         title: "请填写必填字段",
-        description: "字段名和标签是必填的",
+        description: "占位符名称是必填的",
         variant: "destructive",
       })
       return

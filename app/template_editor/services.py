@@ -282,18 +282,16 @@ class TemplateService:
             # 查询是否已存在
             result = await db.execute(
                 select(TemplatePlaceholder).where(
-                    TemplatePlaceholder.placeholder_name == placeholder_name
+                    TemplatePlaceholder.name == placeholder_name
                 )
             )
             placeholder = result.scalar_one_or_none()
             
             if not placeholder:
-                # 创建新占位符（只设置 placeholder_name，其他用默认值）
+                # 创建新占位符（只设置 name，其他用默认值）
                 placeholder = TemplatePlaceholder(
-                    placeholder_name=placeholder_name,
+                    name=placeholder_name,
                     type="text",  # 默认类型
-                    required=False,  # 默认值
-                    hint=None,  # 默认值
                     options=None,  # 默认值
                     created_by_id=created_by_id,
                     updated_by_id=created_by_id,
@@ -402,18 +400,16 @@ class TemplateService:
                 # 查询是否已存在
                 result = await db.execute(
                     select(TemplatePlaceholder).where(
-                        TemplatePlaceholder.placeholder_name == placeholder_name
+                        TemplatePlaceholder.name == placeholder_name
                     )
                 )
                 placeholder = result.scalar_one_or_none()
                 
                 if not placeholder:
-                    # 创建新占位符（只设置 placeholder_name，其他用默认值）
+                    # 创建新占位符（只设置 name，其他用默认值）
                     placeholder = TemplatePlaceholder(
-                        placeholder_name=placeholder_name,
+                        name=placeholder_name,
                         type="text",  # 默认类型
-                        required=False,  # 默认值
-                        hint=None,  # 默认值
                         options=None,  # 默认值
                         created_by_id=updated_by_id,
                         updated_by_id=updated_by_id,
@@ -460,72 +456,42 @@ class TemplateService:
 class PlaceholderService:
     """占位符服务"""
     
-    async def create_or_update_placeholder(
+    async def create_placeholder(
         self,
         db: AsyncSession,
-        placeholder_name: str,
+        name: str,
         type: str,
-        required: bool = False,
-        hint: Optional[str] = None,
         options: Optional[List[Dict[str, Any]]] = None,
-        label: Optional[str] = None,
-        default_value: Optional[str] = None,
         created_by_id: Optional[int] = None,
     ) -> TemplatePlaceholder:
         """
-        创建或更新占位符（以 placeholder_name 为唯一标识）
+        创建占位符（以 name 为唯一标识）
         
-        Args:
-            db: 数据库会话
-            placeholder_name: 占位符名称（唯一）
-            type: 占位符类型
-            required: 是否必填
-            hint: 提示文本
-            options: 选项列表
-            created_by_id: 创建人ID
-            
-        Returns:
-            TemplatePlaceholder: 占位符对象
+        如果占位符已存在，抛出 ValueError 异常
         """
         from sqlalchemy import select
         
-        # 查询是否已存在
         result = await db.execute(
             select(TemplatePlaceholder).where(
-                TemplatePlaceholder.placeholder_name == placeholder_name
+                TemplatePlaceholder.name == name
             )
         )
         placeholder = result.scalar_one_or_none()
         
         if placeholder:
-            # 更新现有占位符
-            placeholder.type = type
-            placeholder.required = required
-            placeholder.hint = hint
-            placeholder.label = label if label is not None else placeholder.label
-            placeholder.default_value = default_value if default_value is not None else placeholder.default_value
-            placeholder.options = options
-            placeholder.updated_by_id = created_by_id
-            await db.commit()
-            await db.refresh(placeholder)
-            logger.info(f"更新占位符成功: {placeholder_name}")
-        else:
-            # 创建新占位符
-            placeholder = TemplatePlaceholder(
-                placeholder_name=placeholder_name,
-                label=label or placeholder_name,
-                type=type,
-                required=required,
-                hint=hint,
-                default_value=default_value,
-                options=options,
-                created_by_id=created_by_id,
-                updated_by_id=created_by_id,
-            )
-            db.add(placeholder)
-            await db.commit()
-            await db.refresh(placeholder)
-            logger.info(f"创建占位符成功: {placeholder_name}")
+            raise ValueError(f"占位符 '{name}' 已存在")
+        
+        placeholder = TemplatePlaceholder(
+            name=name,
+            type=type,
+            options=options,
+            created_by_id=created_by_id,
+            updated_by_id=created_by_id,
+        )
+        db.add(placeholder)
+        await db.commit()
+        await db.refresh(placeholder)
+        logger.info(f"创建占位符成功: {name}")
         
         return placeholder
     
@@ -548,7 +514,7 @@ class PlaceholderService:
         
         result = await db.execute(
             select(TemplatePlaceholder).where(
-                TemplatePlaceholder.placeholder_name == placeholder_name
+                TemplatePlaceholder.name == placeholder_name
             )
         )
         return result.scalar_one_or_none()
@@ -609,52 +575,26 @@ class PlaceholderService:
         self,
         db: AsyncSession,
         placeholder_name: str,
-        new_placeholder_name: Optional[str] = None,
+        new_name: Optional[str] = None,
         type: Optional[str] = None,
-        required: Optional[bool] = None,
-        hint: Optional[str] = None,
         options: Optional[List[Dict[str, Any]]] = None,
-        label: Optional[str] = None,
-        default_value: Optional[str] = None,
         updated_by_id: Optional[int] = None,
     ) -> Optional[TemplatePlaceholder]:
         """
         更新占位符
-        
-        Args:
-            db: 数据库会话
-            placeholder_name: 占位符名称（用于查找）
-            new_placeholder_name: 新的占位符名称（可选，用于重命名）
-            type: 占位符类型
-            required: 是否必填
-            hint: 提示文本
-            options: 选项列表
-            updated_by_id: 更新人ID
-            
-        Returns:
-            Optional[TemplatePlaceholder]: 更新后的占位符对象，不存在返回 None
         """
         placeholder = await self.get_placeholder(db, placeholder_name)
         if not placeholder:
             return None
         
-        # 如果提供了新名称且与旧名称不同，检查新名称是否已存在
-        if new_placeholder_name and new_placeholder_name != placeholder_name:
-            existing = await self.get_placeholder(db, new_placeholder_name)
+        if new_name and new_name != placeholder_name:
+            existing = await self.get_placeholder(db, new_name)
             if existing:
-                raise ValueError(f"占位符名称 '{new_placeholder_name}' 已存在")
-            placeholder.placeholder_name = new_placeholder_name
+                raise ValueError(f"占位符名称 '{new_name}' 已存在")
+            placeholder.name = new_name
         
         if type is not None:
             placeholder.type = type
-        if required is not None:
-            placeholder.required = required
-        if hint is not None:
-            placeholder.hint = hint
-        if label is not None:
-            placeholder.label = label
-        if default_value is not None:
-            placeholder.default_value = default_value
         if options is not None:
             placeholder.options = options
         if updated_by_id is not None:
@@ -663,7 +603,7 @@ class PlaceholderService:
         await db.commit()
         await db.refresh(placeholder)
         
-        logger.info(f"更新占位符成功: {placeholder_name}" + (f" -> {new_placeholder_name}" if new_placeholder_name else ""))
+        logger.info(f"更新占位符成功: {placeholder_name}" + (f" -> {new_name}" if new_name else ""))
         return placeholder
     
     async def delete_placeholder(

@@ -23,12 +23,8 @@ export interface PlaceholderPosition {
 
 export interface BackendPlaceholderMeta {
   id: number
-  placeholder_name: string
-  label?: string | null
+  name: string
   type: string
-  required: boolean
-  hint?: string | null
-  default_value?: string | null
   options?: Array<{ label: string; value: string }>
   created_at?: string
   updated_at?: string
@@ -49,12 +45,8 @@ export interface PlaceholderMeta {
 }
 
 export interface PlaceholderPayload {
-  placeholder_name: string
-  label?: string
+  name: string
   type: string
-  required?: boolean
-  hint?: string
-  default_value?: string
   options?: Array<{ label: string; value: string }>
 }
 
@@ -192,7 +184,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
       const items: BackendPlaceholderMeta[] = response.data || []
       const map: Record<string, BackendPlaceholderMeta> = {}
       items.forEach((item) => {
-        map[item.placeholder_name] = {
+        map[item.name] = {
           ...item,
           options: item.options ?? undefined,
         }
@@ -214,7 +206,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         const items: BackendPlaceholderMeta[] = response.data || []
         const map: Record<string, BackendPlaceholderMeta> = {}
         items.forEach((item) => {
-          map[item.placeholder_name] = {
+          map[item.name] = {
             ...item,
             options: item.options ?? undefined,
           }
@@ -265,38 +257,40 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
 
   const createPlaceholder = useCallback(
     async (payload: PlaceholderPayload, options?: { insertIntoDocument?: boolean }) => {
-      const targetTemplateId = ensureTemplateId()
       const snapshot = deepClone(backendMap)
       const shouldInsert = options?.insertIntoDocument ?? false
       setIsMutating(true)
       setBackendMap((prev) => ({
         ...prev,
-        [payload.placeholder_name]: {
-          id: prev[payload.placeholder_name]?.id ?? Date.now(),
-          placeholder_name: payload.placeholder_name,
-        label: payload.label ?? prev[payload.placeholder_name]?.label ?? payload.placeholder_name,
+        [payload.name]: {
+          id: prev[payload.name]?.id ?? Date.now(),
+          name: payload.name,
           type: payload.type,
-          required: Boolean(payload.required),
-        hint: payload.hint,
-        default_value: payload.default_value,
           options: payload.options,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
       }))
       try {
-        await templateApi.createOrUpdatePlaceholder(payload)
-        await templateApi.associatePlaceholderToTemplate(
-          targetTemplateId,
-          payload.placeholder_name
-        )
+        // 1. 创建全局占位符（不自动关联到模板）
+        await templateApi.createPlaceholder(payload)
+        
+        // 2. 如果需要在文档中插入，则关联到当前模板
         if (shouldInsert) {
+          const targetTemplateId = ensureTemplateId()
+          await templateApi.associatePlaceholderToTemplate(
+            targetTemplateId,
+            payload.name
+          )
           await invokeBridge("insert", payload)
         }
-        await Promise.all([
-          loadBackendPlaceholders(targetTemplateId),
-          loadAllSystemPlaceholders(),
-        ])
+        
+        // 3. 刷新占位符列表
+        await loadAllSystemPlaceholders()
+        // 如果当前有模板ID，也刷新当前模板的占位符列表（但不强制要求）
+        if (currentTemplateId) {
+          await loadBackendPlaceholders(currentTemplateId)
+        }
       } catch (error) {
         setBackendMap(snapshot)
         throw error
@@ -304,7 +298,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         setIsMutating(false)
       }
     },
-    [backendMap, ensureTemplateId, loadBackendPlaceholders]
+    [backendMap, ensureTemplateId, loadBackendPlaceholders, currentTemplateId, loadAllSystemPlaceholders, invokeBridge]
   )
 
   const updatePlaceholder = useCallback(
@@ -316,16 +310,11 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         [fieldKey]: {
           ...(prev[fieldKey] ?? {
             id: Date.now(),
-            placeholder_name: fieldKey,
-            required: Boolean(payload.required),
+            name: fieldKey,
             type: payload.type,
           }),
-          label: payload.label ?? prev[fieldKey]?.label,
-          placeholder_name: payload.placeholder_name || fieldKey,
+          name: payload.name || fieldKey,
           type: payload.type,
-          required: Boolean(payload.required),
-          hint: payload.hint,
-          default_value: payload.default_value ?? prev[fieldKey]?.default_value,
           options: payload.options,
           updated_at: new Date().toISOString(),
         },
@@ -337,9 +326,9 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
           loadAllSystemPlaceholders(),
         ])
         if (
-          payload.placeholder_name &&
-          payload.placeholder_name.trim() &&
-          payload.placeholder_name.trim() !== fieldKey
+          payload.name &&
+          payload.name.trim() &&
+          payload.name.trim() !== fieldKey
         ) {
           await invokeBridge("rename", fieldKey, payload)
         }
@@ -434,15 +423,11 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         const docMeta = docPlaceholderMap[id]
         if (!docMeta) return null
         const backend = backendMap[docMeta.fieldKey]
-        const mergedLabel = backend?.label ?? docMeta.label ?? docMeta.fieldKey
-        const mergedDescription = backend?.hint ?? docMeta.description
-        const mergedDefault = backend?.default_value ?? docMeta.defaultValue
+        const mergedLabel = docMeta.label ?? docMeta.fieldKey
         const mergedDataType = backend?.type ?? docMeta.dataType
         return {
           ...docMeta,
           label: mergedLabel,
-          description: mergedDescription ?? undefined,
-          defaultValue: mergedDefault ?? undefined,
           dataType: mergedDataType,
           backendMeta: backend,
           status: backend ? "bound" : "unbound",
@@ -459,9 +444,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         return {
           id: `backend-${fieldKey}`,
           fieldKey,
-          label: backend.label ?? backend.placeholder_name ?? fieldKey,
-          description: backend.hint ?? undefined,
-          defaultValue: backend.default_value ?? undefined,
+          label: fieldKey,
           dataType: backend.type,
           status: "pending" as PlaceholderStatus,
           source: "backend" as const,
@@ -485,9 +468,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
       return {
         id: `system-${fieldKey}`,
         fieldKey,
-        label: backend.label ?? backend.placeholder_name ?? fieldKey,
-        description: backend.hint ?? undefined,
-        defaultValue: backend.default_value ?? undefined,
+        label: fieldKey,
         dataType: backend.type,
         status: backendMap[fieldKey] ? "bound" : "pending" as PlaceholderStatus,
         source: "backend" as const,
@@ -618,4 +599,5 @@ export const usePlaceholderDocumentBridge = (bridge: PlaceholderDocumentBridge |
     return () => manager.registerDocumentBridge(null)
   }, [bridge, manager])
 }
+
 
