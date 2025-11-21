@@ -41,8 +41,16 @@ export const createEmptyPlaceholderForm = (): PlaceholderFormState => ({
 export const normalizePlaceholderOptions = (formData: PlaceholderFormState) =>
   formData.options?.filter((opt) => (opt.label ?? "").trim() || (opt.value ?? "").trim()) || []
 
-export const isValidFieldKey = (value: string) =>
-  /^[a-zA-Z_][a-zA-Z0-9_.-]*$/.test(value)
+export const isValidFieldKey = (value: string) => {
+  // 允许中文字符、英文字母、数字、下划线、点、连字符
+  // 不能为空，不能包含花括号（因为占位符格式是 {{name}}）
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  // 不允许包含花括号，避免与占位符语法冲突
+  if (trimmed.includes('{') || trimmed.includes('}')) return false
+  // 允许任何其他字符（包括中文）
+  return true
+}
 
 export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormState => {
   // 确保 options 数组中的每个对象都有正确的结构

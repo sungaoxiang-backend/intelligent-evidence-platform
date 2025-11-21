@@ -185,7 +185,7 @@ export function PlaceholderList() {
     if (!isValidFieldKey(formData.fieldKey.trim())) {
       toast({
         title: "字段标识格式错误",
-        description: "仅允许使用字母、数字和下划线，且不能以数字开头",
+        description: "占位符名称不能为空，且不能包含花括号 { }",
         variant: "destructive",
       })
       return
@@ -368,7 +368,7 @@ export function PlaceholderList() {
               className="h-6 px-2 text-[10px] font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex-shrink-0"
             >
               <Plus className="h-3 w-3 mr-1" />
-              新建
+              新占位符
             </Button>
           </div>
         }
@@ -389,7 +389,7 @@ export function PlaceholderList() {
           <div className="p-8 text-center text-muted-foreground">
             <Hash className="h-12 w-12 mx-auto mb-2 opacity-50" />
             <p className="text-sm">暂无占位符</p>
-            <p className="text-xs mt-1">点击"新建"按钮添加占位符</p>
+            <p className="text-xs mt-1">点击"新占位符"按钮添加占位符</p>
           </div>
         }
       >
