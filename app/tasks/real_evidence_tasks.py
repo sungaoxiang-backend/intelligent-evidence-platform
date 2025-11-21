@@ -472,19 +472,24 @@ def cast_evidence_cards_task(self, case_id: int, evidence_ids: List[int], card_i
         error_traceback = traceback.format_exc()
         logger.error(f"错误详情: {error_traceback}")
         
-        # 更新任务状态为失败，确保异常信息可以被正确序列化
+        # 构建错误结果
+        error_result = {
+            "status": "failed",
+            "message": f"证据卡片铸造失败: {str(e)}",
+            "error": str(e),
+            "traceback": error_traceback,
+            "cards": []
+        }
+        
+        # 更新任务状态为失败，并返回错误结果而不是抛出异常
+        # 这样可以避免 Celery 序列化异常时出现问题
         self.update_state(
             state="FAILURE",
-            meta={
-                "status": "failed",
-                "message": f"证据卡片铸造失败: {str(e)}",
-                "error": str(e),
-                "traceback": error_traceback
-            }
+            meta=error_result
         )
         
-        # 重新抛出异常，但确保异常类型可以被序列化
-        raise Exception(f"证据卡片铸造失败: {str(e)}")
+        # 返回错误结果而不是抛出异常
+        return error_result
 
 
 async def _cast_evidence_cards_async(
