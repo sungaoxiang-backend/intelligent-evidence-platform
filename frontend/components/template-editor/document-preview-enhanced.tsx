@@ -99,10 +99,12 @@ export function DocumentPreviewEnhanced({
   
   // 创建编辑器实例
   const editor = useEditor({
+    immediatelyRender: false, // 修复 SSR hydration 问题
     extensions: [
       StarterKit.configure({
         heading: false,
         paragraph: false,
+        hardBreak: false, // 禁用 StarterKit 中的 hardBreak，避免重复扩展
       }),
       HardBreak.configure({
         keepMarks: true,

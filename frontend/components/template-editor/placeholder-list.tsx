@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useId, useCallback } from "react"
+import React, { useState, useMemo, useId, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -145,21 +145,32 @@ export function PlaceholderList() {
   }
 
   const handleOpenCreate = () => {
+    // 确保重置所有状态，防止遮罩层残留
     setEditingPlaceholder(null)
     resetForm()
+    setIsSubmitting(false) // 确保提交状态已重置
     setCreateDialogOpen(true)
   }
 
   const handleOpenEdit = (placeholder: PlaceholderMeta) => {
+    // 确保重置所有状态，防止遮罩层残留
     setEditingPlaceholder(placeholder)
     setFormData(buildFormStateFromMeta(placeholder))
+    setIsSubmitting(false) // 确保提交状态已重置
     setCreateDialogOpen(true)
   }
 
   const handleCloseDialog = () => {
+    // 确保在关闭时重置所有状态，防止遮罩层残留
+    // 即使 isSubmitting 为 true，也允许关闭（用户可能想取消操作）
     setCreateDialogOpen(false)
     setEditingPlaceholder(null)
     resetForm()
+    // 如果正在提交，不重置 isSubmitting，让 finally 块处理
+    // 如果不在提交，确保重置
+    if (!isSubmitting) {
+      setIsSubmitting(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -391,7 +402,14 @@ export function PlaceholderList() {
         )}
       </SidebarLayout>
 
-      <Dialog open={createDialogOpen} onOpenChange={handleCloseDialog}>
+      <Dialog 
+        open={createDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseDialog()
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingPlaceholder ? "编辑占位符" : "新建占位符"}</DialogTitle>
