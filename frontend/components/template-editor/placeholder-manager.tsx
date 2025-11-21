@@ -182,6 +182,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     try {
       const response = await templateApi.getPlaceholders({ limit: 1000 })
       const items: BackendPlaceholderMeta[] = response.data || []
+      console.log('[PlaceholderManager] loadAllSystemPlaceholders: received', items.length, 'system placeholders')
       const map: Record<string, BackendPlaceholderMeta> = {}
       items.forEach((item) => {
         map[item.name] = {
@@ -189,21 +190,32 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
           options: item.options ?? undefined,
         }
       })
+      console.log('[PlaceholderManager] loadAllSystemPlaceholders: allSystemPlaceholdersMap keys:', Object.keys(map).slice(0, 10))
       setAllSystemPlaceholdersMap(map)
     } catch (error) {
-      console.error("Failed to load all system placeholders:", error)
+      console.error("[PlaceholderManager] Failed to load all system placeholders:", error)
     }
   }, [])
 
   const loadBackendPlaceholders = useCallback(
     async (templateIdOverride?: number) => {
       const targetId = templateIdOverride ?? currentTemplateId
-      if (!targetId) return
+      if (!targetId) {
+        console.log('[PlaceholderManager] loadBackendPlaceholders: no templateId, skipping')
+        return
+      }
 
+      console.log('[PlaceholderManager] loadBackendPlaceholders: loading for templateId =', targetId)
       setIsSyncing(true)
       try {
+        // 先加载所有系统占位符，确保 allSystemPlaceholdersMap 有数据
+        await loadAllSystemPlaceholders()
+        
+        // 然后加载当前模板关联的占位符
         const response = await templateApi.getPlaceholders({ template_id: targetId })
         const items: BackendPlaceholderMeta[] = response.data || []
+        console.log('[PlaceholderManager] loadBackendPlaceholders: received', items.length, 'associated placeholders:', items.map(i => i.name))
+        
         const map: Record<string, BackendPlaceholderMeta> = {}
         items.forEach((item) => {
           map[item.name] = {
@@ -211,11 +223,10 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
             options: item.options ?? undefined,
           }
         })
+        console.log('[PlaceholderManager] loadBackendPlaceholders: backendMap keys:', Object.keys(map))
         setBackendMap(map)
-        // 同时加载所有系统占位符
-        await loadAllSystemPlaceholders()
       } catch (error) {
-        console.error("Failed to load placeholders:", error)
+        console.error("[PlaceholderManager] Failed to load placeholders:", error)
       } finally {
         setIsSyncing(false)
       }
@@ -404,12 +415,20 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
       const targetTemplateId = ensureTemplateId()
       // 如果已经存在于当前模板，直接返回
       if (backendMap[fieldKey]) {
+        console.log('[PlaceholderManager] ensureAssociation: already associated, skipping', fieldKey)
         return
       }
+      console.log('[PlaceholderManager] ensureAssociation: associating', fieldKey, 'to template', targetTemplateId)
       setIsMutating(true)
       try {
         await templateApi.associatePlaceholderToTemplate(targetTemplateId, fieldKey)
+        console.log('[PlaceholderManager] ensureAssociation: API call successful, reloading placeholders')
+        // 重新加载关联数据
         await loadBackendPlaceholders(targetTemplateId)
+        console.log('[PlaceholderManager] ensureAssociation: reload completed')
+      } catch (error: any) {
+        console.error('[PlaceholderManager] ensureAssociation: failed', error)
+        throw error
       } finally {
         setIsMutating(false)
       }
@@ -479,7 +498,18 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
 
   // 区分关联和未关联的占位符
   const associatedPlaceholders = useMemo(() => {
-    return allSystemPlaceholders.filter((p) => backendMap[p.fieldKey])
+    const associated = allSystemPlaceholders.filter((p) => backendMap[p.fieldKey])
+    console.log('[PlaceholderManager] associatedPlaceholders:', {
+      total: allSystemPlaceholders.length,
+      associated: associated.length,
+      backendMapKeys: Object.keys(backendMap),
+      sampleFieldKeys: allSystemPlaceholders.slice(0, 3).map(p => p.fieldKey),
+      sampleMatches: allSystemPlaceholders.slice(0, 3).map(p => ({
+        fieldKey: p.fieldKey,
+        inBackendMap: !!backendMap[p.fieldKey]
+      }))
+    })
+    return associated
   }, [allSystemPlaceholders, backendMap])
 
   const unassociatedPlaceholders = useMemo(() => {

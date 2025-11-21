@@ -250,6 +250,7 @@ export function DocumentPreviewInteractive({
         return
       }
       
+      // 从文档中删除所有占位符实例
       let tr = editor.state.tr
       matches
         .sort((a, b) => b.pos - a.pos)
@@ -258,7 +259,24 @@ export function DocumentPreviewInteractive({
         })
       
       editor.view.dispatch(tr)
-      onChange?.(editor.getJSON())
+      const updatedContent = editor.getJSON()
+      onChange?.(updatedContent)
+      
+      // 检查文档中是否还有其他该占位符的实例
+      // 如果没有，则从模板中移除占位符关联
+      const remainingMatches = collectPlaceholderNodes(chipMenuFieldKey)
+      if (remainingMatches.length === 0) {
+        // 文档中已经没有该占位符了，移除关联
+        try {
+          await placeholderManager.detachPlaceholder(chipMenuFieldKey)
+          // 确保刷新关联状态
+          await placeholderManager.loadBackendPlaceholders()
+        } catch (error: any) {
+          console.error('Failed to detach placeholder:', error)
+          // 即使移除关联失败，也继续显示删除成功的提示
+          // 因为文档中的占位符已经删除了
+        }
+      }
       
       toast({
         title: "删除成功",
@@ -274,7 +292,7 @@ export function DocumentPreviewInteractive({
     }
     
     setChipMenuOpen(false)
-  }, [chipMenuFieldKey, editor, onChange, toast, collectPlaceholderNodes])
+  }, [chipMenuFieldKey, editor, onChange, toast, collectPlaceholderNodes, placeholderManager])
   
   // 替换占位符
   const handleReplacePlaceholder = useCallback(() => {
@@ -307,7 +325,18 @@ export function DocumentPreviewInteractive({
       if (insertPosition === -1 && selectedFieldKey) {
         console.log('[handleSelectPlaceholder] Replace mode: replacing', selectedFieldKey, 'with', fieldKey)
         
-        // 确保新的占位符关联到当前模板（在管理占位符模式下）
+        const matches = collectPlaceholderNodes(selectedFieldKey)
+        if (matches.length === 0) {
+          toast({
+            title: "未找到",
+            description: "文档中没有找到该占位符",
+          })
+          setInsertPosition(null)
+          setSelectedFieldKey(null)
+          return
+        }
+        
+        // 1. 先关联新的占位符到模板
         try {
           await placeholderManager.ensureAssociation(fieldKey)
         } catch (error: any) {
@@ -322,17 +351,7 @@ export function DocumentPreviewInteractive({
           return
         }
         
-        const matches = collectPlaceholderNodes(selectedFieldKey)
-        if (matches.length === 0) {
-          toast({
-            title: "未找到",
-            description: "文档中没有找到该占位符",
-          })
-          setInsertPosition(null)
-          setSelectedFieldKey(null)
-          return
-        }
-        
+        // 2. 在文档中替换占位符
         const placeholderType = editor.state.schema.nodes.placeholder
         if (!placeholderType) {
           console.warn("Placeholder node type is not registered")
@@ -345,7 +364,23 @@ export function DocumentPreviewInteractive({
         })
         editor.view.dispatch(tr)
         
-        onChange?.(editor.getJSON())
+        const updatedContent = editor.getJSON()
+        onChange?.(updatedContent)
+        
+        // 3. 检查旧占位符是否还在文档中，如果不在，则移除关联
+        const remainingOldMatches = collectPlaceholderNodes(selectedFieldKey)
+        if (remainingOldMatches.length === 0 && selectedFieldKey !== fieldKey) {
+          // 文档中已经没有旧占位符了，且新旧占位符不同，移除旧占位符的关联
+          try {
+            await placeholderManager.detachPlaceholder(selectedFieldKey)
+          } catch (error: any) {
+            console.error('Failed to detach old placeholder:', error)
+            // 即使移除关联失败，也继续显示替换成功的提示
+          }
+        }
+        
+        // 4. 确保刷新关联状态（无论是否移除旧关联）
+        await placeholderManager.loadBackendPlaceholders()
         
         toast({
           title: "替换成功",
@@ -364,6 +399,8 @@ export function DocumentPreviewInteractive({
         // 确保占位符关联到当前模板（在管理占位符模式下）
         try {
           await placeholderManager.ensureAssociation(fieldKey)
+          // 确保刷新关联状态
+          await placeholderManager.loadBackendPlaceholders()
         } catch (error: any) {
           console.error('Failed to ensure association:', error)
           toast({

@@ -26,7 +26,10 @@ class TemplateEditorService:
     
     def extract_placeholders(self, prosemirror_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        从 ProseMirror JSON 中提取占位符（{{name}} 格式）
+        从 ProseMirror JSON 中提取占位符
+        支持两种格式：
+        1. placeholder 节点（type="placeholder", attrs.fieldKey）
+        2. 文本中的 {{name}} 格式
         
         Args:
             prosemirror_json: ProseMirror JSON 格式的文档
@@ -48,8 +51,31 @@ class TemplateEditorService:
             """递归遍历 ProseMirror 节点树"""
             node_type = node.get("type")
             
-            # 如果是文本节点，检查文本内容
-            if node_type == "text":
+            # 如果是 placeholder 节点，直接提取 fieldKey
+            if node_type == "placeholder":
+                attrs = node.get("attrs", {})
+                field_key = attrs.get("fieldKey") or attrs.get("field_key")
+                if field_key:
+                    placeholder_name = str(field_key).strip()
+                    if placeholder_name:
+                        placeholders_set.add(placeholder_name)
+                        
+                        # 记录占位符的元数据
+                        if placeholder_name not in placeholder_metadata:
+                            placeholder_metadata[placeholder_name] = {
+                                'count': 0,
+                                'positions': []
+                            }
+                        
+                        placeholder_metadata[placeholder_name]['count'] += 1
+                        placeholder_metadata[placeholder_name]['positions'].append({
+                            'path': path.copy(),
+                            'node_type': 'placeholder',
+                            'fieldKey': placeholder_name
+                        })
+            
+            # 如果是文本节点，检查文本内容中的 {{placeholder}} 格式
+            elif node_type == "text":
                 text = node.get("text", "")
                 # 使用正则表达式提取 {{placeholder}} 格式的占位符
                 pattern = r'\{\{([^}]+)\}\}'
@@ -385,17 +411,20 @@ class TemplateService:
             placeholder_info = template_editor_service.extract_placeholders(prosemirror_json)
             placeholder_names = placeholder_info.get('placeholders', [])
             
-            # 清除旧的关联关系（直接操作中间表，避免触发懒加载）
             from .models import template_placeholder_association
-            await db.execute(
-                template_placeholder_association.delete().where(
+            
+            # 获取当前模板的所有关联占位符ID
+            existing_associations_result = await db.execute(
+                select(template_placeholder_association.c.placeholder_id).where(
                     template_placeholder_association.c.template_id == template.id
                 )
             )
-            await db.flush()
+            existing_placeholder_ids = {row[0] for row in existing_associations_result.all()}
             
-            # 为每个占位符名称创建或获取 TemplatePlaceholder 对象并关联到模板
+            # 获取文档中占位符名称对应的占位符对象
             placeholder_objects = []
+            placeholder_name_to_id: Dict[str, int] = {}
+            
             for placeholder_name in placeholder_names:
                 # 查询是否已存在
                 result = await db.execute(
@@ -421,16 +450,36 @@ class TemplateService:
                     logger.info(f"使用已存在的占位符: {placeholder_name}")
                 
                 placeholder_objects.append(placeholder)
+                placeholder_name_to_id[placeholder_name] = placeholder.id
             
-            # 关联占位符到模板（直接操作中间表，避免触发懒加载）
-            if placeholder_objects:
-                for placeholder in placeholder_objects:
-                    await db.execute(
-                        template_placeholder_association.insert().values(
-                            template_id=template.id,
-                            placeholder_id=placeholder.id
-                        )
+            # 计算需要添加和删除的关联
+            new_placeholder_ids = {p.id for p in placeholder_objects}
+            ids_to_add = new_placeholder_ids - existing_placeholder_ids
+            # 注意：只删除文档中不再存在的占位符关联，保留手动关联的占位符
+            # 这里我们只删除那些在文档中不再出现的占位符
+            ids_to_remove = existing_placeholder_ids - new_placeholder_ids
+            
+            # 删除文档中不再存在的占位符关联
+            if ids_to_remove:
+                await db.execute(
+                    template_placeholder_association.delete().where(
+                        (template_placeholder_association.c.template_id == template.id) &
+                        (template_placeholder_association.c.placeholder_id.in_(ids_to_remove))
                     )
+                )
+                logger.info(f"删除 {len(ids_to_remove)} 个不再使用的占位符关联")
+            
+            # 添加新的占位符关联（如果不存在）
+            if ids_to_add:
+                for placeholder in placeholder_objects:
+                    if placeholder.id in ids_to_add:
+                        await db.execute(
+                            template_placeholder_association.insert().values(
+                                template_id=template.id,
+                                placeholder_id=placeholder.id
+                            )
+                        )
+                logger.info(f"添加 {len(ids_to_add)} 个新的占位符关联")
         
         await db.commit()
         await db.refresh(template)

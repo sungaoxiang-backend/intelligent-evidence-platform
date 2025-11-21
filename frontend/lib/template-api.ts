@@ -273,16 +273,25 @@ export const templateApi = {
     if (params?.limit !== undefined) queryParams.append("limit", String(params.limit))
 
     const url = buildApiUrl(`/template-editor/placeholders${queryParams.toString() ? `?${queryParams.toString()}` : ""}`)
+    console.log('[template-api] getPlaceholders: GET', url, params)
+    
     const response = await fetch(url, {
       headers: getAuthHeader(),
     })
 
     if (!response.ok) {
       const error = await response.json()
+      console.error('[template-api] getPlaceholders: error', error)
       throw new Error(error.detail || "获取占位符列表失败")
     }
 
     const result = await response.json()
+    console.log('[template-api] getPlaceholders: response', {
+      code: result.code,
+      total: result.total,
+      dataCount: result.data?.length || 0,
+      data: result.data?.map((p: any) => p.name) || []
+    })
     return result
   },
 
@@ -366,18 +375,23 @@ export const templateApi = {
     templateId: number,
     placeholderName: string
   ): Promise<void> {
-    const response = await fetch(
-      buildApiUrl(`/template-editor/templates/${templateId}/placeholders/${placeholderName}`),
-      {
-        method: "POST",
-        headers: getAuthHeader(),
-      }
-    )
+    const url = buildApiUrl(`/template-editor/templates/${templateId}/placeholders/${placeholderName}`)
+    console.log('[template-api] associatePlaceholderToTemplate: POST', url, { templateId, placeholderName })
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: getAuthHeader(),
+    })
+
+    console.log('[template-api] associatePlaceholderToTemplate: response status', response.status, response.statusText)
 
     if (!response.ok) {
       const error = await response.json()
+      console.error('[template-api] associatePlaceholderToTemplate: error', error)
       throw new Error(error.detail || "关联占位符到模板失败")
     }
+    
+    console.log('[template-api] associatePlaceholderToTemplate: success')
   },
 
   // 从模板中移除占位符关联

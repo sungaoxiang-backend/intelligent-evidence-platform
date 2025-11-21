@@ -19,6 +19,7 @@ import {
   templateBaseStyles,
 } from "../template-editor/extensions"
 import { normalizeHardBreaks } from "../template-editor/utils"
+import { PlaceholderNode } from "../template-editor/placeholder-node-extension"
 import { PlaceholderFieldExtension, requestPlaceholderFieldRefresh } from "./placeholder-field-extension"
 import { InlineFieldRenderer } from "./inline-field-renderer"
 import type { PlaceholderInfo } from "@/lib/document-generation-api"
@@ -47,9 +48,32 @@ export function DocumentGenerationViewer({
   const previousContentRef = useRef<string | null>(null)
   const [fieldMounts, setFieldMounts] = React.useState<HTMLElement[]>([])
 
+  // 将 placeholder 节点转换为文本格式的 {{fieldKey}}，以便 PlaceholderFieldExtension 处理
+  const convertPlaceholderNodesToText = (node: JSONContent): JSONContent => {
+    if (node.type === "placeholder") {
+      const fieldKey = node.attrs?.fieldKey || ""
+      return {
+        type: "text",
+        text: `{{${fieldKey}}}`,
+      }
+    }
+    
+    if (node.content && Array.isArray(node.content)) {
+      return {
+        ...node,
+        content: node.content.map(convertPlaceholderNodesToText),
+      }
+    }
+    
+    return node
+  }
+
   const normalizeContent = (value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    const cloned = JSON.parse(JSON.stringify(value))
+    // 先转换 placeholder 节点为文本格式（在 normalizeHardBreaks 之前）
+    const withTextPlaceholders = convertPlaceholderNodesToText(cloned)
+    return normalizeHardBreaks(withTextPlaceholders)
   }
 
   const editor = useEditor({
@@ -86,7 +110,12 @@ export function DocumentGenerationViewer({
       Underline,
       TextStyle,
       Color,
-      // 使用专门的占位符字段扩展
+      // 注册 PlaceholderNode 以支持解析模板中的 placeholder 节点
+      // 但我们会将它们转换为文本格式，由 PlaceholderFieldExtension 处理
+      PlaceholderNode.configure({
+        getPlaceholderMeta: () => undefined,
+      }),
+      // 使用专门的占位符字段扩展来处理文本中的 {{xxx}} 格式
       PlaceholderFieldExtension.configure({
         placeholders,
         formData,
