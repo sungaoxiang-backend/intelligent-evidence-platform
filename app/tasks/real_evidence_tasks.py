@@ -15,6 +15,8 @@ from sqlalchemy.orm import joinedload
 from app.users.models import User  # 导入 User 模型
 from app.staffs.models import Staff  # 导入 Staff 模型
 from app.cases.models import CaseParty  # 导入 CaseParty 模型
+from app.document_generation.models import DocumentGeneration  # 导入 DocumentGeneration 模型
+from app.template_editor.models import DocumentTemplate  # 导入 DocumentTemplate 模型
 
 
 @celery_app.task(bind=True)
