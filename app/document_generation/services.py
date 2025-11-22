@@ -362,12 +362,12 @@ class DocumentGenerationService:
                             formatted_value = format_placeholder_value(placeholder_name, value, meta)
                         else:
                             formatted_value = ""  # 如果没有值，返回空内容
-                    
-                    # 将 placeholder 节点替换为 text 节点
-                    node["type"] = "text"
-                    node["text"] = formatted_value
-                    if "attrs" in node:
-                        del node["attrs"]
+                        
+                        # 将 placeholder 节点替换为 text 节点
+                        node["type"] = "text"
+                        node["text"] = formatted_value
+                        if "attrs" in node:
+                            del node["attrs"]
             
             # 处理 text 节点中的 {{placeholder}} 格式（兼容旧格式）
             elif node_type == "text":

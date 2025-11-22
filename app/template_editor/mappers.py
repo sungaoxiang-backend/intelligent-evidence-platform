@@ -884,10 +884,76 @@ class ProseMirrorToDocxMapper:
                 self._apply_marks(run, text_node.get("marks", []))
                 if not run.font.color or not run.font.color.rgb:
                     run.font.color.rgb = RGBColor(0, 0, 0)
+            elif node_type == "placeholder":
+                # 处理 placeholder 节点（要素式模板保留的占位符节点）
+                attrs = text_node.get("attrs", {})
+                value = attrs.get("value")
+                placeholder_type = attrs.get("placeholderType", "text")
+                options = attrs.get("options", [])
+                
+                # 格式化占位符值
+                formatted_text = self._format_placeholder_value_for_export(value, placeholder_type, options)
+                
+                if formatted_text:
+                    run = para.add_run(formatted_text)
+                    if not run.font.color or not run.font.color.rgb:
+                        run.font.color.rgb = RGBColor(0, 0, 0)
             elif node_type == "hardBreak":
                 para.add_run().add_break()
 
         return para
+
+    def _format_placeholder_value_for_export(
+        self, 
+        value: Any, 
+        placeholder_type: str, 
+        options: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
+        """格式化占位符值用于导出到 DOCX"""
+        if value is None:
+            return ""
+        
+        # 对于 radio/checkbox 类型，显示所有选项和选中状态
+        if placeholder_type in ["radio", "checkbox"] and options:
+            # 处理 radio：值是单个字符串
+            # 处理 checkbox：值是数组
+            if placeholder_type == "radio":
+                selected_values = [value] if value else []
+            else:
+                selected_values = value if isinstance(value, list) else ([value] if value else [])
+            
+            # 格式化选项：☑ 已选 ☐ 未选
+            formatted_options = []
+            for opt in options:
+                opt_value = opt.get("value", "")
+                opt_label = opt.get("label", opt_value)
+                
+                if opt_value in selected_values:
+                    formatted_options.append(f"☑ {opt_label}")
+                else:
+                    formatted_options.append(f"☐ {opt_label}")
+            
+            return "  ".join(formatted_options)
+        
+        # 其他类型正常处理
+        elif isinstance(value, list):
+            # 数组转换为顿号分隔的字符串
+            if len(value) == 0:
+                return ""
+            return "、".join(str(v) for v in value if v)
+        elif isinstance(value, (int, float)):
+            # 数字转换为字符串
+            return str(value)
+        elif isinstance(value, str):
+            if value == "":
+                return ""
+            return value
+        elif isinstance(value, bool):
+            # 布尔值转换为字符串
+            return "是" if value else "否"
+        else:
+            # 其他类型转换为字符串
+            return str(value) if value else ""
 
     def _apply_list_format(self, para: Paragraph, list_info: Dict[str, Any]) -> None:
         list_type = list_info.get("type")
@@ -1377,10 +1443,11 @@ class ProseMirrorToDocxMapper:
                 
                 for para_node in cell_content:
                     if para_node.get("type") == "paragraph" or para_node.get("type") == "heading":
-                        # 检查段落是否有文本内容
+                        # 检查段落是否有文本内容（包括 text 和 placeholder 节点）
                         para_content = para_node.get("content", [])
                         has_text = any(
-                            item.get("type") == "text" and item.get("text", "").strip()
+                            (item.get("type") == "text" and item.get("text", "").strip()) or
+                            (item.get("type") == "placeholder" and item.get("attrs", {}).get("value") is not None)
                             for item in para_content
                         )
                         # 检查是否有特殊格式（对齐、缩进、间距等）

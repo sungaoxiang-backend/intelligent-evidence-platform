@@ -312,7 +312,7 @@ class TemplateService:
             placeholder = None
             
             if is_narrative_style:
-                # 陈述式：查询适用于"陈述式"的 type="text" 占位符
+                # 陈述式：优先查询适用于"陈述式"的 type="text" 占位符
                 result = await db.execute(
                     select(TemplatePlaceholder).where(
                         TemplatePlaceholder.name == placeholder_name,
@@ -321,6 +321,20 @@ class TemplateService:
                     )
                 )
                 placeholder = result.scalar_one_or_none()
+                
+                # 如果没有找到 type="text" 的，检查是否存在其他类型的（避免唯一性约束冲突）
+                if not placeholder:
+                    result = await db.execute(
+                        select(TemplatePlaceholder).where(
+                            TemplatePlaceholder.name == placeholder_name,
+                            TemplatePlaceholder.applicable_template_category == "陈述式"
+                        )
+                    )
+                    existing_placeholder = result.scalar_one_or_none()
+                    if existing_placeholder:
+                        # 如果已存在其他类型的占位符，复用它（不强制改为 text）
+                        placeholder = existing_placeholder
+                        logger.info(f"复用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于陈述式)")
                 
                 if not placeholder:
                     # 创建新的 type="text" 占位符，标记为适用于"陈述式"
@@ -336,7 +350,7 @@ class TemplateService:
                     await db.flush()  # flush 以获取 placeholder.id
                     logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于陈述式)")
                 else:
-                    logger.info(f"使用已存在的占位符: {placeholder_name} (type=text, 适用于陈述式)")
+                    logger.info(f"使用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于陈述式)")
             else:
                 # 要素式：查询适用于"要素式"的占位符（任意类型）
                 result = await db.execute(
@@ -468,7 +482,7 @@ class TemplateService:
                 placeholder = None
                 
                 if is_narrative_style:
-                    # 陈述式：查询适用于"陈述式"的 type="text" 占位符
+                    # 陈述式：优先查询适用于"陈述式"的 type="text" 占位符
                     result = await db.execute(
                         select(TemplatePlaceholder).where(
                             TemplatePlaceholder.name == placeholder_name,
@@ -477,6 +491,20 @@ class TemplateService:
                         )
                     )
                     placeholder = result.scalar_one_or_none()
+                    
+                    # 如果没有找到 type="text" 的，检查是否存在其他类型的（避免唯一性约束冲突）
+                    if not placeholder:
+                        result = await db.execute(
+                            select(TemplatePlaceholder).where(
+                                TemplatePlaceholder.name == placeholder_name,
+                                TemplatePlaceholder.applicable_template_category == "陈述式"
+                            )
+                        )
+                        existing_placeholder = result.scalar_one_or_none()
+                        if existing_placeholder:
+                            # 如果已存在其他类型的占位符，复用它（不强制改为 text）
+                            placeholder = existing_placeholder
+                            logger.info(f"复用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于陈述式)")
                     
                     if not placeholder:
                         # 创建新的 type="text" 占位符，标记为适用于"陈述式"
@@ -492,7 +520,7 @@ class TemplateService:
                         await db.flush()  # flush 以获取 placeholder.id
                         logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于陈述式)")
                     else:
-                        logger.info(f"使用已存在的占位符: {placeholder_name} (type=text, 适用于陈述式)")
+                        logger.info(f"使用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于陈述式)")
                 else:
                     # 要素式：查询适用于"要素式"的占位符（任意类型）
                     result = await db.execute(
@@ -852,6 +880,10 @@ class PlaceholderService:
         """
         将占位符关联到模板
         
+        注意：由于唯一性约束改为 (name, applicable_template_category)，
+        同一个 name 可能有多个占位符。此方法会根据模板类型选择合适的占位符。
+        优先级：匹配模板类型的占位符 > 通用占位符（applicable_template_category 为 None）
+        
         Args:
             db: 数据库会话
             template_id: 模板ID
@@ -860,17 +892,40 @@ class PlaceholderService:
         Returns:
             bool: 是否关联成功
         """
-        from sqlalchemy import select
+        from sqlalchemy import select, or_
         from .models import template_placeholder_association
         
-        # 校验模板存在
+        # 获取模板信息（包括 category）
         template_result = await db.execute(
-            select(DocumentTemplate.id).where(DocumentTemplate.id == template_id)
+            select(DocumentTemplate).where(DocumentTemplate.id == template_id)
         )
-        if not template_result.scalar_one_or_none():
+        template = template_result.scalar_one_or_none()
+        if not template:
             return False
         
-        placeholder = await self.get_placeholder(db, placeholder_name)
+        # 根据模板类型选择合适的占位符
+        # 优先级：1. 匹配模板类型的占位符 2. 通用占位符（applicable_template_category 为 None）
+        template_category = template.category or ""
+        
+        # 查询匹配模板类型的占位符
+        result = await db.execute(
+            select(TemplatePlaceholder).where(
+                TemplatePlaceholder.name == placeholder_name,
+                TemplatePlaceholder.applicable_template_category == template_category
+            )
+        )
+        placeholder = result.scalar_one_or_none()
+        
+        # 如果没有找到匹配模板类型的，查找通用占位符
+        if not placeholder:
+            result = await db.execute(
+                select(TemplatePlaceholder).where(
+                    TemplatePlaceholder.name == placeholder_name,
+                    TemplatePlaceholder.applicable_template_category.is_(None)
+                )
+            )
+            placeholder = result.scalar_one_or_none()
+        
         if not placeholder:
             return False
         
