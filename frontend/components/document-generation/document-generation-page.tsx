@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
@@ -15,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import useSWR from "swr"
 
 export function DocumentGenerationPage() {
+  const searchParams = useSearchParams()
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
   const [generationId, setGenerationId] = useState<number | null>(null)
@@ -26,6 +28,8 @@ export function DocumentGenerationPage() {
   const { toast } = useToast()
   
   const lastSavedFormDataRef = useRef<Record<string, any>>({})
+  const hasInitializedCaseIdRef = useRef(false)
+  const hasInitializedTemplateRef = useRef(false)
 
   // 转换API占位符格式为组件格式
   const convertPlaceholders = useCallback((apiPlaceholders: ApiPlaceholderInfo[]): PlaceholderInfo[] => {
@@ -309,6 +313,42 @@ export function DocumentGenerationPage() {
     revalidateOnFocus: false,
   })
 
+  // 从 URL 参数读取 caseId 并自动选择案件
+  useEffect(() => {
+    if (hasInitializedCaseIdRef.current) return
+    if (selectedCaseId !== null) return // 如果已经选择了案件，不再从 URL 读取
+    
+    const caseIdParam = searchParams.get('caseId')
+    if (caseIdParam) {
+      const caseId = Number(caseIdParam)
+      if (!isNaN(caseId) && caseId > 0) {
+        // 如果案件列表已加载，验证 caseId 是否存在
+        if (cases.length > 0) {
+          const caseExists = cases.some(c => c.id === caseId)
+          if (caseExists) {
+            setSelectedCaseId(caseId)
+            hasInitializedCaseIdRef.current = true
+          }
+        } else {
+          // 如果案件列表还未加载，先设置 caseId，后续会验证
+          setSelectedCaseId(caseId)
+          hasInitializedCaseIdRef.current = true
+        }
+      }
+    }
+  }, [searchParams, cases, selectedCaseId])
+
+  // 自动选择首个已发布模板（仅在初始化时执行一次）
+  useEffect(() => {
+    if (hasInitializedTemplateRef.current) return
+    if (templates.length === 0) return
+    if (selectedTemplate) return
+
+    // 自动选择第一个模板
+    setSelectedTemplate(templates[0])
+    hasInitializedTemplateRef.current = true
+  }, [templates, selectedTemplate])
+
   const getCaseDisplayName = (caseItem: Case) => {
     if (caseItem.creditor_name && caseItem.debtor_name) {
       return `${caseItem.creditor_name} vs ${caseItem.debtor_name}`
@@ -335,6 +375,13 @@ export function DocumentGenerationPage() {
     return "未设置"
   }
 
+  const getPartyTypeLabel = (partyType: string | null | undefined): string => {
+    if (partyType === 'person') return '个人'
+    if (partyType === 'company') return '公司'
+    if (partyType === 'individual') return '个体工商户'
+    return 'N/A'
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-[1600px]">
       {/* 顶部：标题 */}
@@ -343,7 +390,7 @@ export function DocumentGenerationPage() {
       </div>
 
       {/* 案件信息卡片 - 放在页面顶部 */}
-      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
+      <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground">案件信息</h3>
           {/* 案件选择器 */}
@@ -368,106 +415,263 @@ export function DocumentGenerationPage() {
         
         {/* 案件基本信息 - 2x2网格布局，与卡片工厂一致 */}
         {caseData && (
-          <div className="p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
-            <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-              案件基本信息
-            </h4>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-              {/* 第一行第一列：案件ID */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500">案件ID</label>
-                <div 
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(String(caseData.id))
-                      toast({
-                        title: "复制成功",
-                        description: "案件ID已复制到剪贴板",
-                      })
-                    } catch (error) {
-                      toast({
-                        title: "复制失败",
-                        description: "无法复制到剪贴板",
-                        variant: "destructive",
-                      })
-                    }
-                  }}
-                  className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                  title="点击复制案件ID"
-                >
-                  #{caseData.id}
+          <>
+            <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+              <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                案件基本信息
+              </h4>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {/* 第一行第一列：案件ID */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">案件ID</label>
+                  <div 
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(String(caseData.id))
+                        toast({
+                          title: "复制成功",
+                          description: "案件ID已复制到剪贴板",
+                        })
+                      } catch (error) {
+                        toast({
+                          title: "复制失败",
+                          description: "无法复制到剪贴板",
+                          variant: "destructive",
+                        })
+                      }
+                    }}
+                    className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                    title="点击复制案件ID"
+                  >
+                    #{caseData.id}
+                  </div>
                 </div>
-              </div>
-              {/* 第一行第二列：关联用户 */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500">关联用户</label>
-                <div className="flex items-center gap-2">
-                  {caseData.user?.id && (
-                    <div 
-                      onClick={async () => {
-                        if (!caseData.user?.id) return
-                        try {
-                          await navigator.clipboard.writeText(String(caseData.user.id))
-                          toast({
-                            title: "复制成功",
-                            description: "用户ID已复制到剪贴板",
-                          })
-                        } catch (error) {
-                          toast({
-                            title: "复制失败",
-                            description: "无法复制到剪贴板",
-                            variant: "destructive",
-                          })
-                        }
-                      }}
-                      className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                      title="点击复制用户ID"
-                    >
-                      #{caseData.user.id}
-                    </div>
-                  )}
-                  {caseData.user?.wechat_avatar && (
-                    <img 
-                      src={caseData.user.wechat_avatar} 
-                      alt={caseData.user?.name || '用户头像'} 
-                      className="w-6 h-6 rounded-full object-cover"
-                      onError={(e) => {
-                        // 如果图片加载失败，隐藏图片
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                  )}
-                  {caseData.user && caseData.user.name && (
-                    <div className="text-sm font-medium text-slate-900">
-                      {caseData.user.name}
-                    </div>
-                  )}
-                  {!caseData.user && (
-                    <div className="text-sm font-medium text-slate-500">N/A</div>
-                  )}
+                {/* 第一行第二列：关联用户 */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">关联用户</label>
+                  <div className="flex items-center gap-2">
+                    {caseData.user?.id && (
+                      <div 
+                        onClick={async () => {
+                          if (!caseData.user?.id) return
+                          try {
+                            await navigator.clipboard.writeText(String(caseData.user.id))
+                            toast({
+                              title: "复制成功",
+                              description: "用户ID已复制到剪贴板",
+                            })
+                          } catch (error) {
+                            toast({
+                              title: "复制失败",
+                              description: "无法复制到剪贴板",
+                              variant: "destructive",
+                            })
+                          }
+                        }}
+                        className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                        title="点击复制用户ID"
+                      >
+                        #{caseData.user.id}
+                      </div>
+                    )}
+                    {caseData.user?.wechat_avatar && (
+                      <img 
+                        src={caseData.user.wechat_avatar} 
+                        alt={caseData.user?.name || '用户头像'} 
+                        className="w-6 h-6 rounded-full object-cover"
+                        onError={(e) => {
+                          // 如果图片加载失败，隐藏图片
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    )}
+                    {caseData.user && caseData.user.name && (
+                      <div className="text-sm font-medium text-slate-900">
+                        {caseData.user.name}
+                      </div>
+                    )}
+                    {!caseData.user && (
+                      <div className="text-sm font-medium text-slate-500">N/A</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              {/* 第二行第一列：案由 */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500">案由</label>
-                <div className="text-sm font-medium text-slate-900">
-                  {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
-                   caseData.case_type === 'contract' ? '买卖合同纠纷' : 
-                   getCaseCause(caseData) || 'N/A'}
+                {/* 第二行第一列：案由 */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">案由</label>
+                  <div className="text-sm font-medium text-slate-900">
+                    {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
+                     caseData.case_type === 'contract' ? '买卖合同纠纷' : 
+                     getCaseCause(caseData) || 'N/A'}
+                  </div>
                 </div>
-              </div>
-              {/* 第二行第二列：欠款金额 */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500">欠款金额</label>
-                <div className="text-sm font-semibold text-red-600">
-                  {caseData.loan_amount !== null && caseData.loan_amount !== undefined
-                    ? `¥${caseData.loan_amount.toLocaleString()}`
-                    : 'N/A'}
+                {/* 第二行第二列：欠款金额 */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">欠款金额</label>
+                  <div className="text-sm font-semibold text-red-600">
+                    {caseData.loan_amount !== null && caseData.loan_amount !== undefined
+                      ? `¥${caseData.loan_amount.toLocaleString()}`
+                      : 'N/A'}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+
+            {/* 债权人和债务人信息 - 左右分布 */}
+            {(caseData.case_parties?.find((p: any) => p.party_role === "creditor") || caseData.case_parties?.find((p: any) => p.party_role === "debtor")) && (
+              <div className="grid grid-cols-2 gap-4 items-start">
+                {/* 债权人信息 */}
+                {caseData.case_parties?.find((p: any) => p.party_role === "creditor") && (
+                  <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-100 dark:border-blue-900/50">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-1 h-5 bg-blue-500 rounded-full" />
+                      <h4 className="text-slate-500 text-sm font-normal">债权人信息</h4>
+                    </div>
+                    {(() => {
+                      const creditor = caseData.case_parties.find((p: any) => p.party_role === "creditor")
+                      if (!creditor) return null
+                      
+                      return (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500">债权人类型</label>
+                            <div className="text-sm font-medium text-slate-900">
+                              {getPartyTypeLabel(creditor.party_type)}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500">债权人名称</label>
+                            <div className="text-sm font-medium text-slate-900">
+                              {creditor.party_name || 'N/A'}
+                            </div>
+                          </div>
+                          
+                          {/* 根据类型动态渲染必要字段 */}
+                          {creditor.party_type === "person" && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-500">自然人姓名</label>
+                              <div className="text-sm font-medium text-slate-900">
+                                {creditor.name || 'N/A'}
+                              </div>
+                            </div>
+                          )}
+
+                          {creditor.party_type === "individual" && (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">个体工商户名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {creditor.company_name || 'N/A'}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">经营者名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {creditor.name || 'N/A'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {creditor.party_type === "company" && (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">公司名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {creditor.company_name || 'N/A'}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">法定代表人名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {creditor.name || 'N/A'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
+                {/* 债务人信息 */}
+                {caseData.case_parties?.find((p: any) => p.party_role === "debtor") && (
+                  <div className="bg-slate-50/50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-1 h-5 bg-slate-400 rounded-full" />
+                      <h4 className="text-slate-500 text-sm font-normal">债务人信息</h4>
+                    </div>
+                    {(() => {
+                      const debtor = caseData.case_parties.find((p: any) => p.party_role === "debtor")
+                      if (!debtor) return null
+                      
+                      return (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500">债务人类型</label>
+                            <div className="text-sm font-medium text-slate-900">
+                              {getPartyTypeLabel(debtor.party_type)}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500">债务人名称</label>
+                            <div className="text-sm font-medium text-slate-900">
+                              {debtor.party_name || 'N/A'}
+                            </div>
+                          </div>
+                          
+                          {/* 根据类型动态渲染必要字段 */}
+                          {debtor.party_type === "person" && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-500">自然人姓名</label>
+                              <div className="text-sm font-medium text-slate-900">
+                                {debtor.name || 'N/A'}
+                              </div>
+                            </div>
+                          )}
+
+                          {debtor.party_type === "individual" && (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">个体工商户名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {debtor.company_name || 'N/A'}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">经营者名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {debtor.name || 'N/A'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {debtor.party_type === "company" && (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">公司名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {debtor.company_name || 'N/A'}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500">法定代表人名称</label>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {debtor.name || 'N/A'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
