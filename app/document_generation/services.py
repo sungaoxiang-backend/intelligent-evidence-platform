@@ -344,7 +344,23 @@ class DocumentGenerationService:
                     # 获取值
                     value = form_data.get(placeholder_name) if form_data else None
                     
-                    if is_element_style:
+                    # 获取占位符类型
+                    placeholder_type = meta.get("type", "text") if meta else "text"
+                    
+                    # file 类型占位符：无论是要素式还是陈述式，都保留为 placeholder 节点，以便导出时插入图片
+                    if placeholder_type == "file":
+                        # file 类型：保留 placeholder 节点，将值添加到 attrs 中
+                        if attrs is None:
+                            attrs = {}
+                        attrs["value"] = value  # 保存原始值（COS链接）
+                        if meta:
+                            # 保存占位符元数据
+                            attrs["placeholderType"] = "file"
+                            if meta.get("options"):
+                                attrs["options"] = meta["options"]
+                        node["attrs"] = attrs
+                        # 保留 placeholder 节点类型，不转换为 text
+                    elif is_element_style:
                         # 要素式：保留 placeholder 节点，将值添加到 attrs 中
                         if attrs is None:
                             attrs = {}

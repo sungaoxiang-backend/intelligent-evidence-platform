@@ -891,17 +891,66 @@ class ProseMirrorToDocxMapper:
                 placeholder_type = attrs.get("placeholderType", "text")
                 options = attrs.get("options", [])
                 
-                # 格式化占位符值
-                formatted_text = self._format_placeholder_value_for_export(value, placeholder_type, options)
-                
-                if formatted_text:
-                    run = para.add_run(formatted_text)
-                    if not run.font.color or not run.font.color.rgb:
-                        run.font.color.rgb = RGBColor(0, 0, 0)
+                # 如果是 file 类型且值是 URL，尝试插入图片
+                if placeholder_type == "file" and value and isinstance(value, str) and (value.startswith("http://") or value.startswith("https://")):
+                    try:
+                        # 尝试下载图片并插入
+                        image_added = self._add_image_from_url(para, value)
+                        if not image_added:
+                            # 如果插入失败，显示URL文本
+                            run = para.add_run(f"[图片: {value}]")
+                            if not run.font.color or not run.font.color.rgb:
+                                run.font.color.rgb = RGBColor(0, 0, 0)
+                    except Exception as e:
+                        logger.warning(f"插入图片失败: {value}, 错误: {str(e)}")
+                        # 插入失败时显示URL文本
+                        run = para.add_run(f"[图片加载失败: {value}]")
+                        if not run.font.color or not run.font.color.rgb:
+                            run.font.color.rgb = RGBColor(0, 0, 0)
+                else:
+                    # 其他类型：格式化占位符值
+                    formatted_text = self._format_placeholder_value_for_export(value, placeholder_type, options)
+                    
+                    if formatted_text:
+                        run = para.add_run(formatted_text)
+                        if not run.font.color or not run.font.color.rgb:
+                            run.font.color.rgb = RGBColor(0, 0, 0)
             elif node_type == "hardBreak":
                 para.add_run().add_break()
 
         return para
+
+    def _add_image_from_url(self, para: Paragraph, image_url: str) -> bool:
+        """
+        从 URL 下载图片并插入到段落中
+        
+        Args:
+            para: 段落对象
+            image_url: 图片 URL
+            
+        Returns:
+            是否成功插入图片
+        """
+        try:
+            import requests
+            from io import BytesIO
+            from docx.shared import Inches
+            
+            # 下载图片
+            response = requests.get(image_url, timeout=10, stream=True)
+            response.raise_for_status()
+            
+            # 读取图片数据
+            image_data = BytesIO(response.content)
+            
+            # 添加到段落
+            run = para.add_run()
+            run.add_picture(image_data, width=Inches(4))  # 默认宽度4英寸
+            
+            return True
+        except Exception as e:
+            logger.warning(f"从URL插入图片失败: {image_url}, 错误: {str(e)}")
+            return False
 
     def _format_placeholder_value_for_export(
         self, 

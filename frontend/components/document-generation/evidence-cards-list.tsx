@@ -3,8 +3,14 @@
 import React, { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Loader2, Copy, ImageIcon, Info, AlertCircle } from "lucide-react"
+import { Loader2, Copy, ImageIcon, Info, AlertCircle, Check, ChevronLeft, ChevronRight } from "lucide-react"
 import { evidenceApi, evidenceCardApi, type EvidenceCard } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -105,6 +111,8 @@ function EvidenceCardItem({
   const { toast } = useToast()
   const [currentImageIdx, setCurrentImageIdx] = useState(0)
   const [isHoveringImage, setIsHoveringImage] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+  const [previewImage, setPreviewImage] = useState<{ url: string; urls: string[]; currentIndex: number } | null>(null)
 
   // 复制到剪贴板功能
   const handleCopy = async (text: string, label: string, e?: React.MouseEvent) => {
@@ -117,6 +125,32 @@ function EvidenceCardItem({
         title: "复制成功",
         description: `${label}已复制到剪贴板`,
       })
+    } catch (error) {
+      console.error('复制失败:', error)
+      toast({
+        title: "复制失败",
+        description: "无法复制到剪贴板",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // 复制当前图片的COS链接
+  const handleCopyImageUrl = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!currentImageUrl) return
+    
+    try {
+      await navigator.clipboard.writeText(currentImageUrl)
+      setCopiedUrl(currentImageUrl)
+      toast({
+        title: "复制成功",
+        description: "图片链接已复制到剪贴板，可粘贴到表单中",
+      })
+      // 2秒后重置复制状态
+      setTimeout(() => {
+        setCopiedUrl(null)
+      }, 2000)
     } catch (error) {
       console.error('复制失败:', error)
       toast({
@@ -164,7 +198,13 @@ function EvidenceCardItem({
 
   const handleImageClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    // 可以在这里添加图片查看功能
+    if (currentImageUrl && evidenceUrls.length > 0) {
+      setPreviewImage({
+        url: currentImageUrl,
+        urls: evidenceUrls,
+        currentIndex: currentIdx,
+      })
+    }
   }
 
   const handlePreviousImage = (e: React.MouseEvent) => {
@@ -227,7 +267,8 @@ function EvidenceCardItem({
               <img
                 src={currentImageUrl}
                 alt={cardType}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-pointer"
+                title="点击放大"
               />
             ) : (
               <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
@@ -270,6 +311,27 @@ function EvidenceCardItem({
                 )}
               </>
             )}
+            {/* 复制图片链接按钮 - 悬停时显示 */}
+            {isHoveringImage && currentImageUrl && (
+              <div className="absolute top-2 right-2 z-20">
+                <button
+                  onClick={handleCopyImageUrl}
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-sm",
+                    copiedUrl === currentImageUrl
+                      ? "bg-green-600 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+                  )}
+                  title="复制图片链接"
+                >
+                  {copiedUrl === currentImageUrl ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           // 独立证据卡片 - 显示缩略图
@@ -281,7 +343,8 @@ function EvidenceCardItem({
               <img
                 src={currentImageUrl}
                 alt={cardType}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-pointer"
+                title="点击放大"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -420,6 +483,78 @@ function EvidenceCardItem({
           </div>
         )}
       </div>
+
+      {/* 图片预览弹窗 */}
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
+          <DialogTitle className="sr-only">图片预览</DialogTitle>
+          {previewImage && (
+            <div className="relative">
+              <img
+                src={previewImage.url}
+                alt="证据图片预览"
+                className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+              />
+              
+              {/* 关闭按钮 */}
+              <Button 
+                onClick={() => setPreviewImage(null)} 
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0 z-10"
+                size="sm"
+              >
+                关闭
+              </Button>
+              
+              {/* 上一张按钮 */}
+              {previewImage.urls.length > 1 && (
+                <Button 
+                  onClick={() => {
+                    const newIndex = previewImage.currentIndex === 0 
+                      ? previewImage.urls.length - 1 
+                      : previewImage.currentIndex - 1
+                    setPreviewImage({
+                      url: previewImage.urls[newIndex],
+                      urls: previewImage.urls,
+                      currentIndex: newIndex,
+                    })
+                  }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0 z-10"
+                  size="sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              )}
+              
+              {/* 下一张按钮 */}
+              {previewImage.urls.length > 1 && (
+                <Button 
+                  onClick={() => {
+                    const newIndex = previewImage.currentIndex === previewImage.urls.length - 1
+                      ? 0
+                      : previewImage.currentIndex + 1
+                    setPreviewImage({
+                      url: previewImage.urls[newIndex],
+                      urls: previewImage.urls,
+                      currentIndex: newIndex,
+                    })
+                  }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0 z-10"
+                  size="sm"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
+              
+              {/* 图片索引指示器 */}
+              {previewImage.urls.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-3 py-1 rounded-full backdrop-blur-sm">
+                  {previewImage.currentIndex + 1} / {previewImage.urls.length}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

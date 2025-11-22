@@ -13,6 +13,13 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface PlaceholderInfo {
@@ -315,6 +322,145 @@ export function PlaceholderFormField({
             className={cn("min-w-[120px]", className)}
             disabled={disabled}
           />
+        )
+
+      case "file":
+        // file 类型：支持粘贴COS链接和拖拽图片，显示图片预览
+        const fileUrl = internalValue || ""
+        const isImageUrl = fileUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(fileUrl)
+        const [isDragging, setIsDragging] = React.useState(false)
+        const [previewImage, setPreviewImage] = React.useState<{ url: string } | null>(null)
+        const fileInputRef = React.useRef<HTMLInputElement>(null)
+        
+        const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+          const pastedText = e.clipboardData.getData('text')
+          if (pastedText && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
+            e.preventDefault()
+            handleChange(pastedText)
+          }
+        }
+
+        const handleDragOver = (e: React.DragEvent<HTMLInputElement>) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragging(true)
+        }
+
+        const handleDragLeave = (e: React.DragEvent<HTMLInputElement>) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragging(false)
+        }
+
+        const handleDrop = (e: React.DragEvent<HTMLInputElement>) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragging(false)
+          
+          // 尝试从拖拽数据中获取URL
+          const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
+          if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+            handleChange(url)
+            return
+          }
+          
+          // 如果没有URL，尝试获取文件
+          const files = e.dataTransfer.files
+          if (files && files.length > 0) {
+            const file = files[0]
+            if (file.type.startsWith('image/')) {
+              // 如果是本地文件，创建临时URL（实际项目中可能需要上传到COS）
+              const reader = new FileReader()
+              reader.onload = (event) => {
+                const result = event.target?.result
+                if (typeof result === 'string') {
+                  handleChange(result)
+                }
+              }
+              reader.readAsDataURL(file)
+            }
+          }
+        }
+
+        return (
+          <div className={cn("flex flex-col gap-2 min-w-[200px]", className)}>
+            <div className="relative">
+              <Input
+                ref={(el) => {
+                  inputRef.current = el
+                  fileInputRef.current = el as HTMLInputElement
+                }}
+                type="text"
+                value={fileUrl}
+                onChange={(e) => handleChange(e.target.value)}
+                onPaste={handlePaste}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                placeholder="粘贴图片链接或拖拽图片"
+                className={cn(
+                  "min-w-[200px] pr-8",
+                  isDragging && "ring-2 ring-blue-500 bg-blue-50"
+                )}
+                disabled={disabled}
+              />
+              {fileUrl && (
+                <button
+                  type="button"
+                  onClick={() => handleChange("")}
+                  disabled={disabled}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="清除"
+                >
+                  <X className="h-4 w-4 text-slate-500" />
+                </button>
+              )}
+            </div>
+            {isImageUrl && (
+              <div 
+                className="relative border border-slate-200 rounded-md overflow-hidden bg-slate-50 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                onClick={() => setPreviewImage({ url: fileUrl })}
+              >
+                <img
+                  src={fileUrl}
+                  alt={placeholder.name}
+                  className="w-full h-auto max-h-48 object-contain"
+                  title="点击放大"
+                  onError={(e) => {
+                    // 如果图片加载失败，隐藏预览
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              </div>
+            )}
+
+            {/* 图片预览弹窗 */}
+            <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+              <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none">
+                <DialogTitle className="sr-only">图片预览</DialogTitle>
+                {previewImage && (
+                  <div className="relative">
+                    <img
+                      src={previewImage.url}
+                      alt={placeholder.name}
+                      className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+                    />
+                    
+                    {/* 关闭按钮 */}
+                    <Button 
+                      onClick={() => setPreviewImage(null)} 
+                      className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-0 z-10"
+                      size="sm"
+                    >
+                      关闭
+                    </Button>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+          </div>
         )
 
       default:
