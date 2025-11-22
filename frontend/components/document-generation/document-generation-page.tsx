@@ -1,330 +1,262 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Download, Loader2, ArrowLeft, Save } from "lucide-react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/components/ui/use-toast"
-import { TemplateSelectorDropdown } from "./template-selector-dropdown"
-import { EvidenceCardList, type EvidenceCard, type Evidence } from "./evidence-card-list"
+import { Card, CardContent } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2, Download, Save, FileText } from "lucide-react"
+import { TemplateSelector } from "./template-selector"
 import { CaseSelector } from "./case-selector"
-import { DocumentGenerationViewer } from "./document-generation-viewer"
-import {
-  documentGenerationApi,
-  type TemplateInfo,
-  type DocumentGeneration,
-} from "@/lib/document-generation-api"
-import type { Case } from "@/lib/types"
+import { DocumentPreviewForm } from "./document-preview-form"
+import { documentGenerationApi, type TemplateInfo, type PlaceholderInfo as ApiPlaceholderInfo } from "@/lib/document-generation-api"
+import { PlaceholderInfo } from "./placeholder-form-fields"
+import { cn } from "@/lib/utils"
 
-export interface DocumentGenerationPageProps {
-  initialCaseId?: number
-  initialTemplateId?: number
-}
-
-/**
- * 文书生成主页面
- * 整合所有子组件，管理状态和数据流
- */
-export function DocumentGenerationPage({
-  initialCaseId,
-  initialTemplateId,
-}: DocumentGenerationPageProps) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { toast } = useToast()
-
-  // 从URL参数获取案件ID
-  const caseIdFromUrl = searchParams.get("caseId")
-
-  // 状态管理
-  const [selectedCase, setSelectedCase] = useState<Case | null>(null)
+export function DocumentGenerationPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
-  const [templates, setTemplates] = useState<TemplateInfo[]>([])
-  const [evidenceCards, setEvidenceCards] = useState<EvidenceCard[]>([])
-  const [evidences, setEvidences] = useState<Evidence[]>([])
-  const [generation, setGeneration] = useState<DocumentGeneration | null>(null)
+  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
+  const [generationId, setGenerationId] = useState<number | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
-  const [loadingEvidence, setLoadingEvidence] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const { toast } = useToast()
+  
+  const lastSavedFormDataRef = useRef<Record<string, any>>({})
 
-  // 加载模板列表
-  const loadTemplates = useCallback(async () => {
-    try {
-      setLoadingTemplates(true)
-      console.log("开始加载模板列表...")
-      const response = await documentGenerationApi.getPublishedTemplates({})
-      console.log("模板列表响应:", response)
-      console.log("模板数量:", response.data?.length || 0)
-      setTemplates(response.data || [])
-    } catch (error) {
-      console.error("加载模板列表失败:", error)
-      toast({
-        title: "错误",
-        description: error instanceof Error ? error.message : "加载模板列表失败",
-        variant: "destructive",
-      })
-      setTemplates([])
-    } finally {
-      setLoadingTemplates(false)
-    }
-  }, [toast])
-
-  // 加载证据卡片
-  const loadEvidenceCards = useCallback(async (caseId: number) => {
-    try {
-      setLoadingEvidence(true)
-      console.log("开始加载证据卡片, 案件ID:", caseId)
-      
-      // 使用封装好的API方法，自动携带认证token
-      const { evidenceCardApi, evidenceApi } = await import("@/lib/api")
-      
-      // 获取证据卡片
-      const cardResult = await evidenceCardApi.getEvidenceCards({
-        case_id: caseId,
-        skip: 0,
-        limit: 1000,
-      })
-      console.log("证据卡片数据:", cardResult)
-      console.log("证据卡片数量:", cardResult.data?.length || 0)
-      setEvidenceCards(cardResult.data || [])
-
-      // 加载证据列表
-      try {
-        const evidenceResult = await evidenceApi.getEvidences({
-          page: 1,
-          pageSize: 1000,
-          case_id: caseId,
-        })
-        console.log("证据列表数量:", evidenceResult.data?.length || 0)
-        setEvidences(evidenceResult.data || [])
-      } catch (error) {
-        console.warn("加载证据列表失败:", error)
-        setEvidences([])
+  // 转换API占位符格式为组件格式
+  const convertPlaceholders = useCallback((apiPlaceholders: ApiPlaceholderInfo[]): PlaceholderInfo[] => {
+    return apiPlaceholders.map((p, index) => {
+      // API可能返回name或placeholder_name字段
+      const placeholderName = (p as any).name || p.placeholder_name || ""
+      return {
+        id: (p as any).id || index, // 使用API返回的id或索引
+        name: placeholderName,
+        type: p.type || "text",
+        options: p.options,
       }
-    } catch (error) {
-      console.error("加载证据卡片失败:", error)
-      setEvidenceCards([])
-      setEvidences([])
-    } finally {
-      setLoadingEvidence(false)
-    }
+    })
   }, [])
 
-  // 初始化：从URL参数或props加载案件
+  // 当模板或案件变化时，创建或获取生成记录
   useEffect(() => {
-    const caseId = caseIdFromUrl ? parseInt(caseIdFromUrl, 10) : initialCaseId
-    if (caseId && !selectedCase) {
-      // 加载案件信息（使用API封装方法，自动携带认证）
-      import("@/lib/api").then(({ caseApi }) => {
-        caseApi.getCaseById(caseId)
-          .then((result) => {
-            if (result?.data) {
-              setSelectedCase(result.data)
-            } else {
-              throw new Error("案件数据格式错误")
-            }
-          })
-          .catch((error) => {
-            console.error("加载案件信息失败:", error)
-            toast({
-              title: "错误",
-              description: `加载案件信息失败: ${error.message}`,
-              variant: "destructive",
-            })
-          })
-      })
-    }
-  }, [caseIdFromUrl, initialCaseId, selectedCase, toast])
-
-  // 加载模板列表
-  useEffect(() => {
-    loadTemplates()
-  }, [loadTemplates])
-
-  // 当模板加载完成且有案件时，自动选择第一个模板
-  useEffect(() => {
-    if (templates.length > 0 && selectedCase && !selectedTemplate && !loadingTemplates) {
-      console.log("自动选择第一个模板:", templates[0].name)
-      setSelectedTemplate(templates[0])
-    }
-  }, [templates, selectedCase, selectedTemplate, loadingTemplates])
-
-  // 当选择案件时，加载证据卡片
-  useEffect(() => {
-    if (selectedCase?.id) {
-      loadEvidenceCards(selectedCase.id)
-    } else {
-      setEvidenceCards([])
-      setEvidences([])
-    }
-  }, [selectedCase?.id, loadEvidenceCards])
-
-  // 创建或获取文书生成记录
-  const createOrGetGeneration = async (caseId: number, templateId: number) => {
-    try {
-      setLoading(true)
-      const result = await documentGenerationApi.createOrGetGeneration({
-        case_id: caseId,
-        template_id: templateId,
-        form_data: {},
-      })
-      setGeneration(result)
-      setFormData(result.form_data || {})
-      setHasUnsavedChanges(false) // 加载已有数据后，清除未保存标记
-      
-      toast({
-        title: "成功",
-        description: "文书生成记录已加载",
-      })
-    } catch (error) {
-      console.error("创建或获取文书生成记录失败:", error)
-      toast({
-        title: "错误",
-        description: error instanceof Error ? error.message : "操作失败",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 监听案件和模板变化
-  useEffect(() => {
-    if (selectedCase && selectedTemplate) {
-      createOrGetGeneration(selectedCase.id, selectedTemplate.id)
-    } else {
-      setGeneration(null)
+    if (!selectedTemplate || !selectedCaseId) {
+      setGenerationId(null)
       setFormData({})
-      setHasUnsavedChanges(false)
+      return
     }
-  }, [selectedCase?.id, selectedTemplate?.id])
 
-  // 页面离开提示（有未保存的更改时）
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault()
-        e.returnValue = "" // Chrome 需要设置 returnValue
-        return "" // 部分浏览器需要返回字符串
+    const createOrGetGeneration = async () => {
+      setLoading(true)
+      try {
+        const response = await documentGenerationApi.createOrGetGeneration({
+          case_id: selectedCaseId,
+          template_id: selectedTemplate.id,
+        })
+        
+        // API返回的可能是DocumentGeneration对象或包含data字段的响应
+        const generation = (response as any).data || response
+        
+        if (!generation || !generation.id) {
+          throw new Error("创建文书生成记录失败：响应格式错误")
+        }
+        
+        setGenerationId(generation.id)
+        const initialFormData = generation.form_data || {}
+        // 确保 form_data 是对象
+        const normalizedFormData = typeof initialFormData === 'object' && initialFormData !== null && !Array.isArray(initialFormData)
+          ? initialFormData 
+          : {}
+        setFormData(normalizedFormData)
+        lastSavedFormDataRef.current = normalizedFormData
+        setHasUnsavedChanges(false)
+      } catch (error: any) {
+        toast({
+          title: "加载失败",
+          description: error.message || "无法加载文书生成记录",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
       }
+    }
+
+    createOrGetGeneration()
+  }, [selectedTemplate, selectedCaseId, toast])
+
+  // 检测表单数据变化
+  useEffect(() => {
+    if (!generationId) return
+    const hasChanges = JSON.stringify(formData) !== JSON.stringify(lastSavedFormDataRef.current)
+    setHasUnsavedChanges(hasChanges)
+  }, [formData, generationId])
+
+  // 页面离开前提示
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = "页面不会保存你的更改"
+      return "页面不会保存你的更改"
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload)
+
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
   }, [hasUnsavedChanges])
 
-  // 处理字段变化
-  const handleFieldChange = useCallback((fieldName: string, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      [fieldName]: value,
-    }))
-    setHasUnsavedChanges(true)
-  }, [])
-
-  // 手动保存草稿
-  const handleSaveDraft = async () => {
-    if (!generation?.id) {
+  // 手动保存
+  const handleManualSave = async () => {
+    if (!generationId) {
       toast({
-        title: "错误",
-        description: "请先选择案件和模板",
+        title: "请先选择模板和案件",
         variant: "destructive",
       })
       return
     }
 
+    setSaving(true)
     try {
-      setIsSaving(true)
-      await documentGenerationApi.updateGenerationData(generation.id, {
-        form_data: formData,
-      })
+      // 使用最新的 formData 进行保存
+      const currentFormData = formData
+      console.log("Saving formData:", JSON.stringify(currentFormData, null, 2))
+      console.log("FormData keys:", Object.keys(currentFormData))
       
+      const requestData = {
+        form_data: currentFormData,
+      }
+      console.log("Request data:", JSON.stringify(requestData, null, 2))
+      
+      const response = await documentGenerationApi.updateGenerationData(generationId, requestData)
+      
+      console.log("Save response:", response)
+      console.log("Save response type:", typeof response)
+      console.log("Save response keys:", response ? Object.keys(response) : "null")
+      
+      // API返回的可能是DocumentGeneration对象或包含data字段的响应
+      const updated = (response as any).data || response
+      
+      if (!updated || !updated.id) {
+        console.error("Invalid save response:", updated)
+        throw new Error("保存响应格式错误")
+      }
+      
+      // 更新已保存的数据引用
+      const savedFormData = updated.form_data || currentFormData
+      console.log("Saved form_data from server:", savedFormData)
+      console.log("Saved form_data type:", typeof savedFormData)
+      
+      // 确保 savedFormData 是对象
+      let normalizedSavedData: Record<string, any>
+      if (typeof savedFormData === 'string') {
+        // 如果后端返回的是 JSON 字符串，需要解析
+        try {
+          normalizedSavedData = JSON.parse(savedFormData)
+        } catch (e) {
+          console.error("Failed to parse savedFormData as JSON:", e)
+          normalizedSavedData = currentFormData
+        }
+      } else if (typeof savedFormData === 'object' && savedFormData !== null && !Array.isArray(savedFormData)) {
+        normalizedSavedData = savedFormData
+      } else {
+        console.warn("Unexpected savedFormData format, using currentFormData")
+        normalizedSavedData = currentFormData
+      }
+      
+      console.log("Normalized saved data:", JSON.stringify(normalizedSavedData, null, 2))
+      
+      lastSavedFormDataRef.current = normalizedSavedData
+      
+      // 更新 formData 以确保与服务器同步
+      setFormData(normalizedSavedData)
+      
+      // 清除未保存状态
       setHasUnsavedChanges(false)
+      
       toast({
         title: "保存成功",
-        description: "草稿已保存",
+        description: "表单数据已保存",
       })
-    } catch (error) {
-      console.error("保存草稿失败:", error)
+    } catch (error: any) {
+      console.error("Save error:", error)
+      console.error("Save error stack:", error.stack)
       toast({
         title: "保存失败",
-        description: error instanceof Error ? error.message : "保存失败",
+        description: error.message || "无法保存表单数据",
         variant: "destructive",
       })
     } finally {
-      setIsSaving(false)
+      setSaving(false)
     }
   }
 
-  // 计算已填写字段数量和总数
-  const fieldStats = useMemo(() => {
-    if (!selectedTemplate) return { filled: 0, total: 0 }
-    const filled = selectedTemplate.placeholders.filter(
-      (p) => formData[p.placeholder_name] !== undefined && formData[p.placeholder_name] !== null && formData[p.placeholder_name] !== ""
-    ).length
-    return { filled, total: selectedTemplate.placeholders.length }
-  }, [selectedTemplate, formData])
-
   // 导出文书
   const handleExport = async () => {
-    if (!generation) {
+    if (!generationId) {
       toast({
-        title: "错误",
-        description: "请先选择案件和模板",
+        title: "请先选择模板和案件",
         variant: "destructive",
       })
       return
     }
 
-    try {
-      setExporting(true)
-      
-      // 显示开始导出的提示
-      toast({
-        title: "开始导出",
-        description: "正在生成文书，请稍候...",
-      })
-      
-      // 如果有未保存的更改，先保存草稿
-      if (hasUnsavedChanges) {
-        await documentGenerationApi.updateGenerationData(generation.id, {
+    // 先保存当前表单数据
+    if (JSON.stringify(formData) !== JSON.stringify(lastSavedFormDataRef.current)) {
+      try {
+        const response = await documentGenerationApi.updateGenerationData(generationId, {
           form_data: formData,
         })
-        setHasUnsavedChanges(false)
-      }
-
-      const result = await documentGenerationApi.exportGenerationDocument(generation.id, {
-        filename: selectedTemplate?.name,
-      })
-
-      // 下载文件
-      window.open(result.data.file_url, "_blank")
-
-      toast({
-        title: "导出成功",
-        description: result.data.warnings.length > 0
-          ? `文书已生成，但有 ${result.data.warnings.length} 个警告`
-          : "文书已成功生成并开始下载",
-      })
-
-      // 如果有警告，显示警告信息
-      if (result.data.warnings.length > 0) {
-        result.data.warnings.forEach((warning) => {
-          console.warn("导出警告:", warning)
+        const updated = (response as any).data || response
+        lastSavedFormDataRef.current = updated.form_data || formData
+      } catch (error: any) {
+        toast({
+          title: "保存失败",
+          description: error.message || "无法保存表单数据",
+          variant: "destructive",
         })
+        return
       }
-    } catch (error) {
-      console.error("导出文书失败:", error)
+    }
+
+    setExporting(true)
+    try {
+      const response = await documentGenerationApi.exportGenerationDocument(generationId)
+      
+      if (response.data?.file_url) {
+        // 下载文件
+        const link = document.createElement("a")
+        link.href = response.data.file_url
+        link.download = response.data.filename || "document.docx"
+        link.target = "_blank"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // 显示警告信息（如果有）
+        const warnings = response.data.warnings || []
+        if (warnings.length > 0) {
+          toast({
+            title: "导出成功（有警告）",
+            description: warnings.join("; "),
+            variant: "default",
+          })
+        } else {
+          toast({
+            title: "导出成功",
+            description: `文书已生成并下载`,
+          })
+        }
+      } else {
+        throw new Error("导出响应中没有文件URL")
+      }
+    } catch (error: any) {
       toast({
         title: "导出失败",
-        description: error instanceof Error ? error.message : "导出失败",
+        description: error.message || "无法导出文书",
         variant: "destructive",
       })
     } finally {
@@ -332,147 +264,118 @@ export function DocumentGenerationPage({
     }
   }
 
+  const placeholders: PlaceholderInfo[] = selectedTemplate
+    ? convertPlaceholders(selectedTemplate.placeholders || [])
+    : []
+
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* 顶部工具栏 */}
-      <div className="border-b bg-background px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.back()}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold">
-              {selectedTemplate ? selectedTemplate.name : "文书生成"}
-            </h1>
-            {selectedCase && (
-              <p className="text-sm text-muted-foreground">
-                {selectedCase.description || `案件 #${selectedCase.id}`}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* 未保存状态提示 */}
-          {hasUnsavedChanges && (
-            <Badge variant="secondary" className="text-orange-600 border-orange-300">
-              有未保存的更改
-            </Badge>
-          )}
-
-          {/* 保存草稿按钮 */}
-          <Button
-            variant="outline"
-            onClick={handleSaveDraft}
-            disabled={!generation || isSaving || !hasUnsavedChanges}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                保存中...
-              </>
-            ) : (
-              <>保存草稿</>
-            )}
-          </Button>
-
-          {/* 导出按钮 */}
-          <Button
-            onClick={handleExport}
-            disabled={!generation || exporting}
-          >
-            {exporting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                导出中...
-              </>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" />
-                导出文书
-              </>
-            )}
-          </Button>
-        </div>
+    <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">文书生成</h1>
+        <p className="text-muted-foreground mt-1">
+          选择模板和案件，填写表单数据，生成文书
+        </p>
       </div>
 
-      {/* 主内容区 */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：模板选择 + 证据卡片列表 */}
-        <div className="w-80 shrink-0 border-r flex flex-col bg-white">
-          {/* 案件选择和模板选择 */}
-          <div className="p-4 border-b space-y-4">
-            <CaseSelector
-              selectedCaseId={selectedCase?.id}
-              onSelect={setSelectedCase}
-            />
-            <TemplateSelectorDropdown
-              templates={templates}
-              selectedTemplateId={selectedTemplate?.id}
-              onSelect={setSelectedTemplate}
-              loading={loadingTemplates}
-            />
-          </div>
-
-          {/* 证据卡片列表 */}
-          <div className="flex-1 overflow-hidden">
-            {loadingEvidence ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <EvidenceCardList cards={evidenceCards} evidences={evidences} />
-            )}
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* 左侧：模板和案件选择 */}
+        <div className="lg:col-span-1 space-y-4">
+          <TemplateSelector
+            selectedTemplateId={selectedTemplate?.id}
+            onSelectTemplate={setSelectedTemplate}
+          />
+          <CaseSelector
+            selectedCaseId={selectedCaseId || undefined}
+            onSelectCase={setSelectedCaseId}
+          />
         </div>
 
-        {/* 右侧：文档视图 */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-          {/* 进度指示 */}
-          {selectedTemplate && generation && (
-            <div className="px-4 py-3 bg-white border-b">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">填写进度</span>
-                <Badge variant="outline" className="text-sm">
-                  已填写 {fieldStats.filled}/{fieldStats.total} 个字段
-                </Badge>
-              </div>
-            </div>
-          )}
-
-          {/* 文档内容区 */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : !selectedCase || !selectedTemplate ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center text-muted-foreground max-w-md p-8">
-                  <p className="text-lg font-medium mb-2">开始文书生成</p>
-                  <p className="text-sm">
-                    {!selectedCase
-                      ? "请先选择一个案件"
-                      : "请从上方下拉框选择一个模板"}
+        {/* 右侧：文档预览和表单 */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardContent className="p-6">
+              {!selectedTemplate || !selectedCaseId ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">
+                    请先选择模板和案件
                   </p>
                 </div>
-              </div>
-            ) : (
-              <div className="py-8">
-                <DocumentGenerationViewer
-                  content={selectedTemplate.prosemirror_json}
-                  placeholders={selectedTemplate.placeholders}
-                  formData={formData}
-                  onFieldChange={handleFieldChange}
-                  readOnly={false}
-                />
-              </div>
-            )}
-          </div>
+              ) : loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">{selectedTemplate.name}</h3>
+                      {selectedTemplate.description && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {selectedTemplate.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {hasUnsavedChanges && (
+                        <span className="text-xs text-orange-600 flex items-center gap-1">
+                          (未保存)
+                        </span>
+                      )}
+                      {saving && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          保存中...
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleManualSave}
+                        disabled={saving}
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        保存
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleExport}
+                        disabled={exporting}
+                      >
+                        {exporting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            导出中...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            下载文书
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    <DocumentPreviewForm
+                      content={selectedTemplate.prosemirror_json}
+                      placeholders={placeholders}
+                      formData={formData}
+                      onFormDataChange={(updater) => {
+                        if (typeof updater === 'function') {
+                          setFormData(updater)
+                        } else {
+                          setFormData(updater)
+                        }
+                      }}
+                      className="min-h-[600px]"
+                    />
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

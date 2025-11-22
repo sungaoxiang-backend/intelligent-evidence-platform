@@ -171,10 +171,11 @@ export const documentGenerationApi = {
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.detail || "创建文书生成记录失败")
+      throw new Error(error.detail || error.message || "创建文书生成记录失败")
     }
 
     const result = await response.json()
+    // FastAPI response_model 直接返回数据对象，不是包装格式
     return result
   },
 
@@ -199,10 +200,11 @@ export const documentGenerationApi = {
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.detail || "更新文书生成记录失败")
+      throw new Error(error.detail || error.message || "更新文书生成记录失败")
     }
 
     const result = await response.json()
+    // FastAPI response_model 直接返回数据对象，不是包装格式
     return result
   },
 

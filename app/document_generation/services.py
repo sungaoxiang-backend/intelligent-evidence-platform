@@ -245,7 +245,7 @@ class DocumentGenerationService:
         self,
         prosemirror_json: Dict[str, Any],
         form_data: Dict[str, Any],
-        placeholders: List[Any] = None
+        placeholders: Optional[List[Any]] = None
     ) -> Dict[str, Any]:
         """
         在 ProseMirror JSON 中替换占位符
@@ -270,9 +270,90 @@ class DocumentGenerationService:
                     "options": p.options or []
                 }
         
+        # 记录占位符映射用于调试
+        logger.info(f"占位符映射键: {list(placeholder_map.keys())}")
+        logger.info(f"form_data 键: {list(form_data.keys()) if form_data else []}")
+        logger.info(f"form_data 内容: {form_data}")
+        
+        def format_placeholder_value(placeholder_name: str, value: Any, meta: Optional[Dict[str, Any]] = None) -> str:
+            """格式化占位符值"""
+            if value is None:
+                return ""  # None 替换为空内容
+            
+            # 对于 radio/checkbox 类型，显示所有选项和选中状态
+            if meta and meta.get("type") in ["radio", "checkbox"] and meta.get("options"):
+                # 处理 radio：值是单个字符串
+                # 处理 checkbox：值是数组
+                if meta["type"] == "radio":
+                    selected_values = [value] if value else []
+                else:
+                    selected_values = value if isinstance(value, list) else ([value] if value else [])
+                
+                # 格式化选项：☑ 已选 ☐ 未选
+                formatted_options = []
+                for opt in meta["options"]:
+                    opt_value = opt.get("value", "")
+                    opt_label = opt.get("label", opt_value)
+                    
+                    if opt_value in selected_values:
+                        formatted_options.append(f"☑ {opt_label}")
+                    else:
+                        formatted_options.append(f"☐ {opt_label}")
+                
+                return "  ".join(formatted_options)
+            
+            # 其他类型正常处理
+            elif isinstance(value, list):
+                # 数组转换为顿号分隔的字符串
+                if len(value) == 0:
+                    return ""  # 空数组返回空
+                return "、".join(str(v) for v in value if v)  # 过滤空值
+            elif isinstance(value, (int, float)):
+                # 数字转换为字符串
+                return str(value)
+            elif isinstance(value, str):
+                if value == "":
+                    # 空字符串替换为空
+                    return ""
+                return value
+            elif isinstance(value, bool):
+                # 布尔值转换为字符串
+                return "是" if value else "否"
+            else:
+                # 其他类型转换为字符串
+                return str(value) if value else ""
+        
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""
-            if node.get("type") == "text":
+            node_type = node.get("type")
+            
+            # 处理 placeholder 节点类型（这是主要的占位符格式）
+            if node_type == "placeholder":
+                attrs = node.get("attrs", {})
+                placeholder_name = attrs.get("fieldKey", "").strip()
+                
+                if placeholder_name:
+                    # 获取占位符元数据
+                    meta = placeholder_map.get(placeholder_name)
+                    
+                    # 调试日志
+                    logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}")
+                    
+                    # 获取值并格式化
+                    if placeholder_name in form_data:
+                        value = form_data[placeholder_name]
+                        formatted_value = format_placeholder_value(placeholder_name, value, meta)
+                    else:
+                        formatted_value = ""  # 如果没有值，返回空内容
+                    
+                    # 将 placeholder 节点替换为 text 节点
+                    node["type"] = "text"
+                    node["text"] = formatted_value
+                    if "attrs" in node:
+                        del node["attrs"]
+            
+            # 处理 text 节点中的 {{placeholder}} 格式（兼容旧格式）
+            elif node_type == "text":
                 text = node.get("text", "")
                 
                 # 替换 {{placeholder}} 格式的占位符
@@ -283,49 +364,16 @@ class DocumentGenerationService:
                     # 获取占位符元数据
                     meta = placeholder_map.get(placeholder_name)
                     
+                    # 调试日志
+                    logger.debug(f"处理文本中的占位符: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}")
+                    
                     # 如果表单数据中有值，则替换
                     if placeholder_name in form_data:
                         value = form_data[placeholder_name]
-                        
-                        # 处理不同类型的值
-                        if value is None:
-                            return match.group(0)  # None 保留占位符
-                        
-                        # 对于 radio/checkbox 类型，显示所有选项和选中状态
-                        if meta and meta["type"] in ["radio", "checkbox"] and meta["options"]:
-                            selected_values = [value] if meta["type"] == "radio" else (value if isinstance(value, list) else [value])
-                            
-                            # 格式化选项：☑ 已选 ☐ 未选
-                            formatted_options = []
-                            for opt in meta["options"]:
-                                opt_value = opt.get("value", "")
-                                opt_label = opt.get("label", opt_value)
-                                
-                                if opt_value in selected_values:
-                                    formatted_options.append(f"☑ {opt_label}")
-                                else:
-                                    formatted_options.append(f"☐ {opt_label}")
-                            
-                            return "  ".join(formatted_options)
-                        
-                        # 其他类型正常处理
-                        elif isinstance(value, list):
-                            # 数组转换为顿号分隔的字符串
-                            return "、".join(str(v) for v in value)
-                        elif isinstance(value, (int, float)):
-                            # 数字转换为字符串
-                            return str(value)
-                        elif isinstance(value, str):
-                            if value == "":
-                                # 空字符串替换为空
-                                return ""
-                            return value
-                        else:
-                            # 其他类型转换为字符串
-                            return str(value)
+                        return format_placeholder_value(placeholder_name, value, meta)
                     
-                    # 如果没有值，保留原占位符
-                    return match.group(0)
+                    # 如果没有值，返回空内容（不保留原占位符）
+                    return ""
                 
                 # 使用正则替换所有占位符
                 node["text"] = re.sub(r'\{\{([^}]+)\}\}', replacer, text)
@@ -371,6 +419,14 @@ class DocumentGenerationService:
         # 获取模板的 ProseMirror JSON
         template_json = generation.template.prosemirror_json
         
+        # 记录 form_data 内容用于调试
+        logger.info(f"form_data 内容: {generation.form_data}")
+        logger.info(f"form_data 键: {list(generation.form_data.keys()) if generation.form_data else []}")
+        
+        # 记录占位符信息
+        placeholder_names = [p.name for p in generation.template.placeholders] if generation.template.placeholders else []
+        logger.info(f"占位符名称列表: {placeholder_names}")
+        
         # 使用表单数据替换占位符，传递占位符元数据用于格式化选项
         filled_json = self._replace_placeholders_in_json(
             template_json,
@@ -378,7 +434,7 @@ class DocumentGenerationService:
             generation.template.placeholders
         )
         
-        logger.info(f"占位符替换完成，form_data 数量: {len(generation.form_data)}")
+        logger.info(f"占位符替换完成，form_data 数量: {len(generation.form_data) if generation.form_data else 0}")
         
         # 导出为 DOCX 字节流
         # 检查是否有 mock 的 template_editor_service
