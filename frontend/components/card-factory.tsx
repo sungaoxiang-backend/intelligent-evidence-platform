@@ -441,11 +441,33 @@ function EvidenceCardListItem({
   associationCardTypes?: string[]
   getAvailableTypesForIndependentCard?: (currentCardType: string) => string[]
 }) {
+  const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [editedFeatures, setEditedFeatures] = useState<any[]>([])
   const [isHoveringImage, setIsHoveringImage] = useState(false)
   const prevIsEditingRef = React.useRef(false)
   const prevAllFeaturesRef = React.useRef<any[]>([])
+  
+  // 复制到剪贴板功能
+  const handleCopy = async (text: string, label: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation() // 阻止事件冒泡，避免触发卡片选择
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "复制成功",
+        description: `${label}已复制到剪贴板`,
+      })
+    } catch (error) {
+      console.error('复制失败:', error)
+      toast({
+        title: "复制失败",
+        description: "无法复制到剪贴板",
+        variant: "destructive",
+      })
+    }
+  }
   
   // 异常卡片不能拖拽，只能删除
   const isAbnormal = !card.is_normal
@@ -1144,13 +1166,32 @@ function EvidenceCardListItem({
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-slate-900 font-medium break-words">
+                      <div 
+                        className={cn(
+                          "text-xs text-slate-900 font-medium break-words",
+                          !isNullValue && "cursor-pointer hover:text-blue-600 hover:underline transition-colors inline-flex items-center gap-1 group"
+                        )}
+                        onClick={(e) => {
+                          if (!isNullValue) {
+                            const valueToCopy = displayFeature.slot_value_type === 'boolean' 
+                              ? (displayFeature.slot_value ? '是' : '否')
+                              : String(displayFeature.slot_value)
+                            handleCopy(valueToCopy, displayFeature.slot_name, e)
+                          }
+                        }}
+                        title={!isNullValue ? `点击复制${displayFeature.slot_name}` : undefined}
+                      >
                         {isNullValue 
                           ? 'N/A'
-                          : displayFeature.slot_value_type === 'boolean' 
+                          : (
+                            <>
+                              {displayFeature.slot_value_type === 'boolean' 
                             ? (displayFeature.slot_value ? '是' : '否')
                             : String(displayFeature.slot_value)}
-                      </span>
+                              <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </>
+                          )}
+                      </div>
                     )}
                   </div>
                 )

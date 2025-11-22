@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, Save, FileText } from "lucide-react"
-import { TemplateSelector } from "./template-selector"
-import { CaseSelector } from "./case-selector"
+import { Loader2, Download, Save, FileText, Scale } from "lucide-react"
 import { DocumentPreviewForm } from "./document-preview-form"
 import { documentGenerationApi, type TemplateInfo, type PlaceholderInfo as ApiPlaceholderInfo } from "@/lib/document-generation-api"
 import { PlaceholderInfo } from "./placeholder-form-fields"
-import { cn } from "@/lib/utils"
+import { EvidenceCardsList } from "./evidence-cards-list"
+import { caseApi } from "@/lib/api"
+import { type Case } from "@/lib/types"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import useSWR from "swr"
 
 export function DocumentGenerationPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
@@ -268,54 +270,229 @@ export function DocumentGenerationPage() {
     ? convertPlaceholders(selectedTemplate.placeholders || [])
     : []
 
+  // 获取案件列表
+  const casesFetcher = async () => {
+    const response = await caseApi.getCases({
+      page: 1,
+      pageSize: 100,
+    })
+    return response.data || []
+  }
+
+  const { data: cases = [] } = useSWR('/api/cases', casesFetcher, {
+    revalidateOnFocus: false,
+  })
+
+  // 获取选中的案件详情
+  const caseFetcher = async ([_key, caseId]: [string, number]) => {
+    const response = await caseApi.getCaseById(caseId)
+    return response.data
+  }
+
+  const { data: caseData } = useSWR(
+    selectedCaseId ? ['/api/case', selectedCaseId] : null,
+    caseFetcher,
+    {
+      revalidateOnFocus: false,
+    }
+  )
+
+  // 获取模板列表
+  const templatesFetcher = async () => {
+    const response = await documentGenerationApi.getPublishedTemplates({
+      limit: 100,
+    })
+    return response.data || []
+  }
+
+  const { data: templates = [] } = useSWR('/api/templates', templatesFetcher, {
+    revalidateOnFocus: false,
+  })
+
+  const getCaseDisplayName = (caseItem: Case) => {
+    if (caseItem.creditor_name && caseItem.debtor_name) {
+      return `${caseItem.creditor_name} vs ${caseItem.debtor_name}`
+    }
+    if (caseItem.description) {
+      return caseItem.description
+    }
+    return `案件 #${caseItem.id}`
+  }
+
+  const getCaseCause = (caseItem: Case) => {
+    // 从 case_type 或其他字段获取案由
+    return caseItem.case_type || "未设置"
+  }
+
+  const getLoanAmount = (caseItem: Case) => {
+    if (caseItem.loan_amount) {
+      return new Intl.NumberFormat('zh-CN', {
+        style: 'currency',
+        currency: 'CNY',
+        minimumFractionDigits: 0,
+      }).format(caseItem.loan_amount)
+    }
+    return "未设置"
+  }
+
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div className="container mx-auto px-4 py-6 max-w-[1600px]">
+      {/* 顶部：标题 */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">文书生成</h1>
-        <p className="text-muted-foreground mt-1">
-          选择模板和案件，填写表单数据，生成文书
-        </p>
+        <h1 className="text-2xl font-bold">文书生成页面</h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* 左侧：模板和案件选择 */}
-        <div className="lg:col-span-1 space-y-4">
-          <TemplateSelector
-            selectedTemplateId={selectedTemplate?.id}
-            onSelectTemplate={setSelectedTemplate}
-          />
-          <CaseSelector
-            selectedCaseId={selectedCaseId || undefined}
-            onSelectCase={setSelectedCaseId}
-          />
+      {/* 案件信息卡片 - 放在页面顶部 */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">案件信息</h3>
+          {/* 案件选择器 */}
+          <div className="w-64">
+            <Select
+              value={selectedCaseId?.toString() || ""}
+              onValueChange={(value) => setSelectedCaseId(Number(value))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="请选择案件" />
+              </SelectTrigger>
+              <SelectContent>
+                {cases.map((caseItem) => (
+                  <SelectItem key={caseItem.id} value={caseItem.id.toString()}>
+                    {getCaseDisplayName(caseItem)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        {/* 案件基本信息 - 2x2网格布局，与卡片工厂一致 */}
+        {caseData && (
+          <div className="p-2 bg-white/50 dark:bg-white/5 rounded-lg border border-blue-200/30 dark:border-blue-800/30">
+            <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+              案件基本信息
+            </h4>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {/* 第一行第一列：案件ID */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">案件ID</label>
+                <div 
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(String(caseData.id))
+                      toast({
+                        title: "复制成功",
+                        description: "案件ID已复制到剪贴板",
+                      })
+                    } catch (error) {
+                      toast({
+                        title: "复制失败",
+                        description: "无法复制到剪贴板",
+                        variant: "destructive",
+                      })
+                    }
+                  }}
+                  className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                  title="点击复制案件ID"
+                >
+                  #{caseData.id}
+                </div>
+              </div>
+              {/* 第一行第二列：关联用户 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">关联用户</label>
+                <div className="flex items-center gap-2">
+                  {caseData.user?.id && (
+                    <div 
+                      onClick={async () => {
+                        if (!caseData.user?.id) return
+                        try {
+                          await navigator.clipboard.writeText(String(caseData.user.id))
+                          toast({
+                            title: "复制成功",
+                            description: "用户ID已复制到剪贴板",
+                          })
+                        } catch (error) {
+                          toast({
+                            title: "复制失败",
+                            description: "无法复制到剪贴板",
+                            variant: "destructive",
+                          })
+                        }
+                      }}
+                      className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                      title="点击复制用户ID"
+                    >
+                      #{caseData.user.id}
+                    </div>
+                  )}
+                  {caseData.user?.wechat_avatar && (
+                    <img 
+                      src={caseData.user.wechat_avatar} 
+                      alt={caseData.user?.name || '用户头像'} 
+                      className="w-6 h-6 rounded-full object-cover"
+                      onError={(e) => {
+                        // 如果图片加载失败，隐藏图片
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  )}
+                  {caseData.user && caseData.user.name && (
+                    <div className="text-sm font-medium text-slate-900">
+                      {caseData.user.name}
+                    </div>
+                  )}
+                  {!caseData.user && (
+                    <div className="text-sm font-medium text-slate-500">N/A</div>
+                  )}
+                </div>
+              </div>
+              {/* 第二行第一列：案由 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">案由</label>
+                <div className="text-sm font-medium text-slate-900">
+                  {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
+                   caseData.case_type === 'contract' ? '买卖合同纠纷' : 
+                   getCaseCause(caseData) || 'N/A'}
+                </div>
+              </div>
+              {/* 第二行第二列：欠款金额 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">欠款金额</label>
+                <div className="text-sm font-semibold text-red-600">
+                  {caseData.loan_amount !== null && caseData.loan_amount !== undefined
+                    ? `¥${caseData.loan_amount.toLocaleString()}`
+                    : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左侧：证据卡片列表 */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5" />
+                证据卡片
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EvidenceCardsList caseId={selectedCaseId} />
+            </CardContent>
+          </Card>
         </div>
 
-        {/* 右侧：文档预览和表单 */}
+        {/* 右侧：模板表单 */}
         <div className="lg:col-span-2">
           <Card>
-            <CardContent className="p-6">
-              {!selectedTemplate || !selectedCaseId ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    请先选择模板和案件
-                  </p>
-                </div>
-              ) : loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <>
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold">{selectedTemplate.name}</h3>
-                      {selectedTemplate.description && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {selectedTemplate.description}
-                        </p>
-                      )}
-                    </div>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>模板表单</CardTitle>
                     <div className="flex items-center gap-2">
                       {hasUnsavedChanges && (
                         <span className="text-xs text-orange-600 flex items-center gap-1">
@@ -332,15 +509,15 @@ export function DocumentGenerationPage() {
                         variant="outline"
                         size="sm"
                         onClick={handleManualSave}
-                        disabled={saving}
+                    disabled={saving || !generationId}
                       >
                         <Save className="h-4 w-4 mr-2" />
-                        保存
+                    保存草稿
                       </Button>
                       <Button
                         size="sm"
                         onClick={handleExport}
-                        disabled={exporting}
+                    disabled={exporting || !generationId}
                       >
                         {exporting ? (
                           <>
@@ -356,7 +533,46 @@ export function DocumentGenerationPage() {
                       </Button>
                     </div>
                   </div>
-                  
+            </CardHeader>
+            <CardContent>
+              {/* 模板选择器 */}
+              <div className="mb-4">
+                <label className="text-sm font-medium mb-2 block">文档类型</label>
+                <Select
+                  value={selectedTemplate?.id?.toString() || ""}
+                  onValueChange={(value) => {
+                    const template = templates.find((t) => t.id.toString() === value)
+                    if (template) {
+                      setSelectedTemplate(template)
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="请选择模板" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id.toString()}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 文档表单 */}
+              {!selectedTemplate || !selectedCaseId ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border rounded-lg">
+                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">
+                    请先选择案件和模板
+                  </p>
+                </div>
+              ) : loading ? (
+                <div className="flex items-center justify-center py-16 border rounded-lg">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
                   <div className="border rounded-lg overflow-hidden">
                     <DocumentPreviewForm
                       content={selectedTemplate.prosemirror_json}
@@ -372,7 +588,6 @@ export function DocumentGenerationPage() {
                       className="min-h-[600px]"
                     />
                   </div>
-                </>
               )}
             </CardContent>
           </Card>
