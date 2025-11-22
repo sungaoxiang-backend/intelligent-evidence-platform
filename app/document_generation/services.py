@@ -245,7 +245,8 @@ class DocumentGenerationService:
         self,
         prosemirror_json: Dict[str, Any],
         form_data: Dict[str, Any],
-        placeholders: Optional[List[Any]] = None
+        placeholders: Optional[List[Any]] = None,
+        is_element_style: bool = False
     ) -> Dict[str, Any]:
         """
         在 ProseMirror JSON 中替换占位符
@@ -254,6 +255,7 @@ class DocumentGenerationService:
             prosemirror_json: ProseMirror JSON
             form_data: 表单数据
             placeholders: 占位符元数据列表（可选）
+            is_element_style: 是否为要素式（True=要素式保留节点，False=陈述式转换为文本）
             
         Returns:
             替换后的 ProseMirror JSON（深拷贝）
@@ -337,14 +339,29 @@ class DocumentGenerationService:
                     meta = placeholder_map.get(placeholder_name)
                     
                     # 调试日志
-                    logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}")
+                    logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}, 要素式: {is_element_style}")
                     
-                    # 获取值并格式化
-                    if placeholder_name in form_data:
-                        value = form_data[placeholder_name]
-                        formatted_value = format_placeholder_value(placeholder_name, value, meta)
+                    # 获取值
+                    value = form_data.get(placeholder_name) if form_data else None
+                    
+                    if is_element_style:
+                        # 要素式：保留 placeholder 节点，将值添加到 attrs 中
+                        if attrs is None:
+                            attrs = {}
+                        attrs["value"] = value  # 保存原始值
+                        if meta:
+                            # 保存占位符元数据
+                            attrs["placeholderType"] = meta.get("type", "text")
+                            if meta.get("options"):
+                                attrs["options"] = meta["options"]
+                        node["attrs"] = attrs
+                        # 保留 placeholder 节点类型，不转换为 text
                     else:
-                        formatted_value = ""  # 如果没有值，返回空内容
+                        # 陈述式：将 placeholder 节点替换为 text 节点
+                        if value is not None:
+                            formatted_value = format_placeholder_value(placeholder_name, value, meta)
+                        else:
+                            formatted_value = ""  # 如果没有值，返回空内容
                     
                     # 将 placeholder 节点替换为 text 节点
                     node["type"] = "text"
@@ -427,11 +444,16 @@ class DocumentGenerationService:
         placeholder_names = [p.name for p in generation.template.placeholders] if generation.template.placeholders else []
         logger.info(f"占位符名称列表: {placeholder_names}")
         
+        # 获取模板的 category，判断是要素式还是陈述式
+        template_category = generation.template.category or ""
+        is_element_style = "要素" in template_category or template_category == "要素式"
+        
         # 使用表单数据替换占位符，传递占位符元数据用于格式化选项
         filled_json = self._replace_placeholders_in_json(
             template_json,
             generation.form_data,
-            generation.template.placeholders
+            generation.template.placeholders,
+            is_element_style=is_element_style
         )
         
         logger.info(f"占位符替换完成，form_data 数量: {len(generation.form_data) if generation.form_data else 0}")

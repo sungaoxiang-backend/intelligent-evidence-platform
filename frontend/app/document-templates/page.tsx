@@ -96,6 +96,7 @@ export default function DocumentTemplatesPage() {
   const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadCategory, setUploadCategory] = useState<string>("要素式")
   const [placeholderCounts, setPlaceholderCounts] = useState<Record<number, number>>({})
   const { toast } = useToast()
 
@@ -424,6 +425,7 @@ export default function DocumentTemplatesPage() {
       
       const response = await templateApi.parseAndSave(uploadFile, {
         name: nameWithoutExt,
+        category: uploadCategory,
         status: "draft",
         save_to_cos: true,
       })
@@ -433,6 +435,7 @@ export default function DocumentTemplatesPage() {
       })
       setUploadDialogOpen(false)
       setUploadFile(null)
+      setUploadCategory("要素式") // 重置为默认值
       
       // 如果当前过滤器不是"全部"或"草稿"，则切换到"草稿"以显示新模板
       if (statusFilter === 'published') {
@@ -478,7 +481,7 @@ export default function DocumentTemplatesPage() {
             - 不显示占位符列表
             ============================================ */}
         {viewMode === "document-edit" && selectedTemplate ? (
-          <PlaceholderProvider templateId={selectedTemplate.id}>
+          <PlaceholderProvider templateId={selectedTemplate.id} templateCategory={selectedTemplate.category}>
             <div className="col-span-12 flex flex-col">
               <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
                 <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
@@ -536,7 +539,7 @@ export default function DocumentTemplatesPage() {
             - 右侧：文档预览（chip可点击）
             ============================================ */
         ) : viewMode === "placeholder-management" && selectedTemplate ? (
-          <PlaceholderProvider templateId={selectedTemplate.id}>
+          <PlaceholderProvider templateId={selectedTemplate.id} templateCategory={selectedTemplate.category}>
             <>
               <PlaceholderList />
               <div className="col-span-8 flex flex-col">
@@ -671,7 +674,7 @@ export default function DocumentTemplatesPage() {
         <div className="col-span-8 flex flex-col">
           {selectedTemplate ? (
             /* ✅ 预览模式也需要 PlaceholderProvider，虽然不启用交互 */
-            <PlaceholderProvider templateId={selectedTemplate.id}>
+            <PlaceholderProvider templateId={selectedTemplate.id} templateCategory={selectedTemplate.category}>
               <Card className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
                 <CardHeader className="pb-2 pt-2 px-4 flex flex-row items-center justify-between border-b flex-shrink-0">
                   <div className="flex flex-col">
@@ -793,6 +796,28 @@ export default function DocumentTemplatesPage() {
                 </div>
               )}
             </div>
+            <div>
+              <Label>模板类型</Label>
+              <div className="mt-2">
+                <Select
+                  value={uploadCategory}
+                  onValueChange={setUploadCategory}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择模板类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="要素式">要素式</SelectItem>
+                    <SelectItem value="陈述式">陈述式</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {uploadCategory === "要素式" 
+                  ? "要素式：导出时保留占位符组件和选项状态" 
+                  : "陈述式：导出时将占位符转换为纯文本"}
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -800,6 +825,7 @@ export default function DocumentTemplatesPage() {
               onClick={() => {
                 setUploadDialogOpen(false)
                 setUploadFile(null)
+                setUploadCategory("要素式") // 重置为默认值
               }}
               disabled={isLoading}
             >

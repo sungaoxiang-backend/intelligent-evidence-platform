@@ -30,7 +30,7 @@ import {
 } from "./extensions"
 import { normalizeHardBreaks } from "./utils"
 import { PlaceholderNode } from "./placeholder-node-extension"
-import { usePlaceholderManager } from "./placeholder-manager"
+import { usePlaceholderManager, usePlaceholderDocumentBridge } from "./placeholder-manager"
 import { PlaceholderInserter } from "./placeholder-inserter"
 import {
   ContextMenu,
@@ -294,6 +294,39 @@ export function DocumentPreviewInteractive({
     setChipMenuOpen(false)
   }, [chipMenuFieldKey, editor, onChange, toast, collectPlaceholderNodes, placeholderManager])
   
+  // 从文档中移除占位符（用于 bridge）
+  const removePlaceholderBlocks = useCallback(
+    async (fieldKey: string) => {
+      if (!editor) return
+      
+      const matches = collectPlaceholderNodes(fieldKey)
+      if (matches.length === 0) return
+      
+      // 从文档中删除所有占位符实例
+      let tr = editor.state.tr
+      matches
+        .sort((a, b) => b.pos - a.pos)
+        .forEach(({ pos, node }) => {
+          tr = tr.delete(pos, pos + node.nodeSize)
+        })
+      
+      editor.view.dispatch(tr)
+      const updatedContent = editor.getJSON()
+      onChange?.(updatedContent)
+    },
+    [editor, onChange, collectPlaceholderNodes]
+  )
+
+  // 注册 document bridge，使 placeholder-manager 可以操作文档
+  usePlaceholderDocumentBridge(
+    React.useMemo(
+      () => ({
+        remove: removePlaceholderBlocks,
+      }),
+      [removePlaceholderBlocks]
+    )
+  )
+
   // 替换占位符
   const handleReplacePlaceholder = useCallback(() => {
     if (!chipMenuFieldKey) return

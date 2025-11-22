@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Loader2, Search, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import { usePlaceholderManager } from "./placeholder-manager"
 import {
   PlaceholderFormFields,
@@ -58,10 +59,11 @@ export function PlaceholderInserter({
 }: PlaceholderInserterProps) {
   const placeholderManager = usePlaceholderManager()
   const { toast } = useToast()
+  const templateCategory = placeholderManager.templateCategory
   
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm())
+  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm(templateCategory))
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   // 获取所有系统占位符（已配置的）
@@ -105,11 +107,11 @@ export function PlaceholderInserter({
         .replace(/^_+|_+$/g, "")
       
       setFormData({
-        ...createEmptyPlaceholderForm(),
+        ...createEmptyPlaceholderForm(templateCategory),
         fieldKey: normalized,
       })
     }
-  }, [searchQuery])
+  }, [searchQuery, templateCategory])
   
   // 提交创建
   const handleSubmitCreate = useCallback(async () => {
@@ -150,7 +152,7 @@ export function PlaceholderInserter({
       onClose()
       setShowCreateForm(false)
       setSearchQuery("")
-      setFormData(createEmptyPlaceholderForm())
+      setFormData(createEmptyPlaceholderForm(templateCategory))
     } catch (error: any) {
       toast({
         title: "创建失败",
@@ -160,13 +162,13 @@ export function PlaceholderInserter({
     } finally {
       setIsSubmitting(false)
     }
-  }, [formData, placeholderManager, onSelect, onClose, toast])
+  }, [formData, placeholderManager, onSelect, onClose, toast, templateCategory])
   
   // 取消创建
   const handleCancelCreate = useCallback(() => {
     setShowCreateForm(false)
-    setFormData(createEmptyPlaceholderForm())
-  }, [])
+    setFormData(createEmptyPlaceholderForm(templateCategory))
+  }, [templateCategory])
   
   // 关闭对话框
   const handleClose = useCallback(() => {
@@ -174,9 +176,9 @@ export function PlaceholderInserter({
       onClose()
       setSearchQuery("")
       setShowCreateForm(false)
-      setFormData(createEmptyPlaceholderForm())
+      setFormData(createEmptyPlaceholderForm(templateCategory))
     }
-  }, [onClose, isSubmitting])
+  }, [onClose, isSubmitting, templateCategory])
   
   // 获取占位符图标
   const getFieldIcon = (fieldType?: string) => {
@@ -210,6 +212,7 @@ export function PlaceholderInserter({
               formData={formData}
               onChange={setFormData}
               disabled={isSubmitting}
+              templateCategory={templateCategory}
             />
             
             <DialogFooter>
@@ -260,21 +263,38 @@ export function PlaceholderInserter({
                 <div>
                   <div className="text-xs font-medium text-gray-500 mb-2">常用占位符</div>
                   <div className="space-y-1">
-                    {commonPlaceholders.map((p) => (
-                      <button
-                        key={p.fieldKey}
-                        onClick={() => handleSelectPlaceholder(p.fieldKey)}
-                        className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-gray-100 transition-colors text-left"
-                      >
-                        <span className="text-lg">{getFieldIcon(p.backendMeta?.field_type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm">{p.label}</div>
-                          <div className="text-xs text-gray-500 font-mono truncate">
-                            {`{{${p.fieldKey}}}`}
+                    {commonPlaceholders.map((p) => {
+                      const category = p.backendMeta?.applicable_template_category
+                      return (
+                        <button
+                          key={`${p.id}-${category || 'null'}`}
+                          onClick={() => handleSelectPlaceholder(p.fieldKey)}
+                          className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-gray-100 transition-colors text-left"
+                        >
+                          <span className="text-lg">{getFieldIcon(p.backendMeta?.field_type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{p.label}</span>
+                              <Badge 
+                                variant="outline" 
+                                className={cn(
+                                  "text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
+                                  category === "要素式" && "border-blue-500 text-blue-600 bg-blue-50",
+                                  category === "陈述式" && "border-purple-500 text-purple-600 bg-purple-50",
+                                  (!category || category === null) && "border-gray-400 text-gray-600 bg-gray-50"
+                                )}
+                              >
+                                {category === "要素式" ? "要素式" : 
+                                 category === "陈述式" ? "陈述式" : "通用"}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono truncate">
+                              {`{{${p.fieldKey}}}`}
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -289,21 +309,38 @@ export function PlaceholderInserter({
                     <div className="space-y-1 pr-4">
                       {filteredPlaceholders
                         .filter(p => !searchQuery || !commonPlaceholders.find(c => c.fieldKey === p.fieldKey))
-                        .map((p) => (
-                          <button
-                            key={p.fieldKey}
-                            onClick={() => handleSelectPlaceholder(p.fieldKey)}
-                            className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-gray-100 transition-colors text-left"
-                          >
-                            <span className="text-lg">{getFieldIcon(p.backendMeta?.field_type)}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm">{p.label}</div>
-                              <div className="text-xs text-gray-500 font-mono truncate">
-                                {`{{${p.fieldKey}}}`}
+                        .map((p) => {
+                          const category = p.backendMeta?.applicable_template_category
+                          return (
+                            <button
+                              key={`${p.id}-${category || 'null'}`}
+                              onClick={() => handleSelectPlaceholder(p.fieldKey)}
+                              className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-gray-100 transition-colors text-left"
+                            >
+                              <span className="text-lg">{getFieldIcon(p.backendMeta?.field_type)}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">{p.label}</span>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={cn(
+                                      "text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
+                                      category === "要素式" && "border-blue-500 text-blue-600 bg-blue-50",
+                                      category === "陈述式" && "border-purple-500 text-purple-600 bg-purple-50",
+                                      (!category || category === null) && "border-gray-400 text-gray-600 bg-gray-50"
+                                    )}
+                                  >
+                                    {category === "要素式" ? "要素式" : 
+                                     category === "陈述式" ? "陈述式" : "通用"}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs text-gray-500 font-mono truncate">
+                                  {`{{${p.fieldKey}}}`}
+                                </div>
                               </div>
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          )
+                        })}
                     </div>
                   </ScrollArea>
                 </div>

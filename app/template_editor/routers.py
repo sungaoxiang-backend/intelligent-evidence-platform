@@ -596,6 +596,7 @@ async def create_placeholder(
             name=request.name,
             type=request.type,
             options=options_dict,
+            applicable_template_category=request.applicable_template_category,
             created_by_id=current_staff.id,
         )
         
@@ -622,6 +623,7 @@ async def create_placeholder(
 @router.get("/placeholders", response_model=PlaceholderListResponse)
 async def list_placeholders(
     template_id: Optional[int] = Query(None, description="模板ID（可选，如果提供则只返回该模板关联的占位符）"),
+    template_category: Optional[str] = Query(None, description="模板类型（可选，如果提供则只返回该类型或通用的占位符）"),
     skip: int = Query(0, ge=0, description="跳过记录数"),
     limit: int = Query(100, ge=1, le=1000, description="返回记录数限制"),
     db: AsyncSession = Depends(get_db),
@@ -630,11 +632,13 @@ async def list_placeholders(
     列出占位符
     
     如果提供 template_id，则只返回该模板关联的占位符
+    如果提供 template_category，则只返回适用于该类型或通用的占位符
     """
     try:
         placeholders, total = await placeholder_service.list_placeholders(
             db=db,
             template_id=template_id,
+            template_category=template_category,
             skip=skip,
             limit=limit,
         )
@@ -710,6 +714,7 @@ async def update_placeholder(
             new_name=request.name,
             type=request.type,
             options=options_dict,
+            applicable_template_category=request.applicable_template_category,
             updated_by_id=current_staff.id,
         )
         

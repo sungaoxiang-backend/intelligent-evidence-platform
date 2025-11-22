@@ -261,14 +261,16 @@ export const templateApi = {
     return await response.blob()
   },
 
-  // 获取占位符列表（支持按 template_id 筛选）
+  // 获取占位符列表（支持按 template_id 和 template_category 筛选）
   async getPlaceholders(params?: {
     template_id?: number
+    template_category?: string
     skip?: number
     limit?: number
   }): Promise<{ code: number; message: string; data: any[]; total: number }> {
     const queryParams = new URLSearchParams()
     if (params?.template_id !== undefined) queryParams.append("template_id", String(params.template_id))
+    if (params?.template_category) queryParams.append("template_category", params.template_category)
     if (params?.skip !== undefined) queryParams.append("skip", String(params.skip))
     if (params?.limit !== undefined) queryParams.append("limit", String(params.limit))
 
@@ -330,6 +332,7 @@ export const templateApi = {
       name?: string
       type?: string
       options?: Array<{ label: string; value: string }>
+      applicable_template_category?: string | null
     }
   ): Promise<{ code: number; message: string; data: any }> {
     const response = await fetch(

@@ -78,12 +78,12 @@ class TemplatePlaceholder(Base):
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        unique=True,
         index=True,
-        comment="占位符名称（唯一，如：{{姓名}} 对应 name 字段）",
+        comment="占位符名称（如：{{姓名}} 对应 name 字段）",
     )
-    type: Mapped[str] = mapped_column(String(20), nullable=False, comment="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
+    type: Mapped[str] = mapped_column(String(20), nullable=False, index=True, comment="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
     options: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True, comment="选项列表（用于 select, radio, checkbox 类型）")
+    applicable_template_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True, comment="适用的模板类型：要素式/陈述式/通用（None表示通用，适用于所有类型）")
     
     # 创建和更新信息
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("staffs.id"), nullable=True, comment="创建人ID")
@@ -104,4 +104,5 @@ class TemplatePlaceholder(Base):
     
     __table_args__ = (
         Index("idx_template_placeholders_name", "name"),
+        UniqueConstraint("name", "applicable_template_category", name="uq_template_placeholders_name_category"),
     )

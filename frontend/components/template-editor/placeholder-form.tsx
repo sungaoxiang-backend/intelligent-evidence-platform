@@ -19,6 +19,7 @@ export type PlaceholderFormState = {
   fieldKey: string
   type: string
   options: Array<{ label: string; value: string }>
+  applicable_template_category?: string | null
 }
 
 export const placeholderTypeOptions = [
@@ -32,10 +33,11 @@ export const placeholderTypeOptions = [
   { value: "file", label: "文件 (file)" },
 ]
 
-export const createEmptyPlaceholderForm = (): PlaceholderFormState => ({
+export const createEmptyPlaceholderForm = (templateCategory?: string | null): PlaceholderFormState => ({
   fieldKey: "",
   type: "text",
   options: [],
+  applicable_template_category: templateCategory || null,
 })
 
 export const normalizePlaceholderOptions = (formData: PlaceholderFormState) =>
@@ -52,7 +54,7 @@ export const isValidFieldKey = (value: string) => {
   return true
 }
 
-export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormState => {
+export const buildFormStateFromMeta = (meta: PlaceholderMeta, templateCategory?: string | null): PlaceholderFormState => {
   // 确保 options 数组中的每个对象都有正确的结构
   const normalizeOptions = (options?: Array<{ label?: string; value?: string }>): Array<{ label: string; value: string }> => {
     if (!options || !Array.isArray(options)) return []
@@ -66,6 +68,7 @@ export const buildFormStateFromMeta = (meta: PlaceholderMeta): PlaceholderFormSt
     fieldKey: meta.backendMeta?.name || meta.fieldKey,
     type: meta.backendMeta?.type || meta.dataType || "text",
     options: normalizeOptions(meta.backendMeta?.options),
+    applicable_template_category: meta.backendMeta?.applicable_template_category ?? templateCategory ?? null,
   }
 }
 
@@ -73,6 +76,8 @@ export const buildPayloadFromFormState = (formData: PlaceholderFormState): Place
   name: formData.fieldKey.trim(),
   type: formData.type,
   options: normalizePlaceholderOptions(formData),
+  // 明确传递 null 或值，不要转换为 undefined，这样后端才能区分"未设置"和"设置为通用"
+  applicable_template_category: formData.applicable_template_category ?? null,
 })
 
 export interface PlaceholderFormFieldsProps {
@@ -80,6 +85,7 @@ export interface PlaceholderFormFieldsProps {
   formData: PlaceholderFormState
   onChange: (value: PlaceholderFormState) => void
   disabled?: boolean
+  templateCategory?: string | null
 }
 
 export function PlaceholderFormFields({
@@ -87,6 +93,7 @@ export function PlaceholderFormFields({
   formData,
   onChange,
   disabled,
+  templateCategory,
 }: PlaceholderFormFieldsProps) {
   const fieldIds = useMemo(
     () => ({
@@ -106,7 +113,19 @@ export function PlaceholderFormFields({
   const updateOption = (index: number, field: "label" | "value", value: string) => {
     const next = [...(formData.options || [])]
     const currentOption = next[index] || { label: "", value: "" }
-    next[index] = { ...currentOption, [field]: value }
+    
+    // 当标签改变时，如果值为空或者值等于之前的标签值，自动同步更新值
+    if (field === "label") {
+      const shouldSyncValue = !currentOption.value || currentOption.value === currentOption.label
+      next[index] = { 
+        ...currentOption, 
+        label: value,
+        value: shouldSyncValue ? value : currentOption.value
+      }
+    } else {
+      next[index] = { ...currentOption, [field]: value }
+    }
+    
     onChange({
       ...formData,
       options: next,
@@ -155,6 +174,33 @@ export function PlaceholderFormFields({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div>
+        <Label>适用的模板类型</Label>
+        <Select
+          value={formData.applicable_template_category || "通用"}
+          onValueChange={(value) => updateField("applicable_template_category", value === "通用" ? null : value)}
+          disabled={disabled}
+        >
+          <SelectTrigger className="mt-2">
+            <SelectValue placeholder="选择适用的模板类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={templateCategory || "通用"}>
+              {templateCategory || "通用"} {templateCategory ? "(当前模板类型)" : ""}
+            </SelectItem>
+            {templateCategory && (
+              <SelectItem value={templateCategory === "要素式" ? "陈述式" : "要素式"}>
+                {templateCategory === "要素式" ? "陈述式" : "要素式"}
+              </SelectItem>
+            )}
+            <SelectItem value="通用">通用 (适用于所有类型)</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          选择此占位符适用的模板类型。默认使用当前模板的类型。
+        </p>
       </div>
 
       {needsOptions && (

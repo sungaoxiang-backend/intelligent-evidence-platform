@@ -302,31 +302,66 @@ class TemplateService:
         db.add(template)
         await db.flush()  # 先 flush 以获取 template.id
         
+        # 判断是否为陈述式模板，确定适用的模板类型
+        is_narrative_style = category and ("陈述" in category or category == "陈述式")
+        applicable_category = "陈述式" if is_narrative_style else ("要素式" if category and ("要素" in category or category == "要素式") else None)
+        
         # 为每个占位符名称创建或获取 TemplatePlaceholder 对象并关联到模板
         placeholder_objects = []
         for placeholder_name in placeholder_names:
-            # 查询是否已存在
-            result = await db.execute(
-                select(TemplatePlaceholder).where(
-                    TemplatePlaceholder.name == placeholder_name
-                )
-            )
-            placeholder = result.scalar_one_or_none()
+            placeholder = None
             
-            if not placeholder:
-                # 创建新占位符（只设置 name，其他用默认值）
-                placeholder = TemplatePlaceholder(
-                    name=placeholder_name,
-                    type="text",  # 默认类型
-                    options=None,  # 默认值
-                    created_by_id=created_by_id,
-                    updated_by_id=created_by_id,
+            if is_narrative_style:
+                # 陈述式：查询适用于"陈述式"的 type="text" 占位符
+                result = await db.execute(
+                    select(TemplatePlaceholder).where(
+                        TemplatePlaceholder.name == placeholder_name,
+                        TemplatePlaceholder.applicable_template_category == "陈述式",
+                        TemplatePlaceholder.type == "text"
+                    )
                 )
-                db.add(placeholder)
-                await db.flush()  # flush 以获取 placeholder.id
-                logger.info(f"创建占位符: {placeholder_name}")
+                placeholder = result.scalar_one_or_none()
+                
+                if not placeholder:
+                    # 创建新的 type="text" 占位符，标记为适用于"陈述式"
+                    placeholder = TemplatePlaceholder(
+                        name=placeholder_name,
+                        type="text",  # 陈述式统一使用 text
+                        options=None,  # 无选项
+                        applicable_template_category="陈述式",  # 标记为适用于陈述式模板
+                        created_by_id=created_by_id,
+                        updated_by_id=created_by_id,
+                    )
+                    db.add(placeholder)
+                    await db.flush()  # flush 以获取 placeholder.id
+                    logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于陈述式)")
+                else:
+                    logger.info(f"使用已存在的占位符: {placeholder_name} (type=text, 适用于陈述式)")
             else:
-                logger.info(f"使用已存在的占位符: {placeholder_name}")
+                # 要素式：查询适用于"要素式"的占位符（任意类型）
+                result = await db.execute(
+                    select(TemplatePlaceholder).where(
+                        TemplatePlaceholder.name == placeholder_name,
+                        TemplatePlaceholder.applicable_template_category == "要素式"
+                    )
+                )
+                placeholder = result.scalar_one_or_none()
+                
+                if not placeholder:
+                    # 创建新占位符（默认 type="text"），标记为适用于"要素式"
+                    placeholder = TemplatePlaceholder(
+                        name=placeholder_name,
+                        type="text",  # 默认类型
+                        options=None,  # 默认值
+                        applicable_template_category="要素式",  # 标记为适用于要素式模板
+                        created_by_id=created_by_id,
+                        updated_by_id=created_by_id,
+                    )
+                    db.add(placeholder)
+                    await db.flush()  # flush 以获取 placeholder.id
+                    logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于要素式)")
+                else:
+                    logger.info(f"使用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于要素式)")
             
             placeholder_objects.append(placeholder)
         
@@ -421,33 +456,68 @@ class TemplateService:
             )
             existing_placeholder_ids = {row[0] for row in existing_associations_result.all()}
             
+            # 判断是否为陈述式模板，确定适用的模板类型
+            is_narrative_style = template.category and ("陈述" in template.category or template.category == "陈述式")
+            applicable_category = "陈述式" if is_narrative_style else ("要素式" if template.category and ("要素" in template.category or template.category == "要素式") else None)
+            
             # 获取文档中占位符名称对应的占位符对象
             placeholder_objects = []
             placeholder_name_to_id: Dict[str, int] = {}
             
             for placeholder_name in placeholder_names:
-                # 查询是否已存在
-                result = await db.execute(
-                    select(TemplatePlaceholder).where(
-                        TemplatePlaceholder.name == placeholder_name
-                    )
-                )
-                placeholder = result.scalar_one_or_none()
+                placeholder = None
                 
-                if not placeholder:
-                    # 创建新占位符（只设置 name，其他用默认值）
-                    placeholder = TemplatePlaceholder(
-                        name=placeholder_name,
-                        type="text",  # 默认类型
-                        options=None,  # 默认值
-                        created_by_id=updated_by_id,
-                        updated_by_id=updated_by_id,
+                if is_narrative_style:
+                    # 陈述式：查询适用于"陈述式"的 type="text" 占位符
+                    result = await db.execute(
+                        select(TemplatePlaceholder).where(
+                            TemplatePlaceholder.name == placeholder_name,
+                            TemplatePlaceholder.applicable_template_category == "陈述式",
+                            TemplatePlaceholder.type == "text"
+                        )
                     )
-                    db.add(placeholder)
-                    await db.flush()  # flush 以获取 placeholder.id
-                    logger.info(f"创建占位符: {placeholder_name}")
+                    placeholder = result.scalar_one_or_none()
+                    
+                    if not placeholder:
+                        # 创建新的 type="text" 占位符，标记为适用于"陈述式"
+                        placeholder = TemplatePlaceholder(
+                            name=placeholder_name,
+                            type="text",  # 陈述式统一使用 text
+                            options=None,  # 无选项
+                            applicable_template_category="陈述式",  # 标记为适用于陈述式模板
+                            created_by_id=updated_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        db.add(placeholder)
+                        await db.flush()  # flush 以获取 placeholder.id
+                        logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于陈述式)")
+                    else:
+                        logger.info(f"使用已存在的占位符: {placeholder_name} (type=text, 适用于陈述式)")
                 else:
-                    logger.info(f"使用已存在的占位符: {placeholder_name}")
+                    # 要素式：查询适用于"要素式"的占位符（任意类型）
+                    result = await db.execute(
+                        select(TemplatePlaceholder).where(
+                            TemplatePlaceholder.name == placeholder_name,
+                            TemplatePlaceholder.applicable_template_category == "要素式"
+                        )
+                    )
+                    placeholder = result.scalar_one_or_none()
+                    
+                    if not placeholder:
+                        # 创建新占位符（默认 type="text"），标记为适用于"要素式"
+                        placeholder = TemplatePlaceholder(
+                            name=placeholder_name,
+                            type="text",  # 默认类型
+                            options=None,  # 默认值
+                            applicable_template_category="要素式",  # 标记为适用于要素式模板
+                            created_by_id=updated_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        db.add(placeholder)
+                        await db.flush()  # flush 以获取 placeholder.id
+                        logger.info(f"创建占位符: {placeholder_name} (type=text, 适用于要素式)")
+                    else:
+                        logger.info(f"使用已存在的占位符: {placeholder_name} (type={placeholder.type}, 适用于要素式)")
                 
                 placeholder_objects.append(placeholder)
                 placeholder_name_to_id[placeholder_name] = placeholder.id
@@ -511,29 +581,33 @@ class PlaceholderService:
         name: str,
         type: str,
         options: Optional[List[Dict[str, Any]]] = None,
+        applicable_template_category: Optional[str] = None,
         created_by_id: Optional[int] = None,
     ) -> TemplatePlaceholder:
         """
-        创建占位符（以 name 为唯一标识）
+        创建占位符（以 name + applicable_template_category 为唯一标识）
         
-        如果占位符已存在，抛出 ValueError 异常
+        如果占位符已存在（相同的 name 和 applicable_template_category），抛出 ValueError 异常
         """
         from sqlalchemy import select
         
         result = await db.execute(
             select(TemplatePlaceholder).where(
-                TemplatePlaceholder.name == name
+                TemplatePlaceholder.name == name,
+                TemplatePlaceholder.applicable_template_category == applicable_template_category
             )
         )
         placeholder = result.scalar_one_or_none()
         
         if placeholder:
-            raise ValueError(f"占位符 '{name}' 已存在")
+            category_str = applicable_template_category or "通用"
+            raise ValueError(f"占位符 '{name}' (适用于{category_str}) 已存在")
         
         placeholder = TemplatePlaceholder(
             name=name,
             type=type,
             options=options,
+            applicable_template_category=applicable_template_category,
             created_by_id=created_by_id,
             updated_by_id=created_by_id,
         )
@@ -572,6 +646,7 @@ class PlaceholderService:
         self,
         db: AsyncSession,
         template_id: Optional[int] = None,
+        template_category: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[List[TemplatePlaceholder], int]:
@@ -581,17 +656,25 @@ class PlaceholderService:
         Args:
             db: 数据库会话
             template_id: 模板ID（可选，如果提供则只返回该模板关联的占位符）
+            template_category: 模板类型（可选，如果提供则只返回该类型或通用的占位符）
             skip: 跳过记录数
             limit: 返回记录数限制
             
         Returns:
             tuple[List[TemplatePlaceholder], int]: (占位符列表, 总数)
         """
-        from sqlalchemy import select, func
-        from .models import template_placeholder_association
+        from sqlalchemy import select, func, or_
+        from .models import template_placeholder_association, DocumentTemplate
         
         if template_id:
             # 查询指定模板关联的占位符
+            # 如果提供了 template_category，先获取模板的 category（如果模板存在）
+            if template_category is None:
+                template_result = await db.execute(
+                    select(DocumentTemplate.category).where(DocumentTemplate.id == template_id)
+                )
+                template_category = template_result.scalar_one_or_none()
+            
             query = select(TemplatePlaceholder).join(
                 template_placeholder_association
             ).where(
@@ -608,6 +691,21 @@ class PlaceholderService:
             # 查询所有占位符
             query = select(TemplatePlaceholder)
             count_query = select(func.count(TemplatePlaceholder.id))
+        
+        # 如果指定了模板类型，过滤占位符（只返回该类型或通用的占位符）
+        if template_category:
+            # 判断是要素式还是陈述式
+            is_narrative_style = "陈述" in template_category or template_category == "陈述式"
+            category_filter = "陈述式" if is_narrative_style else ("要素式" if ("要素" in template_category or template_category == "要素式") else None)
+            
+            if category_filter:
+                # 只返回匹配的 applicable_template_category 或 None（通用）的占位符
+                category_condition = or_(
+                    TemplatePlaceholder.applicable_template_category == category_filter,
+                    TemplatePlaceholder.applicable_template_category.is_(None)
+                )
+                query = query.where(category_condition)
+                count_query = count_query.where(category_condition)
         
         # 获取总数
         total_result = await db.execute(count_query)
@@ -627,23 +725,62 @@ class PlaceholderService:
         new_name: Optional[str] = None,
         type: Optional[str] = None,
         options: Optional[List[Dict[str, Any]]] = None,
+        applicable_template_category: Optional[str] = None,
         updated_by_id: Optional[int] = None,
     ) -> Optional[TemplatePlaceholder]:
         """
         更新占位符
+        
+        注意：由于占位符的唯一性约束是 (name, applicable_template_category) 组合，更新时需要检查冲突
         """
-        placeholder = await self.get_placeholder(db, placeholder_name)
+        from sqlalchemy import select
+        
+        # 先根据 name 查询（可能有多个，取第一个）
+        result = await db.execute(
+            select(TemplatePlaceholder).where(
+                TemplatePlaceholder.name == placeholder_name
+            )
+        )
+        placeholder = result.scalar_one_or_none()
         if not placeholder:
             return None
         
-        if new_name and new_name != placeholder_name:
-            existing = await self.get_placeholder(db, new_name)
-            if existing:
-                raise ValueError(f"占位符名称 '{new_name}' 已存在")
-            placeholder.name = new_name
+        # 确定最终的名称和适用的模板类型
+        final_name = new_name if new_name else placeholder_name
         
+        # 检查 applicable_template_category 是否应该更新
+        # 由于前端总是会发送这个字段（即使是 null），我们可以通过比较来判断是否需要更新
+        # 如果传入的值与当前值不同，则需要更新
+        should_update_category = False
+        if applicable_template_category != placeholder.applicable_template_category:
+            # 值发生了变化，需要更新
+            should_update_category = True
+            final_category = applicable_template_category
+        else:
+            # 值没有变化，不更新
+            final_category = placeholder.applicable_template_category
+        
+        # 如果名称或适用的模板类型发生变化，检查 (final_name, final_category) 组合是否已存在
+        if (new_name and new_name != placeholder_name) or should_update_category:
+            existing_result = await db.execute(
+                select(TemplatePlaceholder).where(
+                    TemplatePlaceholder.name == final_name,
+                    TemplatePlaceholder.applicable_template_category == final_category
+                )
+            )
+            existing = existing_result.scalar_one_or_none()
+            # 如果找到的占位符不是当前要更新的占位符，说明冲突
+            if existing and existing.id != placeholder.id:
+                category_str = final_category or "通用"
+                raise ValueError(f"占位符 '{final_name}' (适用于{category_str}) 已存在")
+        
+        # 更新字段
+        if new_name and new_name != placeholder_name:
+            placeholder.name = new_name
         if type is not None:
             placeholder.type = type
+        if should_update_category:
+            placeholder.applicable_template_category = final_category
         if options is not None:
             placeholder.options = options
         if updated_by_id is not None:
@@ -663,6 +800,9 @@ class PlaceholderService:
         """
         删除占位符
         
+        注意：由于唯一性约束改为 (name, applicable_template_category)，
+        同一个 name 可能有多个占位符。此方法会删除所有匹配 name 的占位符。
+        
         Args:
             db: 数据库会话
             placeholder_name: 占位符名称
@@ -670,14 +810,37 @@ class PlaceholderService:
         Returns:
             bool: 是否删除成功
         """
-        placeholder = await self.get_placeholder(db, placeholder_name)
-        if not placeholder:
+        from sqlalchemy import select
+        from .models import template_placeholder_association
+        
+        # 查询所有匹配 name 的占位符（可能有多个，因为唯一性约束是 (name, applicable_template_category)）
+        result = await db.execute(
+            select(TemplatePlaceholder).where(
+                TemplatePlaceholder.name == placeholder_name
+            )
+        )
+        placeholders = result.scalars().all()
+        
+        if not placeholders:
             return False
         
-        await db.delete(placeholder)
+        # 先删除所有关联记录（中间表）
+        placeholder_ids = [p.id for p in placeholders]
+        if placeholder_ids:
+            await db.execute(
+                template_placeholder_association.delete().where(
+                    template_placeholder_association.c.placeholder_id.in_(placeholder_ids)
+                )
+            )
+            logger.info(f"删除 {len(placeholder_ids)} 个占位符的关联记录")
+        
+        # 然后删除占位符本身
+        for placeholder in placeholders:
+            await db.delete(placeholder)
+        
         await db.commit()
         
-        logger.info(f"删除占位符成功: {placeholder_name}")
+        logger.info(f"删除占位符成功: {placeholder_name} (共 {len(placeholders)} 个)")
         return True
     
     async def associate_placeholder_to_template(
@@ -742,6 +905,9 @@ class PlaceholderService:
         """
         从模板中移除占位符关联
         
+        注意：由于唯一性约束改为 (name, applicable_template_category)，
+        同一个 name 可能有多个占位符。此方法会删除所有匹配 name 的占位符与模板的关联。
+        
         Args:
             db: 数据库会话
             template_id: 模板ID
@@ -760,19 +926,28 @@ class PlaceholderService:
         if not template_result.scalar_one_or_none():
             return False
         
-        placeholder = await self.get_placeholder(db, placeholder_name)
-        if not placeholder:
+        # 查找所有匹配 name 的占位符（可能有多个，因为唯一性约束是 (name, applicable_template_category)）
+        placeholders_result = await db.execute(
+            select(TemplatePlaceholder.id).where(
+                TemplatePlaceholder.name == placeholder_name
+            )
+        )
+        placeholder_ids = [row[0] for row in placeholders_result.all()]
+        
+        if not placeholder_ids:
             return False
         
+        # 删除所有匹配的关联记录（通过中间表）
         delete_result = await db.execute(
             template_placeholder_association.delete().where(
                 (template_placeholder_association.c.template_id == template_id)
-                & (template_placeholder_association.c.placeholder_id == placeholder.id)
+                & (template_placeholder_association.c.placeholder_id.in_(placeholder_ids))
             )
         )
-        if delete_result.rowcount:
+        
+        if delete_result.rowcount > 0:
             await db.commit()
-            logger.info(f"移除占位符关联成功: template_id={template_id}, placeholder_name={placeholder_name}")
+            logger.info(f"移除占位符关联成功: template_id={template_id}, placeholder_name={placeholder_name} (删除了 {delete_result.rowcount} 条关联)")
             return True
         
         return False

@@ -123,9 +123,10 @@ class PlaceholderOption(BaseModel):
 class PlaceholderCreateRequest(BaseModel):
     """创建占位符请求"""
     
-    name: str = Field(..., description="占位符名称（唯一，对应文档中的 {{name}}）", min_length=1, max_length=100)
+    name: str = Field(..., description="占位符名称（对应文档中的 {{name}}）", min_length=1, max_length=100)
     type: str = Field(..., description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
+    applicable_template_category: Optional[str] = Field(None, description="适用的模板类型：要素式/陈述式/通用（None表示通用）")
 
 
 class PlaceholderUpdateRequest(BaseModel):
@@ -134,6 +135,7 @@ class PlaceholderUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, description="占位符名称", min_length=1, max_length=100)
     type: Optional[str] = Field(None, description="占位符类型：text, textarea, select, radio, checkbox, date, number, file")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表（用于 select, radio, checkbox 类型）")
+    applicable_template_category: Optional[str] = Field(None, description="适用的模板类型：要素式/陈述式/通用（None表示通用）")
 
 
 class PlaceholderResponse(BaseModel):
@@ -143,6 +145,7 @@ class PlaceholderResponse(BaseModel):
     name: str = Field(..., description="占位符名称")
     type: str = Field(..., description="占位符类型")
     options: Optional[List[PlaceholderOption]] = Field(None, description="选项列表")
+    applicable_template_category: Optional[str] = Field(None, description="适用的模板类型")
     created_by_id: Optional[int] = Field(None, description="创建人ID")
     updated_by_id: Optional[int] = Field(None, description="更新人ID")
     created_at: datetime = Field(..., description="创建时间")

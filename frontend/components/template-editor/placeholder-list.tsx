@@ -75,6 +75,7 @@ export function PlaceholderList() {
     deletePlaceholder,
     isSyncing,
     isMutating,
+    templateCategory,
   } = usePlaceholderManager()
 
   const { toast } = useToast()
@@ -85,7 +86,7 @@ export function PlaceholderList() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
-  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm())
+  const [formData, setFormData] = useState<PlaceholderFormState>(createEmptyPlaceholderForm(templateCategory))
 
   // 合并所有占位符，关联的靠前
   const sortedPlaceholders = useMemo(() => {
@@ -141,7 +142,7 @@ export function PlaceholderList() {
   }
 
   const resetForm = () => {
-    setFormData(createEmptyPlaceholderForm())
+    setFormData(createEmptyPlaceholderForm(templateCategory))
   }
 
   const handleOpenCreate = () => {
@@ -155,7 +156,7 @@ export function PlaceholderList() {
   const handleOpenEdit = (placeholder: PlaceholderMeta) => {
     // 确保重置所有状态，防止遮罩层残留
     setEditingPlaceholder(placeholder)
-    setFormData(buildFormStateFromMeta(placeholder))
+    setFormData(buildFormStateFromMeta(placeholder, templateCategory))
     setIsSubmitting(false) // 确保提交状态已重置
     setCreateDialogOpen(true)
   }
@@ -229,10 +230,19 @@ export function PlaceholderList() {
     if (!placeholderToDelete) return
     setIsSubmitting(true)
     try {
+      // 检查占位符是否在文档中
+      const isInDocument = orderedPlaceholders.some(
+        p => p.fieldKey === placeholderToDelete.fieldKey && p.source === "document"
+      )
+      
       await deletePlaceholder(placeholderToDelete.fieldKey)
+      
       toast({
         title: "删除成功",
-        description: `已移除占位符 ${placeholderToDelete.label ?? placeholderToDelete.fieldKey}`,
+        description: isInDocument 
+          ? `已移除占位符 ${placeholderToDelete.label ?? placeholderToDelete.fieldKey}。请记得保存模板以应用更改。`
+          : `已移除占位符 ${placeholderToDelete.label ?? placeholderToDelete.fieldKey}`,
+        duration: isInDocument ? 5000 : 3000, // 如果在文档中，显示更长时间
       })
       setDeleteDialogOpen(false)
       setPlaceholderToDelete(null)
@@ -274,6 +284,19 @@ export function PlaceholderList() {
             
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
               {backend?.type || placeholder.dataType || "text"}
+            </Badge>
+            
+            <Badge 
+              variant="outline" 
+              className={cn(
+                "text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
+                backend?.applicable_template_category === "要素式" && "border-blue-500 text-blue-600 bg-blue-50",
+                backend?.applicable_template_category === "陈述式" && "border-purple-500 text-purple-600 bg-purple-50",
+                (!backend?.applicable_template_category || backend.applicable_template_category === null) && "border-gray-400 text-gray-600 bg-gray-50"
+              )}
+            >
+              {backend?.applicable_template_category === "要素式" ? "要素式" : 
+               backend?.applicable_template_category === "陈述式" ? "陈述式" : "通用"}
             </Badge>
           </>
         }
@@ -422,6 +445,7 @@ export function PlaceholderList() {
             formData={formData}
             onChange={setFormData}
             disabled={isSubmitting}
+            templateCategory={templateCategory}
           />
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>

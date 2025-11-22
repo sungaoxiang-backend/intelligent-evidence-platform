@@ -26,6 +26,7 @@ export interface BackendPlaceholderMeta {
   name: string
   type: string
   options?: Array<{ label: string; value: string }>
+  applicable_template_category?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -48,6 +49,7 @@ export interface PlaceholderPayload {
   name: string
   type: string
   options?: Array<{ label: string; value: string }>
+  applicable_template_category?: string | null
 }
 
 interface PlaceholderDocumentBridge {
@@ -67,6 +69,7 @@ interface PlaceholderContextValue {
   editingId: string | null
   isSyncing: boolean
   isMutating: boolean
+  templateCategory?: string | null
   syncFromDoc: (doc?: JSONContent | null) => void
   loadBackendPlaceholders: (templateIdOverride?: number) => Promise<void>
   loadAllSystemPlaceholders: () => Promise<void>
@@ -99,10 +102,11 @@ interface ExtractedPlaceholder {
 
 interface PlaceholderProviderProps {
   templateId?: number
+  templateCategory?: string | null
   children: ReactNode
 }
 
-export const PlaceholderProvider = ({ children, templateId }: PlaceholderProviderProps) => {
+export const PlaceholderProvider = ({ children, templateId, templateCategory }: PlaceholderProviderProps) => {
   const [docPlaceholderMap, setDocPlaceholderMap] = useState<Record<string, PlaceholderMeta>>({})
   const [docOrderedIds, setDocOrderedIds] = useState<string[]>([])
   const [backendMap, setBackendMap] = useState<Record<string, BackendPlaceholderMeta>>({})
@@ -180,9 +184,12 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
 
   const loadAllSystemPlaceholders = useCallback(async () => {
     try {
-      const response = await templateApi.getPlaceholders({ limit: 1000 })
+      const response = await templateApi.getPlaceholders({ 
+        template_category: templateCategory || undefined,
+        limit: 1000 
+      })
       const items: BackendPlaceholderMeta[] = response.data || []
-      console.log('[PlaceholderManager] loadAllSystemPlaceholders: received', items.length, 'system placeholders')
+      console.log('[PlaceholderManager] loadAllSystemPlaceholders: received', items.length, 'system placeholders (category:', templateCategory, ')')
       const map: Record<string, BackendPlaceholderMeta> = {}
       items.forEach((item) => {
         map[item.name] = {
@@ -195,7 +202,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     } catch (error) {
       console.error("[PlaceholderManager] Failed to load all system placeholders:", error)
     }
-  }, [])
+  }, [templateCategory])
 
   const loadBackendPlaceholders = useCallback(
     async (templateIdOverride?: number) => {
@@ -212,9 +219,12 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         await loadAllSystemPlaceholders()
         
         // 然后加载当前模板关联的占位符
-        const response = await templateApi.getPlaceholders({ template_id: targetId })
+        const response = await templateApi.getPlaceholders({ 
+          template_id: targetId,
+          template_category: templateCategory || undefined
+        })
         const items: BackendPlaceholderMeta[] = response.data || []
-        console.log('[PlaceholderManager] loadBackendPlaceholders: received', items.length, 'associated placeholders:', items.map(i => i.name))
+        console.log('[PlaceholderManager] loadBackendPlaceholders: received', items.length, 'associated placeholders (category:', templateCategory, '):', items.map(i => i.name))
         
         const map: Record<string, BackendPlaceholderMeta> = {}
         items.forEach((item) => {
@@ -231,7 +241,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
         setIsSyncing(false)
       }
     },
-    [currentTemplateId, loadAllSystemPlaceholders]
+    [currentTemplateId, templateCategory, loadAllSystemPlaceholders]
   )
 
   useEffect(() => {
@@ -327,6 +337,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
           name: payload.name || fieldKey,
           type: payload.type,
           options: payload.options,
+          applicable_template_category: payload.applicable_template_category,
           updated_at: new Date().toISOString(),
         },
       }))
@@ -527,6 +538,7 @@ export const PlaceholderProvider = ({ children, templateId }: PlaceholderProvide
     editingId,
     isSyncing,
     isMutating,
+    templateCategory,
     syncFromDoc,
     loadBackendPlaceholders,
     loadAllSystemPlaceholders,

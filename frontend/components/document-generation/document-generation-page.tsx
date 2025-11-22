@@ -417,105 +417,105 @@ export function DocumentGenerationPage() {
         {caseData && (
           <>
             <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-              <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                案件基本信息
-              </h4>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                {/* 第一行第一列：案件ID */}
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-500">案件ID</label>
-                  <div 
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(String(caseData.id))
-                        toast({
-                          title: "复制成功",
-                          description: "案件ID已复制到剪贴板",
-                        })
-                      } catch (error) {
-                        toast({
-                          title: "复制失败",
-                          description: "无法复制到剪贴板",
-                          variant: "destructive",
-                        })
-                      }
-                    }}
-                    className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                    title="点击复制案件ID"
-                  >
-                    #{caseData.id}
-                  </div>
+            <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+              案件基本信息
+            </h4>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {/* 第一行第一列：案件ID */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">案件ID</label>
+                <div 
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(String(caseData.id))
+                      toast({
+                        title: "复制成功",
+                        description: "案件ID已复制到剪贴板",
+                      })
+                    } catch (error) {
+                      toast({
+                        title: "复制失败",
+                        description: "无法复制到剪贴板",
+                        variant: "destructive",
+                      })
+                    }
+                  }}
+                  className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                  title="点击复制案件ID"
+                >
+                  #{caseData.id}
                 </div>
-                {/* 第一行第二列：关联用户 */}
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-500">关联用户</label>
-                  <div className="flex items-center gap-2">
-                    {caseData.user?.id && (
-                      <div 
-                        onClick={async () => {
-                          if (!caseData.user?.id) return
-                          try {
-                            await navigator.clipboard.writeText(String(caseData.user.id))
-                            toast({
-                              title: "复制成功",
-                              description: "用户ID已复制到剪贴板",
-                            })
-                          } catch (error) {
-                            toast({
-                              title: "复制失败",
-                              description: "无法复制到剪贴板",
-                              variant: "destructive",
-                            })
-                          }
-                        }}
-                        className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                        title="点击复制用户ID"
-                      >
-                        #{caseData.user.id}
-                      </div>
-                    )}
-                    {caseData.user?.wechat_avatar && (
-                      <img 
-                        src={caseData.user.wechat_avatar} 
-                        alt={caseData.user?.name || '用户头像'} 
-                        className="w-6 h-6 rounded-full object-cover"
-                        onError={(e) => {
-                          // 如果图片加载失败，隐藏图片
-                          e.currentTarget.style.display = 'none'
-                        }}
-                      />
-                    )}
-                    {caseData.user && caseData.user.name && (
-                      <div className="text-sm font-medium text-slate-900">
-                        {caseData.user.name}
-                      </div>
-                    )}
-                    {!caseData.user && (
-                      <div className="text-sm font-medium text-slate-500">N/A</div>
-                    )}
-                  </div>
+              </div>
+              {/* 第一行第二列：关联用户 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">关联用户</label>
+                <div className="flex items-center gap-2">
+                  {caseData.user?.id && (
+                    <div 
+                      onClick={async () => {
+                        if (!caseData.user?.id) return
+                        try {
+                          await navigator.clipboard.writeText(String(caseData.user.id))
+                          toast({
+                            title: "复制成功",
+                            description: "用户ID已复制到剪贴板",
+                          })
+                        } catch (error) {
+                          toast({
+                            title: "复制失败",
+                            description: "无法复制到剪贴板",
+                            variant: "destructive",
+                          })
+                        }
+                      }}
+                      className="text-sm font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                      title="点击复制用户ID"
+                    >
+                      #{caseData.user.id}
+                    </div>
+                  )}
+                  {caseData.user?.wechat_avatar && (
+                    <img 
+                      src={caseData.user.wechat_avatar} 
+                      alt={caseData.user?.name || '用户头像'} 
+                      className="w-6 h-6 rounded-full object-cover"
+                      onError={(e) => {
+                        // 如果图片加载失败，隐藏图片
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  )}
+                  {caseData.user && caseData.user.name && (
+                    <div className="text-sm font-medium text-slate-900">
+                      {caseData.user.name}
+                    </div>
+                  )}
+                  {!caseData.user && (
+                    <div className="text-sm font-medium text-slate-500">N/A</div>
+                  )}
                 </div>
-                {/* 第二行第一列：案由 */}
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-500">案由</label>
-                  <div className="text-sm font-medium text-slate-900">
-                    {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
-                     caseData.case_type === 'contract' ? '买卖合同纠纷' : 
-                     getCaseCause(caseData) || 'N/A'}
-                  </div>
+              </div>
+              {/* 第二行第一列：案由 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">案由</label>
+                <div className="text-sm font-medium text-slate-900">
+                  {caseData.case_type === 'debt' ? '民间借贷纠纷' : 
+                   caseData.case_type === 'contract' ? '买卖合同纠纷' : 
+                   getCaseCause(caseData) || 'N/A'}
                 </div>
-                {/* 第二行第二列：欠款金额 */}
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-500">欠款金额</label>
-                  <div className="text-sm font-semibold text-red-600">
-                    {caseData.loan_amount !== null && caseData.loan_amount !== undefined
-                      ? `¥${caseData.loan_amount.toLocaleString()}`
-                      : 'N/A'}
-                  </div>
+              </div>
+              {/* 第二行第二列：欠款金额 */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">欠款金额</label>
+                <div className="text-sm font-semibold text-red-600">
+                  {caseData.loan_amount !== null && caseData.loan_amount !== undefined
+                    ? `¥${caseData.loan_amount.toLocaleString()}`
+                    : 'N/A'}
                 </div>
               </div>
             </div>
+          </div>
 
             {/* 债权人和债务人信息 - 左右分布 */}
             {(caseData.case_parties?.find((p: any) => p.party_role === "creditor") || caseData.case_parties?.find((p: any) => p.party_role === "debtor")) && (
