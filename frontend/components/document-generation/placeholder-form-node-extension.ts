@@ -10,6 +10,7 @@ export interface PlaceholderFormNodeOptions {
   getFormValue?: (fieldKey: string) => any
   onFormValueChange?: (fieldKey: string, value: any) => void
   registerUpdateCallback?: (callback: () => void) => () => void
+  templateCategory?: string | null
 }
 
 export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
@@ -25,6 +26,7 @@ export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
       getFormValue: () => undefined,
       onFormValueChange: undefined,
       registerUpdateCallback: undefined,
+      templateCategory: null,
     }
   },
 
@@ -115,15 +117,16 @@ export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
           currentPlaceholderInfo === placeholderInfo
         ) {
           // 只更新值，不重新创建组件
-          root.render(
-            React.createElement(PlaceholderFormField, {
-              placeholder: placeholderInfo,
-              value: formValue,
-              onChange: (value: any) => {
-                this.options.onFormValueChange?.(fieldKey, value)
-              },
-            })
-          )
+              root.render(
+                React.createElement(PlaceholderFormField, {
+                  placeholder: placeholderInfo,
+                  value: formValue,
+                  onChange: (value: any) => {
+                    this.options.onFormValueChange?.(fieldKey, value)
+                  },
+                  templateCategory: this.options.templateCategory,
+                })
+              )
           return
         }
 
@@ -149,6 +152,7 @@ export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
                 onChange: (value: any) => {
                   this.options.onFormValueChange?.(fieldKey, value)
                 },
+                templateCategory: this.options.templateCategory,
               })
             )
           } catch (error) {
@@ -177,6 +181,7 @@ export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
                   onChange: (value: any) => {
                     this.options.onFormValueChange?.(currentFieldKey, value)
                   },
+                  templateCategory: this.options.templateCategory,
                 })
               )
             }

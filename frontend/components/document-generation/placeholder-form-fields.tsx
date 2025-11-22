@@ -33,6 +33,7 @@ interface PlaceholderFormFieldProps {
   placeholder: PlaceholderInfo
   value: any
   onChange: (value: any) => void
+  templateCategory?: string | null
   className?: string
   disabled?: boolean
 }
@@ -41,6 +42,7 @@ export function PlaceholderFormField({
   placeholder,
   value,
   onChange,
+  templateCategory,
   className,
   disabled = false,
 }: PlaceholderFormFieldProps) {
@@ -115,6 +117,19 @@ export function PlaceholderFormField({
     onChange(newValue) // 立即更新外部状态
   }
   
+  // 判断是否是要素式模板
+  const isElementStyle = templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式")
+  
+  // 获取placeholder文本（陈述式使用特殊格式）
+  const getPlaceholderText = () => {
+    if (!isElementStyle) {
+      // 陈述式：格式为"请输入"key""
+      return `请输入"${placeholder.name}"`
+    }
+    // 要素式：使用默认格式
+    return `请输入${placeholder.name}`
+  }
+  
   const renderField = () => {
     switch (placeholder.type) {
       case "text":
@@ -127,8 +142,11 @@ export function PlaceholderFormField({
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder={`请输入${placeholder.name}`}
-            className={cn("min-w-[120px]", className)}
+            placeholder={getPlaceholderText()}
+            className={cn(
+              isElementStyle ? "w-full h-8" : "w-full h-8",
+              className
+            )}
             disabled={disabled}
           />
         )
@@ -143,8 +161,11 @@ export function PlaceholderFormField({
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder={`请输入${placeholder.name}`}
-            className={cn("min-w-[200px] min-h-[60px]", className)}
+            placeholder={getPlaceholderText()}
+            className={cn(
+              isElementStyle ? "w-full min-h-[60px]" : "w-full min-h-[60px]",
+              className
+            )}
             disabled={disabled}
           />
         )
@@ -160,8 +181,11 @@ export function PlaceholderFormField({
               onChange={(e) => handleChange(e.target.value)}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              placeholder={`请输入${placeholder.name}`}
-              className={cn("min-w-[120px]", className)}
+              placeholder={getPlaceholderText()}
+              className={cn(
+                isElementStyle ? "w-full h-8" : "w-full h-8",
+                className
+              )}
               disabled={disabled}
             />
           )
@@ -176,7 +200,10 @@ export function PlaceholderFormField({
             }}
             disabled={disabled}
           >
-            <SelectTrigger className={cn("min-w-[120px]", className)}>
+            <SelectTrigger className={cn(
+              isElementStyle ? "w-full h-8" : "w-full h-8",
+              className
+            )}>
               <SelectValue placeholder={`请选择${placeholder.name}`} />
             </SelectTrigger>
             <SelectContent>
@@ -200,8 +227,11 @@ export function PlaceholderFormField({
               onChange={(e) => handleChange(e.target.value)}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              placeholder={`请输入${placeholder.name}`}
-              className={cn("min-w-[120px]", className)}
+              placeholder={getPlaceholderText()}
+              className={cn(
+                isElementStyle ? "w-full h-8" : "w-full h-8",
+                className
+              )}
               disabled={disabled}
             />
           )
@@ -302,7 +332,10 @@ export function PlaceholderFormField({
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            className={cn("min-w-[150px]", className)}
+            className={cn(
+              isElementStyle ? "w-full h-8" : "w-full h-8",
+              className
+            )}
             disabled={disabled}
           />
         )
@@ -383,7 +416,7 @@ export function PlaceholderFormField({
         }
 
         return (
-          <div className={cn("flex flex-col gap-2 min-w-[200px]", className)}>
+          <div className={cn("flex flex-col gap-2 w-full", className)}>
             <div className="relative">
               <Input
                 ref={(el) => {
@@ -399,9 +432,9 @@ export function PlaceholderFormField({
                 onDrop={handleDrop}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                placeholder="粘贴图片链接或拖拽图片"
+                placeholder={getPlaceholderText()}
                 className={cn(
-                  "min-w-[200px] pr-8",
+                  "w-full h-8 pr-8",
                   isDragging && "ring-2 ring-blue-500 bg-blue-50"
                 )}
                 disabled={disabled}

@@ -782,6 +782,7 @@ export function DocumentGenerationPage() {
                       content={selectedTemplate.prosemirror_json}
                       placeholders={placeholders}
                       formData={formData}
+                      templateCategory={selectedTemplate.category}
                       onFormDataChange={(updater) => {
                         if (typeof updater === 'function') {
                           setFormData(updater)

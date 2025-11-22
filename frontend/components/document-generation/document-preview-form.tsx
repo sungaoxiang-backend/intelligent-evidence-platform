@@ -35,6 +35,9 @@ interface DocumentPreviewFormProps {
   /** 表单数据变化回调 */
   onFormDataChange?: (formData: Record<string, any>) => void
   
+  /** 模板类型（要素式/陈述式） */
+  templateCategory?: string | null
+  
   /** 自定义类名 */
   className?: string
 }
@@ -49,6 +52,7 @@ export function DocumentPreviewForm({
   placeholders = [],
   formData = {},
   onFormDataChange,
+  templateCategory,
   className,
 }: DocumentPreviewFormProps) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -140,6 +144,7 @@ export function DocumentPreviewForm({
         getFormValue,
         onFormValueChange: handleFormValueChange,
         registerUpdateCallback,
+        templateCategory,
       }),
     ],
     content: { type: "doc", content: [] },
@@ -198,6 +203,76 @@ export function DocumentPreviewForm({
         <EditorContent editor={editor} />
       </div>
       <style jsx global>{templateBaseStyles}</style>
+      <style jsx global>{`
+        /* 要素式模板：表格单元格布局优化 - 50%:50%布局 */
+        /* 表格单元格中包含占位符字段时，使用flex布局实现50%:50%分配 */
+        .template-doc table td,
+        .template-doc table th {
+          position: relative;
+        }
+        
+        /* 要素式模板：表格单元格中包含占位符时，使用flex布局 */
+        .template-doc table td .placeholder-form-field,
+        .template-doc table th .placeholder-form-field {
+          display: inline-block;
+          width: 50%;
+          vertical-align: middle;
+          margin-left: auto;
+        }
+        
+        /* 要素式模板：确保输入框样式统一 */
+        .template-doc table td .placeholder-form-field input,
+        .template-doc table td .placeholder-form-field textarea,
+        .template-doc table td .placeholder-form-field [role="combobox"],
+        .template-doc table th .placeholder-form-field input,
+        .template-doc table th .placeholder-form-field textarea,
+        .template-doc table th .placeholder-form-field [role="combobox"] {
+          width: 100%;
+          height: 32px;
+          padding: 4px 8px;
+          font-size: 14px;
+          line-height: 1.5;
+          border: 1px solid #d1d5db;
+          border-radius: 4px;
+        }
+        
+        .template-doc table td .placeholder-form-field textarea,
+        .template-doc table th .placeholder-form-field textarea {
+          height: auto;
+          min-height: 60px;
+        }
+        
+        /* 要素式模板：表格单元格中的文本（字段名）应该在左侧，占50% */
+        .template-doc table td,
+        .template-doc table th {
+          text-align: left;
+        }
+        
+        /* 陈述式模板：统一输入框样式 */
+        .template-doc .placeholder-form-field input,
+        .template-doc .placeholder-form-field textarea,
+        .template-doc .placeholder-form-field [role="combobox"] {
+          width: 100%;
+          height: 32px;
+          padding: 4px 8px;
+          font-size: 14px;
+          line-height: 1.5;
+          border: 1px solid #d1d5db;
+          border-radius: 4px;
+        }
+        
+        .template-doc .placeholder-form-field textarea {
+          height: auto;
+          min-height: 60px;
+        }
+        
+        /* 统一所有输入框的placeholder样式 */
+        .template-doc .placeholder-form-field input::placeholder,
+        .template-doc .placeholder-form-field textarea::placeholder {
+          color: #9ca3af;
+          opacity: 1;
+        }
+      `}</style>
     </div>
   )
 }
