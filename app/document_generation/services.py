@@ -343,93 +343,112 @@ class DocumentGenerationService:
             values.sort(key=lambda x: x[0])
             return values
         
-        def duplicate_table_row_with_array_data(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]]):
+        def expand_cells_with_array_data(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]]):
             """
-            复制表格行，为数组数据创建多个行副本
-            cell_placeholders_map: {cell_index: [placeholder_names]}
+            在单元格内垂直排列数组数据，保持原有样式和格式
+            这是最简单有效的方案
             """
-            # 找出所有需要复制的单元格及其数组数据
-            cell_array_data = {}  # {cell_index: [(index, {field: value})]}
-            
+            logger.info(f"单元格扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
+
+            cells = row_node.get("content", [])
+            if not cells:
+                logger.warning("单元格扩展：行没有单元格内容")
+                return
+
+            logger.info(f"单元格扩展：原行有 {len(cells)} 个单元格")
+
+            # 处理每个需要扩展的单元格
             for cell_idx, placeholders in cell_placeholders_map.items():
-                if not placeholders:
+                if cell_idx >= len(cells):
+                    logger.warning(f"单元格扩展：单元格索引 {cell_idx} 超出范围")
                     continue
-                
+
+                cell_node = cells[cell_idx]
+                logger.info(f"单元格扩展：处理单元格 {cell_idx}，占位符: {placeholders}")
+
                 # 获取第一个占位符的所有数组值
                 first_placeholder = placeholders[0]
                 array_values = get_all_array_values(first_placeholder, form_data)
-                
-                if not array_values:
+
+                if not array_values or len(array_values) <= 1:
+                    logger.info(f"单元格扩展：单元格 {cell_idx} 没有或只有一个数组值，跳过")
                     continue
-                
-                # 为每个数组索引创建数据字典
-                cell_data_list = []
-                for arr_idx, _ in array_values:
-                    cell_data = {}
+
+                logger.info(f"单元格扩展：单元格 {cell_idx} 有 {len(array_values)} 个数组值")
+
+                # 为单元格创建垂直排列的内容
+                expanded_content = []
+                for i, (arr_idx, _) in enumerate(array_values):
+                    logger.info(f"单元格扩展：为单元格 {cell_idx} 创建第 {arr_idx} 项的内容")
+
+                    # 为当前索引创建专用的form_data
+                    temp_form_data = form_data.copy()
+
+                    # 将当前索引的数组数据映射到普通字段名
                     for placeholder in placeholders:
                         array_field_name = f"{placeholder}[{arr_idx}]"
-                        cell_data[placeholder] = form_data.get(array_field_name)
-                    cell_data_list.append((arr_idx, cell_data))
-                
-                if cell_data_list:
-                    cell_array_data[cell_idx] = cell_data_list
-            
-            if not cell_array_data:
-                return [row_node]  # 没有数组数据，返回原行
-            
-            # 找出最大的数组长度
-            max_length = max(len(data_list) for data_list in cell_array_data.values())
-            if max_length == 0:
-                return [row_node]
-            
-            # 创建多个行副本
-            duplicated_rows = []
-            cells = row_node.get("content", [])
-            
-            for i in range(max_length):
-                new_cells = []
-                for cell_idx, cell_node in enumerate(cells):
-                    if cell_idx in cell_array_data and i < len(cell_array_data[cell_idx]):
-                        # 这个单元格需要复制，使用对应索引的数据
-                        _, cell_data = cell_array_data[cell_idx][i]
-                        # 创建单元格副本并替换占位符
-                        new_cell = copy.deepcopy(cell_node)
-                        replace_placeholders_in_node(new_cell, cell_data, cell_placeholders_map.get(cell_idx, []))
-                        new_cells.append(new_cell)
-                    elif cell_idx not in cell_array_data:
-                        # 这个单元格不需要复制，直接使用原单元格
-                        new_cells.append(copy.deepcopy(cell_node))
-                    else:
-                        # 数组数据不足，使用最后一个数据或空数据
-                        if cell_array_data[cell_idx]:
-                            _, cell_data = cell_array_data[cell_idx][-1]
-                        else:
-                            cell_data = {}
-                        new_cell = copy.deepcopy(cell_node)
-                        replace_placeholders_in_node(new_cell, cell_data, cell_placeholders_map.get(cell_idx, []))
-                        new_cells.append(new_cell)
-                
-                new_row = {
-                    "type": row_node.get("type", "tableRow"),
-                    "content": new_cells,
-                }
-                duplicated_rows.append(new_row)
-            
-            return duplicated_rows if duplicated_rows else [row_node]
-        
-        def replace_placeholders_in_node(node: Dict[str, Any], cell_data: Dict[str, Any], cell_placeholders: list[str]):
+                        value = form_data.get(array_field_name)
+                        if value is not None:
+                            temp_form_data[placeholder] = value
+                            logger.info(f"单元格扩展：设置 {placeholder} = {value}")
+
+                    # 复制原始单元格结构
+                    cell_copy = copy.deepcopy(cell_node)
+
+                    # 使用正常的占位符替换流程处理这个副本
+                    replace_placeholders_in_node(cell_copy, temp_form_data, placeholders)
+
+                    # 将处理后的内容添加到扩展内容中
+                    if "content" in cell_copy and cell_copy["content"]:
+                        # 如果内容是段落列表，将它们添加到扩展内容
+                        for content_item in cell_copy["content"]:
+                            expanded_content.append(content_item)
+                            logger.info(f"单元格扩展：添加了处理后的内容项")
+
+                    # 在不同的复制项之间添加分割线（除了最后一个）
+                    if i < len(array_values) - 1:
+                        # 创建分割线段落 - 使用点划线字符
+                        separator_paragraph = {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "--------------------------------"
+                                }
+                            ]
+                        }
+                        expanded_content.append(separator_paragraph)
+                        logger.info(f"单元格扩展：在第 {arr_idx} 项后添加了点划线分割线")
+
+                # 替换单元格内容
+                if expanded_content:
+                    cell_node["content"] = expanded_content
+                    logger.info(f"单元格扩展：单元格 {cell_idx} 内容已替换为 {len(expanded_content)} 个内容项")
+                else:
+                    # 如果没有内容，创建空段落
+                    empty_paragraph = {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": ""}]
+                    }
+                    cell_node["content"] = [empty_paragraph]
+                    logger.info(f"单元格扩展：单元格 {cell_idx} 没有数据，创建空段落")
+
+            logger.info("单元格扩展：处理完成")
+
+          
+        def replace_placeholders_in_node(node: Dict[str, Any], form_data_for_replacement: Dict[str, Any], cell_placeholders: list[str]):
             """在节点中替换占位符（用于单元格复制）"""
             node_type = node.get("type")
-            
+
             if node_type == "placeholder":
                 attrs = node.get("attrs", {})
                 placeholder_name = attrs.get("fieldKey", "").strip()
-                
-                if placeholder_name and placeholder_name in cell_data:
-                    value = cell_data[placeholder_name]
+
+                if placeholder_name and placeholder_name in form_data_for_replacement:
+                    value = form_data_for_replacement[placeholder_name]
                     meta = placeholder_map.get(placeholder_name)
                     placeholder_type = meta.get("type", "text") if meta else "text"
-                    
+
                     if placeholder_type == "file":
                         if attrs is None:
                             attrs = {}
@@ -457,10 +476,10 @@ class DocumentGenerationService:
                         node["text"] = formatted_value
                         if "attrs" in node:
                             del node["attrs"]
-            
+
             if "content" in node and isinstance(node["content"], list):
                 for child in node["content"]:
-                    replace_placeholders_in_node(child, cell_data, cell_placeholders)
+                    replace_placeholders_in_node(child, form_data_for_replacement, cell_placeholders)
         
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""
@@ -470,10 +489,12 @@ class DocumentGenerationService:
             if node_type == "tableRow":
                 # 检查行中的单元格是否包含数组格式的占位符
                 cells = node.get("content", [])
+                logger.info(f"表格行复制：分析表格行，有 {len(cells)} 个单元格")
                 cell_placeholders_map = {}  # {cell_index: [placeholder_names]}
-                
+
                 for cell_idx, cell_node in enumerate(cells):
                     if cell_node.get("type") in ["tableCell", "tableHeader"]:
+                        logger.info(f"表格行复制：检查单元格 {cell_idx}")
                         # 提取单元格中的所有占位符
                         cell_placeholders = []
                         def extract_from_cell(cell: Dict[str, Any]):
@@ -484,27 +505,34 @@ class DocumentGenerationService:
                             if "content" in cell and isinstance(cell["content"], list):
                                 for child in cell["content"]:
                                     extract_from_cell(child)
-                        
+
                         extract_from_cell(cell_node)
-                        
+                        logger.info(f"表格行复制：单元格 {cell_idx} 占位符: {cell_placeholders}")
+
                         # 检查这些占位符是否有数组格式的数据
                         has_array_data = False
                         for placeholder in cell_placeholders:
                             array_values = get_all_array_values(placeholder, form_data)
                             if array_values:
                                 has_array_data = True
+                                logger.info(f"表格行复制：单元格 {cell_idx} 的占位符 {placeholder} 有数组数据: {array_values}")
                                 break
-                        
-                        if has_array_data and len(cell_placeholders) > 1:
+
+                        if has_array_data:
                             cell_placeholders_map[cell_idx] = cell_placeholders
-                
-                # 如果有需要复制的单元格，复制行
+                            logger.info(f"表格行复制：标记单元格 {cell_idx} 需要复制，占位符: {cell_placeholders}")
+                        else:
+                            logger.info(f"表格行复制：单元格 {cell_idx} 无数组数据，占位符: {cell_placeholders}")
+
+                # 如果有需要复制的单元格，在单元格内垂直排列数据
                 if cell_placeholders_map:
-                    duplicated_rows = duplicate_table_row_with_array_data(node, cell_placeholders_map)
-                    # 替换当前节点为多个行（需要返回给父节点处理）
-                    # 这里我们标记节点需要被替换
-                    node["__duplicated_rows__"] = duplicated_rows
+                    logger.info(f"表格行复制：检测到需要复制的单元格，改为单元格内垂直排列")
+                    logger.info(f"表格行复制：cell_placeholders_map = {cell_placeholders_map}")
+                    expand_cells_with_array_data(node, cell_placeholders_map)
+                    logger.info(f"表格行复制：单元格扩展完成")
                     return
+                else:
+                    logger.info("表格行复制：当前行没有需要复制的单元格")
             
             # 处理 placeholder 节点类型（这是主要的占位符格式）
             if node_type == "placeholder":
@@ -603,10 +631,15 @@ class DocumentGenerationService:
                     traverse_and_replace(child)
                     # 检查是否有复制的行
                     if "__duplicated_rows__" in child:
+                        logger.info(f"表格行复制：发现复制标记，扩展 {len(child['__duplicated_rows__'])} 行")
                         new_content.extend(child["__duplicated_rows__"])
                         del child["__duplicated_rows__"]
                     else:
                         new_content.append(child)
+
+                # 记录内容变化
+                if len(new_content) != len(node["content"]):
+                    logger.info(f"表格行复制：内容从 {len(node['content'])} 行变为 {len(new_content)} 行")
                 node["content"] = new_content
         
         traverse_and_replace(result)
