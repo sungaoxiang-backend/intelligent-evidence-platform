@@ -325,9 +325,186 @@ class DocumentGenerationService:
                 # 其他类型转换为字符串
                 return str(value) if value else ""
         
+        def parse_array_field_name(field_name: str):
+            """解析数组格式的字段名，如 'fieldName[0]' -> ('fieldName', 0)"""
+            match = re.match(r'^(.+)\[(\d+)\]$', field_name)
+            if match:
+                return (match.group(1), int(match.group(2)))
+            return None
+        
+        def get_all_array_values(base_name: str, form_data: Dict[str, Any]):
+            """获取所有数组格式的字段值，返回 [(index, value), ...]"""
+            values = []
+            for key, value in form_data.items():
+                parsed = parse_array_field_name(key)
+                if parsed and parsed[0] == base_name:
+                    values.append((parsed[1], value))
+            # 按索引排序
+            values.sort(key=lambda x: x[0])
+            return values
+        
+        def duplicate_table_row_with_array_data(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]]):
+            """
+            复制表格行，为数组数据创建多个行副本
+            cell_placeholders_map: {cell_index: [placeholder_names]}
+            """
+            # 找出所有需要复制的单元格及其数组数据
+            cell_array_data = {}  # {cell_index: [(index, {field: value})]}
+            
+            for cell_idx, placeholders in cell_placeholders_map.items():
+                if not placeholders:
+                    continue
+                
+                # 获取第一个占位符的所有数组值
+                first_placeholder = placeholders[0]
+                array_values = get_all_array_values(first_placeholder, form_data)
+                
+                if not array_values:
+                    continue
+                
+                # 为每个数组索引创建数据字典
+                cell_data_list = []
+                for arr_idx, _ in array_values:
+                    cell_data = {}
+                    for placeholder in placeholders:
+                        array_field_name = f"{placeholder}[{arr_idx}]"
+                        cell_data[placeholder] = form_data.get(array_field_name)
+                    cell_data_list.append((arr_idx, cell_data))
+                
+                if cell_data_list:
+                    cell_array_data[cell_idx] = cell_data_list
+            
+            if not cell_array_data:
+                return [row_node]  # 没有数组数据，返回原行
+            
+            # 找出最大的数组长度
+            max_length = max(len(data_list) for data_list in cell_array_data.values())
+            if max_length == 0:
+                return [row_node]
+            
+            # 创建多个行副本
+            duplicated_rows = []
+            cells = row_node.get("content", [])
+            
+            for i in range(max_length):
+                new_cells = []
+                for cell_idx, cell_node in enumerate(cells):
+                    if cell_idx in cell_array_data and i < len(cell_array_data[cell_idx]):
+                        # 这个单元格需要复制，使用对应索引的数据
+                        _, cell_data = cell_array_data[cell_idx][i]
+                        # 创建单元格副本并替换占位符
+                        new_cell = copy.deepcopy(cell_node)
+                        replace_placeholders_in_node(new_cell, cell_data, cell_placeholders_map.get(cell_idx, []))
+                        new_cells.append(new_cell)
+                    elif cell_idx not in cell_array_data:
+                        # 这个单元格不需要复制，直接使用原单元格
+                        new_cells.append(copy.deepcopy(cell_node))
+                    else:
+                        # 数组数据不足，使用最后一个数据或空数据
+                        if cell_array_data[cell_idx]:
+                            _, cell_data = cell_array_data[cell_idx][-1]
+                        else:
+                            cell_data = {}
+                        new_cell = copy.deepcopy(cell_node)
+                        replace_placeholders_in_node(new_cell, cell_data, cell_placeholders_map.get(cell_idx, []))
+                        new_cells.append(new_cell)
+                
+                new_row = {
+                    "type": row_node.get("type", "tableRow"),
+                    "content": new_cells,
+                }
+                duplicated_rows.append(new_row)
+            
+            return duplicated_rows if duplicated_rows else [row_node]
+        
+        def replace_placeholders_in_node(node: Dict[str, Any], cell_data: Dict[str, Any], cell_placeholders: list[str]):
+            """在节点中替换占位符（用于单元格复制）"""
+            node_type = node.get("type")
+            
+            if node_type == "placeholder":
+                attrs = node.get("attrs", {})
+                placeholder_name = attrs.get("fieldKey", "").strip()
+                
+                if placeholder_name and placeholder_name in cell_data:
+                    value = cell_data[placeholder_name]
+                    meta = placeholder_map.get(placeholder_name)
+                    placeholder_type = meta.get("type", "text") if meta else "text"
+                    
+                    if placeholder_type == "file":
+                        if attrs is None:
+                            attrs = {}
+                        attrs["value"] = value
+                        if meta:
+                            attrs["placeholderType"] = "file"
+                            if meta.get("options"):
+                                attrs["options"] = meta["options"]
+                        node["attrs"] = attrs
+                    elif is_element_style:
+                        if attrs is None:
+                            attrs = {}
+                        attrs["value"] = value
+                        if meta:
+                            attrs["placeholderType"] = meta.get("type", "text")
+                            if meta.get("options"):
+                                attrs["options"] = meta["options"]
+                        node["attrs"] = attrs
+                    else:
+                        if value is not None:
+                            formatted_value = format_placeholder_value(placeholder_name, value, meta)
+                        else:
+                            formatted_value = ""
+                        node["type"] = "text"
+                        node["text"] = formatted_value
+                        if "attrs" in node:
+                            del node["attrs"]
+            
+            if "content" in node and isinstance(node["content"], list):
+                for child in node["content"]:
+                    replace_placeholders_in_node(child, cell_data, cell_placeholders)
+        
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""
             node_type = node.get("type")
+            
+            # 处理表格行：检查是否需要复制
+            if node_type == "tableRow":
+                # 检查行中的单元格是否包含数组格式的占位符
+                cells = node.get("content", [])
+                cell_placeholders_map = {}  # {cell_index: [placeholder_names]}
+                
+                for cell_idx, cell_node in enumerate(cells):
+                    if cell_node.get("type") in ["tableCell", "tableHeader"]:
+                        # 提取单元格中的所有占位符
+                        cell_placeholders = []
+                        def extract_from_cell(cell: Dict[str, Any]):
+                            if cell.get("type") == "placeholder":
+                                field_key = cell.get("attrs", {}).get("fieldKey", "").strip()
+                                if field_key:
+                                    cell_placeholders.append(field_key)
+                            if "content" in cell and isinstance(cell["content"], list):
+                                for child in cell["content"]:
+                                    extract_from_cell(child)
+                        
+                        extract_from_cell(cell_node)
+                        
+                        # 检查这些占位符是否有数组格式的数据
+                        has_array_data = False
+                        for placeholder in cell_placeholders:
+                            array_values = get_all_array_values(placeholder, form_data)
+                            if array_values:
+                                has_array_data = True
+                                break
+                        
+                        if has_array_data and len(cell_placeholders) > 1:
+                            cell_placeholders_map[cell_idx] = cell_placeholders
+                
+                # 如果有需要复制的单元格，复制行
+                if cell_placeholders_map:
+                    duplicated_rows = duplicate_table_row_with_array_data(node, cell_placeholders_map)
+                    # 替换当前节点为多个行（需要返回给父节点处理）
+                    # 这里我们标记节点需要被替换
+                    node["__duplicated_rows__"] = duplicated_rows
+                    return
             
             # 处理 placeholder 节点类型（这是主要的占位符格式）
             if node_type == "placeholder":
@@ -335,14 +512,21 @@ class DocumentGenerationService:
                 placeholder_name = attrs.get("fieldKey", "").strip()
                 
                 if placeholder_name:
+                    # 检查是否有数组格式的数据
+                    array_values = get_all_array_values(placeholder_name, form_data)
+                    
                     # 获取占位符元数据
                     meta = placeholder_map.get(placeholder_name)
                     
                     # 调试日志
                     logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}, 要素式: {is_element_style}")
                     
-                    # 获取值
-                    value = form_data.get(placeholder_name) if form_data else None
+                    # 如果有数组数据，使用第一个值（在表格行复制时已经处理了）
+                    if array_values:
+                        value = array_values[0][1]  # 使用第一个数组值
+                    else:
+                        # 获取值
+                        value = form_data.get(placeholder_name) if form_data else None
                     
                     # 获取占位符类型
                     placeholder_type = meta.get("type", "text") if meta else "text"
@@ -413,10 +597,29 @@ class DocumentGenerationService:
             
             # 递归处理子节点
             if "content" in node and isinstance(node["content"], list):
+                # 检查是否有需要替换的行
+                new_content = []
                 for child in node["content"]:
                     traverse_and_replace(child)
+                    # 检查是否有复制的行
+                    if "__duplicated_rows__" in child:
+                        new_content.extend(child["__duplicated_rows__"])
+                        del child["__duplicated_rows__"]
+                    else:
+                        new_content.append(child)
+                node["content"] = new_content
         
         traverse_and_replace(result)
+        
+        # 清理所有标记
+        def clean_marks(node: Dict[str, Any]):
+            if "__duplicated_rows__" in node:
+                del node["__duplicated_rows__"]
+            if "content" in node and isinstance(node["content"], list):
+                for child in node["content"]:
+                    clean_marks(child)
+        
+        clean_marks(result)
         return result
     
     async def generate_document(

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useCallback } from "react"
+import React, { useEffect, useRef, useCallback, useState } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
 import StarterKit from "@tiptap/starter-kit"
@@ -14,13 +14,16 @@ import HardBreak from "@tiptap/extension-hard-break"
 import {
   HeadingWithAttrs,
   ParagraphWithAttrs,
-  TableCellWithAttrs,
   TableWithAttrs,
   templateBaseStyles,
 } from "@/components/template-editor/extensions"
+import { ReplicableTableCellWithAttrs } from "./replicable-table-cell-with-attrs"
 import { normalizeHardBreaks } from "@/components/template-editor/utils"
 import { PlaceholderFormNode } from "./placeholder-form-node-extension"
 import { PlaceholderInfo } from "./placeholder-form-fields"
+import { identifyReplicableCells, type ReplicableCellInfo } from "./replicable-cell-utils"
+import { createRoot } from "react-dom/client"
+import { ReplicableCell } from "./replicable-cell"
 
 interface DocumentPreviewFormProps {
   /** 文档内容（ProseMirror JSON） */
@@ -57,6 +60,12 @@ export function DocumentPreviewForm({
 }: DocumentPreviewFormProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const previousContentRef = useRef<string | null>(null)
+  const formDataRef = useRef<Record<string, any>>(formData || {})
+  
+  // 保持 formDataRef 与 formData 同步
+  useEffect(() => {
+    formDataRef.current = formData || {}
+  }, [formData])
   
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
@@ -91,6 +100,7 @@ export function DocumentPreviewForm({
   
   // 存储值更新回调（用于外部数据加载时更新，不用于用户输入）
   const valueUpdateCallbacksRef = useRef<Set<() => void>>(new Set())
+  const replicableCellUpdateCallbacksRef = useRef<Set<() => void>>(new Set())
   
   // 注册值更新回调
   const registerUpdateCallback = useCallback((callback: () => void) => {
@@ -100,6 +110,28 @@ export function DocumentPreviewForm({
       valueUpdateCallbacksRef.current.delete(callback)
     }
   }, [])
+  
+  // 注册可复制单元格更新回调
+  const registerReplicableCellUpdateCallback = useCallback((callback: () => void) => {
+    replicableCellUpdateCallbacksRef.current.add(callback)
+    // 返回清理函数
+    return () => {
+      replicableCellUpdateCallbacksRef.current.delete(callback)
+    }
+  }, [])
+  
+  // 当 formData 变化时，通知所有可复制单元格更新
+  useEffect(() => {
+    console.log("DocumentPreviewForm: formData changed, calling", replicableCellUpdateCallbacksRef.current.size, "callbacks")
+    console.log("DocumentPreviewForm: formData keys:", Object.keys(formData || {}))
+    replicableCellUpdateCallbacksRef.current.forEach(callback => {
+      try {
+        callback()
+      } catch (error) {
+        console.error("Error calling replicable cell update callback:", error)
+      }
+    })
+  }, [formData])
   
   // 注意：不在 formData 变化时触发更新，因为输入框使用内部状态管理
   // 只在占位符信息变化时更新（比如从服务器加载新数据）
@@ -128,8 +160,21 @@ export function DocumentPreviewForm({
       TableHeader.configure({
         HTMLAttributes: {},
       }),
-      TableCellWithAttrs.configure({
+      ReplicableTableCellWithAttrs.configure({
         HTMLAttributes: {},
+        getPlaceholderInfos: () => placeholders,
+        getFormData: () => {
+          // 使用 ref 获取最新的 formData，避免闭包问题
+          return formDataRef.current || {}
+        },
+        onFormDataChange: (newFormData: Record<string, any>) => {
+          console.log("ReplicableCell onFormDataChange called:", newFormData)
+          if (onFormDataChange) {
+            onFormDataChange(newFormData)
+          }
+        },
+        templateCategory,
+        registerUpdateCallback: registerReplicableCellUpdateCallback,
       }),
       TextAlign.configure({
         types: ["heading", "paragraph", "tableCell"],
