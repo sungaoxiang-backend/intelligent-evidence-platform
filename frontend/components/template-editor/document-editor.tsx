@@ -41,6 +41,13 @@ import {
   ListPlus,
   Plus,
   Loader2,
+  Table,
+  Trash2,
+  PlusCircle,
+  MinusCircle,
+  Grid3X3,
+  Merge,
+  UnMerge,
 } from "lucide-react"
 import {
   Select,
@@ -96,6 +103,7 @@ interface DocumentEditorProps {
   initialContent?: JSONContent | null
   onChange?: (content: JSONContent) => void
   isLoading?: boolean
+  templateType?: string | null
 }
 
 const FONT_FAMILIES = [
@@ -126,6 +134,11 @@ const Toolbar = ({
 }: ToolbarProps) => {
   if (!editor) return null
 
+  const [tableConfigOpen, setTableConfigOpen] = useState(false)
+  const [tableRows, setTableRows] = useState(1)
+  const [tableCols, setTableCols] = useState(1)
+  const [withHeaderRow, setWithHeaderRow] = useState(false)
+
   const setHeading = (level: string) => {
     if (level === "paragraph") {
       editor.commands.setParagraph()
@@ -133,6 +146,19 @@ const Toolbar = ({
       const headingLevel = parseInt(level.replace('heading', ''))
       editor.commands.toggleHeading({ level: headingLevel })
     }
+  }
+
+  const handleInsertTable = () => {
+    editor.chain().focus().insertTable({
+      rows: tableRows,
+      cols: tableCols,
+      withHeaderRow: withHeaderRow
+    }).run()
+    setTableConfigOpen(false)
+    // 重置为默认值
+    setTableRows(1)
+    setTableCols(1)
+    setWithHeaderRow(false)
   }
 
   const getCurrentHeading = () => {
@@ -232,6 +258,88 @@ const Toolbar = ({
           </Button>
         </div>
 
+        <div className="flex items-center gap-1 border-r border-gray-300 pr-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setTableConfigOpen(true)}
+            className="h-8 w-8 p-0"
+            title="插入表格"
+          >
+            <Table className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().addColumnBefore().run()}
+            disabled={!editor.can().addColumnBefore()}
+            className="h-8 w-8 p-0"
+            title="在左侧添加列"
+          >
+            <PlusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().addColumnAfter().run()}
+            disabled={!editor.can().addColumnAfter()}
+            className="h-8 w-8 p-0"
+            title="在右侧添加列"
+          >
+            <PlusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().deleteColumn().run()}
+            disabled={!editor.can().deleteColumn()}
+            className="h-8 w-8 p-0"
+            title="删除列"
+          >
+            <MinusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().addRowBefore().run()}
+            disabled={!editor.can().addRowBefore()}
+            className="h-8 w-8 p-0"
+            title="在上方添加行"
+          >
+            <PlusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().addRowAfter().run()}
+            disabled={!editor.can().addRowAfter()}
+            className="h-8 w-8 p-0"
+            title="在下方添加行"
+          >
+            <PlusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().deleteRow().run()}
+            disabled={!editor.can().deleteRow()}
+            className="h-8 w-8 p-0"
+            title="删除行"
+          >
+            <MinusCircle className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            disabled={!editor.can().deleteTable()}
+            className="h-8 w-8 p-0"
+            title="删除表格"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -259,6 +367,108 @@ const Toolbar = ({
           disabled={isBusy}
         />
       </div>
+
+      {/* 表格配置对话框 */}
+      <Dialog open={tableConfigOpen} onOpenChange={setTableConfigOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>插入表格</DialogTitle>
+            <DialogDescription>
+              设置表格的行数和列数
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="rows" className="text-right">
+                行数
+              </Label>
+              <Input
+                id="rows"
+                type="number"
+                min="1"
+                max="20"
+                value={tableRows}
+                onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cols" className="text-right">
+                列数
+              </Label>
+              <Input
+                id="cols"
+                type="number"
+                min="1"
+                max="20"
+                value={tableCols}
+                onChange={(e) => setTableCols(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <div className="col-span-1"></div>
+              <div className="col-span-3 flex items-center space-x-2">
+                <input
+                  id="header"
+                  type="checkbox"
+                  checked={withHeaderRow}
+                  onChange={(e) => setWithHeaderRow(e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="header" className="text-sm font-normal">
+                  包含表头行
+                </Label>
+              </div>
+            </div>
+
+            {/* 表格预览 */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">
+                预览
+              </Label>
+              <div className="col-span-3">
+                <div className="border border-gray-200 rounded p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-2">表格预览 ({tableRows}行 × {tableCols}列)</div>
+                  <div className="grid gap-1" style={{
+                    gridTemplateColumns: `repeat(${tableCols}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.min(tableRows, 5)}, minmax(0, 1fr))`
+                  }}>
+                    {Array.from({ length: Math.min(tableRows, 5) }).map((_, rowIdx) =>
+                      Array.from({ length: tableCols }).map((_, colIdx) => (
+                        <div
+                          key={`${rowIdx}-${colIdx}`}
+                          className={`border border-gray-300 rounded-sm aspect-square flex items-center justify-center text-xs ${
+                            rowIdx === 0 && withHeaderRow ? 'bg-blue-100 font-semibold' : 'bg-white'
+                          }`}
+                        >
+                          {rowIdx === 0 && withHeaderRow ? '表头' : `${rowIdx + 1}-${colIdx + 1}`}
+                        </div>
+                      ))
+                    )}
+                    {tableRows > 5 && (
+                      <div
+                        className="col-span-full border border-gray-300 rounded-sm bg-gray-100 flex items-center justify-center text-xs text-gray-500 py-2"
+                        style={{ gridColumn: `1 / ${tableCols + 1}` }}
+                      >
+                        ...还有 {tableRows - 5} 行
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTableConfigOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleInsertTable}>
+              插入表格
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -355,6 +565,7 @@ export function DocumentEditor({
   initialContent,
   onChange,
   isLoading,
+  templateType,
 }: DocumentEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const contentSetRef = useRef(false)
@@ -549,8 +760,11 @@ export function DocumentEditor({
       ParagraphWithAttrs,
       HeadingWithAttrs,
       TableWithAttrs.configure({
-        resizable: false,
-        HTMLAttributes: {},
+        resizable: true, // 启用表格大小调整
+        allowTableNodeSelection: true, // 允许表格选择
+        HTMLAttributes: {
+          class: `custom-table ${templateType === '陈述式' ? 'narrative-table' : 'form-table'}`,
+        },
       }),
       TableRow.configure({
         HTMLAttributes: {},

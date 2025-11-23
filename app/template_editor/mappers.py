@@ -310,19 +310,85 @@ class DocxToProseMirrorMapper:
             parts = text_value.split("\n")
             for idx, part in enumerate(parts):
                 if part:
-                    text_node: Dict[str, Any] = {
-                        "type": "text",
-                        "text": part,
-                    }
+                    # 识别和转换占位符 {{fieldKey}} 格式
+                    placeholder_content = self._parse_placeholders_in_text(part)
 
                     marks = self._map_marks(run)
-                    if marks:
-                        text_node["marks"] = marks
+                    # 为所有非占位符文本节点添加样式标记
+                    for node in placeholder_content:
+                        if node.get("type") == "text" and marks:
+                            node["marks"] = marks
 
-                    content.append(text_node)
+                    content.extend(placeholder_content)
 
                 if idx < len(parts) - 1:
                     content.append({"type": "hardBreak"})
+
+        return content
+
+    def _parse_placeholders_in_text(self, text: str) -> List[Dict[str, Any]]:
+        """
+        解析文本中的占位符，将 {{fieldKey}} 格式转换为占位符节点
+
+        Args:
+            text: 原始文本内容
+
+        Returns:
+            包含文本节点和占位符节点的列表
+        """
+        import re
+
+        # 占位符正则表达式：匹配 {{fieldKey}} 格式
+        placeholder_pattern = r'\{\{([^}]+)\}\}'
+
+        content = []
+        last_index = 0
+
+        # 查找所有占位符
+        for match in re.finditer(placeholder_pattern, text):
+            # 添加占位符之前的普通文本
+            if match.start() > last_index:
+                plain_text = text[last_index:match.start()]
+                if plain_text:
+                    content.append({
+                        "type": "text",
+                        "text": plain_text
+                    })
+
+            # 提取占位符字段名
+            field_key = match.group(1).strip()
+            if field_key:
+                # 创建占位符节点
+                content.append({
+                    "type": "placeholder",
+                    "attrs": {
+                        "fieldKey": field_key
+                    }
+                })
+            else:
+                # 如果字段名为空，保持原始文本
+                content.append({
+                    "type": "text",
+                    "text": match.group(0)
+                })
+
+            last_index = match.end()
+
+        # 添加最后一个占位符之后的普通文本
+        if last_index < len(text):
+            trailing_text = text[last_index:]
+            if trailing_text:
+                content.append({
+                    "type": "text",
+                    "text": trailing_text
+                })
+
+        # 如果没有找到占位符，返回原文本节点
+        if not content:
+            content.append({
+                "type": "text",
+                "text": text
+            })
 
         return content
 

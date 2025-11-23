@@ -320,9 +320,9 @@ export function DocumentEditorSimple({
           <div className="flex items-center gap-1">
             <ToolbarButton
               onClick={() =>
-                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
               }
-              title="插入表格 (3x3)"
+              title="插入表格"
             >
               <Table className="h-4 w-4" />
             </ToolbarButton>

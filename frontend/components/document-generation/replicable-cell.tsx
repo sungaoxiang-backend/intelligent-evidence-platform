@@ -224,12 +224,17 @@ export function ReplicableCell({
             const info = placeholderInfoMap.get(placeholder)
             if (!info) return null
             
+            // 判断是否是要素式模板
+            const isElementStyle = templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式")
+
             return (
-              <div key={placeholder} className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 min-w-[100px]">
-                  {info.name}:
-                </label>
-                <div className="flex-1">
+              <div key={placeholder} className={isElementStyle ? "flex items-center gap-2" : ""}>
+                {isElementStyle && (
+                  <label className="text-sm font-medium text-gray-700 min-w-[100px]">
+                    {info.name}:
+                  </label>
+                )}
+                <div className={isElementStyle ? "flex-1" : ""}>
                   <PlaceholderFormField
                     placeholder={info}
                     value={getPlaceholderValue(placeholder, index)}

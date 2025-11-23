@@ -14,6 +14,7 @@ from app.core.deps import get_current_staff, get_db
 from app.staffs.models import Staff
 from app.integrations.cos import cos_service
 from .services import template_editor_service, template_service, placeholder_service
+from .fix_templates import fix_existing_template_service
 from .schemas import (
     ParseDocxResponse, 
     ExportDocxRequest, 
@@ -828,4 +829,95 @@ async def disassociate_placeholder_from_template(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"移除占位符关联失败: {str(e)}"
         )
+
+
+@router.post("/templates/{template_id}/fix", response_model=dict)
+async def fix_template(
+    template_id: int,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    修复指定模板的占位符和文本结构
+
+    Args:
+        template_id: 模板ID
+        current_staff: 当前登录用户
+        db: 数据库会话
+
+    Returns:
+        修复结果
+    """
+    try:
+        success = await fix_existing_template_service.fix_template(template_id, db)
+
+        return {
+            "code": 200,
+            "message": "修复成功" if success else "修复失败",
+            "data": {
+                "template_id": template_id,
+                "success": success
+            }
+        }
+    except Exception as e:
+        logger.error(f"修复模板 {template_id} 失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修复模板失败: {str(e)}"
+        )
+
+
+@router.post("/templates/fix-all", response_model=dict)
+async def fix_all_narrative_templates(
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    修复所有陈述式模板的占位符和文本结构
+
+    Args:
+        current_staff: 当前登录用户
+        db: 数据库会话
+
+    Returns:
+        批量修复结果统计
+    """
+    try:
+        result = await fix_existing_template_service.fix_all_narrative_templates(db)
+
+        return {
+            "code": 200,
+            "message": "批量修复完成",
+            "data": result
+        }
+    except Exception as e:
+        logger.error(f"批量修复模板失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量修复模板失败: {str(e)}"
+        )
+
+
+@router.post("/debug-fix-all", response_model=dict)
+async def fix_all_narrative_templates_debug(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    调试版本：修复所有陈述式模板（不需要认证）
+    """
+    try:
+        result = await fix_existing_template_service.fix_all_narrative_templates(db)
+
+        return {
+            "code": 200,
+            "message": "批量修复完成",
+            "data": result
+        }
+    except Exception as e:
+        logger.error(f"批量修复模板失败: {e}", exc_info=True)
+        return {
+            "code": 500,
+            "message": f"批量修复模板失败: {str(e)}",
+            "data": None
+        }
 
