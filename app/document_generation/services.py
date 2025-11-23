@@ -5,6 +5,7 @@ from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 import copy
 import io
+import json
 import re
 from loguru import logger
 from fastapi import HTTPException
@@ -366,6 +367,11 @@ class DocumentGenerationService:
                 cell_node = cells[cell_idx]
                 logger.info(f"单元格扩展：处理单元格 {cell_idx}，占位符: {placeholders}")
 
+                # 检查单元格是否有宽度或样式信息
+                cell_attrs = cell_node.get("attrs", {})
+                logger.info(f"单元格扩展：单元格 {cell_idx} 的 attrs: {cell_attrs}")
+                logger.info(f"单元格扩展：单元格 {cell_idx} 完整结构: {json.dumps(cell_node, ensure_ascii=False)}")
+
                 # 获取第一个占位符的所有数组值
                 first_placeholder = placeholders[0]
                 array_values = get_all_array_values(first_placeholder, form_data)
@@ -407,18 +413,27 @@ class DocumentGenerationService:
 
                     # 在不同的复制项之间添加分割线（除了最后一个）
                     if i < len(array_values) - 1:
-                        # 创建分割线段落 - 使用点划线字符
+                        # 动态计算分割线长度：基于单元格中占位符的数量和内容长度
+                        total_length = 0
+                        for placeholder in placeholders:
+                            value = temp_form_data.get(placeholder, "")
+                            if value:
+                                total_length += len(str(value)) + 2  # 字符长度 + 间距
+                        # 估算分割线长度，至少30个字符
+                        separator_length = max(30, min(total_length, 50))
+                        separator_text = "-" * separator_length
+
                         separator_paragraph = {
                             "type": "paragraph",
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": "--------------------------------"
+                                    "text": separator_text
                                 }
                             ]
                         }
                         expanded_content.append(separator_paragraph)
-                        logger.info(f"单元格扩展：在第 {arr_idx} 项后添加了点划线分割线")
+                        logger.info(f"单元格扩展：在第 {arr_idx} 项后添加了长度为 {separator_length} 的分割线")
 
                 # 替换单元格内容
                 if expanded_content:
