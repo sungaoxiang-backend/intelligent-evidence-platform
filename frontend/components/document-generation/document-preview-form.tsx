@@ -121,16 +121,58 @@ export function DocumentPreviewForm({
   }, [])
   
   // 当 formData 变化时，通知所有可复制单元格更新
+  // 使用防抖来避免输入时频繁重新渲染导致输入框失去焦点
   useEffect(() => {
-    console.log("DocumentPreviewForm: formData changed, calling", replicableCellUpdateCallbacksRef.current.size, "callbacks")
+    console.log("DocumentPreviewForm: formData changed, scheduling update callbacks")
     console.log("DocumentPreviewForm: formData keys:", Object.keys(formData || {}))
-    replicableCellUpdateCallbacksRef.current.forEach(callback => {
-      try {
-        callback()
-      } catch (error) {
-        console.error("Error calling replicable cell update callback:", error)
+    
+    // 检查是否有输入框处于焦点状态
+    const activeElement = document.activeElement
+    const hasFocusedInput = activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.closest('input, textarea')
+    )
+    
+    // 使用防抖延迟更新，避免输入时频繁重新渲染
+    // 如果有输入框处于焦点状态，使用更长的延迟
+    const delay = hasFocusedInput ? 1500 : 800
+    const timeoutId = setTimeout(() => {
+      // 再次检查是否有输入框处于焦点状态
+      const currentActiveElement = document.activeElement
+      const stillHasFocusedInput = currentActiveElement && (
+        currentActiveElement.tagName === 'INPUT' || 
+        currentActiveElement.tagName === 'TEXTAREA' ||
+        currentActiveElement.closest('input, textarea')
+      )
+      
+      // 如果仍然有输入框处于焦点状态，再延迟一次
+      if (stillHasFocusedInput) {
+        setTimeout(() => {
+          console.log("DocumentPreviewForm: calling", replicableCellUpdateCallbacksRef.current.size, "callbacks")
+          replicableCellUpdateCallbacksRef.current.forEach(callback => {
+            try {
+              callback()
+            } catch (error) {
+              console.error("Error calling replicable cell update callback:", error)
+            }
+          })
+        }, 500)
+      } else {
+        console.log("DocumentPreviewForm: calling", replicableCellUpdateCallbacksRef.current.size, "callbacks")
+        replicableCellUpdateCallbacksRef.current.forEach(callback => {
+          try {
+            callback()
+          } catch (error) {
+            console.error("Error calling replicable cell update callback:", error)
+          }
+        })
       }
-    })
+    }, delay)
+    
+    return () => {
+      clearTimeout(timeoutId)
+    }
   }, [formData])
   
   // 注意：不在 formData 变化时触发更新，因为输入框使用内部状态管理

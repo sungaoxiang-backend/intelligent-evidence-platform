@@ -93,11 +93,8 @@ export function ReplicableCell({
   useEffect(() => {
     const newCount = getReplicaCount()
     console.log("ReplicableCell: formData changed, new replicaCount:", newCount, "formData keys:", Object.keys(formData))
-    if (newCount !== replicaCount) {
-      console.log("ReplicableCell: replicaCount changed from", replicaCount, "to", newCount)
-      setReplicaCount(newCount)
-    }
-  }, [formData, placeholders, replicaCount])
+    setReplicaCount(newCount)
+  }, [formData, placeholders])
   
   // 添加副本
   const handleAdd = (e?: React.MouseEvent) => {
@@ -106,12 +103,36 @@ export function ReplicableCell({
       e.stopPropagation()
     }
     
-    console.log("handleAdd called, current replicaCount:", replicaCount)
+    // 直接计算当前的副本数量，而不是使用状态值（避免状态更新延迟问题）
+    const currentCount = getReplicaCount()
+    console.log("handleAdd called, current replicaCount:", currentCount, "state replicaCount:", replicaCount)
     console.log("handleAdd: placeholders", placeholders)
     console.log("handleAdd: current formData", formData)
     
-    const newIndex = replicaCount
     const newFormData = { ...formData }
+    
+    // 检查是否是第一次添加（从原始字段转换为数组格式）
+    const firstPlaceholder = placeholders[0]
+    const hasArrayFields = Object.keys(formData).some(key => {
+      const parsed = parseArrayFieldName(key)
+      return parsed && parsed.baseName === firstPlaceholder
+    })
+    const hasOriginalField = formData[firstPlaceholder] !== undefined
+    
+    // 如果是第一次添加（有原始字段但没有数组字段），需要先迁移原始字段到 [0]
+    if (!hasArrayFields && hasOriginalField) {
+      placeholders.forEach(placeholder => {
+        const arrayFieldName0 = getArrayFieldName(placeholder, 0)
+        if (formData[placeholder] !== undefined) {
+          newFormData[arrayFieldName0] = formData[placeholder]
+          // 保留原始字段（向后兼容），但优先使用数组字段
+          console.log(`handleAdd: 迁移原始字段 ${placeholder} 到 ${arrayFieldName0} = ${newFormData[arrayFieldName0]}`)
+        }
+      })
+    }
+    
+    // 计算新索引（如果已经有数组字段，使用最大索引+1；否则使用1）
+    const newIndex = hasArrayFields ? currentCount : 1
     
     // 为每个占位符创建新的数组字段
     placeholders.forEach(placeholder => {
@@ -122,26 +143,21 @@ export function ReplicableCell({
         : null
       
       // 获取当前值（可能是原始字段名或数组字段名）
-      const currentValue = formData[placeholder] || (lastFieldName && formData[lastFieldName])
+      const currentValue = (lastFieldName && newFormData[lastFieldName]) || newFormData[placeholder]
       
       newFormData[arrayFieldName] = currentValue !== undefined ? currentValue : ""
       
       console.log(`handleAdd: 创建字段 ${arrayFieldName} = ${newFormData[arrayFieldName]}`)
     })
     
-    // 如果这是第一次添加（从原始字段名转换为数组），需要保留原始字段的值到 [0]
-    if (newIndex === 1) {
-      placeholders.forEach(placeholder => {
-        // 如果原始字段名有值，但没有 [0] 字段，则创建 [0] 字段
-        const arrayFieldName0 = getArrayFieldName(placeholder, 0)
-        if (formData[placeholder] !== undefined && formData[arrayFieldName0] === undefined) {
-          newFormData[arrayFieldName0] = formData[placeholder]
-          console.log(`handleAdd: 迁移原始字段 ${placeholder} 到 ${arrayFieldName0} = ${newFormData[arrayFieldName0]}`)
-        }
-      })
-    }
-    
     console.log("handleAdd: newFormData (完整)", JSON.stringify(newFormData, null, 2))
+    
+    // 直接更新 replicaCount，确保 UI 立即反映变化
+    // 计算新数据中的副本数量
+    const newCount = hasArrayFields ? newIndex + 1 : 2
+    console.log("handleAdd: updating replicaCount to", newCount)
+    setReplicaCount(newCount)
+    
     onFormDataChange(newFormData)
   }
   

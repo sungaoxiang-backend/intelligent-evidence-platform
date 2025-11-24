@@ -36,6 +36,7 @@ interface PlaceholderFormFieldProps {
   templateCategory?: string | null
   className?: string
   disabled?: boolean
+  index?: number // 用于数组字段，表示当前索引
 }
 
 export function PlaceholderFormField({
@@ -45,6 +46,7 @@ export function PlaceholderFormField({
   templateCategory,
   className,
   disabled = false,
+  index,
 }: PlaceholderFormFieldProps) {
   // 使用内部状态来避免输入中断
   // 根据占位符类型初始化内部状态
@@ -65,6 +67,36 @@ export function PlaceholderFormField({
   const isFocusedRef = React.useRef(false)
   const isUserInputRef = React.useRef(false) // 标记是否是用户输入导致的变化
   
+  // 添加一个方法来强制同步内部值到外部状态（用于保存时）
+  const syncToExternal = React.useCallback(() => {
+    if (JSON.stringify(internalValue) !== JSON.stringify(value)) {
+      onChange(internalValue)
+    }
+  }, [internalValue, value, onChange])
+  
+  // 在 ref 回调中设置同步方法，确保 DOM 元素存在
+  const setInputRef = React.useCallback((el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = el
+    if (el) {
+      // 在 DOM 元素上存储同步方法
+      (el as any).__syncToExternal = syncToExternal
+      ;(el as any).__getInternalValue = () => internalValue
+      // 存储 fieldKey 和 index，用于从 DOM 读取值
+      el.setAttribute('data-field-key', placeholder.name)
+      if (typeof index === 'number') {
+        el.setAttribute('data-field-index', index.toString())
+      }
+    }
+  }, [syncToExternal, internalValue, placeholder.name, index])
+  
+  // 当 syncToExternal 或 internalValue 变化时，更新 DOM 元素上的方法
+  React.useEffect(() => {
+    if (inputRef.current) {
+      (inputRef.current as any).__syncToExternal = syncToExternal
+      ;(inputRef.current as any).__getInternalValue = () => internalValue
+    }
+  }, [syncToExternal, internalValue])
+  
   // 当外部值变化时更新内部状态（但不影响正在输入的字段）
   React.useEffect(() => {
     // 如果是用户输入导致的变化，不同步（避免覆盖用户输入）
@@ -73,12 +105,12 @@ export function PlaceholderFormField({
       return
     }
     
-    // 只有当输入框没有焦点时才同步外部值（用于从服务器加载数据）
-    if (isFocusedRef.current && (placeholder.type === "text" || placeholder.type === "textarea" || placeholder.type === "date" || placeholder.type === "number")) {
+    // 如果输入框有焦点，完全禁止同步外部值（避免输入时被外部值覆盖）
+    if (isFocusedRef.current) {
       return
     }
     
-    // 同步外部值到内部状态
+    // 同步外部值到内部状态（仅当输入框没有焦点时）
     if (placeholder.type === "checkbox" && placeholder.options && placeholder.options.length > 0) {
       // 多选 checkbox：值是数组
       const newValue = Array.isArray(value) ? value : (value ? [value] : [])
@@ -98,7 +130,7 @@ export function PlaceholderFormField({
         setInternalValue(newValue)
       }
     }
-  }, [value, placeholder.type, placeholder.options])
+  }, [value, placeholder.type, placeholder.options, internalValue])
   
   // 处理焦点事件
   const handleFocus = () => {
@@ -107,14 +139,16 @@ export function PlaceholderFormField({
   
   const handleBlur = () => {
     isFocusedRef.current = false
-    // 注意：不在 blur 时强制同步，让用户输入的值保持
-    // 外部值会通过 onChange 已经更新到 formData
+    // 不再在失去焦点时自动更新外部状态
+    // 用户可以通过"保存草稿"按钮手动保存
+    // 这样可以避免重新渲染导致焦点丢失和内容丢失
   }
   
   const handleChange = (newValue: any) => {
     isUserInputRef.current = true // 标记这是用户输入
     setInternalValue(newValue)
-    onChange(newValue) // 立即更新外部状态
+    // 不在输入时立即更新外部状态，避免触发重新渲染导致输入中断
+    // 只在失去焦点时更新（在 handleBlur 中处理）
   }
   
   // 判断是否是要素式模板
@@ -135,9 +169,7 @@ export function PlaceholderFormField({
       case "text":
         return (
           <Input
-            ref={(el) => {
-              inputRef.current = el
-            }}
+            ref={setInputRef}
             value={internalValue}
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}
@@ -154,9 +186,7 @@ export function PlaceholderFormField({
       case "textarea":
         return (
           <Textarea
-            ref={(el) => {
-              inputRef.current = el
-            }}
+            ref={setInputRef}
             value={internalValue}
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}
@@ -174,9 +204,7 @@ export function PlaceholderFormField({
         if (!placeholder.options || placeholder.options.length === 0) {
           return (
             <Input
-              ref={(el) => {
-                inputRef.current = el
-              }}
+              ref={setInputRef}
               value={internalValue}
               onChange={(e) => handleChange(e.target.value)}
               onFocus={handleFocus}
@@ -220,9 +248,7 @@ export function PlaceholderFormField({
         if (!placeholder.options || placeholder.options.length === 0) {
           return (
             <Input
-              ref={(el) => {
-                inputRef.current = el
-              }}
+              ref={setInputRef}
               value={internalValue}
               onChange={(e) => handleChange(e.target.value)}
               onFocus={handleFocus}
@@ -324,9 +350,7 @@ export function PlaceholderFormField({
       case "date":
         return (
           <Input
-            ref={(el) => {
-              inputRef.current = el
-            }}
+            ref={setInputRef}
             type="date"
             value={internalValue}
             onChange={(e) => handleChange(e.target.value)}
@@ -343,9 +367,7 @@ export function PlaceholderFormField({
       case "number":
         return (
           <Input
-            ref={(el) => {
-              inputRef.current = el
-            }}
+            ref={setInputRef}
             type="number"
             value={internalValue}
             onChange={(e) => handleChange(e.target.value)}
@@ -420,7 +442,7 @@ export function PlaceholderFormField({
             <div className="relative">
               <Input
                 ref={(el) => {
-                  inputRef.current = el
+                  setInputRef(el)
                   fileInputRef.current = el as HTMLInputElement
                 }}
                 type="text"
@@ -499,9 +521,7 @@ export function PlaceholderFormField({
       default:
         return (
           <Input
-            ref={(el) => {
-              inputRef.current = el
-            }}
+            ref={setInputRef}
             value={internalValue}
             onChange={(e) => handleChange(e.target.value)}
             onFocus={handleFocus}

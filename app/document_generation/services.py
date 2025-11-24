@@ -344,83 +344,6 @@ class DocumentGenerationService:
             values.sort(key=lambda x: x[0])
             return values
         
-        def expand_cells_as_narrative_paragraphs(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]], form_data: Dict[str, Any], placeholder_map: Dict[str, Any]):
-            """
-        陈述式模板：将表格单元格扩展为多个段落，不使用表格结构
-        """
-        logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
-
-        # 找出最大的数组长度
-        max_replicas = 0
-        for cell_idx, placeholders in cell_placeholders_map.items():
-            if not placeholders:
-                continue
-
-            first_placeholder = placeholders[0]
-            array_values = get_all_array_values(first_placeholder, form_data)
-            if array_values:
-                max_replicas = max(max_replicas, len(array_values))
-                logger.info(f"陈述式段落扩展：单元格 {cell_idx} 有 {len(array_values)} 个段落")
-
-        if max_replicas == 0:
-            logger.info("陈述式段落扩展：没有数组数据，返回原行")
-            return
-
-        # 创建多个段落内容
-        narrative_paragraphs = []
-        for i in range(max_replicas):
-            logger.info(f"陈述式段落扩展：创建第 {i+1} 个段落")
-
-            # 收集当前段落的所有文本内容
-            paragraph_content = []
-
-            # 为每个单元格的占位符收集数据
-            for cell_idx in sorted(cell_placeholders_map.keys()):
-                placeholders = cell_placeholders_map[cell_idx]
-                cell_texts = []
-
-                for placeholder in placeholders:
-                    array_field_name = f"{placeholder}[{i}]"
-                    value = form_data.get(array_field_name)
-                    if value:
-                        # 获取占位符元数据
-                        meta = placeholder_map.get(placeholder, {})
-                        # 格式化值
-                        formatted_value = format_placeholder_value(placeholder, value, meta)
-                        cell_texts.append(formatted_value)
-
-                # 将单元格的内容添加到段落中
-                if cell_texts:
-                    # 单元格内的字段用空格连接
-                    cell_content = " ".join(cell_texts)
-                    paragraph_content.append(cell_content)
-
-            # 如果有内容，创建段落
-            if paragraph_content:
-                # 将所有单元格的内容用逗号或空格连接
-                full_paragraph_content = "，".join(paragraph_content)
-
-                # 创建段落节点
-                paragraph_node = {
-                    "type": "paragraph",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": full_paragraph_content
-                        }
-                    ]
-                }
-                narrative_paragraphs.append(paragraph_node)
-                logger.info(f"陈述式段落扩展：第 {i+1} 段内容: {full_paragraph_content}")
-
-        # 将表格行替换为段落列表
-        row_node.clear()
-        row_node.update({
-            "type": "doc",
-            "content": narrative_paragraphs
-        })
-        logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落")
-
         def expand_cells_with_array_data(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]]):
             """
             在单元格内垂直排列数组数据，保持原有样式和格式
@@ -526,8 +449,7 @@ class DocumentGenerationService:
                     logger.info(f"单元格扩展：单元格 {cell_idx} 没有数据，创建空段落")
 
             logger.info("单元格扩展：处理完成")
-
-          
+        
         def replace_placeholders_in_node(node: Dict[str, Any], form_data_for_replacement: Dict[str, Any], cell_placeholders: list[str]):
             """在节点中替换占位符（用于单元格复制）"""
             node_type = node.get("type")
@@ -572,6 +494,83 @@ class DocumentGenerationService:
             if "content" in node and isinstance(node["content"], list):
                 for child in node["content"]:
                     replace_placeholders_in_node(child, form_data_for_replacement, cell_placeholders)
+        
+        def expand_cells_as_narrative_paragraphs(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]], form_data: Dict[str, Any], placeholder_map: Dict[str, Any]):
+            """
+            陈述式模板：将表格单元格扩展为多个段落，不使用表格结构
+            """
+            logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
+
+            # 找出最大的数组长度
+            max_replicas = 0
+            for cell_idx, placeholders in cell_placeholders_map.items():
+                if not placeholders:
+                    continue
+
+                first_placeholder = placeholders[0]
+                array_values = get_all_array_values(first_placeholder, form_data)
+                if array_values:
+                    max_replicas = max(max_replicas, len(array_values))
+                    logger.info(f"陈述式段落扩展：单元格 {cell_idx} 有 {len(array_values)} 个段落")
+
+            if max_replicas == 0:
+                logger.info("陈述式段落扩展：没有数组数据，返回原行")
+                return
+
+            # 创建多个段落内容
+            narrative_paragraphs = []
+            for i in range(max_replicas):
+                logger.info(f"陈述式段落扩展：创建第 {i+1} 个段落")
+
+                # 收集当前段落的所有文本内容
+                paragraph_content = []
+
+                # 为每个单元格的占位符收集数据
+                for cell_idx in sorted(cell_placeholders_map.keys()):
+                    placeholders = cell_placeholders_map[cell_idx]
+                    cell_texts = []
+
+                    for placeholder in placeholders:
+                        array_field_name = f"{placeholder}[{i}]"
+                        value = form_data.get(array_field_name)
+                        if value:
+                            # 获取占位符元数据
+                            meta = placeholder_map.get(placeholder, {})
+                            # 格式化值
+                            formatted_value = format_placeholder_value(placeholder, value, meta)
+                            cell_texts.append(formatted_value)
+
+                    # 将单元格的内容添加到段落中
+                    if cell_texts:
+                        # 单元格内的字段用空格连接
+                        cell_content = " ".join(cell_texts)
+                        paragraph_content.append(cell_content)
+
+                # 如果有内容，创建段落
+                if paragraph_content:
+                    # 将所有单元格的内容用逗号或空格连接
+                    full_paragraph_content = "，".join(paragraph_content)
+
+                    # 创建段落节点
+                    paragraph_node = {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": full_paragraph_content
+                            }
+                        ]
+                    }
+                    narrative_paragraphs.append(paragraph_node)
+                    logger.info(f"陈述式段落扩展：第 {i+1} 段内容: {full_paragraph_content}")
+
+            # 将表格行替换为段落列表
+            row_node.clear()
+            row_node.update({
+                "type": "doc",
+                "content": narrative_paragraphs
+            })
+            logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落")
         
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""

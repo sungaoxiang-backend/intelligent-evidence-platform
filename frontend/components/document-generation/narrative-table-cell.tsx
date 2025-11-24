@@ -29,6 +29,8 @@ export function NarrativeTableCell({
   getFormData,
   cellId,
 }: NarrativeTableCellProps) {
+  // 使用 ref 存储防抖定时器
+  
   // 获取当前单元格的所有占位符
   const extractPlaceholdersFromNode = (node: JSONContent): string[] => {
     const placeholders: string[] = []
@@ -49,39 +51,28 @@ export function NarrativeTableCell({
   const placeholders = extractPlaceholdersFromNode(cellNode)
   const baseKey = placeholders[0] || cellId
 
-  // 获取当前数组的长度
-  const getCurrentArrayLength = () => {
+  // 使用 useMemo 缓存数组长度计算，避免频繁重新计算
+  const arrayLength = React.useMemo(() => {
     let maxLength = 0
-    console.log("getCurrentArrayLength: checking placeholders", placeholders)
-    console.log("getCurrentArrayLength: formData", formData)
-    console.log("getCurrentArrayLength: getFormData()", getFormData())
-
+    const currentFormData = getFormData ? getFormData() : formData
+    
     placeholders.forEach(key => {
-      const value = formData[key] || getFormData()[key]
-      console.log(`getCurrentArrayLength: key=${key}, value=`, value, `type=${typeof value}`)
-
+      const value = currentFormData[key]
+      
       if (Array.isArray(value)) {
         maxLength = Math.max(maxLength, value.length)
-        console.log(`getCurrentArrayLength: ${key} is array with length ${value.length}`)
-        // 检查数组内容
-        console.log(`getCurrentArrayLength: ${key} array contents:`, value)
       } else if (value !== undefined && value !== null && value !== '') {
         maxLength = Math.max(maxLength, 1)
-        console.log(`getCurrentArrayLength: ${key} has non-empty value, setting maxLength=1`)
       }
     })
-    console.log(`getCurrentArrayLength: final maxLength=${maxLength}`)
 
     // 特殊处理：如果所有数组都是空的（只包含空字符串），也显示一个段落
     if (maxLength === 0) {
-      console.log("getCurrentArrayLength: no data found, but will render 1 item for initial state")
       return 1
     }
 
     return maxLength
-  }
-
-  const arrayLength = getCurrentArrayLength()
+  }, [formData, placeholders, getFormData])
 
   // 获取指定索引的值
   const getValueAtIndex = (key: string, index: number) => {
@@ -93,12 +84,10 @@ export function NarrativeTableCell({
   }
 
   // 设置指定索引的值
+  // 注意：现在只在失去焦点时调用，所以不需要防抖
   const setValueAtIndex = (key: string, index: number, newValue: any) => {
     const currentFormData = getFormData ? getFormData() : formData
     const currentValues = [...(currentFormData[key] || [])]
-
-    console.log(`setValueAtIndex: key=${key}, index=${index}, newValue=${newValue}`)
-    console.log("setValueAtIndex: currentValues before", currentValues)
 
     // 确保数组长度足够
     while (currentValues.length <= index) {
@@ -112,31 +101,95 @@ export function NarrativeTableCell({
       currentValues.pop()
     }
 
-    console.log("setValueAtIndex: currentValues after", currentValues)
-
     const newFormData = {
       ...currentFormData,
       [key]: currentValues
     }
 
-    console.log("setValueAtIndex: calling onFormDataChange with", newFormData)
     onFormDataChange(newFormData)
   }
 
   // 添加新项
   const handleAdd = () => {
     console.log("handleAdd: starting to add new item")
+    
+    // 在添加前，先从 DOM 读取所有输入框的当前值
+    // 因为输入框使用内部状态，不会自动更新 formData
+    const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`) || 
+                       document.querySelector(`.narrative-table-cell`)
+    
+    // 创建一个新的 formData，从 DOM 读取所有当前值
+    const currentFormDataFromDOM: Record<string, any> = {}
+    
+    if (cellElement) {
+      const allInputs = cellElement.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+      
+      // 先初始化所有占位符的数组
+      placeholders.forEach(key => {
+        currentFormDataFromDOM[key] = []
+      })
+      
+      // 从 DOM 读取所有输入框的值
+      allInputs.forEach((input) => {
+        const fieldKey = input.getAttribute('data-field-key')
+        const indexStr = input.getAttribute('data-field-index')
+        const inputValue = (input as HTMLInputElement | HTMLTextAreaElement).value
+        
+        if (fieldKey && indexStr !== null) {
+          const index = parseInt(indexStr, 10)
+          if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
+            currentFormDataFromDOM[fieldKey] = []
+          }
+          // 确保数组长度足够
+          while (currentFormDataFromDOM[fieldKey].length <= index) {
+            currentFormDataFromDOM[fieldKey].push("")
+          }
+          currentFormDataFromDOM[fieldKey][index] = inputValue
+        }
+      })
+      
+      // 移除末尾的空值（但保留至少一个值）
+      placeholders.forEach(key => {
+        const values = currentFormDataFromDOM[key]
+        if (Array.isArray(values)) {
+          while (values.length > 1 && values[values.length - 1] === "") {
+            values.pop()
+          }
+          // 如果数组为空，设置为空数组
+          if (values.length === 0) {
+            currentFormDataFromDOM[key] = []
+          }
+        }
+      })
+    }
+    
+    // 合并从 DOM 读取的值和现有的 formData（优先使用 DOM 值）
     const currentFormData = getFormData ? getFormData() : formData
-    console.log("handleAdd: currentFormData", currentFormData)
+    const mergedFormData = { ...currentFormData, ...currentFormDataFromDOM }
+    
+    console.log("handleAdd: currentFormData from DOM", currentFormDataFromDOM)
+    console.log("handleAdd: mergedFormData", mergedFormData)
 
-    const newFormData = { ...currentFormData }
+    const newFormData = { ...mergedFormData }
 
     placeholders.forEach(key => {
-      const currentValues = currentFormData[key] || []
-      const newValues = Array.isArray(currentValues) ? [...currentValues] : (currentValues ? [currentValues] : [])
-      newValues.push("")
+      const currentValue = mergedFormData[key]
+      let newValues: any[]
+      
+      if (Array.isArray(currentValue) && currentValue.length > 0) {
+        // 如果已经是数组且有值，直接复制并添加新元素
+        newValues = [...currentValue, ""]
+      } else if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+        // 如果有非空值但不是数组，转换为数组并添加新元素
+        newValues = [currentValue, ""]
+      } else {
+        // 如果没有值或为空，创建包含两个空元素的数组（第一个是当前状态，第二个是新添加的）
+        // 这样第一次点击时，数组长度就是 2
+        newValues = ["", ""]
+      }
+      
       newFormData[key] = newValues
-      console.log(`handleAdd: updated ${key}`, newValues)
+      console.log(`handleAdd: updated ${key} from`, currentValue, `to`, newValues, `(length: ${newValues.length})`)
     })
 
     console.log("handleAdd: calling onFormDataChange with", newFormData)
@@ -180,17 +233,20 @@ export function NarrativeTableCell({
         return `{{${fieldKey}}}`
       }
 
+      // 使用稳定的 key 来避免重新创建输入框导致焦点丢失
       return React.createElement(PlaceholderFormField, {
+        key: `${cellId}-${fieldKey}-${index}`,
         placeholder: placeholderInfo,
         value: getValueAtIndex(fieldKey, index),
         onChange: (value: any) => setValueAtIndex(fieldKey, index, value),
         templateCategory,
+        index, // 传递 index，用于在 DOM 元素上存储
       })
     }
 
     if (node.content && Array.isArray(node.content)) {
       return node.content.map((child, childIndex) => (
-        React.createElement(React.Fragment, { key: childIndex }, renderPlaceholderContent(child, index))
+        React.createElement(React.Fragment, { key: `${cellId}-content-${index}-${childIndex}` }, renderPlaceholderContent(child, index))
       ))
     }
 

@@ -127,6 +127,30 @@ export function DocumentGenerationPage() {
 
     setSaving(true)
     try {
+      // 在保存前，先同步所有输入框的内部值到 formData
+      // 因为输入框使用内部状态，不会自动更新 formData
+      const allInputs = document.querySelectorAll('input, textarea')
+      const syncPromises: Promise<void>[] = []
+      
+      allInputs.forEach((input) => {
+        const syncMethod = (input as any).__syncToExternal
+        if (syncMethod && typeof syncMethod === 'function') {
+          try {
+            syncMethod()
+            // 创建一个 Promise 来等待同步完成
+            syncPromises.push(Promise.resolve())
+          } catch (error) {
+            console.error('Error syncing input value:', error)
+          }
+        }
+      })
+      
+      // 等待所有同步完成
+      await Promise.all(syncPromises)
+      
+      // 再等待一个 tick，确保 React 状态更新完成
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
       // 使用最新的 formData 进行保存
       const currentFormData = formData
       console.log("Saving formData:", JSON.stringify(currentFormData, null, 2))
