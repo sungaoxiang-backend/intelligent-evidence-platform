@@ -336,10 +336,22 @@ class DocumentGenerationService:
         def get_all_array_values(base_name: str, form_data: Dict[str, Any]):
             """获取所有数组格式的字段值，返回 [(index, value), ...]"""
             values = []
+
+            # 方法1：查找 fieldName[0] 格式的字段名
             for key, value in form_data.items():
                 parsed = parse_array_field_name(key)
                 if parsed and parsed[0] == base_name:
                     values.append((parsed[1], value))
+
+            # 方法2：如果方法1没有找到，检查直接的数组格式 {'fieldName': [value1, value2, ...]}
+            if not values:
+                direct_value = form_data.get(base_name)
+                if isinstance(direct_value, list) and len(direct_value) > 1:
+                    # 只有当数组长度大于1时才认为是需要复制的数组数据
+                    for index, value in enumerate(direct_value):
+                        values.append((index, value))
+                    logger.info(f"数组数据检测：发现直接数组格式 {base_name}: {direct_value}")
+
             # 按索引排序
             values.sort(key=lambda x: x[0])
             return values
@@ -498,6 +510,7 @@ class DocumentGenerationService:
         def expand_cells_as_narrative_paragraphs(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]], form_data: Dict[str, Any], placeholder_map: Dict[str, Any]):
             """
             陈述式模板：将表格单元格扩展为多个段落，不使用表格结构
+            复制原始单元格的结构，保持格式
             """
             logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
 
@@ -517,60 +530,114 @@ class DocumentGenerationService:
                 logger.info("陈述式段落扩展：没有数组数据，返回原行")
                 return
 
+            # 获取原始单元格节点（用于复制结构）
+            cells = row_node.get("content", [])
+            
             # 创建多个段落内容
             narrative_paragraphs = []
             for i in range(max_replicas):
                 logger.info(f"陈述式段落扩展：创建第 {i+1} 个段落")
 
-                # 收集当前段落的所有文本内容
-                paragraph_content = []
-
-                # 为每个单元格的占位符收集数据
-                for cell_idx in sorted(cell_placeholders_map.keys()):
-                    placeholders = cell_placeholders_map[cell_idx]
-                    cell_texts = []
-
+                # 为当前索引创建临时 form_data，包含所有占位符的值
+                temp_form_data = {}
+                for cell_idx, placeholders in cell_placeholders_map.items():
                     for placeholder in placeholders:
+                        # 首先尝试数组格式的字段名
                         array_field_name = f"{placeholder}[{i}]"
                         value = form_data.get(array_field_name)
-                        if value:
-                            # 获取占位符元数据
-                            meta = placeholder_map.get(placeholder, {})
-                            # 格式化值
-                            formatted_value = format_placeholder_value(placeholder, value, meta)
-                            cell_texts.append(formatted_value)
 
-                    # 将单元格的内容添加到段落中
-                    if cell_texts:
-                        # 单元格内的字段用空格连接
-                        cell_content = " ".join(cell_texts)
-                        paragraph_content.append(cell_content)
+                        # 如果数组格式没有找到，尝试直接数组格式
+                        if value is None:
+                            direct_array = form_data.get(placeholder)
+                            if isinstance(direct_array, list):
+                                if i < len(direct_array):
+                                    value = direct_array[i]
+                                    logger.info(f"陈述式段落扩展：从直接数组获取 {placeholder}[{i}] = {value}")
+                                elif len(direct_array) > 0:
+                                    # 如果索引超出范围，使用最后一个值（如果有的话）
+                                    value = direct_array[-1]
+                                    logger.info(f"陈述式段落扩展：数组索引超出范围，使用最后一个值 {placeholder}[{i}] = {value}")
+                                else:
+                                    # 如果数组为空，使用空字符串
+                                    value = ""
+                                    logger.info(f"陈述式段落扩展：数组为空，使用空值 {placeholder}[{i}] = ''")
+
+                        # 使用基础字段名（占位符名称）作为键
+                        if value is not None:
+                            temp_form_data[placeholder] = value
+                        # 同时支持直接使用数组格式的字段名（以防万一）
+                        if value is not None:
+                            temp_form_data[array_field_name] = value
+
+                # 合并所有单元格的内容到一个段落中，保持原有模板结构
+                combined_content = []
+
+                for cell_idx, cell_node in enumerate(cells):
+                    if cell_node.get("type") in ["tableCell", "tableHeader"]:
+                        # 深度复制单元格内容
+                        cell_content = cell_node.get("content", [])
+                        if cell_content:
+                            copied_cell_content = copy.deepcopy(cell_content)
+
+                            # 递归替换所有占位符
+                            cell_placeholders = cell_placeholders_map.get(cell_idx, [])
+                            for content_node in copied_cell_content:
+                                replace_placeholders_in_node(content_node, temp_form_data, cell_placeholders)
+
+                            # 将处理后的内容添加到组合内容中
+                            combined_content.extend(copied_cell_content)
 
                 # 如果有内容，创建段落
-                if paragraph_content:
-                    # 将所有单元格的内容用逗号或空格连接
-                    full_paragraph_content = "，".join(paragraph_content)
-
-                    # 创建段落节点
-                    paragraph_node = {
-                        "type": "paragraph",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": full_paragraph_content
+                if combined_content:
+                    # 检查内容是否已经是段落，如果是则直接使用，否则包装成段落
+                    for content_node in combined_content:
+                        if content_node.get("type") == "paragraph":
+                            # 如果已经是段落，直接添加
+                            narrative_paragraphs.append(content_node)
+                        else:
+                            # 如果不是段落，包装成段落
+                            paragraph_node = {
+                                "type": "paragraph",
+                                "content": [content_node] if content_node else []
                             }
-                        ]
-                    }
-                    narrative_paragraphs.append(paragraph_node)
-                    logger.info(f"陈述式段落扩展：第 {i+1} 段内容: {full_paragraph_content}")
+                            narrative_paragraphs.append(paragraph_node)
+  
+                    # 提取段落文本用于日志
+                    if narrative_paragraphs:
+                        para_text = ""
+                        def extract_text(n):
+                            if n.get("type") == "text":
+                                return n.get("text", "")
+                            elif "content" in n:
+                                return "".join(extract_text(c) for c in n.get("content", []))
+                            return ""
+                        # 从最后添加的段落中提取文本
+                        last_para = narrative_paragraphs[-1]
+                        para_text = extract_text(last_para)
+                        logger.info(f"陈述式段落扩展：第 {i+1} 段内容: {para_text[:100]}...")
 
-            # 将表格行替换为段落列表
+                        # 在段落之间添加空白行（除了最后一个段落）
+                        if i < max_replicas - 1:
+                            empty_paragraph = {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": ""
+                                    }
+                                ]
+                            }
+                            narrative_paragraphs.append(empty_paragraph)
+                            logger.info(f"陈述式段落扩展：在第 {i+1} 段后添加空白行")
+
+            # 将表格行替换为段落列表（标记为特殊类型，以便后续处理）
+            # 使用特殊标记，表示这个节点应该被替换为段落
             row_node.clear()
             row_node.update({
-                "type": "doc",
+                "type": "__narrative_paragraphs__",  # 特殊标记，表示这是段落列表
                 "content": narrative_paragraphs
             })
-            logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落")
+            logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落（包含空白行）")
         
         def traverse_and_replace(node: Dict[str, Any]):
             """递归遍历并替换占位符"""
@@ -615,21 +682,71 @@ class DocumentGenerationService:
                         else:
                             logger.info(f"表格行复制：单元格 {cell_idx} 无数组数据，占位符: {cell_placeholders}")
 
-                # 如果有需要复制的单元格，根据模板类型选择处理方式
-                if cell_placeholders_map:
-                    if is_element_style:
+                # 根据模板类型选择处理方式
+                if is_element_style:
+                    # 要素式模板：只有需要复制时才处理，否则保留表格结构
+                    if cell_placeholders_map:
                         logger.info(f"表格行复制：要素式模板，单元格内垂直排列")
                         logger.info(f"表格行复制：cell_placeholders_map = {cell_placeholders_map}")
                         expand_cells_with_array_data(node, cell_placeholders_map)
                         logger.info(f"表格行复制：单元格扩展完成")
                     else:
-                        logger.info(f"表格行复制：陈述式模板，创建多个段落")
+                        logger.info("表格行复制：要素式模板，当前行没有需要复制的单元格，保留表格结构")
+                else:
+                    # 陈述式模板：总是转换为段落，即使没有数组数据
+                    if cell_placeholders_map:
+                        logger.info(f"表格行复制：陈述式模板，有数组数据，创建多个段落")
                         logger.info(f"表格行复制：cell_placeholders_map = {cell_placeholders_map}")
                         expand_cells_as_narrative_paragraphs(node, cell_placeholders_map, form_data, placeholder_map)
                         logger.info(f"表格行复制：段落扩展完成")
+                    else:
+                        logger.info(f"表格行复制：陈述式模板，无数组数据，将表格内容转换为段落")
+                        # 将表格行的所有内容转换为段落
+                        cells = node.get("content", [])
+                        narrative_paragraphs = []
+
+                        for cell_idx, cell_node in enumerate(cells):
+                            if cell_node.get("type") in ["tableCell", "tableHeader"]:
+                                # 深度复制单元格内容
+                                cell_content = cell_node.get("content", [])
+                                if cell_content:
+                                    copied_cell_content = copy.deepcopy(cell_content)
+
+                                    # 递归替换所有占位符
+                                    cell_placeholders = []
+                                    def extract_placeholders_from_cell(cell):
+                                        if cell.get("type") == "placeholder":
+                                            field_key = cell.get("attrs", {}).get("fieldKey", "").strip()
+                                            if field_key:
+                                                cell_placeholders.append(field_key)
+                                        if "content" in cell and isinstance(cell["content"], list):
+                                            for child in cell["content"]:
+                                                extract_placeholders_from_cell(child)
+
+                                    extract_placeholders_from_cell(cell_node)
+
+                                    for content_node in copied_cell_content:
+                                        replace_placeholders_in_node(content_node, form_data, cell_placeholders)
+
+                                    # 将处理后的内容添加到段落列表
+                                    for content_node in copied_cell_content:
+                                        if content_node.get("type") == "paragraph":
+                                            narrative_paragraphs.append(content_node)
+                                        else:
+                                            paragraph_node = {
+                                                "type": "paragraph",
+                                                "content": [content_node] if content_node else []
+                                            }
+                                            narrative_paragraphs.append(paragraph_node)
+
+                        # 将表格行替换为段落列表
+                        node.clear()
+                        node.update({
+                            "type": "__narrative_paragraphs__",
+                            "content": narrative_paragraphs
+                        })
+                        logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落")
                     return
-                else:
-                    logger.info("表格行复制：当前行没有需要复制的单元格")
             
             # 处理 placeholder 节点类型（这是主要的占位符格式）
             if node_type == "placeholder":
@@ -731,6 +848,11 @@ class DocumentGenerationService:
                         logger.info(f"表格行复制：发现复制标记，扩展 {len(child['__duplicated_rows__'])} 行")
                         new_content.extend(child["__duplicated_rows__"])
                         del child["__duplicated_rows__"]
+                    # 检查是否是陈述式段落（表格行被替换为段落）
+                    elif child.get("type") == "__narrative_paragraphs__":
+                        logger.info(f"陈述式段落：发现段落列表，包含 {len(child.get('content', []))} 个段落")
+                        # 将段落列表展开到父节点中
+                        new_content.extend(child.get("content", []))
                     else:
                         new_content.append(child)
 
@@ -738,18 +860,81 @@ class DocumentGenerationService:
                 if len(new_content) != len(node["content"]):
                     logger.info(f"表格行复制：内容从 {len(node['content'])} 行变为 {len(new_content)} 行")
                 node["content"] = new_content
+                
+            # 处理表格节点：如果表格行被替换为段落，则将整个表格替换为段落列表
+            # 注意：这个检查必须在递归处理子节点之后
+            if node_type == "table":
+                rows = node.get("content", [])
+                # 检查是否所有行都被替换为段落（在递归处理后，行已经被展开为段落）
+                # 如果表格的内容现在都是段落，说明表格应该被替换
+                all_content_are_paragraphs = all(
+                    item.get("type") == "paragraph" or item.get("type") == "heading"
+                    for item in rows
+                )
+                has_paragraphs = any(
+                    item.get("type") == "paragraph" or item.get("type") == "heading"
+                    for item in rows
+                )
+                # 如果表格包含段落（说明有行被替换为段落），则将整个表格替换为段落列表
+                if has_paragraphs and rows:
+                    logger.info(f"陈述式表格：表格包含段落，将表格转换为段落列表（共 {len(rows)} 个段落）")
+                    # 过滤出段落节点（忽略其他类型的节点）
+                    paragraph_nodes = [
+                        item for item in rows 
+                        if item.get("type") == "paragraph" or item.get("type") == "heading"
+                    ]
+                    if paragraph_nodes:
+                        # 将表格节点替换为段落列表（标记为段落容器）
+                        node.clear()
+                        node.update({
+                            "type": "__narrative_table_replacement__",  # 特殊标记，表示这是表格的段落替换
+                            "content": paragraph_nodes
+                        })
+                        logger.info(f"陈述式表格：生成 {len(paragraph_nodes)} 个段落")
         
         traverse_and_replace(result)
         
-        # 清理所有标记
+        # 清理所有标记，并将特殊标记的节点转换为正常节点
         def clean_marks(node: Dict[str, Any]):
-            if "__duplicated_rows__" in node:
+            node_type = node.get("type")
+            # 将陈述式表格替换标记转换为段落列表
+            if node_type == "__narrative_table_replacement__":
+                # 将标记节点替换为段落列表（在父节点中展开）
+                paragraphs = node.get("content", [])
+                # 这个节点会被父节点处理，这里先标记
+                node["__replace_with_paragraphs__"] = paragraphs
+            # 将陈述式段落标记转换为段落列表
+            elif node_type == "__narrative_paragraphs__":
+                paragraphs = node.get("content", [])
+                node["__replace_with_paragraphs__"] = paragraphs
+            elif "__duplicated_rows__" in node:
                 del node["__duplicated_rows__"]
             if "content" in node and isinstance(node["content"], list):
+                new_content = []
                 for child in node["content"]:
                     clean_marks(child)
+                    # 如果子节点需要替换为段落，展开它
+                    if "__replace_with_paragraphs__" in child:
+                        new_content.extend(child["__replace_with_paragraphs__"])
+                        del child["__replace_with_paragraphs__"]
+                    else:
+                        new_content.append(child)
+                node["content"] = new_content
         
         clean_marks(result)
+        
+        # 最后清理：将文档根节点中的表格替换标记展开为段落
+        if "content" in result and isinstance(result["content"], list):
+            final_content = []
+            for child in result["content"]:
+                if child.get("type") == "__narrative_table_replacement__":
+                    final_content.extend(child.get("content", []))
+                elif "__replace_with_paragraphs__" in child:
+                    final_content.extend(child["__replace_with_paragraphs__"])
+                else:
+                    final_content.append(child)
+            result["content"] = final_content
+        
         return result
     
     async def generate_document(
@@ -814,7 +999,7 @@ class DocumentGenerationService:
         # 为了测试隔离，如果是 None，获取真实服务
         editor_service = template_editor_service if template_editor_service is not None else get_template_editor_service()
         
-        export_result = editor_service.export_prosemirror_to_docx(filled_json)
+        export_result = editor_service.export_prosemirror_to_docx(filled_json, is_narrative_style=not is_element_style)
         docx_bytes = export_result.get("docx")  # 注意：键名是 "docx" 不是 "docx_bytes"
         warnings = export_result.get("warnings", [])
         

@@ -159,13 +159,14 @@ class TemplateEditorService:
             raise ValueError(f"无法解析 docx 文件: {str(e)}") from e
 
     def export_prosemirror_to_docx(
-        self, prosemirror_json: Dict[str, Any]
+        self, prosemirror_json: Dict[str, Any], is_narrative_style: bool = False
     ) -> Dict[str, Any]:
         """
         从 ProseMirror JSON 导出为 docx 文件
 
         Args:
             prosemirror_json: ProseMirror JSON 格式的文档
+            is_narrative_style: 是否为陈述式模板（用于决定是否显示表格边框）
 
         Returns:
             包含 docx 字节流和警告信息的字典
@@ -187,7 +188,7 @@ class TemplateEditorService:
             logger.info("开始转换 ProseMirror JSON 到 DOCX")
             template_log_service.clear()
             template_log_service.add_record("export", "map_document", "start")
-            doc = self.pm_to_docx_mapper.map_document(prosemirror_json)
+            doc = self.pm_to_docx_mapper.map_document(prosemirror_json, is_narrative_style=is_narrative_style)
             template_log_service.add_record("export", "map_document", "success")
             logger.info("DOCX 文档创建成功")
             

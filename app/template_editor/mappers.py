@@ -795,17 +795,19 @@ class ProseMirrorToDocxMapper:
     def __init__(self) -> None:
         self.export_warnings: List[Dict[str, Any]] = []
 
-    def map_document(self, prosemirror_json: Dict[str, Any]) -> Document:
+    def map_document(self, prosemirror_json: Dict[str, Any], is_narrative_style: bool = False) -> Document:
         """
         从 ProseMirror JSON 映射到 docx 文档
 
         Args:
             prosemirror_json: ProseMirror JSON 格式的文档
+            is_narrative_style: 是否为陈述式模板（用于决定是否显示表格边框）
 
         Returns:
             Document 对象
         """
         self.export_warnings = []
+        self.is_narrative_style = is_narrative_style
         doc = Document()
 
         # 遍历内容节点
@@ -815,7 +817,14 @@ class ProseMirrorToDocxMapper:
             try:
                 if node_type == "paragraph" or node_type == "heading":
                     self.map_paragraph_node(node, doc)
+                elif node_type == "__narrative_table_replacement__":
+                    # 处理陈述式表格替换（段落列表）- 优先检查这个
+                    paragraphs = node.get("content", [])
+                    for para_node in paragraphs:
+                        if para_node.get("type") == "paragraph" or para_node.get("type") == "heading":
+                            self.map_paragraph_node(para_node, doc)
                 elif node_type == "table":
+                    # 正常表格，渲染表格
                     self.map_table_node(node, doc)
                 else:
                     self._log_warning(
@@ -1208,16 +1217,20 @@ class ProseMirrorToDocxMapper:
             existing_tbl_layout.set(qn('w:type'), layout_type)
             logger.info(f"[EXPORT] 设置表格布局: {layout_type}")
         
-        # 设置边框
-        tbl_borders = OxmlElement('w:tblBorders')
-        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-            border = OxmlElement(f'w:{border_name}')
-            border.set(qn('w:val'), 'single')
-            border.set(qn('w:sz'), '4')
-            border.set(qn('w:space'), '0')
-            border.set(qn('w:color'), '000000')
-            tbl_borders.append(border)
-        tbl_pr.append(tbl_borders)
+        # 设置边框 - 陈述式模板不显示表格边框
+        if not self.is_narrative_style:
+            tbl_borders = OxmlElement('w:tblBorders')
+            for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+                border = OxmlElement(f'w:{border_name}')
+                border.set(qn('w:val'), 'single')
+                border.set(qn('w:sz'), '4')
+                border.set(qn('w:space'), '0')
+                border.set(qn('w:color'), '000000')
+                tbl_borders.append(border)
+            tbl_pr.append(tbl_borders)
+            logger.info("[EXPORT] 设置表格边框：要素式模板，显示边框")
+        else:
+            logger.info("[EXPORT] 跳过表格边框设置：陈述式模板，不显示边框")
 
         # 填充表格（考虑合并单元格）
         # 关键：按照实际结构填充，合并单元格通过 gridSpan 和 vMerge 实现

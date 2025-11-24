@@ -15,6 +15,29 @@ import { type Case } from "@/lib/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import useSWR from "swr"
 
+// 规范化 formData 用于比较（统一格式）
+const normalizeFormDataForComparison = (data: Record<string, any>): Record<string, any> => {
+  const normalized: Record<string, any> = {}
+  for (const key in data) {
+    const value = data[key]
+    if (Array.isArray(value)) {
+      // 清理数组末尾的空值
+      const arr = [...value]
+      while (arr.length > 1 && arr[arr.length - 1] === "") {
+        arr.pop()
+      }
+      // 如果数组为空，不添加这个键（与空数组等价）
+      if (arr.length > 0) {
+        normalized[key] = arr
+      }
+    } else if (value !== undefined && value !== null && value !== "") {
+      normalized[key] = value
+    }
+    // 忽略空字符串、undefined、null
+  }
+  return normalized
+}
+
 export function DocumentGenerationPage() {
   const searchParams = useSearchParams()
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateInfo | null>(null)
@@ -75,7 +98,8 @@ export function DocumentGenerationPage() {
           ? initialFormData 
           : {}
         setFormData(normalizedFormData)
-        lastSavedFormDataRef.current = normalizedFormData
+        // 规范化保存的数据用于比较
+        lastSavedFormDataRef.current = normalizeFormDataForComparison(normalizedFormData)
         setHasUnsavedChanges(false)
       } catch (error: any) {
         toast({
@@ -91,11 +115,102 @@ export function DocumentGenerationPage() {
     createOrGetGeneration()
   }, [selectedTemplate, selectedCaseId, toast])
 
-  // 检测表单数据变化
+  // 检测表单数据变化（包括 DOM 中的值）
   useEffect(() => {
     if (!generationId) return
-    const hasChanges = JSON.stringify(formData) !== JSON.stringify(lastSavedFormDataRef.current)
-    setHasUnsavedChanges(hasChanges)
+    
+    // 延迟检测，等待 DOM 渲染完成
+    const timeoutId = setTimeout(() => {
+      // 从 DOM 读取当前值
+      const currentFormDataFromDOM: Record<string, any> = {}
+      const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+
+      // 如果没有输入框，说明 DOM 还没渲染完成，不检测
+      if (allInputs.length === 0) {
+        return
+      }
+
+      allInputs.forEach((input) => {
+        const fieldKey = input.getAttribute('data-field-key')
+        const indexStr = input.getAttribute('data-field-index')
+        const value = (input as HTMLInputElement | HTMLTextAreaElement).value
+
+        if (fieldKey) {
+          if (indexStr !== null) {
+            const index = parseInt(indexStr, 10)
+            if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
+              currentFormDataFromDOM[fieldKey] = []
+            }
+            while (currentFormDataFromDOM[fieldKey].length <= index) {
+              currentFormDataFromDOM[fieldKey].push("")
+            }
+            currentFormDataFromDOM[fieldKey][index] = value
+          } else {
+            currentFormDataFromDOM[fieldKey] = value
+          }
+        }
+      })
+
+      // 合并 formData 和 DOM 中的值
+      const mergedFormData = { ...formData, ...currentFormDataFromDOM }
+      
+      // 规范化后比较
+      const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
+      const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+      
+      const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
+      setHasUnsavedChanges(hasChanges)
+    }, 500) // 延迟 500ms，等待 DOM 渲染完成
+
+    return () => clearTimeout(timeoutId)
+  }, [formData, generationId])
+  
+  // 定期检查 DOM 中的值是否有变化（用于检测未保存的更改）
+  useEffect(() => {
+    if (!generationId) return
+    
+    const intervalId = setInterval(() => {
+      const currentFormDataFromDOM: Record<string, any> = {}
+      const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+
+      // 如果没有输入框，跳过检测
+      if (allInputs.length === 0) {
+        return
+      }
+
+      allInputs.forEach((input) => {
+        const fieldKey = input.getAttribute('data-field-key')
+        const indexStr = input.getAttribute('data-field-index')
+        const value = (input as HTMLInputElement | HTMLTextAreaElement).value
+
+        if (fieldKey) {
+          if (indexStr !== null) {
+            const index = parseInt(indexStr, 10)
+            if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
+              currentFormDataFromDOM[fieldKey] = []
+            }
+            while (currentFormDataFromDOM[fieldKey].length <= index) {
+              currentFormDataFromDOM[fieldKey].push("")
+            }
+            currentFormDataFromDOM[fieldKey][index] = value
+          } else {
+            currentFormDataFromDOM[fieldKey] = value
+          }
+        }
+      })
+
+      // 合并 formData 和 DOM 中的值
+      const mergedFormData = { ...formData, ...currentFormDataFromDOM }
+      
+      // 规范化后比较
+      const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
+      const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+      
+      const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
+      setHasUnsavedChanges(hasChanges)
+    }, 1000) // 每秒检查一次
+
+    return () => clearInterval(intervalId)
   }, [formData, generationId])
 
   // 页面离开前提示
@@ -127,37 +242,56 @@ export function DocumentGenerationPage() {
 
     setSaving(true)
     try {
-      // 在保存前，先同步所有输入框的内部值到 formData
+      // 在保存前，直接从 DOM 读取所有输入框的最新值
       // 因为输入框使用内部状态，不会自动更新 formData
-      const allInputs = document.querySelectorAll('input, textarea')
-      const syncPromises: Promise<void>[] = []
-      
+      const newFormData: Record<string, any> = {}
+      const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+
       allInputs.forEach((input) => {
-        const syncMethod = (input as any).__syncToExternal
-        if (syncMethod && typeof syncMethod === 'function') {
-          try {
-            syncMethod()
-            // 创建一个 Promise 来等待同步完成
-            syncPromises.push(Promise.resolve())
-          } catch (error) {
-            console.error('Error syncing input value:', error)
+        const fieldKey = input.getAttribute('data-field-key')
+        const indexStr = input.getAttribute('data-field-index')
+        const value = (input as HTMLInputElement | HTMLTextAreaElement).value
+
+        if (fieldKey) {
+          if (indexStr !== null) {
+            // 处理数组字段，例如 "姓名[0]"
+            const index = parseInt(indexStr, 10)
+            if (!Array.isArray(newFormData[fieldKey])) {
+              newFormData[fieldKey] = []
+            }
+            // 确保数组长度足够
+            while (newFormData[fieldKey].length <= index) {
+              newFormData[fieldKey].push("")
+            }
+            newFormData[fieldKey][index] = value
+          } else {
+            // 处理普通字段
+            newFormData[fieldKey] = value
           }
         }
       })
-      
-      // 等待所有同步完成
-      await Promise.all(syncPromises)
-      
-      // 再等待一个 tick，确保 React 状态更新完成
-      await new Promise(resolve => setTimeout(resolve, 50))
-      
-      // 使用最新的 formData 进行保存
-      const currentFormData = formData
-      console.log("Saving formData:", JSON.stringify(currentFormData, null, 2))
-      console.log("FormData keys:", Object.keys(currentFormData))
+
+      // 清理数组末尾的空值（但保留至少一个值）
+      for (const key in newFormData) {
+        if (Array.isArray(newFormData[key])) {
+          const arr = newFormData[key]
+          while (arr.length > 1 && arr[arr.length - 1] === "") {
+            arr.pop()
+          }
+          // 如果数组为空，设置为空数组
+          if (arr.length === 0) {
+            newFormData[key] = []
+          }
+        }
+      }
+
+      // 合并现有的 formData（保留非输入框字段）
+      const currentFormData = { ...formData, ...newFormData }
+      console.log("Saving formData (from DOM):", JSON.stringify(newFormData, null, 2))
+      console.log("FormData keys (from DOM):", Object.keys(newFormData))
       
       const requestData = {
-        form_data: currentFormData,
+        form_data: newFormData, // 使用从 DOM 收集的最新数据
       }
       console.log("Request data:", JSON.stringify(requestData, null, 2))
       
@@ -176,7 +310,7 @@ export function DocumentGenerationPage() {
       }
       
       // 更新已保存的数据引用
-      const savedFormData = updated.form_data || currentFormData
+      const savedFormData = updated.form_data || newFormData
       console.log("Saved form_data from server:", savedFormData)
       console.log("Saved form_data type:", typeof savedFormData)
       
@@ -199,7 +333,8 @@ export function DocumentGenerationPage() {
       
       console.log("Normalized saved data:", JSON.stringify(normalizedSavedData, null, 2))
       
-      lastSavedFormDataRef.current = normalizedSavedData
+      // 规范化保存的数据用于比较
+      lastSavedFormDataRef.current = normalizeFormDataForComparison(normalizedSavedData)
       
       // 更新 formData 以确保与服务器同步
       setFormData(normalizedSavedData)
@@ -241,7 +376,9 @@ export function DocumentGenerationPage() {
           form_data: formData,
         })
         const updated = (response as any).data || response
-        lastSavedFormDataRef.current = updated.form_data || formData
+        // 规范化保存的数据用于比较
+        const savedData = updated.form_data || formData
+        lastSavedFormDataRef.current = normalizeFormDataForComparison(savedData)
       } catch (error: any) {
         toast({
           title: "保存失败",
