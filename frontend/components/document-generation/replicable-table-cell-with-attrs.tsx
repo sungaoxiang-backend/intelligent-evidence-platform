@@ -48,13 +48,14 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
         (this.options.templateCategory.includes("要素") || this.options.templateCategory === "要素式")
 
       // 完全独立的处理逻辑：
-      // 1. 陈述式模板且包含占位符 -> 使用 narrative-cell-renderer
+      // 1. 陈述式模板（无论是否有占位符）-> 使用 narrative-table-cell 支持添加/删除功能
       // 2. 要素式模板且包含多个占位符 -> 使用 ReplicableCell
       // 3. 其他情况 -> 使用默认渲染
 
-      if (!isElementStyle && placeholders.length > 0) {
-        // 陈述式模板：使用 narrative-table-cell 支持添加/删除功能
-        console.log("使用 narrative-table-cell 处理陈述式模板单元格", { placeholders: placeholders.length })
+      if (!isElementStyle) {
+        // 陈述式模板：所有单元格都使用 narrative-table-cell 支持添加/删除功能
+        // 即使没有占位符，也要渲染为可复制的段落形式
+        console.log("使用 narrative-table-cell 处理陈述式模板单元格", { placeholders: placeholders.length, hasPlaceholders: placeholders.length > 0 })
 
         return createNarrativeTableCell(
           dom,
@@ -201,8 +202,11 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
         }
       }
 
-      // 使用默认渲染（返回 undefined 让 TipTap 使用默认 NodeView）
-      return undefined
+      // 使用默认渲染（返回一个简单的NodeView）
+      return {
+        dom,
+        contentDOM: dom,
+      }
     }
   },
 })

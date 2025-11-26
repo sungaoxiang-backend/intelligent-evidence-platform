@@ -8,13 +8,13 @@ import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
 import TextStyle from "@tiptap/extension-text-style"
 import Color from "@tiptap/extension-color"
-import TableRow from "@tiptap/extension-table-row"
 import TableHeader from "@tiptap/extension-table-header"
 import HardBreak from "@tiptap/extension-hard-break"
 import {
   HeadingWithAttrs,
   ParagraphWithAttrs,
   TableWithAttrs,
+  TableRowWithAttrs,
   templateBaseStyles,
 } from "@/components/template-editor/extensions"
 import { ReplicableTableCellWithAttrs } from "./replicable-table-cell-with-attrs"
@@ -24,6 +24,7 @@ import { PlaceholderInfo } from "./placeholder-form-fields"
 import { identifyReplicableCells, type ReplicableCellInfo } from "./replicable-cell-utils"
 import { createRoot } from "react-dom/client"
 import { ReplicableCell } from "./replicable-cell"
+import { updateRowExportEnabled } from "./table-row-export-control"
 
 interface DocumentPreviewFormProps {
   /** 文档内容（ProseMirror JSON） */
@@ -43,6 +44,9 @@ interface DocumentPreviewFormProps {
   
   /** 自定义类名 */
   className?: string
+  
+  /** 内容变化回调（用于更新表格行导出状态） */
+  onContentChange?: (content: JSONContent) => void
 }
 
 /**
@@ -57,6 +61,7 @@ export function DocumentPreviewForm({
   onFormDataChange,
   templateCategory,
   className,
+  onContentChange,
 }: DocumentPreviewFormProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const previousContentRef = useRef<string | null>(null)
@@ -200,7 +205,7 @@ export function DocumentPreviewForm({
             : "custom-table narrative-table",
         },
       }),
-      TableRow.configure({
+      TableRowWithAttrs.configure({
         HTMLAttributes: {},
       }),
       TableHeader.configure({
@@ -272,6 +277,22 @@ export function DocumentPreviewForm({
     }
   }, [editor, content, normalizeContent])
   
+  // 监听编辑器内容变化，同步到onContentChange
+  useEffect(() => {
+    if (!editor || !onContentChange) return
+    
+    const handleUpdate = () => {
+      const json = editor.getJSON()
+      onContentChange(json)
+    }
+    
+    editor.on("update", handleUpdate)
+    
+    return () => {
+      editor.off("update", handleUpdate)
+    }
+  }, [editor, onContentChange])
+  
   // 当占位符变化时，刷新编辑器（但不响应formData变化，避免中断输入）
   useEffect(() => {
     if (!editor) return
@@ -302,6 +323,21 @@ export function DocumentPreviewForm({
           .template-doc table td,
           .template-doc table th {
             position: relative;
+          }
+          
+          /* 确保checkbox单元格不影响表格布局 */
+          .template-doc table tr .export-control-checkbox-cell {
+            width: 40px !important;
+            min-width: 40px !important;
+            max-width: 40px !important;
+            padding: 8px 4px !important;
+            box-sizing: border-box;
+          }
+          
+          /* 确保其他单元格正常显示 */
+          .template-doc table tr td:not(.export-control-checkbox-cell),
+          .template-doc table tr th:not(.export-control-checkbox-cell) {
+            width: auto;
           }
 
           /* 要素式模板：表格单元格中包含占位符时，使用flex布局 */
@@ -355,6 +391,21 @@ export function DocumentPreviewForm({
             text-align: left;
             vertical-align: top;
             position: relative;
+          }
+          
+          /* 确保checkbox单元格不影响表格布局 */
+          .template-doc table tr .export-control-checkbox-cell {
+            width: 40px !important;
+            min-width: 40px !important;
+            max-width: 40px !important;
+            padding: 8px 4px !important;
+            box-sizing: border-box;
+          }
+          
+          /* 确保其他单元格正常显示 */
+          .template-doc table tr td:not(.export-control-checkbox-cell),
+          .template-doc table tr th:not(.export-control-checkbox-cell) {
+            width: auto;
           }
 
           /* 陈述式模板：表格中的占位符字段保持自然布局 */

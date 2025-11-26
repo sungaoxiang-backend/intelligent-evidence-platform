@@ -209,7 +209,8 @@ class DocumentGenerationService:
         db: AsyncSession,
         generation_id: int,
         form_data: dict,
-        staff_id: int
+        staff_id: int,
+        prosemirror_json: Optional[Dict[str, Any]] = None
     ) -> DocumentGeneration:
         """
         更新文书生成的表单数据（草稿保存）
@@ -219,6 +220,7 @@ class DocumentGenerationService:
             generation_id: 文书生成记录ID
             form_data: 表单数据
             staff_id: 员工ID
+            prosemirror_json: 可选的模板内容（用于保存更新后的exportEnabled状态）
             
         Returns:
             更新后的文书生成记录
@@ -236,6 +238,16 @@ class DocumentGenerationService:
         generation.form_data = form_data
         generation.updated_by_id = staff_id
         generation.updated_at = datetime.now()
+        
+        # 如果提供了prosemirror_json，更新模板的prosemirror_json（用于保存exportEnabled状态）
+        # 注意：这里我们更新的是模板的prosemirror_json，而不是生成记录的
+        # 因为exportEnabled状态是用户每次生成时的选择，不应该永久修改模板
+        # 但为了保存用户的选择，我们可以将prosemirror_json存储在form_data中
+        # 或者创建一个新的字段来存储
+        # 目前，我们将prosemirror_json存储在form_data的一个特殊key中
+        if prosemirror_json is not None:
+            # 将prosemirror_json存储在form_data中，使用特殊key
+            form_data["__template_content__"] = prosemirror_json
         
         await db.commit()
         await db.refresh(generation)
@@ -346,14 +358,19 @@ class DocumentGenerationService:
             # 方法2：如果方法1没有找到，检查直接的数组格式 {'fieldName': [value1, value2, ...]}
             if not values:
                 direct_value = form_data.get(base_name)
-                if isinstance(direct_value, list) and len(direct_value) > 1:
-                    # 只有当数组长度大于1时才认为是需要复制的数组数据
+                if isinstance(direct_value, list):
+                    # 对于数组，即使只有一个元素也要处理（因为可能只有一个段落）
                     for index, value in enumerate(direct_value):
                         values.append((index, value))
-                    logger.info(f"数组数据检测：发现直接数组格式 {base_name}: {direct_value}")
+                    logger.info(f"数组数据检测：发现直接数组格式 {base_name}: {direct_value} (长度: {len(direct_value)})")
+                elif direct_value is not None and direct_value != "":
+                    # 如果值不是数组但也不是空，也作为一个值处理（索引0）
+                    values.append((0, direct_value))
+                    logger.info(f"数组数据检测：发现非数组值 {base_name}: {direct_value}，作为索引0处理")
 
             # 按索引排序
             values.sort(key=lambda x: x[0])
+            logger.info(f"数组数据检测：{base_name} 最终值列表: {values}")
             return values
         
         def expand_cells_with_array_data(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]]):
@@ -754,21 +771,28 @@ class DocumentGenerationService:
                 placeholder_name = attrs.get("fieldKey", "").strip()
                 
                 if placeholder_name:
-                    # 检查是否有数组格式的数据
-                    array_values = get_all_array_values(placeholder_name, form_data)
-                    
                     # 获取占位符元数据
                     meta = placeholder_map.get(placeholder_name)
                     
                     # 调试日志
                     logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}, 要素式: {is_element_style}")
                     
-                    # 如果有数组数据，使用第一个值（在表格行复制时已经处理了）
-                    if array_values:
-                        value = array_values[0][1]  # 使用第一个数组值
-                    else:
-                        # 获取值
-                        value = form_data.get(placeholder_name) if form_data else None
+                    # 首先尝试直接获取值（优先使用直接值，因为数组值在表格行复制时已经处理了）
+                    value = form_data.get(placeholder_name) if form_data else None
+                    
+                    # 如果直接值不存在，检查是否有数组格式的数据
+                    if value is None:
+                        array_values = get_all_array_values(placeholder_name, form_data)
+                        if array_values:
+                            value = array_values[0][1]  # 使用第一个数组值
+                            logger.debug(f"从数组获取值: {placeholder_name} = {value}")
+                    
+                    # 如果还是没有值，尝试检查是否有数组格式的字段名（如 fieldName[0]）
+                    if value is None:
+                        array_field_name = f"{placeholder_name}[0]"
+                        value = form_data.get(array_field_name) if form_data else None
+                        if value is not None:
+                            logger.debug(f"从数组格式字段名获取值: {array_field_name} = {value}")
                     
                     # 获取占位符类型
                     placeholder_type = meta.get("type", "text") if meta else "text"
@@ -836,6 +860,29 @@ class DocumentGenerationService:
                 
                 # 使用正则替换所有占位符
                 node["text"] = re.sub(r'\{\{([^}]+)\}\}', replacer, text)
+            
+            # 对于表格节点，先过滤掉 exportEnabled: false 的行，然后再递归处理
+            if node_type == "table":
+                rows = node.get("content", [])
+                # 过滤掉 exportEnabled: false 的行
+                filtered_rows = []
+                for row in rows:
+                    # 检查是否是表格行
+                    if row.get("type") == "tableRow":
+                        # 检查 exportEnabled 属性，默认为 True（向后兼容）
+                        attrs = row.get("attrs", {})
+                        export_enabled = attrs.get("exportEnabled", True)
+                        # 如果 exportEnabled 为 False，跳过该行
+                        if export_enabled is False:
+                            logger.info(f"表格行导出过滤：跳过 exportEnabled=false 的行")
+                            continue
+                    # 保留该行
+                    filtered_rows.append(row)
+                
+                # 更新表格内容为过滤后的行
+                if len(filtered_rows) != len(rows):
+                    logger.info(f"表格行导出过滤：从 {len(rows)} 行过滤到 {len(filtered_rows)} 行")
+                    node["content"] = filtered_rows
             
             # 递归处理子节点
             if "content" in node and isinstance(node["content"], list):
@@ -941,7 +988,8 @@ class DocumentGenerationService:
         self,
         db: AsyncSession,
         generation_id: int,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        prosemirror_json: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         生成并导出文书到 COS
@@ -950,6 +998,7 @@ class DocumentGenerationService:
             db: 数据库会话
             generation_id: 文书生成记录ID
             filename: 自定义文件名（可选，不含扩展名）
+            prosemirror_json: 可选的模板内容（用于传递更新后的exportEnabled状态）
             
         Returns:
             包含 file_url, filename, warnings 的字典
@@ -968,7 +1017,23 @@ class DocumentGenerationService:
         logger.info(f"开始生成文书，记录ID: {generation_id}")
         
         # 获取模板的 ProseMirror JSON
-        template_json = generation.template.prosemirror_json
+        # 优先使用请求中的prosemirror_json（包含exportEnabled状态）
+        # 如果没有，尝试从form_data中恢复保存的templateContent
+        # 最后使用模板的原始内容
+        if prosemirror_json is not None:
+            template_json = prosemirror_json
+            logger.info("使用请求中的prosemirror_json（包含exportEnabled状态）")
+        elif generation.form_data and isinstance(generation.form_data, dict):
+            saved_template_content = generation.form_data.get("__template_content__")
+            if saved_template_content:
+                template_json = saved_template_content
+                logger.info("从form_data中恢复保存的templateContent（包含exportEnabled状态）")
+            else:
+                template_json = generation.template.prosemirror_json
+                logger.info("使用模板的原始prosemirror_json")
+        else:
+            template_json = generation.template.prosemirror_json
+            logger.info("使用模板的原始prosemirror_json")
         
         # 记录 form_data 内容用于调试
         logger.info(f"form_data 内容: {generation.form_data}")

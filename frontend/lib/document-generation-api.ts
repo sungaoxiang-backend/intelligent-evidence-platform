@@ -93,10 +93,12 @@ export interface CreateGenerationRequest {
 
 export interface UpdateGenerationRequest {
   form_data: Record<string, any>
+  prosemirror_json?: any // 可选的模板内容（用于保存更新后的exportEnabled状态）
 }
 
 export interface ExportDocumentRequest {
   filename?: string
+  prosemirror_json?: any // 可选的模板内容（用于传递更新后的exportEnabled状态）
 }
 
 // ========== API 方法 ==========

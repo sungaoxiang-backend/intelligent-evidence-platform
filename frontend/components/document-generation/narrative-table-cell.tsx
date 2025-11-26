@@ -50,11 +50,23 @@ export function NarrativeTableCell({
 
   const placeholders = extractPlaceholdersFromNode(cellNode)
   const baseKey = placeholders[0] || cellId
+  
+  // 对于没有占位符的单元格，使用一个特殊的key来跟踪段落数量
+  const paragraphCountKey = placeholders.length === 0 ? `__paragraph_count_${cellId}__` : null
 
   // 使用 useMemo 缓存数组长度计算，避免频繁重新计算
   const arrayLength = React.useMemo(() => {
     let maxLength = 0
     const currentFormData = getFormData ? getFormData() : formData
+    
+    if (placeholders.length === 0 && paragraphCountKey) {
+      // 对于没有占位符的单元格，使用特殊key来跟踪段落数量
+      const count = currentFormData[paragraphCountKey]
+      if (typeof count === 'number' && count > 0) {
+        return count
+      }
+      return 1 // 默认显示一个段落
+    }
     
     placeholders.forEach(key => {
       const value = currentFormData[key]
@@ -72,7 +84,7 @@ export function NarrativeTableCell({
     }
 
     return maxLength
-  }, [formData, placeholders, getFormData])
+  }, [formData, placeholders, getFormData, paragraphCountKey])
 
   // 获取指定索引的值
   const getValueAtIndex = (key: string, index: number) => {
@@ -192,6 +204,13 @@ export function NarrativeTableCell({
       console.log(`handleAdd: updated ${key} from`, currentValue, `to`, newValues, `(length: ${newValues.length})`)
     })
 
+    // 对于没有占位符的单元格，使用特殊key来增加段落数量
+    if (placeholders.length === 0 && paragraphCountKey) {
+      const currentCount = mergedFormData[paragraphCountKey] || 1
+      newFormData[paragraphCountKey] = currentCount + 1
+      console.log(`handleAdd: 没有占位符，增加段落数量从 ${currentCount} 到 ${currentCount + 1}`)
+    }
+    
     console.log("handleAdd: calling onFormDataChange with", newFormData)
     onFormDataChange(newFormData)
   }

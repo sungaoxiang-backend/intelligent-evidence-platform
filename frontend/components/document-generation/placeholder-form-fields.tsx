@@ -277,7 +277,11 @@ export function PlaceholderFormField({
           >
             {placeholder.options.map((option, index) => (
               <div key={index} className="flex items-center space-x-2">
-                <RadioGroupItem value={option.value} id={`${placeholder.name}-${index}`} />
+                <RadioGroupItem 
+                  value={option.value} 
+                  id={`${placeholder.name}-${index}`}
+                  data-field-key={placeholder.name}
+                />
                 <Label htmlFor={`${placeholder.name}-${index}`} className="cursor-pointer">
                   {option.label || option.value}
                 </Label>
@@ -317,6 +321,8 @@ export function PlaceholderFormField({
                       checked={isChecked}
                       onCheckedChange={(checked) => handleCheckboxChange(option.value, Boolean(checked))}
                       disabled={disabled}
+                      data-field-key={placeholder.name}
+                      value={option.value}
                     />
                     <Label htmlFor={`${placeholder.name}-${index}`} className="cursor-pointer">
                       {option.label || option.value}

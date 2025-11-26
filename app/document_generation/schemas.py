@@ -23,6 +23,10 @@ class DocumentGenerationUpdateRequest(BaseModel):
         ..., 
         description="占位符填写数据，格式：{name: value}"
     )
+    prosemirror_json: Optional[Dict[str, Any]] = Field(
+        None,
+        description="可选的模板内容（用于保存更新后的exportEnabled状态）"
+    )
 
 
 class DocumentGenerationExportRequest(BaseModel):
@@ -32,6 +36,10 @@ class DocumentGenerationExportRequest(BaseModel):
         None, 
         description="导出文件名（不含扩展名）",
         max_length=200
+    )
+    prosemirror_json: Optional[Dict[str, Any]] = Field(
+        None,
+        description="可选的模板内容（用于传递更新后的exportEnabled状态）"
     )
 
 

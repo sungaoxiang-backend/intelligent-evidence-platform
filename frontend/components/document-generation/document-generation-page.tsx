@@ -9,6 +9,7 @@ import { Loader2, Download, Save, FileText, Scale } from "lucide-react"
 import { DocumentPreviewForm } from "./document-preview-form"
 import { documentGenerationApi, type TemplateInfo, type PlaceholderInfo as ApiPlaceholderInfo } from "@/lib/document-generation-api"
 import { PlaceholderInfo } from "./placeholder-form-fields"
+import type { JSONContent } from "@tiptap/core"
 import { EvidenceCardsList } from "./evidence-cards-list"
 import { caseApi } from "@/lib/api"
 import { type Case } from "@/lib/types"
@@ -44,6 +45,7 @@ export function DocumentGenerationPage() {
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
   const [generationId, setGenerationId] = useState<number | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
+  const [templateContent, setTemplateContent] = useState<JSONContent | null>(null) // 用于管理表格行导出状态
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -53,6 +55,16 @@ export function DocumentGenerationPage() {
   const lastSavedFormDataRef = useRef<Record<string, any>>({})
   const hasInitializedCaseIdRef = useRef(false)
   const hasInitializedTemplateRef = useRef(false)
+
+  // 当模板变化时，更新模板内容
+  useEffect(() => {
+    if (selectedTemplate?.prosemirror_json) {
+      // 深拷贝模板内容，避免修改原始模板
+      setTemplateContent(JSON.parse(JSON.stringify(selectedTemplate.prosemirror_json)))
+    } else {
+      setTemplateContent(null)
+    }
+  }, [selectedTemplate])
 
   // 转换API占位符格式为组件格式
   const convertPlaceholders = useCallback((apiPlaceholders: ApiPlaceholderInfo[]): PlaceholderInfo[] => {
@@ -169,48 +181,53 @@ export function DocumentGenerationPage() {
   useEffect(() => {
     if (!generationId) return
     
-    const intervalId = setInterval(() => {
-      const currentFormDataFromDOM: Record<string, any> = {}
-      const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+    // 延迟启动检测，避免初始化时误触发
+    const timeoutId = setTimeout(() => {
+      const intervalId = setInterval(() => {
+        const currentFormDataFromDOM: Record<string, any> = {}
+        const allInputs = document.querySelectorAll('input[data-field-key]:not([type="radio"]):not([type="checkbox"]), textarea[data-field-key]')
 
-      // 如果没有输入框，跳过检测
-      if (allInputs.length === 0) {
-        return
-      }
-
-      allInputs.forEach((input) => {
-        const fieldKey = input.getAttribute('data-field-key')
-        const indexStr = input.getAttribute('data-field-index')
-        const value = (input as HTMLInputElement | HTMLTextAreaElement).value
-
-        if (fieldKey) {
-          if (indexStr !== null) {
-            const index = parseInt(indexStr, 10)
-            if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
-              currentFormDataFromDOM[fieldKey] = []
-            }
-            while (currentFormDataFromDOM[fieldKey].length <= index) {
-              currentFormDataFromDOM[fieldKey].push("")
-            }
-            currentFormDataFromDOM[fieldKey][index] = value
-          } else {
-            currentFormDataFromDOM[fieldKey] = value
-          }
+        // 如果没有输入框，跳过检测
+        if (allInputs.length === 0) {
+          return
         }
-      })
 
-      // 合并 formData 和 DOM 中的值
-      const mergedFormData = { ...formData, ...currentFormDataFromDOM }
-      
-      // 规范化后比较
-      const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
-      const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
-      
-      const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
-      setHasUnsavedChanges(hasChanges)
-    }, 1000) // 每秒检查一次
+        allInputs.forEach((input) => {
+          const fieldKey = input.getAttribute('data-field-key')
+          const indexStr = input.getAttribute('data-field-index')
+          const value = (input as HTMLInputElement | HTMLTextAreaElement).value
 
-    return () => clearInterval(intervalId)
+          if (fieldKey) {
+            if (indexStr !== null) {
+              const index = parseInt(indexStr, 10)
+              if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
+                currentFormDataFromDOM[fieldKey] = []
+              }
+              while (currentFormDataFromDOM[fieldKey].length <= index) {
+                currentFormDataFromDOM[fieldKey].push("")
+              }
+              currentFormDataFromDOM[fieldKey][index] = value
+            } else {
+              currentFormDataFromDOM[fieldKey] = value
+            }
+          }
+        })
+
+        // 合并 formData 和 DOM 中的值（优先使用formData，因为包含radio、checkbox等）
+        const mergedFormData = { ...formData, ...currentFormDataFromDOM }
+        
+        // 规范化后比较
+        const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
+        const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+        
+        const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
+        setHasUnsavedChanges(hasChanges)
+      }, 2000) // 每2秒检查一次，减少频率
+
+      return () => clearInterval(intervalId)
+    }, 2000) // 延迟2秒启动，避免初始化时误触发
+
+    return () => clearTimeout(timeoutId)
   }, [formData, generationId])
 
   // 页面离开前提示
@@ -242,10 +259,16 @@ export function DocumentGenerationPage() {
 
     setSaving(true)
     try {
-      // 在保存前，直接从 DOM 读取所有输入框的最新值
-      // 因为输入框使用内部状态，不会自动更新 formData
-      const newFormData: Record<string, any> = {}
-      const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
+      // 在保存前，收集所有表单数据：
+      // 1. 从formData状态获取最新值（包括radio、checkbox、select等）
+      // 2. 从DOM读取input和textarea的值（用于同步内部状态）
+      // 3. 合并两者，优先使用formData中的值
+      
+      // 首先，合并当前的formData（包含所有类型的表单控件值）
+      const newFormData: Record<string, any> = { ...formData }
+      
+      // 从DOM读取input和textarea的值（用于同步可能未更新的内部状态）
+      const allInputs = document.querySelectorAll('input[data-field-key]:not([type="radio"]):not([type="checkbox"]), textarea[data-field-key]')
 
       allInputs.forEach((input) => {
         const fieldKey = input.getAttribute('data-field-key')
@@ -265,9 +288,54 @@ export function DocumentGenerationPage() {
             }
             newFormData[fieldKey][index] = value
           } else {
-            // 处理普通字段
-            newFormData[fieldKey] = value
+            // 处理普通字段（只有当formData中没有该字段时才使用DOM值）
+            if (!(fieldKey in newFormData)) {
+              newFormData[fieldKey] = value
+            }
           }
+        }
+      })
+      
+      // 从DOM读取radio按钮的值
+      const allRadios = document.querySelectorAll('input[type="radio"][data-field-key]:checked')
+      allRadios.forEach((radio) => {
+        const fieldKey = radio.getAttribute('data-field-key')
+        const value = (radio as HTMLInputElement).value
+        if (fieldKey && !(fieldKey in newFormData)) {
+          newFormData[fieldKey] = value
+        }
+      })
+      
+      // 从DOM读取checkbox的值（多选）
+      const checkboxGroups = new Map<string, string[]>()
+      const allCheckboxes = document.querySelectorAll('input[type="checkbox"][data-field-key]')
+      allCheckboxes.forEach((checkbox) => {
+        const fieldKey = checkbox.getAttribute('data-field-key')
+        const value = (checkbox as HTMLInputElement).value
+        const checked = (checkbox as HTMLInputElement).checked
+        if (fieldKey) {
+          if (!checkboxGroups.has(fieldKey)) {
+            checkboxGroups.set(fieldKey, [])
+          }
+          if (checked) {
+            checkboxGroups.get(fieldKey)!.push(value)
+          }
+        }
+      })
+      checkboxGroups.forEach((values, fieldKey) => {
+        if (!(fieldKey in newFormData)) {
+          newFormData[fieldKey] = values
+        }
+      })
+      
+      // 从DOM读取select的值
+      const allSelects = document.querySelectorAll('[role="combobox"][data-field-key]')
+      allSelects.forEach((select) => {
+        const fieldKey = select.getAttribute('data-field-key')
+        // Select组件的值需要通过其内部的input获取
+        const selectInput = select.querySelector('input[value]') as HTMLInputElement
+        if (fieldKey && selectInput && !(fieldKey in newFormData)) {
+          newFormData[fieldKey] = selectInput.value
         }
       })
 
@@ -285,13 +353,19 @@ export function DocumentGenerationPage() {
         }
       }
 
-      // 合并现有的 formData（保留非输入框字段）
+      // 合并现有的 formData（保留非输入框字段，包括段落计数等）
       const currentFormData = { ...formData, ...newFormData }
-      console.log("Saving formData (from DOM):", JSON.stringify(newFormData, null, 2))
-      console.log("FormData keys (from DOM):", Object.keys(newFormData))
+      console.log("Saving formData (merged):", JSON.stringify(currentFormData, null, 2))
+      console.log("FormData keys (merged):", Object.keys(currentFormData))
       
-      const requestData = {
-        form_data: newFormData, // 使用从 DOM 收集的最新数据
+      // 同时保存templateContent（包含exportEnabled状态）
+      const requestData: any = {
+        form_data: currentFormData,
+      }
+      
+      // 如果有templateContent，也保存它（包含exportEnabled状态）
+      if (templateContent) {
+        requestData.prosemirror_json = templateContent
       }
       console.log("Request data:", JSON.stringify(requestData, null, 2))
       
@@ -391,7 +465,10 @@ export function DocumentGenerationPage() {
 
     setExporting(true)
     try {
-      const response = await documentGenerationApi.exportGenerationDocument(generationId)
+      // 传递更新后的模板内容（包含exportEnabled状态）
+      const response = await documentGenerationApi.exportGenerationDocument(generationId, {
+        prosemirror_json: templateContent || selectedTemplate?.prosemirror_json,
+      })
       
       if (response.data?.file_url) {
         // 下载文件
@@ -940,7 +1017,7 @@ export function DocumentGenerationPage() {
               ) : (
                   <div className="border rounded-lg overflow-hidden">
                     <DocumentPreviewForm
-                      content={selectedTemplate.prosemirror_json}
+                      content={templateContent || selectedTemplate.prosemirror_json}
                       placeholders={placeholders}
                       formData={formData}
                       templateCategory={selectedTemplate.category}
@@ -950,6 +1027,9 @@ export function DocumentGenerationPage() {
                         } else {
                           setFormData(updater)
                         }
+                      }}
+                      onContentChange={(updatedContent) => {
+                        setTemplateContent(updatedContent)
                       }}
                       className="min-h-[600px]"
                     />

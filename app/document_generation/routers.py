@@ -176,6 +176,7 @@ async def update_generation_data(
             db=db,
             generation_id=generation_id,
             form_data=request.form_data,
+            prosemirror_json=request.prosemirror_json,
             staff_id=current_staff.id
         )
         
@@ -213,7 +214,8 @@ async def export_document(
         result = await document_generation_service.generate_document(
             db=db,
             generation_id=generation_id,
-            filename=request.filename
+            filename=request.filename,
+            prosemirror_json=request.prosemirror_json
         )
         
         return {
