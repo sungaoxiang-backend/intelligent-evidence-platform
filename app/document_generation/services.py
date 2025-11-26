@@ -524,13 +524,21 @@ class DocumentGenerationService:
                 for child in node["content"]:
                     replace_placeholders_in_node(child, form_data_for_replacement, cell_placeholders)
         
-        def expand_cells_as_narrative_paragraphs(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]], form_data: Dict[str, Any], placeholder_map: Dict[str, Any]):
+        def expand_cells_as_narrative_paragraphs(row_node: Dict[str, Any], cell_placeholders_map: Dict[int, list[str]], form_data: Dict[str, Any], placeholder_map: Dict[str, Any], current_table_idx: int = -1, current_row_idx: int = -1):
             """
             陈述式模板：将表格单元格扩展为多个段落，不使用表格结构
             复制原始单元格的结构，保持格式
             每个单元格独立计算复制次数，只复制需要复制的单元格
+            
+            Args:
+                row_node: 表格行节点
+                cell_placeholders_map: 单元格占位符映射 {cell_idx: [placeholder_names]}
+                form_data: 表单数据
+                placeholder_map: 占位符元数据映射
+                current_table_idx: 当前表格索引（用于精确匹配段落数量key）
+                current_row_idx: 当前行索引（用于精确匹配段落数量key）
             """
-            logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
+            logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}, table={current_table_idx}, row={current_row_idx}")
 
             # 获取原始单元格节点（用于复制结构）
             cells = row_node.get("content", [])
@@ -548,63 +556,25 @@ class DocumentGenerationService:
                 if first_placeholder.startswith("__cell_") and first_placeholder.endswith("_replica__"):
                     # 从虚拟占位符中提取单元格索引：__cell_{cell_idx}_replica__
                     # 然后查找对应的段落数量key
-                    # 前端现在使用稳定ID：table-{tableIndex}-row-{rowIndex}-cell-{cellIndex}
-                    # 但虚拟占位符中只有cell_idx，我们需要匹配所有可能的key
-                    
-                    # 方法1：尝试匹配基于位置的key（table-X-row-Y-cell-Z格式）
-                    # 由于我们不知道table和row的索引，需要遍历所有key
+                    # 前端使用稳定ID：table-{tableIndex}-row-{rowIndex}-cell-{cellIndex}
+                    # 关键修复：使用传入的 table_idx 和 row_idx 进行精确匹配
                     paragraph_count = None
-                    for key, value in form_data.items():
-                        if key.startswith("__paragraph_count_table-") and isinstance(value, int) and value > 1:
-                            # 提取cell索引：__paragraph_count_table-X-row-Y-cell-Z__
-                            # 检查是否匹配当前cell_idx
-                            # 由于key格式是 table-X-row-Y-cell-Z，我们需要解析它
-                            try:
-                                # 从key中提取cell索引：__paragraph_count_table-0-row-1-cell-2__
-                                parts = key.replace("__paragraph_count_", "").split("-")
-                                if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
-                                    key_cell_idx = int(parts[5].replace("__", ""))
-                                    if key_cell_idx == cell_idx:
-                                        paragraph_count = value
-                                        logger.info(f"陈述式段落扩展：单元格 {cell_idx} 匹配到段落数量key {key} = {value}")
-                                        break
-                            except (ValueError, IndexError):
-                                continue
                     
-                    # 方法2：如果没找到精确匹配，尝试通过行内单元格位置匹配
-                    # 由于同一行内的单元格可能共享某些信息，我们可以尝试更智能的匹配
+                    # 精确匹配：同时匹配table、row、cell索引
+                    # 关键：只使用精确匹配，不使用fallback，避免错误匹配
+                    if current_table_idx >= 0 and current_row_idx >= 0:
+                        expected_key = f"__paragraph_count_table-{current_table_idx}-row-{current_row_idx}-cell-{cell_idx}__"
+                        if expected_key in form_data:
+                            value = form_data[expected_key]
+                            if isinstance(value, int) and value >= 1:
+                                paragraph_count = value
+                                logger.info(f"陈述式段落扩展：单元格 {cell_idx} 精确匹配到段落数量key {expected_key} = {value}")
+                    
+                    # 如果精确匹配失败，默认使用1
+                    # 不再使用fallback逻辑，避免错误匹配到其他表格的单元格
                     if paragraph_count is None:
-                        # 首先尝试找到同一行内其他单元格的key，然后根据单元格索引推断
-                        # 但这仍然不够精确，所以如果无法精确匹配，默认使用1
-                        paragraph_count_keys = [k for k, v in form_data.items() if k.startswith("__paragraph_count_") and isinstance(v, int) and v >= 1]
-                        
-                        if paragraph_count_keys:
-                            # 尝试从key中提取行信息，如果行匹配，再检查单元格索引
-                            # 但由于我们不知道行索引，只能尝试所有可能的匹配
-                            matched_keys = []
-                            for key in paragraph_count_keys:
-                                try:
-                                    # 解析key：__paragraph_count_table-X-row-Y-cell-Z__
-                                    parts = key.replace("__paragraph_count_", "").split("-")
-                                    if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
-                                        key_cell_idx = int(parts[5].replace("__", ""))
-                                        # 如果单元格索引匹配，使用这个值
-                                        if key_cell_idx == cell_idx:
-                                            matched_keys.append((key, form_data[key]))
-                                except (ValueError, IndexError):
-                                    continue
-                            
-                            if matched_keys:
-                                # 如果找到匹配的key，使用第一个（应该只有一个）
-                                paragraph_count = matched_keys[0][1]
-                                logger.info(f"陈述式段落扩展：单元格 {cell_idx} 通过单元格索引匹配到段落数量key {matched_keys[0][0]} = {paragraph_count}")
-                            else:
-                                # 如果没找到匹配，默认使用1（不要使用最大值，避免错误复制）
-                                paragraph_count = 1
-                                logger.warning(f"陈述式段落扩展：单元格 {cell_idx} 无法匹配段落数量key，使用默认值1（找到 {len(paragraph_count_keys)} 个key，但都不匹配）")
-                        else:
-                            paragraph_count = 1  # 没有找到key，默认1个
-                            logger.info(f"陈述式段落扩展：单元格 {cell_idx} 没有找到段落数量key，使用默认值1")
+                        paragraph_count = 1
+                        logger.info(f"陈述式段落扩展：单元格 {cell_idx} 没有找到精确匹配的段落数量key（table={current_table_idx}, row={current_row_idx}），使用默认值1")
                     
                     replica_count = paragraph_count
                 else:
@@ -848,6 +818,7 @@ class DocumentGenerationService:
                             paragraph_count = None
                             
                             # 精确匹配：同时匹配table、row、cell索引
+                            # 关键：只使用精确匹配，不使用fallback，避免错误匹配
                             if current_table_idx >= 0 and current_row_idx >= 0:
                                 expected_key = f"__paragraph_count_table-{current_table_idx}-row-{current_row_idx}-cell-{cell_idx}__"
                                 if expected_key in form_data:
@@ -856,26 +827,10 @@ class DocumentGenerationService:
                                         paragraph_count = value
                                         logger.info(f"表格行复制：单元格 {cell_idx} 精确匹配到段落数量key {expected_key} = {value}")
                             
-                            # 如果精确匹配失败，尝试只匹配cell索引（向后兼容，但可能不准确）
+                            # 如果精确匹配失败，不设置paragraph_count，让单元格保持默认的1个段落
+                            # 不再使用fallback逻辑，避免错误匹配到其他表格的单元格
                             if paragraph_count is None:
-                                for key, value in form_data.items():
-                                    if key.startswith("__paragraph_count_table-") and isinstance(value, int) and value >= 1:
-                                        try:
-                                            # 解析key：__paragraph_count_table-X-row-Y-cell-Z__
-                                            parts = key.replace("__paragraph_count_", "").split("-")
-                                            if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
-                                                key_cell_idx = int(parts[5].replace("__", ""))
-                                                # 如果单元格索引匹配，使用这个值（不推荐，但作为fallback）
-                                                if key_cell_idx == cell_idx:
-                                                    paragraph_count = value
-                                                    logger.warning(f"表格行复制：单元格 {cell_idx} 仅通过cell索引匹配到段落数量key {key} = {value}（可能不准确）")
-                                                    break
-                                        except (ValueError, IndexError):
-                                            continue
-                            
-                            # 如果还是没找到，不设置paragraph_count，让单元格保持默认的1个段落
-                            if paragraph_count is None:
-                                logger.info(f"表格行复制：单元格 {cell_idx} 没有找到匹配的段落数量key，不标记为需要复制")
+                                logger.info(f"表格行复制：单元格 {cell_idx} 没有找到精确匹配的段落数量key（table={current_table_idx}, row={current_row_idx}），不标记为需要复制")
                             
                             # 只有找到精确匹配的段落数量且大于1时，才标记为需要复制
                             if paragraph_count is not None and paragraph_count > 1:
@@ -905,7 +860,7 @@ class DocumentGenerationService:
                     if cell_placeholders_map:
                         logger.info(f"表格行复制：陈述式模板，有数组数据，创建多个段落")
                         logger.info(f"表格行复制：cell_placeholders_map = {cell_placeholders_map}")
-                        expand_cells_as_narrative_paragraphs(node, cell_placeholders_map, form_data, placeholder_map)
+                        expand_cells_as_narrative_paragraphs(node, cell_placeholders_map, form_data, placeholder_map, current_table_idx, current_row_idx)
                         logger.info(f"表格行复制：段落扩展完成")
                     else:
                         logger.info(f"表格行复制：陈述式模板，无数组数据，将表格内容转换为段落")
