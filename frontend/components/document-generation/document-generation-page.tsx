@@ -10,7 +10,6 @@ import { DocumentPreviewForm } from "./document-preview-form"
 import { documentGenerationApi, type TemplateInfo, type PlaceholderInfo as ApiPlaceholderInfo } from "@/lib/document-generation-api"
 import { PlaceholderInfo } from "./placeholder-form-fields"
 import type { JSONContent } from "@tiptap/core"
-import { TableRowExportControl } from "./table-row-export-control"
 import { EvidenceCardsList } from "./evidence-cards-list"
 import { caseApi } from "@/lib/api"
 import { type Case } from "@/lib/types"
@@ -54,16 +53,43 @@ export function DocumentGenerationPage() {
   const { toast } = useToast()
   
   const lastSavedFormDataRef = useRef<Record<string, any>>({})
+  const lastSavedTemplateContentRef = useRef<JSONContent | null>(null) // 跟踪保存的templateContent
   const hasInitializedCaseIdRef = useRef(false)
   const hasInitializedTemplateRef = useRef(false)
+  
+  // 使用ref来存储最新的formData和templateContent，避免闭包问题
+  const formDataRef = useRef<Record<string, any>>(formData)
+  const templateContentRef = useRef<JSONContent | null>(templateContent)
+  
+  // 保持ref与state同步
+  useEffect(() => {
+    formDataRef.current = formData
+  }, [formData])
+  
+  useEffect(() => {
+    templateContentRef.current = templateContent
+  }, [templateContent])
 
   // 当模板变化时，更新模板内容
+  // 注意：这个effect会在模板变化时重置templateContent
+  // 但实际的恢复逻辑在createOrGetGeneration中，会从草稿中恢复templateContent
+  // 为了避免覆盖从草稿恢复的内容，我们只在模板真正变化时重置
+  const previousTemplateIdRef = useRef<number | null>(null)
   useEffect(() => {
-    if (selectedTemplate?.prosemirror_json) {
-      // 深拷贝模板内容，避免修改原始模板
-      setTemplateContent(JSON.parse(JSON.stringify(selectedTemplate.prosemirror_json)))
-    } else {
-      setTemplateContent(null)
+    const currentTemplateId = selectedTemplate?.id || null
+    // 只有在模板ID真正变化时才重置templateContent
+    if (currentTemplateId !== previousTemplateIdRef.current) {
+      previousTemplateIdRef.current = currentTemplateId
+      if (selectedTemplate?.prosemirror_json) {
+        // 深拷贝模板内容，避免修改原始模板
+        const newContent = JSON.parse(JSON.stringify(selectedTemplate.prosemirror_json))
+        setTemplateContent(newContent)
+        // 同时更新lastSavedTemplateContentRef，避免误判为未保存
+        lastSavedTemplateContentRef.current = newContent
+      } else {
+        setTemplateContent(null)
+        lastSavedTemplateContentRef.current = null
+      }
     }
   }, [selectedTemplate])
 
@@ -107,12 +133,44 @@ export function DocumentGenerationPage() {
         setGenerationId(generation.id)
         const initialFormData = generation.form_data || {}
         // 确保 form_data 是对象
-        const normalizedFormData = typeof initialFormData === 'object' && initialFormData !== null && !Array.isArray(initialFormData)
+        let normalizedFormData = typeof initialFormData === 'object' && initialFormData !== null && !Array.isArray(initialFormData)
           ? initialFormData 
           : {}
+        
+        // 关键修复：从草稿中恢复templateContent（包含exportEnabled状态）
+        const savedTemplateContent = normalizedFormData["__template_content__"]
+        let initialTemplateContent: JSONContent | null = null
+        if (savedTemplateContent) {
+          console.log("DocumentGenerationPage: 从草稿恢复templateContent（包含exportEnabled状态）")
+          initialTemplateContent = savedTemplateContent
+          setTemplateContent(savedTemplateContent)
+        } else {
+          // 如果没有保存的templateContent，使用模板的原始内容
+          if (selectedTemplate?.prosemirror_json) {
+            initialTemplateContent = JSON.parse(JSON.stringify(selectedTemplate.prosemirror_json))
+            setTemplateContent(initialTemplateContent)
+          }
+        }
+        
+        // 清理旧格式的段落数量key（格式：__paragraph_count_cell-XXX__）
+        // 只保留新格式（格式：__paragraph_count_table-X-row-Y-cell-Z__）
+        const oldFormatKeys = Object.keys(normalizedFormData).filter(k => 
+          k.startsWith("__paragraph_count_") && 
+          !k.includes("table-")
+        )
+        if (oldFormatKeys.length > 0) {
+          console.warn("DocumentGenerationPage: 检测到旧格式的段落数量key，已自动清理:", oldFormatKeys)
+          oldFormatKeys.forEach(key => {
+            delete normalizedFormData[key]
+          })
+        }
+        
         setFormData(normalizedFormData)
+        
         // 规范化保存的数据用于比较
-        lastSavedFormDataRef.current = normalizeFormDataForComparison(normalizedFormData)
+        // 初始化时也不要规范化，保留数组长度信息
+        lastSavedFormDataRef.current = normalizedFormData
+        lastSavedTemplateContentRef.current = initialTemplateContent
         setHasUnsavedChanges(false)
       } catch (error: any) {
         toast({
@@ -129,6 +187,8 @@ export function DocumentGenerationPage() {
   }, [selectedTemplate, selectedCaseId, toast])
 
   // 检测表单数据变化（包括 DOM 中的值）
+  // 注意：这个 effect 在 formData 变化时执行，但不会覆盖通过事件设置的"未保存"状态
+  // 因为事件处理会直接设置状态，而这个 effect 只是作为补充检查
   useEffect(() => {
     if (!generationId) return
     
@@ -164,20 +224,236 @@ export function DocumentGenerationPage() {
         }
       })
 
+      // 使用ref获取最新的formData和templateContent，避免闭包问题
+      const currentFormData = formDataRef.current
+      const currentTemplateContent = templateContentRef.current
+      
       // 合并 formData 和 DOM 中的值
-      const mergedFormData = { ...formData, ...currentFormDataFromDOM }
+      const mergedFormData = { ...currentFormData, ...currentFormDataFromDOM }
       
-      // 规范化后比较
-      const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
-      const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+      // 使用与事件处理相同的比较逻辑，考虑数组长度变化
+      const compareFormData = (current: Record<string, any>, saved: Record<string, any>): boolean => {
+        const allKeys = new Set([...Object.keys(current), ...Object.keys(saved)])
+        
+        for (const key of allKeys) {
+          const currentValue = current[key]
+          const savedValue = saved[key]
+          
+          // 如果都是数组，比较数组长度（即使末尾是空值，长度变化也是变化）
+          if (Array.isArray(currentValue) && Array.isArray(savedValue)) {
+            if (currentValue.length !== savedValue.length) {
+              return true // 有变化
+            }
+            // 如果长度相同，比较内容（忽略末尾空值）
+            const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+            const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+            if (JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)) {
+              return true // 有变化
+            }
+          } else if (Array.isArray(currentValue) || Array.isArray(savedValue)) {
+            // 一个数组，一个非数组，肯定有变化
+            return true
+          } else {
+            // 都不是数组，使用规范化比较
+            const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+            const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+            if (normalizedCurrent !== normalizedSaved) {
+              return true
+            }
+          }
+        }
+        return false // 无变化
+      }
       
-      const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
-      setHasUnsavedChanges(hasChanges)
+      const hasFormDataChanges = compareFormData(mergedFormData, lastSavedFormDataRef.current)
+      
+      // 比较templateContent（exportEnabled状态）
+      const currentTemplateContentStr = currentTemplateContent ? JSON.stringify(currentTemplateContent) : null
+      const savedTemplateContentStr = lastSavedTemplateContentRef.current ? JSON.stringify(lastSavedTemplateContentRef.current) : null
+      const hasTemplateContentChanges = currentTemplateContentStr !== savedTemplateContentStr
+      
+      const hasChanges = hasFormDataChanges || hasTemplateContentChanges
+      
+      // 只有当检测到有变化时才更新状态，避免覆盖事件设置的状态
+      // 如果当前已经是"未保存"状态，且检测到没有变化，保持 true（可能是事件设置的）
+      // 只有在明确检测到有变化时才设置为 true
+      setHasUnsavedChanges(prev => {
+        if (hasChanges) {
+          return true
+        }
+        // 如果没有变化，保持之前的状态（不覆盖事件设置的状态）
+        return prev
+      })
     }, 500) // 延迟 500ms，等待 DOM 渲染完成
 
     return () => clearTimeout(timeoutId)
-  }, [formData, generationId])
+  }, [formData, templateContent, generationId])
   
+  // 立即检查未保存状态的函数
+  const checkUnsavedChangesImmediately = useCallback(() => {
+    if (!generationId) return
+    
+    const currentFormDataFromDOM: Record<string, any> = {}
+    const allInputs = document.querySelectorAll('input[data-field-key]:not([type="radio"]):not([type="checkbox"]), textarea[data-field-key]')
+
+    allInputs.forEach((input) => {
+      const fieldKey = input.getAttribute('data-field-key')
+      const indexStr = input.getAttribute('data-field-index')
+      const value = (input as HTMLInputElement | HTMLTextAreaElement).value
+
+      if (fieldKey) {
+        if (indexStr !== null) {
+          const index = parseInt(indexStr, 10)
+          if (!Array.isArray(currentFormDataFromDOM[fieldKey])) {
+            currentFormDataFromDOM[fieldKey] = []
+          }
+          while (currentFormDataFromDOM[fieldKey].length <= index) {
+            currentFormDataFromDOM[fieldKey].push("")
+          }
+          currentFormDataFromDOM[fieldKey][index] = value
+        } else {
+          currentFormDataFromDOM[fieldKey] = value
+        }
+      }
+    })
+
+    const currentFormData = formDataRef.current
+    const currentTemplateContent = templateContentRef.current
+    
+    const mergedFormData = { ...currentFormData, ...currentFormDataFromDOM }
+    
+    // 使用与事件处理相同的比较逻辑，考虑数组长度变化
+    const compareFormData = (current: Record<string, any>, saved: Record<string, any>): boolean => {
+      const allKeys = new Set([...Object.keys(current), ...Object.keys(saved)])
+      
+      for (const key of allKeys) {
+        const currentValue = current[key]
+        const savedValue = saved[key]
+        
+        // 如果都是数组，比较数组长度（即使末尾是空值，长度变化也是变化）
+        if (Array.isArray(currentValue) && Array.isArray(savedValue)) {
+          if (currentValue.length !== savedValue.length) {
+            return true // 有变化
+          }
+          // 如果长度相同，比较内容（忽略末尾空值）
+          const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+          const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+          if (JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)) {
+            return true // 有变化
+          }
+        } else if (Array.isArray(currentValue) || Array.isArray(savedValue)) {
+          // 一个数组，一个非数组，肯定有变化
+          return true
+        } else {
+          // 都不是数组，使用规范化比较
+          const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+          const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+          if (normalizedCurrent !== normalizedSaved) {
+            return true
+          }
+        }
+      }
+      return false // 无变化
+    }
+    
+    const hasFormDataChanges = compareFormData(mergedFormData, lastSavedFormDataRef.current)
+    
+    const currentTemplateContentStr = currentTemplateContent ? JSON.stringify(currentTemplateContent) : null
+    const savedTemplateContentStr = lastSavedTemplateContentRef.current ? JSON.stringify(lastSavedTemplateContentRef.current) : null
+    const hasTemplateContentChanges = currentTemplateContentStr !== savedTemplateContentStr
+    
+    const hasChanges = hasFormDataChanges || hasTemplateContentChanges
+    setHasUnsavedChanges(hasChanges)
+  }, [generationId])
+
+  // 监听立即检查事件
+  useEffect(() => {
+    const handleFormDataChanged = (event: Event) => {
+      console.log("DocumentGenerationPage: formDataChanged event received", event)
+      const customEvent = event as CustomEvent
+      const { newFormData, source, cellId } = customEvent.detail || {}
+      
+      console.log("DocumentGenerationPage: formDataChanged event detail", { source, cellId, hasNewFormData: !!newFormData })
+      
+      // 简化逻辑：如果是添加或删除操作，直接设置为未保存状态
+      // 不需要复杂的比较，因为这些操作本身就是变化
+      if (source === 'handleAdd' || source === 'handleDelete') {
+        console.log("DocumentGenerationPage: 检测到添加/删除操作，直接设置为未保存状态")
+        setHasUnsavedChanges(true)
+        return
+      }
+      
+      // 对于其他操作（如占位符内容变化），使用比较逻辑
+      if (newFormData) {
+        // 对于数组类型的值，比较时需要考虑数组长度，即使末尾是空值
+        // 因为添加段落时，即使新段落是空的，数组长度变化也应该被视为变化
+        const compareFormData = (current: Record<string, any>, saved: Record<string, any>): boolean => {
+          // 获取所有唯一的键
+          const allKeys = new Set([...Object.keys(current), ...Object.keys(saved)])
+          
+          for (const key of allKeys) {
+            const currentValue = current[key]
+            const savedValue = saved[key]
+            
+            // 如果都是数组，比较数组长度（即使末尾是空值，长度变化也是变化）
+            if (Array.isArray(currentValue) && Array.isArray(savedValue)) {
+              if (currentValue.length !== savedValue.length) {
+                console.log(`DocumentGenerationPage: 数组长度变化检测到: ${key}, 当前长度: ${currentValue.length}, 保存长度: ${savedValue.length}`)
+                return true // 有变化
+              }
+              // 如果长度相同，比较内容（忽略末尾空值）
+              const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+              const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+              if (JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)) {
+                console.log(`DocumentGenerationPage: 数组内容变化检测到: ${key}`)
+                return true // 有变化
+              }
+            } else if (Array.isArray(currentValue) || Array.isArray(savedValue)) {
+              // 一个数组，一个非数组，肯定有变化
+              console.log(`DocumentGenerationPage: 数组类型变化检测到: ${key}`)
+              return true
+            } else {
+              // 都不是数组，使用规范化比较
+              const normalizedCurrent = normalizeFormDataForComparison({ [key]: currentValue })[key]
+              const normalizedSaved = normalizeFormDataForComparison({ [key]: savedValue })[key]
+              if (normalizedCurrent !== normalizedSaved) {
+                console.log(`DocumentGenerationPage: 值变化检测到: ${key}`)
+                return true
+              }
+            }
+          }
+          return false // 无变化
+        }
+        
+        const hasFormDataChanges = compareFormData(newFormData, lastSavedFormDataRef.current)
+        
+        const currentTemplateContent = templateContentRef.current
+        const currentTemplateContentStr = currentTemplateContent ? JSON.stringify(currentTemplateContent) : null
+        const savedTemplateContentStr = lastSavedTemplateContentRef.current ? JSON.stringify(lastSavedTemplateContentRef.current) : null
+        const hasTemplateContentChanges = currentTemplateContentStr !== savedTemplateContentStr
+        
+        const hasChanges = hasFormDataChanges || hasTemplateContentChanges
+        console.log("DocumentGenerationPage: 未保存状态检查结果", {
+          hasFormDataChanges,
+          hasTemplateContentChanges,
+          hasChanges,
+          currentKeys: Object.keys(newFormData).length,
+          savedKeys: Object.keys(lastSavedFormDataRef.current).length
+        })
+        setHasUnsavedChanges(hasChanges)
+      } else {
+        // 如果没有新数据，使用常规检查
+        console.log("DocumentGenerationPage: 事件中没有新数据，使用常规检查")
+        checkUnsavedChangesImmediately()
+      }
+    }
+    
+    window.addEventListener('formDataChanged', handleFormDataChanged)
+    return () => {
+      window.removeEventListener('formDataChanged', handleFormDataChanged)
+    }
+  }, [checkUnsavedChangesImmediately])
+
   // 定期检查 DOM 中的值是否有变化（用于检测未保存的更改）
   useEffect(() => {
     if (!generationId) return
@@ -214,22 +490,42 @@ export function DocumentGenerationPage() {
           }
         })
 
-        // 合并 formData 和 DOM 中的值（优先使用formData，因为包含radio、checkbox等）
-        const mergedFormData = { ...formData, ...currentFormDataFromDOM }
+        // 使用ref获取最新的formData和templateContent，避免闭包问题
+        const currentFormData = formDataRef.current
+        const currentTemplateContent = templateContentRef.current
         
-        // 规范化后比较
+        // 合并 formData 和 DOM 中的值（优先使用formData，因为包含radio、checkbox等）
+        const mergedFormData = { ...currentFormData, ...currentFormDataFromDOM }
+        
+        // 规范化后比较formData
         const normalizedCurrent = normalizeFormDataForComparison(mergedFormData)
         const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+        const hasFormDataChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
         
-        const hasChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
-        setHasUnsavedChanges(hasChanges)
+        // 比较templateContent（exportEnabled状态）
+        const currentTemplateContentStr = currentTemplateContent ? JSON.stringify(currentTemplateContent) : null
+        const savedTemplateContentStr = lastSavedTemplateContentRef.current ? JSON.stringify(lastSavedTemplateContentRef.current) : null
+        const hasTemplateContentChanges = currentTemplateContentStr !== savedTemplateContentStr
+        
+        const hasChanges = hasFormDataChanges || hasTemplateContentChanges
+        
+        // 只有当检测到有变化时才更新状态，避免覆盖事件设置的状态
+        // 如果当前已经是"未保存"状态，且检测到没有变化，保持 true（可能是事件设置的）
+        // 只有在明确检测到有变化时才设置为 true
+        setHasUnsavedChanges(prev => {
+          if (hasChanges) {
+            return true
+          }
+          // 如果没有变化，保持之前的状态（不覆盖事件设置的状态）
+          return prev
+        })
       }, 2000) // 每2秒检查一次，减少频率
 
       return () => clearInterval(intervalId)
     }, 2000) // 延迟2秒启动，避免初始化时误触发
 
     return () => clearTimeout(timeoutId)
-  }, [formData, generationId])
+  }, [generationId]) // 只依赖generationId，使用ref获取最新的formData和templateContent
 
   // 页面离开前提示
   useEffect(() => {
@@ -340,24 +636,115 @@ export function DocumentGenerationPage() {
         }
       })
 
-      // 清理数组末尾的空值（但保留至少一个值）
-      for (const key in newFormData) {
-        if (Array.isArray(newFormData[key])) {
-          const arr = newFormData[key]
-          while (arr.length > 1 && arr[arr.length - 1] === "") {
-            arr.pop()
+      // 重要：不要清理数组末尾的空值，保留数组长度信息
+      // 因为添加段落时，即使新段落是空的，数组长度变化也应该被保存
+      // 清理空值会导致数组长度信息丢失，导致保存后刷新时段落丢失
+      // 注释掉清理逻辑，保留完整的数组长度信息
+      // for (const key in newFormData) {
+      //   if (Array.isArray(newFormData[key])) {
+      //     const arr = newFormData[key]
+      //     while (arr.length > 1 && arr[arr.length - 1] === "") {
+      //       arr.pop()
+      //     }
+      //     if (arr.length === 0) {
+      //       newFormData[key] = []
+      //     }
+      //   }
+      // }
+
+      // 关键修复：合并现有的 formData（保留非输入框字段，包括段落计数等）
+      // 确保所有 __paragraph_count_* 和 __template_content__ 等特殊key都被保留
+      const currentFormData = { ...formData, ...newFormData }
+      
+      // 关键修复：从templateContent中扫描所有单元格，确保所有需要段落数量key的单元格都有对应的key
+      // 这样可以避免因为cellId不稳定导致的段落数量key丢失
+      if (templateContent) {
+        const { extractAllCells } = await import('./cell-id-utils')
+        const allCells = extractAllCells(templateContent)
+        
+        // 关键修复：确保所有没有占位符的单元格都有对应的段落数量key
+        const cellsWithoutPlaceholders = allCells.filter(c => c.placeholders.length === 0)
+        console.log("Saving: 从templateContent扫描到的单元格", {
+          totalCells: allCells.length,
+          cellsWithoutPlaceholders: cellsWithoutPlaceholders.length,
+          cellsInfo: cellsWithoutPlaceholders.map(c => ({
+            cellId: c.cellId,
+            tableIndex: c.tableIndex,
+            rowIndex: c.rowIndex,
+            cellIndex: c.cellIndex,
+            paragraphCountKey: `__paragraph_count_${c.cellId}__`,
+            hasKeyInFormData: `__paragraph_count_${c.cellId}__` in formData,
+            hasKeyInCurrent: `__paragraph_count_${c.cellId}__` in currentFormData,
+            valueInFormData: formData[`__paragraph_count_${c.cellId}__`],
+            valueInCurrent: currentFormData[`__paragraph_count_${c.cellId}__`]
+          }))
+        })
+        
+        // 确保所有没有占位符的单元格都有对应的段落数量key
+        cellsWithoutPlaceholders.forEach(cell => {
+          const paragraphCountKey = `__paragraph_count_${cell.cellId}__`
+          
+          // 如果formData中已经有这个key，保留它
+          if (paragraphCountKey in formData) {
+            currentFormData[paragraphCountKey] = formData[paragraphCountKey]
+            console.log(`Saving: 保留段落数量key ${paragraphCountKey} = ${formData[paragraphCountKey]}`)
+          } else {
+            console.log(`Saving: 单元格 ${cell.cellId} 没有段落数量key（新格式）`)
           }
-          // 如果数组为空，设置为空数组
-          if (arr.length === 0) {
-            newFormData[key] = []
-          }
+        })
+        
+        // 清理旧格式的段落数量key（格式：__paragraph_count_cell-XXX__）
+        // 在清理之前，尝试迁移到新格式
+        const oldFormatKeys = Object.keys(currentFormData).filter(k => 
+          k.startsWith("__paragraph_count_") && 
+          !k.includes("table-")
+        )
+        if (oldFormatKeys.length > 0) {
+          console.warn("Saving: 检测到旧格式的段落数量key，尝试迁移到新格式:", oldFormatKeys)
+          
+          // 尝试将旧格式的key迁移到新格式
+          // 由于无法从旧格式推断新格式，我们只能：
+          // 1. 如果formData中已经有新格式的key，保留新格式的值
+          // 2. 如果formData中只有旧格式的key，尝试通过单元格内容匹配来迁移
+          // 但这种方法不可靠，所以最好的方法是确保cellId生成正确
+          
+          oldFormatKeys.forEach(oldKey => {
+            const oldValue = currentFormData[oldKey]
+            console.warn(`Saving: 旧格式key ${oldKey} = ${oldValue}，但无法自动迁移到新格式（需要cellId生成正确）`)
+            // 直接删除旧格式的key，因为无法可靠地迁移
+            delete currentFormData[oldKey]
+          })
         }
       }
-
-      // 合并现有的 formData（保留非输入框字段，包括段落计数等）
-      const currentFormData = { ...formData, ...newFormData }
+      
+      // 确保所有段落数量key都被保留（这些key不在DOM中，只在formData状态中）
+      const paragraphCountKeys = Object.keys(formData).filter(k => k.startsWith("__paragraph_count_"))
+      console.log("Saving: 检查段落数量key", {
+        formDataKeys: Object.keys(formData),
+        paragraphCountKeys,
+        paragraphCountValues: paragraphCountKeys.reduce((acc, k) => {
+          acc[k] = formData[k]
+          return acc
+        }, {} as Record<string, any>),
+        newFormDataKeys: Object.keys(newFormData),
+      })
+      
+      paragraphCountKeys.forEach(key => {
+        // 确保段落数量key被保留（即使newFormData中没有）
+        if (!(key in currentFormData)) {
+          currentFormData[key] = formData[key]
+          console.log(`Saving: 恢复段落数量key ${key} = ${formData[key]}`)
+        }
+      })
+      
+      // 确保 __template_content__ 也被保留（如果存在）
+      if ("__template_content__" in formData && !("__template_content__" in newFormData)) {
+        currentFormData["__template_content__"] = formData["__template_content__"]
+      }
+      
       console.log("Saving formData (merged):", JSON.stringify(currentFormData, null, 2))
       console.log("FormData keys (merged):", Object.keys(currentFormData))
+      console.log("段落数量key (merged):", Object.keys(currentFormData).filter(k => k.startsWith("__paragraph_count_")))
       
       // 同时保存templateContent（包含exportEnabled状态）
       const requestData: any = {
@@ -385,34 +772,56 @@ export function DocumentGenerationPage() {
       }
       
       // 更新已保存的数据引用
-      const savedFormData = updated.form_data || newFormData
+      const savedFormData = updated.form_data || currentFormData
       console.log("Saved form_data from server:", savedFormData)
       console.log("Saved form_data type:", typeof savedFormData)
       
       // 确保 savedFormData 是对象
-      let normalizedSavedData: Record<string, any>
+      let savedDataFromServer: Record<string, any>
       if (typeof savedFormData === 'string') {
         // 如果后端返回的是 JSON 字符串，需要解析
         try {
-          normalizedSavedData = JSON.parse(savedFormData)
+          savedDataFromServer = JSON.parse(savedFormData)
         } catch (e) {
           console.error("Failed to parse savedFormData as JSON:", e)
-          normalizedSavedData = currentFormData
+          savedDataFromServer = currentFormData
         }
       } else if (typeof savedFormData === 'object' && savedFormData !== null && !Array.isArray(savedFormData)) {
-        normalizedSavedData = savedFormData
+        savedDataFromServer = savedFormData
       } else {
         console.warn("Unexpected savedFormData format, using currentFormData")
-        normalizedSavedData = currentFormData
+        savedDataFromServer = currentFormData
       }
       
-      console.log("Normalized saved data:", JSON.stringify(normalizedSavedData, null, 2))
+      console.log("Saved data from server:", JSON.stringify(savedDataFromServer, null, 2))
       
-      // 规范化保存的数据用于比较
-      lastSavedFormDataRef.current = normalizeFormDataForComparison(normalizedSavedData)
+      // 关键修复：使用当前保存的 formData（currentFormData），而不是服务器返回的数据
+      // 因为服务器返回的数据可能被规范化了，丢失了数组长度信息
+      // 我们需要使用实际保存的数据（currentFormData），它包含了完整的数组长度信息
+      const savedDataWithParagraphCounts = { ...currentFormData }
       
-      // 更新 formData 以确保与服务器同步
-      setFormData(normalizedSavedData)
+      // 确保所有段落数量key都被保留
+      Object.keys(formData).forEach(key => {
+        if (key.startsWith("__paragraph_count_")) {
+          // 确保段落数量key被保留
+          if (!(key in savedDataWithParagraphCounts)) {
+            savedDataWithParagraphCounts[key] = formData[key]
+          }
+        }
+      })
+      
+      // 重要：保存时不要规范化数组，保留数组长度信息
+      // 这样比较时才能检测到数组长度的变化（即使末尾是空值）
+      console.log("Setting lastSavedFormDataRef.current to:", JSON.stringify(savedDataWithParagraphCounts, null, 2))
+      lastSavedFormDataRef.current = savedDataWithParagraphCounts
+      
+      // 更新保存的templateContent引用
+      if (templateContent) {
+        lastSavedTemplateContentRef.current = JSON.parse(JSON.stringify(templateContent))
+      }
+      
+      // 更新 formData 以确保与服务器同步（使用包含段落数量key的数据）
+      setFormData(savedDataWithParagraphCounts)
       
       // 清除未保存状态
       setHasUnsavedChanges(false)
@@ -444,31 +853,118 @@ export function DocumentGenerationPage() {
       return
     }
 
-    // 先保存当前表单数据
-    if (JSON.stringify(formData) !== JSON.stringify(lastSavedFormDataRef.current)) {
-      try {
-        const response = await documentGenerationApi.updateGenerationData(generationId, {
-          form_data: formData,
-        })
-        const updated = (response as any).data || response
-        // 规范化保存的数据用于比较
-        const savedData = updated.form_data || formData
-        lastSavedFormDataRef.current = normalizeFormDataForComparison(savedData)
-      } catch (error: any) {
-        toast({
-          title: "保存失败",
-          description: error.message || "无法保存表单数据",
-          variant: "destructive",
-        })
-        return
+    // 关键修复：导出前先保存当前表单数据和templateContent
+    // 确保段落数量key和exportEnabled状态都被保存
+    try {
+      // 合并formData和templateContent
+      const requestData: any = {
+        form_data: formData,
       }
+      
+      // 如果有templateContent，也保存它（包含exportEnabled状态）
+      if (templateContent) {
+        requestData.prosemirror_json = templateContent
+      }
+      
+      // 检查是否有未保存的更改
+      const normalizedCurrent = normalizeFormDataForComparison(formData)
+      const normalizedSaved = normalizeFormDataForComparison(lastSavedFormDataRef.current)
+      const hasFormDataChanges = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedSaved)
+      
+      // 比较templateContent（exportEnabled状态）
+      const currentTemplateContentStr = templateContent ? JSON.stringify(templateContent) : null
+      const savedTemplateContentStr = lastSavedTemplateContentRef.current ? JSON.stringify(lastSavedTemplateContentRef.current) : null
+      const hasTemplateContentChanges = currentTemplateContentStr !== savedTemplateContentStr
+      
+      if (hasFormDataChanges || hasTemplateContentChanges) {
+        console.log("DocumentGenerationPage: 导出前保存数据", {
+          hasFormDataChanges,
+          hasTemplateContentChanges,
+          formDataKeys: Object.keys(formData),
+          paragraphCountKeys: Object.keys(formData).filter(k => k.startsWith("__paragraph_count_")),
+        })
+        
+        const response = await documentGenerationApi.updateGenerationData(generationId, requestData)
+        const updated = (response as any).data || response
+        // 保存的数据应该保留数组长度信息（不规范化），用于后续比较
+        const savedData = updated.form_data || formData
+        lastSavedFormDataRef.current = savedData
+        
+        // 更新保存的templateContent引用
+        if (templateContent) {
+          lastSavedTemplateContentRef.current = JSON.parse(JSON.stringify(templateContent))
+        }
+        
+        // 更新formData状态，确保与保存的数据一致
+        setFormData(savedData)
+        
+        // 清除未保存状态（导出前保存后）
+        setHasUnsavedChanges(false)
+        
+        console.log("DocumentGenerationPage: 数据已保存", {
+          savedFormDataKeys: Object.keys(savedData),
+          savedParagraphCountKeys: Object.keys(savedData).filter(k => k.startsWith("__paragraph_count_")),
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message || "无法保存表单数据",
+        variant: "destructive",
+      })
+      return
     }
 
     setExporting(true)
     try {
       // 传递更新后的模板内容（包含exportEnabled状态）
+      // 优先使用templateContent，它应该包含最新的checkbox状态
+      let jsonToExport = templateContent || selectedTemplate?.prosemirror_json
+      
+      // 调试：验证导出前的JSON状态和formData
+      console.log("DocumentGenerationPage: 导出前的状态", {
+        formDataKeys: Object.keys(formData),
+        paragraphCountKeys: Object.keys(formData).filter(k => k.startsWith("__paragraph_count_")),
+        paragraphCountValues: Object.keys(formData)
+          .filter(k => k.startsWith("__paragraph_count_"))
+          .reduce((acc, k) => {
+            acc[k] = formData[k]
+            return acc
+          }, {} as Record<string, any>),
+        hasTemplateContent: !!templateContent,
+      })
+      
+      if (jsonToExport) {
+        const { extractTableRows } = await import('./table-row-export-control')
+        const tableRows = extractTableRows(jsonToExport)
+        console.log("DocumentGenerationPage: Exporting with table rows state:", 
+          tableRows.map(r => ({
+            id: r.id,
+            tableIndex: r.tableIndex,
+            rowIndex: r.rowIndex,
+            exportEnabled: r.exportEnabled,
+            previewText: r.previewText.substring(0, 40)
+          }))
+        )
+        
+        // 检查是否有未勾选的行
+        const uncheckedRows = tableRows.filter(r => r.exportEnabled === false)
+        if (uncheckedRows.length > 0) {
+          console.log("DocumentGenerationPage: ⚠️ Found unchecked rows that should be excluded:", 
+            uncheckedRows.map(r => ({
+              id: r.id,
+              previewText: r.previewText.substring(0, 40)
+            }))
+          )
+        } else {
+          console.log("DocumentGenerationPage: ✅ All rows are checked (or no rows found)")
+        }
+      } else {
+        console.warn("DocumentGenerationPage: ⚠️ No JSON content to export!")
+      }
+      
       const response = await documentGenerationApi.exportGenerationDocument(generationId, {
-        prosemirror_json: templateContent || selectedTemplate?.prosemirror_json,
+        prosemirror_json: jsonToExport,
       })
       
       if (response.data?.file_url) {
@@ -958,9 +1454,11 @@ export function DocumentGenerationPage() {
                     保存草稿
                       </Button>
                       <Button
+                        variant="default"
                         size="sm"
                         onClick={handleExport}
-                    disabled={exporting || !generationId}
+                        disabled={exporting || !generationId || hasUnsavedChanges}
+                        title={hasUnsavedChanges ? "请先保存草稿后再下载文书" : ""}
                       >
                         {exporting ? (
                           <>
@@ -1016,36 +1514,32 @@ export function DocumentGenerationPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                  <>
-                    {/* 表格行导出控制面板 */}
-                    <TableRowExportControl
+                  <div className="border rounded-lg overflow-hidden">
+                    <DocumentPreviewForm
                       content={templateContent || selectedTemplate.prosemirror_json}
+                      placeholders={placeholders}
+                      formData={formData}
+                      templateCategory={selectedTemplate.category}
+                      onFormDataChange={(updater) => {
+                        if (typeof updater === 'function') {
+                          setFormData((prevFormData) => {
+                            const newFormData = updater(prevFormData)
+                            // 立即更新 ref，确保检查未保存状态时能获取到最新数据
+                            formDataRef.current = newFormData
+                            return newFormData
+                          })
+                        } else {
+                          setFormData(updater)
+                          // 立即更新 ref，确保检查未保存状态时能获取到最新数据
+                          formDataRef.current = updater
+                        }
+                      }}
                       onContentChange={(updatedContent) => {
                         setTemplateContent(updatedContent)
                       }}
+                      className="min-h-[600px]"
                     />
-                    
-                    {/* 文档表单 */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <DocumentPreviewForm
-                        content={templateContent || selectedTemplate.prosemirror_json}
-                        placeholders={placeholders}
-                        formData={formData}
-                        templateCategory={selectedTemplate.category}
-                        onFormDataChange={(updater) => {
-                          if (typeof updater === 'function') {
-                            setFormData(updater)
-                          } else {
-                            setFormData(updater)
-                          }
-                        }}
-                        onContentChange={(updatedContent) => {
-                          setTemplateContent(updatedContent)
-                        }}
-                        className="min-h-[600px]"
-                      />
-                    </div>
-                  </>
+                  </div>
               )}
             </CardContent>
           </Card>

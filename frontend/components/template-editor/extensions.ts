@@ -247,34 +247,41 @@ export const TableRowWithAttrs = TableRow.extend({
 
   addNodeView() {
     return ({ node, getPos, editor }) => {
+      console.log("TableRowWithAttrs: addNodeView called", { node, getPos, editor: !!editor })
+      
       const dom = document.createElement("tr")
       dom.setAttribute("data-type", "tableRow")
       
-      // 只在编辑器可编辑时显示checkbox（模板编辑器模式）
-      // 在只读模式下（文档预览表单），使用独立的TableRowExportControl面板
-      const isEditable = editor.isEditable
+      // 获取exportEnabled状态
+      const exportEnabled = node.attrs.exportEnabled !== false
+      console.log("TableRowWithAttrs: exportEnabled", exportEnabled)
       
-      if (isEditable) {
-        // 获取exportEnabled状态
-        const exportEnabled = node.attrs.exportEnabled !== false
+      // 创建checkbox容器（作为第一个单元格）
+      const checkboxCell = document.createElement("td")
+      checkboxCell.className = "export-control-checkbox-cell"
+      checkboxCell.setAttribute("data-export-control", "true")
+      checkboxCell.style.cssText = "width: 40px !important; min-width: 40px !important; max-width: 40px !important; padding: 8px 4px !important; vertical-align: top !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;"
+      
+      // 创建checkbox
+      const checkbox = document.createElement("input")
+      checkbox.type = "checkbox"
+      checkbox.checked = exportEnabled
+      checkbox.style.cssText = "cursor: pointer !important; width: 16px !important; height: 16px !important; margin: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important;"
+      checkbox.title = "包含在导出中"
+      checkbox.setAttribute("data-export-checkbox", "true")
+      
+      console.log("TableRowWithAttrs: checkbox created", { checked: checkbox.checked })
+      
+      // 处理checkbox变化
+      checkbox.addEventListener("change", (e) => {
+        const newValue = (e.target as HTMLInputElement).checked
+        const pos = getPos?.()
         
-        // 创建checkbox容器（作为第一个单元格）
-        const checkboxCell = document.createElement("td")
-        checkboxCell.className = "export-control-checkbox-cell"
-        checkboxCell.style.cssText = "width: 40px; min-width: 40px; max-width: 40px; padding: 8px 4px; vertical-align: top; text-align: center; border-right: 1px solid #e5e7eb; box-sizing: border-box;"
-        
-        // 创建checkbox
-        const checkbox = document.createElement("input")
-        checkbox.type = "checkbox"
-        checkbox.checked = exportEnabled
-        checkbox.style.cssText = "cursor: pointer; width: 16px; height: 16px; margin: 0;"
-        checkbox.title = "包含在导出中"
-        
-        // 处理checkbox变化
-        checkbox.addEventListener("change", (e) => {
-          const newValue = (e.target as HTMLInputElement).checked
-          const pos = getPos?.()
-          if (pos !== undefined && editor) {
+        if (pos !== undefined && editor) {
+          const isEditable = editor.isEditable
+          
+          if (isEditable) {
+            // 可编辑模式：使用命令更新
             editor.commands.command(({ tr, dispatch }) => {
               if (dispatch) {
                 const nodePos = tr.doc.resolve(pos)
@@ -288,56 +295,162 @@ export const TableRowWithAttrs = TableRow.extend({
               }
               return true
             })
+          } else {
+            // 只读模式：通过DOM找到行在表格中的位置，然后更新JSON
+            try {
+              const currentJson = editor.getJSON()
+              
+              // 通过DOM找到当前行在表格中的索引
+              const rowElement = dom.closest('tr')
+              if (rowElement) {
+                const table = rowElement.closest('table')
+                if (table) {
+                  // 找到这个表格在文档中的位置
+                  const allTables = Array.from(document.querySelectorAll('.template-doc table'))
+                  const tableIndex = allTables.indexOf(table)
+                  
+                  // 找到这个行在当前表格中的索引（排除checkbox单元格）
+                  const rows = Array.from(table.querySelectorAll('tr'))
+                  const rowIndex = rows.indexOf(rowElement)
+                  
+                  // 遍历JSON找到对应的表格和行
+                  let currentTableIndex = 0
+                  let currentRowIndex = 0
+                  
+                  const updateRowInJson = (json: any): any => {
+                    if (json.type === "table") {
+                      if (currentTableIndex === tableIndex) {
+                        // 这是目标表格
+                        currentRowIndex = 0
+                        if (json.content && Array.isArray(json.content)) {
+                          return {
+                            ...json,
+                            content: json.content.map((row: any, rowIdx: number) => {
+                              if (row.type === "tableRow") {
+                                if (currentRowIndex === rowIndex) {
+                                  // 这是目标行
+                                  currentRowIndex++
+                                  return {
+                                    ...row,
+                                    attrs: {
+                                      ...row.attrs,
+                                      exportEnabled: newValue,
+                                    },
+                                  }
+                                }
+                                currentRowIndex++
+                              }
+                              return row
+                            }),
+                          }
+                        }
+                      }
+                      currentTableIndex++
+                    }
+                    
+                    if (json.content && Array.isArray(json.content)) {
+                      return {
+                        ...json,
+                        content: json.content.map(updateRowInJson),
+                      }
+                    }
+                    
+                    return json
+                  }
+                  
+                  const updatedJson = updateRowInJson(currentJson)
+                  // 更新编辑器内容，这会触发update事件，进而触发onContentChange
+                  // 在只读模式下，使用setContent仍然可以工作
+                  editor.commands.setContent(updatedJson, false, { emitUpdate: true })
+                  return
+                }
+              }
+              
+              // 如果无法通过DOM找到，尝试使用位置信息
+              console.warn("Could not find row in DOM, falling back to position-based update")
+            } catch (error) {
+              console.error("Error updating row export enabled in read-only mode:", error)
+            }
           }
-        })
+        }
+      })
+      
+      checkboxCell.appendChild(checkbox)
+      
+      // 将checkbox单元格插入到行的最前面
+      dom.appendChild(checkboxCell)
+      console.log("TableRowWithAttrs: checkbox cell appended to dom", { 
+        domChildren: dom.children.length,
+        firstChild: dom.firstChild === checkboxCell 
+      })
+      
+      // 创建一个容器来存放TipTap的单元格
+      // 我们不使用contentDOM，而是手动管理单元格的插入
+      const cellsContainer = document.createElement("tbody")
+      cellsContainer.style.display = "contents" // 让容器不影响布局
+      
+      // 使用MutationObserver来确保checkbox始终在最前面
+      // TipTap会在contentDOM中插入表格单元格，我们需要确保checkbox始终是第一个
+      const observer = new MutationObserver((mutations) => {
+        // 检查是否有新的单元格被添加
+        const hasNewCells = mutations.some(m => 
+          m.addedNodes.length > 0 && 
+          Array.from(m.addedNodes).some((n: any) => n.tagName === 'TD' || n.tagName === 'TH')
+        )
         
-        checkboxCell.appendChild(checkbox)
-        
-        // 将checkbox单元格插入到行的最前面
-        dom.appendChild(checkboxCell)
-        
-        // 使用MutationObserver来确保checkbox始终在最前面
-        // TipTap会在contentDOM（即dom）中插入表格单元格，我们需要确保checkbox始终是第一个
-        const observer = new MutationObserver(() => {
-          if (dom.firstChild !== checkboxCell && checkboxCell.parentNode === dom) {
+        if (hasNewCells || dom.firstChild !== checkboxCell) {
+          // 确保checkbox始终在最前面
+          if (checkboxCell.parentNode === dom && dom.firstChild !== checkboxCell) {
+            console.log("TableRowWithAttrs: Moving checkbox to front")
             dom.insertBefore(checkboxCell, dom.firstChild)
           }
-        })
-        
-        // 延迟启动observer，等待TipTap完成初始渲染
-        setTimeout(() => {
-          observer.observe(dom, { childList: true })
-          // 立即检查一次，确保checkbox在最前面
-          if (dom.firstChild !== checkboxCell && checkboxCell.parentNode === dom) {
-            dom.insertBefore(checkboxCell, dom.firstChild)
-          }
-        }, 100)
-        
-        return {
-          dom,
-          contentDOM: dom, // TipTap会在dom中插入单元格
-          destroy: () => {
-            observer.disconnect()
-          },
-          update: (updatedNode) => {
-            // 更新checkbox状态
-            const updatedExportEnabled = updatedNode.attrs.exportEnabled !== false
-            if (checkbox.checked !== updatedExportEnabled) {
-              checkbox.checked = updatedExportEnabled
-            }
-            // 确保checkbox始终在最前面
-            if (dom.firstChild !== checkboxCell && checkboxCell.parentNode === dom) {
-              dom.insertBefore(checkboxCell, dom.firstChild)
-            }
-            return true
-          },
+        }
+      })
+      
+      // 立即检查并启动observer
+      const ensureCheckboxFirst = () => {
+        if (checkboxCell.parentNode === dom && dom.firstChild !== checkboxCell) {
+          console.log("TableRowWithAttrs: Ensuring checkbox is first")
+          dom.insertBefore(checkboxCell, dom.firstChild)
         }
       }
       
-      // 只读模式：不显示checkbox，使用独立的TableRowExportControl面板
+      // 延迟启动observer，等待TipTap完成初始渲染
+      setTimeout(() => {
+        observer.observe(dom, { 
+          childList: true, 
+          subtree: false 
+        })
+        ensureCheckboxFirst()
+        console.log("TableRowWithAttrs: Observer started", {
+          domChildren: dom.children.length,
+          checkboxVisible: checkboxCell.offsetParent !== null
+        })
+      }, 0)
+      
+      // 也立即检查一次
+      ensureCheckboxFirst()
+      
       return {
         dom,
-        contentDOM: dom,
+        contentDOM: dom, // TipTap会在dom中插入单元格
+        destroy: () => {
+          console.log("TableRowWithAttrs: destroy called")
+          observer.disconnect()
+        },
+        update: (updatedNode) => {
+          console.log("TableRowWithAttrs: update called", { 
+            exportEnabled: updatedNode.attrs.exportEnabled 
+          })
+          // 更新checkbox状态
+          const updatedExportEnabled = updatedNode.attrs.exportEnabled !== false
+          if (checkbox.checked !== updatedExportEnabled) {
+            checkbox.checked = updatedExportEnabled
+          }
+          // 确保checkbox始终在最前面
+          ensureCheckboxFirst()
+          return true
+        },
       }
     }
   },

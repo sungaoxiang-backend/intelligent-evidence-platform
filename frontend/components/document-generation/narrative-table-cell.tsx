@@ -53,6 +53,14 @@ export function NarrativeTableCell({
   
   // 对于没有占位符的单元格，使用一个特殊的key来跟踪段落数量
   const paragraphCountKey = placeholders.length === 0 ? `__paragraph_count_${cellId}__` : null
+  
+  // 调试：检查cellId格式
+  if (placeholders.length === 0 && paragraphCountKey) {
+    console.log(`NarrativeTableCell: cellId = ${cellId}, paragraphCountKey = ${paragraphCountKey}`)
+    if (cellId.startsWith("cell-") && !cellId.includes("table-")) {
+      console.warn(`NarrativeTableCell: 警告！cellId仍然是旧格式: ${cellId}，这会导致段落数量无法正确保存`)
+    }
+  }
 
   // 使用 useMemo 缓存数组长度计算，避免频繁重新计算
   const arrayLength = React.useMemo(() => {
@@ -213,6 +221,15 @@ export function NarrativeTableCell({
     
     console.log("handleAdd: calling onFormDataChange with", newFormData)
     onFormDataChange(newFormData)
+    
+    // 立即触发未保存状态检测（不等待定时器）
+    // 延迟一点时间，确保 formDataRef 已经更新
+    setTimeout(() => {
+      console.log("handleAdd: 触发 formDataChanged 事件", { cellId, newFormDataKeys: Object.keys(newFormData) })
+      const event = new CustomEvent('formDataChanged', { detail: { source: 'handleAdd', cellId, newFormData } })
+      window.dispatchEvent(event)
+      console.log("handleAdd: formDataChanged 事件已发送")
+    }, 50)
   }
 
   // 删除指定项
@@ -221,6 +238,7 @@ export function NarrativeTableCell({
     const currentFormData = getFormData ? getFormData() : formData
     const newFormData = { ...currentFormData }
 
+    // 处理有占位符的单元格
     placeholders.forEach(key => {
       const currentValues = currentFormData[key] || []
       if (Array.isArray(currentValues)) {
@@ -230,8 +248,29 @@ export function NarrativeTableCell({
       }
     })
 
+    // 处理没有占位符的单元格（使用段落数量key）
+    if (placeholders.length === 0 && paragraphCountKey) {
+      const currentCount = currentFormData[paragraphCountKey] || 1
+      if (currentCount > 1) {
+        const newCount = currentCount - 1
+        newFormData[paragraphCountKey] = newCount
+        console.log(`handleDelete: 没有占位符，减少段落数量从 ${currentCount} 到 ${newCount}`)
+      } else {
+        // 如果只有1个，删除这个key（表示回到默认的1个）
+        delete newFormData[paragraphCountKey]
+        console.log(`handleDelete: 没有占位符，删除段落数量key（回到默认1个）`)
+      }
+    }
+
     console.log("handleDelete: calling onFormDataChange with", newFormData)
     onFormDataChange(newFormData)
+    
+    // 立即触发未保存状态检测（不等待定时器）
+    // 延迟一点时间，确保 formDataRef 已经更新
+    setTimeout(() => {
+      const event = new CustomEvent('formDataChanged', { detail: { source: 'handleDelete', cellId, newFormData } })
+      window.dispatchEvent(event)
+    }, 50)
   }
 
   // 渲染单个占位符内容
@@ -261,6 +300,57 @@ export function NarrativeTableCell({
         templateCategory,
         index, // 传递 index，用于在 DOM 元素上存储
       })
+    }
+
+    // 关键修复：正确处理段落节点，保持段落结构
+    if (nodeType === "paragraph") {
+      const attrs = node.attrs || {}
+      const style: React.CSSProperties = {}
+      
+      // 处理段落属性
+      if (attrs.textAlign) {
+        style.textAlign = attrs.textAlign as React.CSSProperties['textAlign']
+      }
+      if (attrs.firstLineIndent) {
+        style.textIndent = `${attrs.firstLineIndent}px`
+      }
+      if (attrs.lineHeight) {
+        style.lineHeight = attrs.lineHeight
+      }
+      if (attrs.spacing) {
+        style.marginBottom = `${attrs.spacing}px`
+      }
+      
+      // 检查段落内容是否包含占位符（占位符会返回div，不能放在p标签内）
+      const hasPlaceholder = (node: JSONContent): boolean => {
+        if (node.type === "placeholder") return true
+        if (node.content && Array.isArray(node.content)) {
+          return node.content.some(hasPlaceholder)
+        }
+        return false
+      }
+      
+      const containsPlaceholder = hasPlaceholder(node)
+      
+      // 渲染段落内容
+      const paragraphContent = node.content && Array.isArray(node.content)
+        ? node.content.map((child, childIndex) => (
+            React.createElement(React.Fragment, { key: `${cellId}-para-${index}-${childIndex}` }, renderPlaceholderContent(child, index))
+          ))
+        : null
+      
+      // 如果包含占位符，使用div而不是p（因为p不能包含div）
+      // 否则使用p标签以保持语义
+      const Tag = containsPlaceholder ? 'div' : 'p'
+      
+      return React.createElement(Tag, {
+        key: `${cellId}-paragraph-${index}`,
+        style: {
+          margin: '0.5em 0',
+          display: containsPlaceholder ? 'block' : undefined, // div需要block显示
+          ...style
+        }
+      }, paragraphContent)
     }
 
     if (node.content && Array.isArray(node.content)) {
@@ -303,7 +393,16 @@ export function NarrativeTableCell({
       arrayLength > 1 && React.createElement('button', {
         key: 'delete',
         className: "narrative-cell-delete",
-        onClick: () => handleDelete(index),
+        type: "button", // 防止表单提交
+        onClick: (e) => {
+          e.preventDefault()
+          e.stopPropagation() // 阻止事件冒泡
+          console.log(`Delete button clicked for index ${index}`)
+          handleDelete(index)
+        },
+        onMouseDown: (e) => {
+          e.stopPropagation() // 阻止mousedown事件冒泡
+        },
         title: "删除此项",
         style: {
           padding: "4px",
@@ -314,7 +413,9 @@ export function NarrativeTableCell({
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center"
+          justifyContent: "center",
+          zIndex: 10, // 确保按钮在最上层
+          position: "relative"
         }
       }, React.createElement(Trash2, { size: 16 }))
     ])
@@ -378,10 +479,10 @@ export function createNarrativeTableCell(
   placeholderInfos: PlaceholderInfo[],
   formData: Record<string, any>,
   onFormDataChange: (formData: Record<string, any>) => void,
-  templateCategory?: string | null,
+  templateCategory: string | null | undefined,
   cellId: string,
-  registerUpdateCallback?: (callback: () => void) => () => void,
-  getFormData?: () => Record<string, any>
+  registerUpdateCallback: ((callback: () => void) => () => void) | undefined,
+  getFormData: (() => Record<string, any>) | undefined
 ) {
   console.log("createNarrativeTableCell: function called", {
     dom,
@@ -472,17 +573,19 @@ export function createNarrativeTableCell(
         unregisterCallback()
         unregisterCallback = null
       }
-      if (root) {
+      const rootToUnmount = root
+      if (rootToUnmount) {
+        root = null
         setTimeout(() => {
           try {
-            root.unmount()
+            rootToUnmount.unmount()
           } catch (error) {
             // 忽略卸载错误
           }
         }, 0)
       }
     },
-    update: (updatedCellNode) => {
+    update: (updatedCellNode: JSONContent) => {
       if (isDestroyed || !dom.parentNode) return false
 
       // 更新单元格节点引用

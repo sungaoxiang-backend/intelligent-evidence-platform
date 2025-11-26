@@ -130,7 +130,20 @@ export function updateRowExportEnabled(
     if (!targetRow.attrs) {
       targetRow.attrs = {}
     }
-    targetRow.attrs.exportEnabled = enabled
+    // 明确设置为布尔值
+    targetRow.attrs.exportEnabled = enabled === true
+    
+    console.log(`updateRowExportEnabled: Updated row at path [${path.join(',')}]`, {
+      type: targetRow.type,
+      exportEnabled: targetRow.attrs.exportEnabled,
+      enabled,
+      attrs: targetRow.attrs
+    })
+  } else {
+    console.error(`updateRowExportEnabled: Could not find tableRow at path [${path.join(',')}]`, {
+      foundNode: targetRow ? { type: targetRow.type } : null,
+      path
+    })
   }
   
   return newContent

@@ -528,28 +528,113 @@ class DocumentGenerationService:
             """
             陈述式模板：将表格单元格扩展为多个段落，不使用表格结构
             复制原始单元格的结构，保持格式
+            每个单元格独立计算复制次数，只复制需要复制的单元格
             """
             logger.info(f"陈述式段落扩展开始：分析行，cell_placeholders_map={cell_placeholders_map}")
 
-            # 找出最大的数组长度
-            max_replicas = 0
+            # 获取原始单元格节点（用于复制结构）
+            cells = row_node.get("content", [])
+            
+            # 为每个单元格计算复制次数
+            cell_replica_counts = {}  # {cell_idx: replica_count}
             for cell_idx, placeholders in cell_placeholders_map.items():
                 if not placeholders:
                     continue
 
                 first_placeholder = placeholders[0]
-                array_values = get_all_array_values(first_placeholder, form_data)
-                if array_values:
-                    max_replicas = max(max_replicas, len(array_values))
-                    logger.info(f"陈述式段落扩展：单元格 {cell_idx} 有 {len(array_values)} 个段落")
+                replica_count = 0
+                
+                # 检查是否是虚拟占位符（用于没有占位符的单元格）
+                if first_placeholder.startswith("__cell_") and first_placeholder.endswith("_replica__"):
+                    # 从虚拟占位符中提取单元格索引：__cell_{cell_idx}_replica__
+                    # 然后查找对应的段落数量key
+                    # 前端现在使用稳定ID：table-{tableIndex}-row-{rowIndex}-cell-{cellIndex}
+                    # 但虚拟占位符中只有cell_idx，我们需要匹配所有可能的key
+                    
+                    # 方法1：尝试匹配基于位置的key（table-X-row-Y-cell-Z格式）
+                    # 由于我们不知道table和row的索引，需要遍历所有key
+                    paragraph_count = None
+                    for key, value in form_data.items():
+                        if key.startswith("__paragraph_count_table-") and isinstance(value, int) and value > 1:
+                            # 提取cell索引：__paragraph_count_table-X-row-Y-cell-Z__
+                            # 检查是否匹配当前cell_idx
+                            # 由于key格式是 table-X-row-Y-cell-Z，我们需要解析它
+                            try:
+                                # 从key中提取cell索引：__paragraph_count_table-0-row-1-cell-2__
+                                parts = key.replace("__paragraph_count_", "").split("-")
+                                if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
+                                    key_cell_idx = int(parts[5].replace("__", ""))
+                                    if key_cell_idx == cell_idx:
+                                        paragraph_count = value
+                                        logger.info(f"陈述式段落扩展：单元格 {cell_idx} 匹配到段落数量key {key} = {value}")
+                                        break
+                            except (ValueError, IndexError):
+                                continue
+                    
+                    # 方法2：如果没找到精确匹配，尝试通过行内单元格位置匹配
+                    # 由于同一行内的单元格可能共享某些信息，我们可以尝试更智能的匹配
+                    if paragraph_count is None:
+                        # 首先尝试找到同一行内其他单元格的key，然后根据单元格索引推断
+                        # 但这仍然不够精确，所以如果无法精确匹配，默认使用1
+                        paragraph_count_keys = [k for k, v in form_data.items() if k.startswith("__paragraph_count_") and isinstance(v, int) and v >= 1]
+                        
+                        if paragraph_count_keys:
+                            # 尝试从key中提取行信息，如果行匹配，再检查单元格索引
+                            # 但由于我们不知道行索引，只能尝试所有可能的匹配
+                            matched_keys = []
+                            for key in paragraph_count_keys:
+                                try:
+                                    # 解析key：__paragraph_count_table-X-row-Y-cell-Z__
+                                    parts = key.replace("__paragraph_count_", "").split("-")
+                                    if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
+                                        key_cell_idx = int(parts[5].replace("__", ""))
+                                        # 如果单元格索引匹配，使用这个值
+                                        if key_cell_idx == cell_idx:
+                                            matched_keys.append((key, form_data[key]))
+                                except (ValueError, IndexError):
+                                    continue
+                            
+                            if matched_keys:
+                                # 如果找到匹配的key，使用第一个（应该只有一个）
+                                paragraph_count = matched_keys[0][1]
+                                logger.info(f"陈述式段落扩展：单元格 {cell_idx} 通过单元格索引匹配到段落数量key {matched_keys[0][0]} = {paragraph_count}")
+                            else:
+                                # 如果没找到匹配，默认使用1（不要使用最大值，避免错误复制）
+                                paragraph_count = 1
+                                logger.warning(f"陈述式段落扩展：单元格 {cell_idx} 无法匹配段落数量key，使用默认值1（找到 {len(paragraph_count_keys)} 个key，但都不匹配）")
+                        else:
+                            paragraph_count = 1  # 没有找到key，默认1个
+                            logger.info(f"陈述式段落扩展：单元格 {cell_idx} 没有找到段落数量key，使用默认值1")
+                    
+                    replica_count = paragraph_count
+                else:
+                    # 正常占位符，检查数组数据
+                    array_values = get_all_array_values(first_placeholder, form_data)
+                    if array_values:
+                        replica_count = len(array_values)
+                        logger.info(f"陈述式段落扩展：单元格 {cell_idx} 有 {replica_count} 个段落（占位符：{first_placeholder}，数组值：{array_values[:3]}...）")
+                    else:
+                        # 检查是否有单个值（非数组）
+                        direct_value = form_data.get(first_placeholder)
+                        if direct_value is not None and direct_value != "":
+                            replica_count = 1  # 有值但不是数组，只有1个段落
+                            logger.info(f"陈述式段落扩展：单元格 {cell_idx} 有1个段落（占位符：{first_placeholder}，单值：{direct_value}）")
+                        else:
+                            replica_count = 1  # 没有数据，默认1个
+                            logger.info(f"陈述式段落扩展：单元格 {cell_idx} 没有数据，使用默认值1（占位符：{first_placeholder}）")
+                
+                if replica_count > 0:
+                    cell_replica_counts[cell_idx] = replica_count
 
-            if max_replicas == 0:
-                logger.info("陈述式段落扩展：没有数组数据，返回原行")
+            # 如果没有需要复制的单元格，返回原行
+            if not cell_replica_counts:
+                logger.info("陈述式段落扩展：没有需要复制的单元格，返回原行")
                 return
 
-            # 获取原始单元格节点（用于复制结构）
-            cells = row_node.get("content", [])
-            
+            # 找出最大的复制次数（用于确定需要创建多少个段落）
+            max_replicas = max(cell_replica_counts.values()) if cell_replica_counts else 1
+            logger.info(f"陈述式段落扩展：最大复制次数 = {max_replicas}, 各单元格复制次数 = {cell_replica_counts}")
+
             # 创建多个段落内容
             narrative_paragraphs = []
             for i in range(max_replicas):
@@ -558,7 +643,37 @@ class DocumentGenerationService:
                 # 为当前索引创建临时 form_data，包含所有占位符的值
                 temp_form_data = {}
                 for cell_idx, placeholders in cell_placeholders_map.items():
+                    # 关键修复：只有明确标记为需要复制的单元格才处理
+                    # 如果单元格不在 cell_replica_counts 中，说明它不需要复制，只在第一个段落（i==0）中处理
+                    if cell_idx not in cell_replica_counts:
+                        # 这个单元格不需要复制，只在第一个段落中出现
+                        if i > 0:
+                            logger.info(f"陈述式段落扩展：段落 {i+1}，单元格 {cell_idx} 不需要复制，跳过")
+                            continue
+                        # 在第一个段落中，使用原始值（非数组）
+                        for placeholder in placeholders:
+                            if not placeholder.startswith("__cell_") or not placeholder.endswith("_replica__"):
+                                # 正常占位符，使用原始值
+                                value = form_data.get(placeholder)
+                                if value is not None:
+                                    temp_form_data[placeholder] = value
+                        continue
+                    
+                    # 检查这个单元格是否需要在这个索引复制
+                    cell_replica_count = cell_replica_counts.get(cell_idx, 1)
+                    if i >= cell_replica_count:
+                        # 如果索引超出这个单元格的复制次数，跳过这个单元格
+                        logger.info(f"陈述式段落扩展：段落 {i+1}，单元格 {cell_idx} 的复制次数是 {cell_replica_count}，跳过")
+                        continue
+                    
                     for placeholder in placeholders:
+                        # 检查是否是虚拟占位符（用于没有占位符的单元格）
+                        if placeholder.startswith("__cell_") and placeholder.endswith("_replica__"):
+                            # 对于没有占位符的单元格，不需要设置temp_form_data
+                            # 直接使用原始单元格内容，不替换占位符
+                            logger.info(f"陈述式段落扩展：单元格 {cell_idx} 是虚拟占位符，跳过占位符替换")
+                            continue
+                        
                         # 首先尝试数组格式的字段名
                         array_field_name = f"{placeholder}[{i}]"
                         value = form_data.get(array_field_name)
@@ -591,6 +706,20 @@ class DocumentGenerationService:
 
                 for cell_idx, cell_node in enumerate(cells):
                     if cell_node.get("type") in ["tableCell", "tableHeader"]:
+                        # 关键修复：只有明确标记为需要复制的单元格才在后续段落中处理
+                        # 如果单元格不在 cell_replica_counts 中，说明它不需要复制，只在第一个段落（i==0）中处理
+                        if cell_idx not in cell_replica_counts:
+                            # 这个单元格不需要复制，只在第一个段落中出现
+                            if i > 0:
+                                continue
+                            # 在第一个段落中，正常处理
+                        else:
+                            # 检查这个单元格是否需要在这个索引复制
+                            cell_replica_count = cell_replica_counts.get(cell_idx, 1)
+                            if i >= cell_replica_count:
+                                # 如果索引超出这个单元格的复制次数，跳过这个单元格
+                                continue
+                        
                         # 深度复制单元格内容
                         cell_content = cell_node.get("content", [])
                         if cell_content:
@@ -598,8 +727,11 @@ class DocumentGenerationService:
 
                             # 递归替换所有占位符
                             cell_placeholders = cell_placeholders_map.get(cell_idx, [])
+                            # 过滤掉虚拟占位符
+                            real_placeholders = [p for p in cell_placeholders if not (p.startswith("__cell_") and p.endswith("_replica__"))]
+                            
                             for content_node in copied_cell_content:
-                                replace_placeholders_in_node(content_node, temp_form_data, cell_placeholders)
+                                replace_placeholders_in_node(content_node, temp_form_data, real_placeholders)
 
                             # 将处理后的内容添加到组合内容中
                             combined_content.extend(copied_cell_content)
@@ -656,12 +788,27 @@ class DocumentGenerationService:
             })
             logger.info(f"陈述式段落扩展：生成 {len(narrative_paragraphs)} 个段落（包含空白行）")
         
-        def traverse_and_replace(node: Dict[str, Any]):
+        # 用于跟踪当前表格和行的索引
+        table_index = [0]  # 使用列表以便在嵌套函数中修改
+        row_index = [0]  # 使用列表以便在嵌套函数中修改
+        
+        def traverse_and_replace(node: Dict[str, Any], current_table_idx: int = -1, current_row_idx: int = -1):
             """递归遍历并替换占位符"""
             node_type = node.get("type")
             
+            # 处理表格：更新表格索引
+            if node_type == "table":
+                current_table_idx = table_index[0]
+                table_index[0] += 1
+                logger.info(f"表格行复制：进入表格 {current_table_idx}")
+            
             # 处理表格行：检查是否需要复制
             if node_type == "tableRow":
+                # 更新行索引（在表格内）
+                current_row_idx = row_index[0]
+                row_index[0] += 1
+                logger.info(f"表格行复制：进入表格 {current_table_idx} 的行 {current_row_idx}")
+                
                 # 检查行中的单元格是否包含数组格式的占位符
                 cells = node.get("content", [])
                 logger.info(f"表格行复制：分析表格行，有 {len(cells)} 个单元格")
@@ -669,7 +816,7 @@ class DocumentGenerationService:
 
                 for cell_idx, cell_node in enumerate(cells):
                     if cell_node.get("type") in ["tableCell", "tableHeader"]:
-                        logger.info(f"表格行复制：检查单元格 {cell_idx}")
+                        logger.info(f"表格行复制：检查表格 {current_table_idx} 行 {current_row_idx} 单元格 {cell_idx}")
                         # 提取单元格中的所有占位符
                         cell_placeholders = []
                         def extract_from_cell(cell: Dict[str, Any]):
@@ -692,6 +839,50 @@ class DocumentGenerationService:
                                 has_array_data = True
                                 logger.info(f"表格行复制：单元格 {cell_idx} 的占位符 {placeholder} 有数组数据: {array_values}")
                                 break
+
+                        # 如果没有占位符，检查是否有段落数量key（用于没有占位符的单元格）
+                        if not has_array_data and not cell_placeholders:
+                            # 尝试查找 __paragraph_count_* 格式的key
+                            # 关键：需要精确匹配当前单元格的key，包括table、row、cell索引
+                            # 前端使用稳定ID：table-{tableIndex}-row-{rowIndex}-cell-{cellIndex}
+                            paragraph_count = None
+                            
+                            # 精确匹配：同时匹配table、row、cell索引
+                            if current_table_idx >= 0 and current_row_idx >= 0:
+                                expected_key = f"__paragraph_count_table-{current_table_idx}-row-{current_row_idx}-cell-{cell_idx}__"
+                                if expected_key in form_data:
+                                    value = form_data[expected_key]
+                                    if isinstance(value, int) and value >= 1:
+                                        paragraph_count = value
+                                        logger.info(f"表格行复制：单元格 {cell_idx} 精确匹配到段落数量key {expected_key} = {value}")
+                            
+                            # 如果精确匹配失败，尝试只匹配cell索引（向后兼容，但可能不准确）
+                            if paragraph_count is None:
+                                for key, value in form_data.items():
+                                    if key.startswith("__paragraph_count_table-") and isinstance(value, int) and value >= 1:
+                                        try:
+                                            # 解析key：__paragraph_count_table-X-row-Y-cell-Z__
+                                            parts = key.replace("__paragraph_count_", "").split("-")
+                                            if len(parts) >= 6 and parts[0] == "table" and parts[2] == "row" and parts[4] == "cell":
+                                                key_cell_idx = int(parts[5].replace("__", ""))
+                                                # 如果单元格索引匹配，使用这个值（不推荐，但作为fallback）
+                                                if key_cell_idx == cell_idx:
+                                                    paragraph_count = value
+                                                    logger.warning(f"表格行复制：单元格 {cell_idx} 仅通过cell索引匹配到段落数量key {key} = {value}（可能不准确）")
+                                                    break
+                                        except (ValueError, IndexError):
+                                            continue
+                            
+                            # 如果还是没找到，不设置paragraph_count，让单元格保持默认的1个段落
+                            if paragraph_count is None:
+                                logger.info(f"表格行复制：单元格 {cell_idx} 没有找到匹配的段落数量key，不标记为需要复制")
+                            
+                            # 只有找到精确匹配的段落数量且大于1时，才标记为需要复制
+                            if paragraph_count is not None and paragraph_count > 1:
+                                # 使用一个特殊的占位符名称来标记这个单元格需要复制
+                                cell_placeholders = [f"__cell_{cell_idx}_replica__"]
+                                has_array_data = True
+                                logger.info(f"表格行复制：单元格 {cell_idx} 需要复制 {paragraph_count} 次（无占位符，精确匹配）")
 
                         if has_array_data:
                             cell_placeholders_map[cell_idx] = cell_placeholders
@@ -866,16 +1057,37 @@ class DocumentGenerationService:
                 rows = node.get("content", [])
                 # 过滤掉 exportEnabled: false 的行
                 filtered_rows = []
-                for row in rows:
+                for row_idx, row in enumerate(rows):
                     # 检查是否是表格行
                     if row.get("type") == "tableRow":
                         # 检查 exportEnabled 属性，默认为 True（向后兼容）
                         attrs = row.get("attrs", {})
                         export_enabled = attrs.get("exportEnabled", True)
+                        
+                        # 提取行的预览文本用于调试
+                        preview_text = ""
+                        try:
+                            if row.get("content") and len(row.get("content", [])) > 0:
+                                first_cell = row.get("content", [])[0]
+                                if first_cell.get("content"):
+                                    text_nodes = [item.get("text", "") for item in first_cell.get("content", []) if item.get("type") == "text"]
+                                    preview_text = "".join(text_nodes)[:50]
+                        except:
+                            pass
+                        
+                        # 详细日志：记录每行的exportEnabled状态
+                        logger.info(f"表格行导出检查 [行{row_idx}]: type={row.get('type')}, exportEnabled={export_enabled} (type: {type(export_enabled).__name__}), preview='{preview_text}', attrs={attrs}")
+                        
                         # 如果 exportEnabled 为 False，跳过该行
+                        # 需要明确检查 False（布尔值False）
                         if export_enabled is False:
-                            logger.info(f"表格行导出过滤：跳过 exportEnabled=false 的行")
+                            logger.info(f"表格行导出过滤 [行{row_idx}]: 跳过 exportEnabled=false 的行 (preview: '{preview_text}')")
                             continue
+                        elif export_enabled == False:  # 处理可能的字符串"false"或其他假值
+                            logger.info(f"表格行导出过滤 [行{row_idx}]: 跳过 exportEnabled=false 的行（非布尔False）(preview: '{preview_text}')")
+                            continue
+                        else:
+                            logger.info(f"表格行导出保留 [行{row_idx}]: exportEnabled={export_enabled} (preview: '{preview_text}')")
                     # 保留该行
                     filtered_rows.append(row)
                 
@@ -889,7 +1101,16 @@ class DocumentGenerationService:
                 # 检查是否有需要替换的行
                 new_content = []
                 for child in node["content"]:
-                    traverse_and_replace(child)
+                    # 如果当前节点是表格，重置行索引并传递表格索引
+                    if node_type == "table":
+                        row_index[0] = 0
+                        traverse_and_replace(child, current_table_idx, -1)
+                    elif node_type == "tableRow":
+                        # 传递表格和行索引给子节点
+                        traverse_and_replace(child, current_table_idx, current_row_idx)
+                    else:
+                        # 其他节点，保持当前的table和row索引
+                        traverse_and_replace(child, current_table_idx, current_row_idx)
                     # 检查是否有复制的行
                     if "__duplicated_rows__" in child:
                         logger.info(f"表格行复制：发现复制标记，扩展 {len(child['__duplicated_rows__'])} 行")
@@ -1023,6 +1244,37 @@ class DocumentGenerationService:
         if prosemirror_json is not None:
             template_json = prosemirror_json
             logger.info("使用请求中的prosemirror_json（包含exportEnabled状态）")
+            
+            # 调试：检查exportEnabled状态
+            def count_table_rows(json_data, path=""):
+                """递归统计表格行及其exportEnabled状态"""
+                if isinstance(json_data, dict):
+                    if json_data.get("type") == "tableRow":
+                        attrs = json_data.get("attrs", {})
+                        export_enabled = attrs.get("exportEnabled", True)
+                        return [{"path": path, "exportEnabled": export_enabled}]
+                    elif json_data.get("type") == "table":
+                        rows = []
+                        content = json_data.get("content", [])
+                        for idx, item in enumerate(content):
+                            if isinstance(item, dict) and item.get("type") == "tableRow":
+                                attrs = item.get("attrs", {})
+                                export_enabled = attrs.get("exportEnabled", True)
+                                rows.append({"path": f"{path}[{idx}]", "exportEnabled": export_enabled})
+                        return rows
+                    else:
+                        rows = []
+                        content = json_data.get("content", [])
+                        if isinstance(content, list):
+                            for idx, item in enumerate(content):
+                                rows.extend(count_table_rows(item, f"{path}[{idx}]"))
+                        return rows
+                return []
+            
+            table_rows_info = count_table_rows(template_json)
+            logger.info(f"导出前表格行状态检查: 共 {len(table_rows_info)} 行")
+            for row_info in table_rows_info:
+                logger.info(f"  行 {row_info['path']}: exportEnabled={row_info['exportEnabled']}")
         elif generation.form_data and isinstance(generation.form_data, dict):
             saved_template_content = generation.form_data.get("__template_content__")
             if saved_template_content:
@@ -1038,6 +1290,16 @@ class DocumentGenerationService:
         # 记录 form_data 内容用于调试
         logger.info(f"form_data 内容: {generation.form_data}")
         logger.info(f"form_data 键: {list(generation.form_data.keys()) if generation.form_data else []}")
+        
+        # 关键调试：记录段落数量key
+        if generation.form_data:
+            paragraph_count_keys = [k for k in generation.form_data.keys() if k.startswith("__paragraph_count_")]
+            if paragraph_count_keys:
+                logger.info(f"段落数量key: {paragraph_count_keys}")
+                for key in paragraph_count_keys:
+                    logger.info(f"  {key} = {generation.form_data[key]}")
+            else:
+                logger.info("未找到段落数量key（__paragraph_count_*）")
         
         # 记录占位符信息
         placeholder_names = [p.name for p in generation.template.placeholders] if generation.template.placeholders else []
