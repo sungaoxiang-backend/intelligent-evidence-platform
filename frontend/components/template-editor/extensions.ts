@@ -260,21 +260,94 @@ export const TableRowWithAttrs = TableRow.extend({
       const checkboxCell = document.createElement("td")
       checkboxCell.className = "export-control-checkbox-cell"
       checkboxCell.setAttribute("data-export-control", "true")
-      checkboxCell.style.cssText = "width: 40px !important; min-width: 40px !important; max-width: 40px !important; padding: 8px 4px !important; vertical-align: top !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;"
+      // 使用较小的宽度，减少占据空间
+      checkboxCell.style.cssText = "width: 24px !important; min-width: 24px !important; max-width: 24px !important; padding: 0 !important; vertical-align: middle !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;"
+      
+      // 创建checkbox包装器（用于自定义样式）
+      const checkboxWrapper = document.createElement("label")
+      checkboxWrapper.className = "custom-checkbox-wrapper"
+      checkboxWrapper.style.cssText = "display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; cursor: pointer !important; min-height: 40px !important;"
       
       // 创建checkbox
       const checkbox = document.createElement("input")
       checkbox.type = "checkbox"
       checkbox.checked = exportEnabled
-      checkbox.style.cssText = "cursor: pointer !important; width: 16px !important; height: 16px !important; margin: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important;"
+      checkbox.className = "custom-checkbox"
+      checkbox.style.cssText = "cursor: pointer !important; width: 18px !important; height: 18px !important; margin: 0 !important; display: none !important;"
       checkbox.title = "包含在导出中"
       checkbox.setAttribute("data-export-checkbox", "true")
       
+      // 创建自定义checkbox外观
+      const checkboxVisual = document.createElement("span")
+      checkboxVisual.className = "custom-checkbox-visual"
+      checkboxVisual.style.cssText = `
+        display: inline-block !important;
+        width: 18px !important;
+        height: 18px !important;
+        border: 2px solid #9ca3af !important;
+        border-radius: 3px !important;
+        background-color: ${exportEnabled ? '#3b82f6' : '#ffffff'} !important;
+        position: relative !important;
+        transition: all 0.2s ease !important;
+        flex-shrink: 0 !important;
+      `
+      
+      // 如果已选中，添加对号
+      if (exportEnabled) {
+        const checkmark = document.createElement("span")
+        checkmark.style.cssText = `
+          position: absolute !important;
+          left: 50% !important;
+          top: 50% !important;
+          transform: translate(-50%, -60%) rotate(45deg) !important;
+          width: 4px !important;
+          height: 10px !important;
+          border: solid white !important;
+          border-width: 0 2px 2px 0 !important;
+        `
+        checkboxVisual.appendChild(checkmark)
+      }
+      
+      checkboxWrapper.appendChild(checkbox)
+      checkboxWrapper.appendChild(checkboxVisual)
+      
       console.log("TableRowWithAttrs: checkbox created", { checked: checkbox.checked })
+      
+      // 更新checkbox视觉状态
+      const updateCheckboxVisual = (checked: boolean) => {
+        if (checked) {
+          checkboxVisual.style.backgroundColor = '#3b82f6'
+          checkboxVisual.style.borderColor = '#3b82f6'
+          // 如果还没有对号，添加对号
+          if (!checkboxVisual.querySelector('span')) {
+            const checkmark = document.createElement("span")
+            checkmark.style.cssText = `
+              position: absolute !important;
+              left: 50% !important;
+              top: 50% !important;
+              transform: translate(-50%, -60%) rotate(45deg) !important;
+              width: 4px !important;
+              height: 10px !important;
+              border: solid white !important;
+              border-width: 0 2px 2px 0 !important;
+            `
+            checkboxVisual.appendChild(checkmark)
+          }
+        } else {
+          checkboxVisual.style.backgroundColor = '#ffffff'
+          checkboxVisual.style.borderColor = '#9ca3af'
+          // 移除对号
+          const checkmark = checkboxVisual.querySelector('span')
+          if (checkmark) {
+            checkmark.remove()
+          }
+        }
+      }
       
       // 处理checkbox变化
       checkbox.addEventListener("change", (e) => {
         const newValue = (e.target as HTMLInputElement).checked
+        updateCheckboxVisual(newValue)
         const pos = getPos?.()
         
         if (pos !== undefined && editor) {
@@ -375,7 +448,7 @@ export const TableRowWithAttrs = TableRow.extend({
         }
       })
       
-      checkboxCell.appendChild(checkbox)
+      checkboxCell.appendChild(checkboxWrapper)
       
       // 将checkbox单元格插入到行的最前面
       dom.appendChild(checkboxCell)
@@ -446,6 +519,7 @@ export const TableRowWithAttrs = TableRow.extend({
           const updatedExportEnabled = updatedNode.attrs.exportEnabled !== false
           if (checkbox.checked !== updatedExportEnabled) {
             checkbox.checked = updatedExportEnabled
+            updateCheckboxVisual(updatedExportEnabled)
           }
           // 确保checkbox始终在最前面
           ensureCheckboxFirst()

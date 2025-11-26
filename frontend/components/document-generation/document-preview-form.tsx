@@ -395,9 +395,9 @@ export function DocumentPreviewForm({
           let checkboxCell = row.querySelector('.export-control-checkbox-cell') as HTMLElement
           let checkbox = checkboxCell?.querySelector('input[type="checkbox"]') as HTMLInputElement
           
-          // 获取行的文本内容用于匹配（排除checkbox单元格）
+          // 获取行的文本内容用于匹配（排除checkbox单元格/覆盖层）
           const rowText = Array.from(row.children)
-            .filter((cell: any) => !cell.classList?.contains('export-control-checkbox-cell'))
+            .filter((cell: any) => !cell.classList?.contains('export-control-checkbox-cell') && !cell.classList?.contains('export-control-checkbox-overlay'))
             .map((cell: any) => cell.textContent?.trim() || '')
             .join(' ')
             .substring(0, 50)
@@ -439,15 +439,111 @@ export function DocumentPreviewForm({
                 current: checkbox.checked
               })
               checkbox.checked = savedState
+              // 更新视觉状态
+              const checkboxVisual = checkboxCell.querySelector('.custom-checkbox-visual') as HTMLElement
+              if (checkboxVisual) {
+                if (savedState) {
+                  checkboxVisual.style.backgroundColor = '#3b82f6'
+                  checkboxVisual.style.borderColor = '#3b82f6'
+                  if (!checkboxVisual.querySelector('span')) {
+                    const checkmark = document.createElement('span')
+                    checkmark.style.cssText = `
+                      position: absolute !important;
+                      left: 50% !important;
+                      top: 50% !important;
+                      transform: translate(-50%, -60%) rotate(45deg) !important;
+                      width: 4px !important;
+                      height: 10px !important;
+                      border: solid white !important;
+                      border-width: 0 2px 2px 0 !important;
+                    `
+                    checkboxVisual.appendChild(checkmark)
+                  }
+                } else {
+                  checkboxVisual.style.backgroundColor = '#ffffff'
+                  checkboxVisual.style.borderColor = '#9ca3af'
+                  const checkmark = checkboxVisual.querySelector('span')
+                  if (checkmark) {
+                    checkmark.remove()
+                  }
+                }
+              }
             }
             return
           }
           
-          // 创建新的checkbox单元格
-          checkboxCell = document.createElement('td')
-          checkboxCell.className = 'export-control-checkbox-cell'
-          checkboxCell.setAttribute('data-export-control', 'true')
-          checkboxCell.style.cssText = 'width: 40px !important; min-width: 40px !important; max-width: 40px !important; padding: 8px 4px !important; vertical-align: top !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;'
+          // 判断是否是要素式模板
+          const isElementStyle = templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式")
+          
+          // 要素式模板：使用绝对定位，不创建额外单元格
+          // 陈述式模板：创建checkbox单元格
+          if (isElementStyle) {
+            // 要素式：使用绝对定位覆盖在行的左侧
+            checkboxCell = document.createElement('div')
+            checkboxCell.className = 'export-control-checkbox-overlay'
+            checkboxCell.setAttribute('data-export-control', 'true')
+            
+            // 计算初始行高度
+            const initialRowHeight = row.offsetHeight || row.getBoundingClientRect().height
+            
+            checkboxCell.style.cssText = `
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 24px !important;
+              height: ${initialRowHeight}px !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              z-index: 10 !important;
+              background-color: rgba(255, 255, 255, 0.9) !important;
+              border-right: 1px solid #e5e7eb !important;
+              box-sizing: border-box !important;
+            `
+            
+            // 确保行有相对定位
+            if (!row.style.position || row.style.position === 'static') {
+              row.style.position = 'relative'
+            }
+            
+            // 使用ResizeObserver监听行高度变化，动态更新覆盖层高度
+            const updateOverlayHeight = () => {
+              const currentRowHeight = row.offsetHeight || row.getBoundingClientRect().height
+              if (checkboxCell && currentRowHeight > 0) {
+                checkboxCell.style.height = `${currentRowHeight}px`
+              }
+            }
+            
+            const resizeObserver = new ResizeObserver(() => {
+              updateOverlayHeight()
+            })
+            
+            // 监听行的高度变化
+            resizeObserver.observe(row)
+            
+            // 也监听行内的单元格，因为单元格内容变化也会影响行高
+            const cells = row.querySelectorAll('td, th')
+            cells.forEach(cell => {
+              resizeObserver.observe(cell)
+            })
+            
+            // 将observer存储到checkboxCell上，以便清理
+            ;(checkboxCell as any)._resizeObserver = resizeObserver
+            ;(checkboxCell as any)._row = row
+            
+            console.log(`DocumentPreviewForm: 要素式模板 - 创建checkbox覆盖层，初始高度: ${initialRowHeight}px`)
+          } else {
+            // 陈述式：创建checkbox单元格
+            checkboxCell = document.createElement('td')
+            checkboxCell.className = 'export-control-checkbox-cell'
+            checkboxCell.setAttribute('data-export-control', 'true')
+            checkboxCell.style.cssText = 'width: 32px !important; min-width: 32px !important; max-width: 32px !important; padding: 0 !important; vertical-align: middle !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;'
+          }
+          
+          // 创建checkbox包装器（用于自定义样式）
+          const checkboxWrapper = document.createElement('label')
+          checkboxWrapper.className = 'custom-checkbox-wrapper'
+          checkboxWrapper.style.cssText = 'display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; cursor: pointer !important; min-height: 40px !important;'
           
           // 创建checkbox，使用从JSON中读取的状态
           checkbox = document.createElement('input')
@@ -456,12 +552,14 @@ export function DocumentPreviewForm({
           // 优先使用ref中保存的状态，如果没有则使用JSON中的状态
           const checkboxKey = `table-${jsonTableIndex}-row-${domRowIndex}`
           const savedState = checkboxStatesRef.current.get(checkboxKey)
-          checkbox.checked = savedState !== undefined ? savedState : exportEnabled
+          const initialChecked = savedState !== undefined ? savedState : exportEnabled
+          checkbox.checked = initialChecked
           
           // 保存初始状态到ref
           checkboxStatesRef.current.set(checkboxKey, checkbox.checked)
           
-          checkbox.style.cssText = 'cursor: pointer !important; width: 16px !important; height: 16px !important; margin: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important;'
+          checkbox.className = 'custom-checkbox'
+          checkbox.style.cssText = 'cursor: pointer !important; width: 18px !important; height: 18px !important; margin: 0 !important; display: none !important;'
           checkbox.title = '包含在导出中'
           checkbox.setAttribute('data-export-checkbox', 'true')
           checkbox.setAttribute('data-table-index', String(jsonTableIndex))
@@ -469,12 +567,78 @@ export function DocumentPreviewForm({
           checkbox.setAttribute('data-dom-table-index', String(domTableIndex))
           checkbox.setAttribute('data-checkbox-key', checkboxKey)
           
+          // 创建自定义checkbox外观
+          const checkboxVisual = document.createElement('span')
+          checkboxVisual.className = 'custom-checkbox-visual'
+          checkboxVisual.style.cssText = `
+            display: inline-block !important;
+            width: 18px !important;
+            height: 18px !important;
+            border: 2px solid #9ca3af !important;
+            border-radius: 3px !important;
+            background-color: ${initialChecked ? '#3b82f6' : '#ffffff'} !important;
+            position: relative !important;
+            transition: all 0.2s ease !important;
+            flex-shrink: 0 !important;
+          `
+          
+          // 如果已选中，添加对号
+          if (initialChecked) {
+            const checkmark = document.createElement('span')
+            checkmark.style.cssText = `
+              position: absolute !important;
+              left: 50% !important;
+              top: 50% !important;
+              transform: translate(-50%, -60%) rotate(45deg) !important;
+              width: 4px !important;
+              height: 10px !important;
+              border: solid white !important;
+              border-width: 0 2px 2px 0 !important;
+            `
+            checkboxVisual.appendChild(checkmark)
+          }
+          
+          // 更新checkbox视觉状态的函数
+          const updateCheckboxVisual = (checked: boolean) => {
+            if (checked) {
+              checkboxVisual.style.backgroundColor = '#3b82f6'
+              checkboxVisual.style.borderColor = '#3b82f6'
+              // 如果还没有对号，添加对号
+              if (!checkboxVisual.querySelector('span')) {
+                const checkmark = document.createElement('span')
+                checkmark.style.cssText = `
+                  position: absolute !important;
+                  left: 50% !important;
+                  top: 50% !important;
+                  transform: translate(-50%, -60%) rotate(45deg) !important;
+                  width: 4px !important;
+                  height: 10px !important;
+                  border: solid white !important;
+                  border-width: 0 2px 2px 0 !important;
+                `
+                checkboxVisual.appendChild(checkmark)
+              }
+            } else {
+              checkboxVisual.style.backgroundColor = '#ffffff'
+              checkboxVisual.style.borderColor = '#9ca3af'
+              // 移除对号
+              const checkmark = checkboxVisual.querySelector('span')
+              if (checkmark) {
+                checkmark.remove()
+              }
+            }
+          }
+          
+          checkboxWrapper.appendChild(checkbox)
+          checkboxWrapper.appendChild(checkboxVisual)
+          
           // 处理checkbox变化
           checkbox.addEventListener('change', (e) => {
+            const newValue = (e.target as HTMLInputElement).checked
+            updateCheckboxVisual(newValue)
             // 标记正在更新checkbox，避免触发editor.setContent和update事件
             isUpdatingCheckboxRef.current = true
             
-            const newValue = (e.target as HTMLInputElement).checked
             const checkboxKey = checkbox.getAttribute('data-checkbox-key') || `table-${jsonTableIndex}-row-${domRowIndex}`
             
             // 立即更新ref中的状态
@@ -603,10 +767,16 @@ export function DocumentPreviewForm({
             checkbox.setAttribute('data-row-path', JSON.stringify(rowInfo.path))
           }
           
-          checkboxCell.appendChild(checkbox)
+          checkboxCell.appendChild(checkboxWrapper)
           
-          // 插入到行的最前面
-          row.insertBefore(checkboxCell, row.firstChild)
+          // 根据模板类型插入checkbox
+          if (isElementStyle) {
+            // 要素式：作为覆盖层插入到行内
+            row.appendChild(checkboxCell)
+          } else {
+            // 陈述式：作为第一个单元格插入
+            row.insertBefore(checkboxCell, row.firstChild)
+          }
           console.log(`DocumentPreviewForm: Added checkbox to DOM table ${domTableIndex} (JSON table ${jsonTableIndex}), row ${domRowIndex}`, { 
             exportEnabled,
             rowPath: rowInfo?.path 
@@ -626,6 +796,14 @@ export function DocumentPreviewForm({
     
     return () => {
       clearTimeout(timeoutId)
+      // 清理ResizeObserver（如果有）
+      const overlays = editorRef.current?.querySelectorAll('.export-control-checkbox-overlay')
+      overlays?.forEach((overlay) => {
+        const observer = (overlay as any)._resizeObserver
+        if (observer) {
+          observer.disconnect()
+        }
+      })
     }
   }, [editor]) // 只在editor初始化时运行一次，不依赖content变化
   
@@ -656,24 +834,87 @@ export function DocumentPreviewForm({
         ${templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式") ? `
           /* 要素式模板：表格单元格布局优化 - 50%:50%布局 */
           /* 表格单元格中包含占位符字段时，使用flex布局实现50%:50%分配 */
+          
+          /* 要素式模板：确保表格使用固定布局 */
+          .template-doc table {
+            table-layout: fixed !important;
+            width: 100% !important;
+          }
+          
+          /* 要素式模板：行使用相对定位，为checkbox覆盖层提供定位上下文 */
+          .template-doc table tr {
+            position: relative !important;
+          }
+          
+          /* 要素式模板：checkbox使用绝对定位覆盖在行的左侧，不占据表格列 */
+          .template-doc table tr .export-control-checkbox-overlay {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 24px !important;
+            height: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 10 !important;
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-sizing: border-box !important;
+          }
+          
+          /* 要素式模板：为第一个单元格添加左边距，避免内容被checkbox覆盖 */
+          .template-doc table tr td:first-child,
+          .template-doc table tr th:first-child {
+            padding-left: 28px !important;
+          }
+          
           .template-doc table td,
           .template-doc table th {
             position: relative;
           }
           
-          /* 确保checkbox单元格不影响表格布局 */
-          .template-doc table tr .export-control-checkbox-cell {
-            width: 40px !important;
-            min-width: 40px !important;
-            max-width: 40px !important;
-            padding: 8px 4px !important;
-            box-sizing: border-box;
+          /* 自定义checkbox样式 */
+          .template-doc .custom-checkbox-wrapper {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+            cursor: pointer !important;
+            min-height: 40px !important;
           }
           
-          /* 确保其他单元格正常显示 */
-          .template-doc table tr td:not(.export-control-checkbox-cell),
-          .template-doc table tr th:not(.export-control-checkbox-cell) {
-            width: auto;
+          .template-doc .custom-checkbox {
+            display: none !important;
+          }
+          
+          .template-doc .custom-checkbox-visual {
+            display: inline-block !important;
+            width: 18px !important;
+            height: 18px !important;
+            border: 2px solid #9ca3af !important;
+            border-radius: 3px !important;
+            background-color: #ffffff !important;
+            position: relative !important;
+            transition: all 0.2s ease !important;
+            flex-shrink: 0 !important;
+          }
+          
+          .template-doc .custom-checkbox:checked + .custom-checkbox-visual {
+            background-color: #3b82f6 !important;
+            border-color: #3b82f6 !important;
+          }
+          
+          .template-doc .custom-checkbox:checked + .custom-checkbox-visual::after {
+            content: '' !important;
+            position: absolute !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -60%) rotate(45deg) !important;
+            width: 4px !important;
+            height: 10px !important;
+            border: solid white !important;
+            border-width: 0 2px 2px 0 !important;
           }
 
           /* 要素式模板：表格单元格中包含占位符时，使用flex布局 */
@@ -731,17 +972,62 @@ export function DocumentPreviewForm({
           
           /* 确保checkbox单元格不影响表格布局 */
           .template-doc table tr .export-control-checkbox-cell {
-            width: 40px !important;
-            min-width: 40px !important;
-            max-width: 40px !important;
-            padding: 8px 4px !important;
+            width: 32px !important;
+            min-width: 32px !important;
+            max-width: 32px !important;
+            padding: 0 !important;
             box-sizing: border-box;
+            vertical-align: middle !important;
           }
           
           /* 确保其他单元格正常显示 */
           .template-doc table tr td:not(.export-control-checkbox-cell),
           .template-doc table tr th:not(.export-control-checkbox-cell) {
             width: auto;
+          }
+          
+          /* 自定义checkbox样式 */
+          .template-doc .custom-checkbox-wrapper {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+            cursor: pointer !important;
+            min-height: 40px !important;
+          }
+          
+          .template-doc .custom-checkbox {
+            display: none !important;
+          }
+          
+          .template-doc .custom-checkbox-visual {
+            display: inline-block !important;
+            width: 18px !important;
+            height: 18px !important;
+            border: 2px solid #9ca3af !important;
+            border-radius: 3px !important;
+            background-color: #ffffff !important;
+            position: relative !important;
+            transition: all 0.2s ease !important;
+            flex-shrink: 0 !important;
+          }
+          
+          .template-doc .custom-checkbox:checked + .custom-checkbox-visual {
+            background-color: #3b82f6 !important;
+            border-color: #3b82f6 !important;
+          }
+          
+          .template-doc .custom-checkbox:checked + .custom-checkbox-visual::after {
+            content: '' !important;
+            position: absolute !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -60%) rotate(45deg) !important;
+            width: 4px !important;
+            height: 10px !important;
+            border: solid white !important;
+            border-width: 0 2px 2px 0 !important;
           }
 
           /* 陈述式模板：表格中的占位符字段保持自然布局 */
