@@ -10,6 +10,7 @@ import { DocumentPreviewForm } from "./document-preview-form"
 import { documentGenerationApi, type TemplateInfo, type PlaceholderInfo as ApiPlaceholderInfo } from "@/lib/document-generation-api"
 import { PlaceholderInfo } from "./placeholder-form-fields"
 import type { JSONContent } from "@tiptap/core"
+import { TableRowExportControl } from "./table-row-export-control"
 import { EvidenceCardsList } from "./evidence-cards-list"
 import { caseApi } from "@/lib/api"
 import { type Case } from "@/lib/types"
@@ -1015,25 +1016,36 @@ export function DocumentGenerationPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                  <div className="border rounded-lg overflow-hidden">
-                    <DocumentPreviewForm
+                  <>
+                    {/* 表格行导出控制面板 */}
+                    <TableRowExportControl
                       content={templateContent || selectedTemplate.prosemirror_json}
-                      placeholders={placeholders}
-                      formData={formData}
-                      templateCategory={selectedTemplate.category}
-                      onFormDataChange={(updater) => {
-                        if (typeof updater === 'function') {
-                          setFormData(updater)
-                        } else {
-                          setFormData(updater)
-                        }
-                      }}
                       onContentChange={(updatedContent) => {
                         setTemplateContent(updatedContent)
                       }}
-                      className="min-h-[600px]"
                     />
-                  </div>
+                    
+                    {/* 文档表单 */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <DocumentPreviewForm
+                        content={templateContent || selectedTemplate.prosemirror_json}
+                        placeholders={placeholders}
+                        formData={formData}
+                        templateCategory={selectedTemplate.category}
+                        onFormDataChange={(updater) => {
+                          if (typeof updater === 'function') {
+                            setFormData(updater)
+                          } else {
+                            setFormData(updater)
+                          }
+                        }}
+                        onContentChange={(updatedContent) => {
+                          setTemplateContent(updatedContent)
+                        }}
+                        className="min-h-[600px]"
+                      />
+                    </div>
+                  </>
               )}
             </CardContent>
           </Card>

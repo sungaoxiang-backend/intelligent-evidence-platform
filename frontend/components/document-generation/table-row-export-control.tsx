@@ -33,6 +33,7 @@ export function extractTableRows(content: JSONContent | null): TableRowInfo[] {
   
   const traverse = (node: JSONContent, path: number[] = []): void => {
     if (node.type === "table") {
+      // 表格的路径就是当前path
       const tablePath = [...path]
       if (node.content && Array.isArray(node.content)) {
         node.content.forEach((row, rowIdx) => {
@@ -50,6 +51,7 @@ export function extractTableRows(content: JSONContent | null): TableRowInfo[] {
             // 获取exportEnabled状态（默认为true）
             const exportEnabled = row.attrs?.exportEnabled !== false
             
+            // 行的路径是表格路径 + 行在表格中的索引
             rows.push({
               path: [...tablePath, rowIdx],
               id: `table-${tableIndex}-row-${rowIdx}`,
@@ -62,6 +64,8 @@ export function extractTableRows(content: JSONContent | null): TableRowInfo[] {
         })
       }
       tableIndex++
+      // 注意：表格节点遍历后不再递归遍历其子节点（因为表格行已经在上面处理了）
+      return
     }
     
     // 递归遍历子节点
