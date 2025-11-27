@@ -952,8 +952,16 @@ class ProseMirrorToDocxMapper:
 
         # 添加文本内容
         content = node.get("content", [])
-        for text_node in content:
+        logger.debug(f"[EXPORT] map_paragraph_node: 处理段落，content 长度: {len(content)}")
+        for idx, text_node in enumerate(content):
+            # 防御性检查：确保 text_node 是字典
+            if not isinstance(text_node, dict):
+                logger.warning(f"[EXPORT] ⚠️ 段落内容节点 {idx} 不是字典类型: {type(text_node)}, 值: {text_node}")
+                continue
+            
             node_type = text_node.get("type")
+            logger.debug(f"[EXPORT] map_paragraph_node: 节点 {idx} 类型: {node_type}")
+            
             if node_type == "text":
                 run = para.add_run(text_node.get("text", ""))
                 self._apply_marks(run, text_node.get("marks", []))
@@ -962,9 +970,15 @@ class ProseMirrorToDocxMapper:
             elif node_type == "placeholder":
                 # 处理 placeholder 节点（要素式模板保留的占位符节点）
                 attrs = text_node.get("attrs", {})
+                # 防御性检查：确保 attrs 是字典
+                if not isinstance(attrs, dict):
+                    logger.warning(f"[EXPORT] ⚠️ 占位符节点 attrs 不是字典类型: {type(attrs)}, 值: {attrs}")
+                    attrs = {}
+                
                 value = attrs.get("value")
                 placeholder_type = attrs.get("placeholderType", "text")
                 options = attrs.get("options", [])
+                logger.debug(f"[EXPORT] map_paragraph_node: 占位符节点 {idx}: fieldKey={attrs.get('fieldKey')}, value={value}, value_type={type(value)}")
                 
                 # 如果是 file 类型且值是 URL，尝试插入图片
                 if placeholder_type == "file" and value and isinstance(value, str) and (value.startswith("http://") or value.startswith("https://")):
@@ -984,12 +998,16 @@ class ProseMirrorToDocxMapper:
                             run.font.color.rgb = RGBColor(0, 0, 0)
                 else:
                     # 其他类型：格式化占位符值
+                    logger.info(f"导出占位符: fieldKey={attrs.get('fieldKey')}, value={value}, type={placeholder_type}, options={options}")
                     formatted_text = self._format_placeholder_value_for_export(value, placeholder_type, options)
+                    logger.info(f"格式化后的文本: '{formatted_text}' (长度: {len(formatted_text) if formatted_text else 0})")
                     
                     if formatted_text:
                         run = para.add_run(formatted_text)
                         if not run.font.color or not run.font.color.rgb:
                             run.font.color.rgb = RGBColor(0, 0, 0)
+                    else:
+                        logger.warning(f"占位符 {attrs.get('fieldKey')} 格式化后为空，跳过添加文本")
             elif node_type == "hardBreak":
                 para.add_run().add_break()
 
@@ -1145,8 +1163,27 @@ class ProseMirrorToDocxMapper:
         # 应用列宽（如果存在，从原始表格提取的）
         # 注意：必须在创建表格后立即设置，在填充内容之前
         logger.info(f"[EXPORT] 表格节点 attrs: {table_attrs}")
-        col_widths = table_attrs.get("colWidths")
-        logger.info(f"[EXPORT] 从 attrs 获取的 colWidths: {col_widths}, max_cols: {max_cols}")
+        col_widths_raw = table_attrs.get("colWidths")
+        logger.info(f"[EXPORT] 从 attrs 获取的 colWidths (原始): {col_widths_raw}, 类型: {type(col_widths_raw)}, max_cols: {max_cols}")
+        
+        # 处理 colWidths：可能是字符串（逗号分隔）或列表
+        col_widths = None
+        if col_widths_raw:
+            if isinstance(col_widths_raw, str):
+                # 如果是字符串，尝试解析为列表
+                try:
+                    col_widths = [int(w.strip()) for w in col_widths_raw.split(",") if w.strip()]
+                    logger.info(f"[EXPORT] 解析字符串 colWidths 为列表: {col_widths}")
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"[EXPORT] 无法解析 colWidths 字符串 '{col_widths_raw}': {e}")
+                    col_widths = None
+            elif isinstance(col_widths_raw, list):
+                # 如果已经是列表，直接使用
+                col_widths = col_widths_raw
+                logger.info(f"[EXPORT] colWidths 已经是列表: {col_widths}")
+            else:
+                logger.warning(f"[EXPORT] colWidths 类型不支持: {type(col_widths_raw)}")
+                col_widths = None
         
         if col_widths and len(col_widths) == max_cols:
             logger.info(f"[EXPORT] ✅ 开始应用列宽: {col_widths}")
@@ -1177,6 +1214,15 @@ class ProseMirrorToDocxMapper:
                 logger.error("[EXPORT] ❌ tblGrid 不存在，无法应用列宽")
         elif col_widths:
             logger.warning(f"[EXPORT] ⚠️ 列宽数量不匹配: colWidths={col_widths} (长度={len(col_widths)}), max_cols={max_cols}")
+            # 如果 col_widths 长度小于 max_cols，用最后一个值填充
+            if len(col_widths) < max_cols:
+                last_width = col_widths[-1] if col_widths else 1000
+                col_widths.extend([last_width] * (max_cols - len(col_widths)))
+                logger.info(f"[EXPORT] 扩展 col_widths 到 {len(col_widths)} 个元素，使用最后一个值 {last_width} 填充")
+            # 如果 col_widths 长度大于 max_cols，截断
+            elif len(col_widths) > max_cols:
+                col_widths = col_widths[:max_cols]
+                logger.info(f"[EXPORT] 截断 col_widths 到 {len(col_widths)} 个元素")
         else:
             logger.warning("[EXPORT] ⚠️ 未找到 colWidths 属性，使用默认列宽")
         
@@ -1190,8 +1236,17 @@ class ProseMirrorToDocxMapper:
         table_width_value = None
         table_width_type = "auto"
         if table_width_info:
-            table_width_value = table_width_info.get("width")
-            table_width_type = table_width_info.get("type", "auto")
+            # 处理 tableWidth：可能是字典或字符串（如 "[object Object]"）
+            if isinstance(table_width_info, dict):
+                table_width_value = table_width_info.get("width")
+                table_width_type = table_width_info.get("type", "auto")
+            elif isinstance(table_width_info, str):
+                # 如果是字符串（可能是 "[object Object]"），忽略它
+                logger.warning(f"[EXPORT] tableWidth 是字符串 '{table_width_info}'，忽略")
+                table_width_info = None
+            else:
+                logger.warning(f"[EXPORT] tableWidth 类型不支持: {type(table_width_info)}")
+                table_width_info = None
         if table_width_value is None and col_widths:
             table_width_value = sum(col_widths)
             table_width_type = "dxa"
@@ -1252,9 +1307,31 @@ class ProseMirrorToDocxMapper:
             logger.debug(f"[EXPORT] 处理第 {row_idx} 行，共 {len(cells)} 个单元格，XML 中有 {len(tc_elements_in_row)} 个 tc 元素")
             
             for cell_idx, cell_node in enumerate(cells):
+                # 防御性检查：确保 cell_node 是字典
+                if not isinstance(cell_node, dict):
+                    logger.warning(f"[EXPORT] ⚠️ 单元格节点不是字典类型: {type(cell_node)}, 值: {cell_node}")
+                    col_pos += 1
+                    continue
+                
                 attrs = cell_node.get("attrs", {})
-                colspan = attrs.get("colspan", 1)
-                rowspan = attrs.get("rowspan", 1)
+                # 防御性检查：确保 attrs 是字典
+                if not isinstance(attrs, dict):
+                    logger.warning(f"[EXPORT] ⚠️ 单元格 attrs 不是字典类型: {type(attrs)}, 值: {attrs}")
+                    attrs = {}
+                
+                # 确保 colspan 和 rowspan 是整数
+                colspan_raw = attrs.get("colspan", 1)
+                rowspan_raw = attrs.get("rowspan", 1)
+                try:
+                    colspan = int(colspan_raw) if colspan_raw is not None else 1
+                except (ValueError, TypeError):
+                    logger.warning(f"[EXPORT] ⚠️ colspan 无法转换为整数: {colspan_raw}，使用默认值 1")
+                    colspan = 1
+                try:
+                    rowspan = int(rowspan_raw) if rowspan_raw is not None else 1
+                except (ValueError, TypeError):
+                    logger.warning(f"[EXPORT] ⚠️ rowspan 无法转换为整数: {rowspan_raw}，使用默认值 1")
+                    rowspan = 1
                 
                 logger.debug(f"[EXPORT] 处理单元格 {cell_idx}/{len(cells)}: colspan={colspan}, rowspan={rowspan}, 当前 col_pos={col_pos}")
                 
@@ -1286,25 +1363,55 @@ class ProseMirrorToDocxMapper:
                 cell = None
 
                 # 方法1：直接从Python对象获取（推荐）
+                # 注意：row_cells 是按实际位置排列的，需要考虑已处理的单元格和将被删除的单元格
                 try:
                     # 获取当前行的所有单元格
                     row_cells = table.rows[row_idx].cells
                     logger.debug(f"[EXPORT] 当前行Python对象中有 {len(row_cells)} 个单元格")
 
-                    # 检查逻辑位置是否有效
-                    if col_pos < len(row_cells):
-                        cell = row_cells[col_pos]
-                        tc = cell._tc
-                        logger.info(f"[EXPORT]   ✅ 通过Python对象找到单元格: 逻辑列{col_pos} -> cell={cell}, tc={tc}")
-
-                        # 在XML中找到对应的索引
-                        for idx, tc_elem in enumerate(tc_elements_in_row):
-                            if tc_elem == tc:
-                                actual_cell_index = idx
-                                logger.info(f"[EXPORT]   ✅ 在XML中找到对应索引: {actual_cell_index}")
-                                break
-                    else:
-                        logger.warning(f"[EXPORT]   ⚠️ 逻辑位置{col_pos}超出范围，当前行只有{len(row_cells)}个单元格")
+                    # 计算实际位置：需要考虑已处理的单元格和将被删除的单元格
+                    # 逻辑位置 col_pos 对应的是 ProseMirror JSON 中的单元格顺序
+                    # 实际位置需要考虑前面单元格的 gridSpan
+                    actual_cell_index_in_python = None
+                    logical_pos = 0
+                    
+                    for idx, cell_obj in enumerate(row_cells):
+                        # 跳过已处理的单元格
+                        if idx in processed_tc_indices:
+                            continue
+                        # 跳过将被删除的单元格
+                        if idx in cells_to_remove_indices:
+                            continue
+                        
+                        # 检查这个单元格是否有 gridSpan
+                        tc_obj = cell_obj._tc
+                        tc_pr_obj = tc_obj.find(f'.//{ns}tcPr')
+                        current_grid_span = 1
+                        if tc_pr_obj is not None:
+                            grid_span_elem = tc_pr_obj.find(f'.//{ns}gridSpan')
+                            if grid_span_elem is not None:
+                                current_grid_span = int(grid_span_elem.get(qn('w:val'), 1))
+                        
+                        # 检查是否到达目标逻辑位置
+                        if logical_pos == col_pos:
+                            actual_cell_index_in_python = idx
+                            cell = cell_obj
+                            tc = tc_obj
+                            logger.info(f"[EXPORT]   ✅ 通过Python对象找到单元格: 逻辑列{col_pos} -> 实际索引{idx}, gridSpan={current_grid_span}")
+                            
+                            # 在XML中找到对应的索引
+                            for xml_idx, tc_elem in enumerate(tc_elements_in_row):
+                                if tc_elem == tc:
+                                    actual_cell_index = xml_idx
+                                    logger.info(f"[EXPORT]   ✅ 在XML中找到对应索引: {actual_cell_index}")
+                                    break
+                            break
+                        
+                        # 递增逻辑位置
+                        logical_pos += current_grid_span if current_grid_span > 1 else 1
+                    
+                    if actual_cell_index_in_python is None:
+                        logger.warning(f"[EXPORT]   ⚠️ 无法通过Python对象找到逻辑列{col_pos}的单元格")
 
                 except (IndexError, AttributeError) as e:
                     logger.warning(f"[EXPORT]   ⚠️ 从Python对象获取单元格失败: {e}")
@@ -1470,19 +1577,38 @@ class ProseMirrorToDocxMapper:
                 if colspan == 1:
                     # 普通单元格：设置 tcW 为对应列的宽度
                     cell_width_info = attrs.get("cellWidth")
+                    cell_width = None
+                    width_type = "dxa"
                     if cell_width_info:
-                        # 优先使用解析时提取的宽度数据
-                        cell_width = cell_width_info.get("width")
-                        width_type = cell_width_info.get("type", "dxa")
-                    else:
+                        # 处理 cellWidth：可能是字典或字符串（如 "[object Object]"）
+                        if isinstance(cell_width_info, dict):
+                            cell_width = cell_width_info.get("width")
+                            width_type = cell_width_info.get("type", "dxa")
+                        elif isinstance(cell_width_info, str):
+                            # 如果是字符串（可能是 "[object Object]"），忽略它
+                            logger.debug(f"[EXPORT] cellWidth 是字符串 '{cell_width_info}'，忽略")
+                            cell_width_info = None
+                        else:
+                            logger.debug(f"[EXPORT] cellWidth 类型不支持: {type(cell_width_info)}")
+                            cell_width_info = None
+                    
+                    if not cell_width:
                         # 如果没有提取到宽度信息，从 tblGrid 获取
-                        table_attrs = node.get("attrs", {})
-                        col_widths = table_attrs.get("colWidths", [])
-                        if col_widths and col_pos < len(col_widths):
+                        # 注意：使用之前解析好的 col_widths（在函数开始时已经解析为列表）
+                        if col_widths and isinstance(col_widths, list) and col_pos < len(col_widths):
                             cell_width = col_widths[col_pos]
                             width_type = "dxa"
+                            logger.debug(f"[EXPORT] 从 col_widths 获取单元格宽度: {cell_width} (行{row_idx}, 列{col_pos})")
                         else:
                             cell_width = None
+                            if col_widths is None:
+                                logger.debug(f"[EXPORT] 无法从 col_widths 获取单元格宽度: col_widths 为 None (行{row_idx}, 列{col_pos})")
+                            elif not isinstance(col_widths, list):
+                                logger.debug(f"[EXPORT] 无法从 col_widths 获取单元格宽度: col_widths 不是列表，类型={type(col_widths)} (行{row_idx}, 列{col_pos})")
+                            elif col_pos >= len(col_widths):
+                                logger.debug(f"[EXPORT] 无法从 col_widths 获取单元格宽度: col_pos ({col_pos}) >= len(col_widths) ({len(col_widths)}) (行{row_idx}, 列{col_pos})")
+                            else:
+                                logger.debug(f"[EXPORT] 无法从 col_widths 获取单元格宽度: 未知原因 (行{row_idx}, 列{col_pos})")
                     
                     if cell_width is not None:
                         # 检查是否已存在 tcW，如果存在则删除
@@ -1509,19 +1635,37 @@ class ProseMirrorToDocxMapper:
                     # 合并单元格：需要设置 tcW 为被合并列的总宽度
                     # 虽然 Word 理论上可以根据 gridSpan 和 tblGrid 计算，但实际中需要显式设置 tcW
                     cell_width_info = attrs.get("cellWidth")
-                    table_attrs = node.get("attrs", {})
-                    col_widths = table_attrs.get("colWidths", [])
                     
+                    merged_width = None
+                    width_type = "dxa"
                     if cell_width_info:
-                        # 优先使用解析时提取的宽度数据（这是原始文档中的值）
-                        merged_width = cell_width_info.get("width")
-                        width_type = cell_width_info.get("type", "dxa")
-                    elif col_widths and col_pos + colspan <= len(col_widths):
+                        # 处理 cellWidth：可能是字典或字符串（如 "[object Object]"）
+                        if isinstance(cell_width_info, dict):
+                            merged_width = cell_width_info.get("width")
+                            width_type = cell_width_info.get("type", "dxa")
+                        elif isinstance(cell_width_info, str):
+                            # 如果是字符串（可能是 "[object Object]"），忽略它
+                            logger.debug(f"[EXPORT] 合并单元格 cellWidth 是字符串 '{cell_width_info}'，忽略")
+                            cell_width_info = None
+                        else:
+                            logger.debug(f"[EXPORT] 合并单元格 cellWidth 类型不支持: {type(cell_width_info)}")
+                            cell_width_info = None
+                    
+                    # 注意：使用之前解析好的 col_widths（在函数开始时已经解析为列表）
+                    # 不要重新从 table_attrs 获取，因为它可能是字符串
+                    if not merged_width and col_widths and isinstance(col_widths, list) and col_pos + colspan <= len(col_widths):
                         # 如果没有提取到宽度，从 tblGrid 计算被合并列的总宽度
                         merged_width = sum(col_widths[col_pos:col_pos + colspan])
                         width_type = "dxa"
+                        logger.debug(f"[EXPORT] 从 col_widths 计算合并单元格宽度: {merged_width} (行{row_idx}, 列{col_pos}, colspan={colspan})")
                     else:
                         merged_width = None
+                        if not col_widths:
+                            logger.debug(f"[EXPORT] 合并单元格：col_widths 为空 (行{row_idx}, 列{col_pos})")
+                        elif not isinstance(col_widths, list):
+                            logger.debug(f"[EXPORT] 合并单元格：col_widths 不是列表: {type(col_widths)} (行{row_idx}, 列{col_pos})")
+                        elif col_pos + colspan > len(col_widths):
+                            logger.debug(f"[EXPORT] 合并单元格：col_pos + colspan ({col_pos} + {colspan} = {col_pos + colspan}) 超出 col_widths 长度 ({len(col_widths)}) (行{row_idx}, 列{col_pos})")
                     
                     if merged_width is not None:
                         # 删除已存在的 tcW
@@ -1570,18 +1714,26 @@ class ProseMirrorToDocxMapper:
                 last_was_empty = False
                 
                 for para_node in cell_content:
+                    # 防御性检查：确保 para_node 是字典
+                    if not isinstance(para_node, dict):
+                        logger.warning(f"[EXPORT] ⚠️ 段落节点不是字典类型: {type(para_node)}, 值: {para_node}")
+                        continue
+                    
                     if para_node.get("type") == "paragraph" or para_node.get("type") == "heading":
                         # 检查段落是否有文本内容（包括 text 和 placeholder 节点）
                         para_content = para_node.get("content", [])
                         has_text = any(
-                            (item.get("type") == "text" and item.get("text", "").strip()) or
-                            (item.get("type") == "placeholder" and item.get("attrs", {}).get("value") is not None)
-                            for item in para_content
+                            (isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip()) or
+                            (isinstance(item, dict) and item.get("type") == "placeholder" and isinstance(item.get("attrs", {}), dict) and item.get("attrs", {}).get("value") is not None and item.get("attrs", {}).get("value") != "")
+                            for item in para_content if isinstance(item, dict)
                         )
                         # 检查是否有特殊格式（对齐、缩进、间距等）
-                        attrs = para_node.get("attrs", {})
+                        para_attrs = para_node.get("attrs", {})
+                        # 防御性检查：确保 para_attrs 是字典
+                        if not isinstance(para_attrs, dict):
+                            para_attrs = {}
                         has_formatting = any(
-                            key in attrs
+                            key in para_attrs
                             for key in ["textAlign", "indent", "spacing", "style"]
                         ) or para_node.get("type") == "heading"
                         
@@ -1627,15 +1779,43 @@ class ProseMirrorToDocxMapper:
             # 关键修复：在处理完所有单元格后，再删除被 gridSpan 占用的单元格
             # 这样可以确保所有单元格都能正确定位和添加内容
             if cells_to_remove_in_row:
+                # 验证：删除前，检查每行的单元格数
+                tc_elements_before = row_xml.findall(f'.//{ns}tc')
+                logger.debug(f"[EXPORT] 行{row_idx} 删除前：有 {len(tc_elements_before)} 个单元格，需要删除 {len(cells_to_remove_in_row)} 个")
+                
                 # 从后往前删除，避免索引变化影响
                 cells_to_remove_in_row.sort(reverse=True, key=lambda x: x[0])
+                
+                # 验证：确保要删除的单元格索引是唯一的，且不重复
+                remove_indices_set = set()
+                valid_removals = []
                 for remove_idx, tc_to_remove in cells_to_remove_in_row:
+                    if remove_idx in remove_indices_set:
+                        logger.warning(f"[EXPORT] ⚠️ 重复的删除索引 {remove_idx}，跳过")
+                        continue
+                    if remove_idx >= len(tc_elements_before):
+                        logger.warning(f"[EXPORT] ⚠️ 删除索引 {remove_idx} 超出范围（总单元格数={len(tc_elements_before)}），跳过")
+                        continue
+                    remove_indices_set.add(remove_idx)
+                    valid_removals.append((remove_idx, tc_to_remove))
+                
+                # 执行删除
+                for remove_idx, tc_to_remove in valid_removals:
                     parent = tc_to_remove.getparent()
                     if parent is not None:
                         parent.remove(tc_to_remove)
                         processed_tc_indices.add(remove_idx)
                         logger.info(f"[EXPORT] ✅ 删除被 gridSpan 占用的单元格 (行{row_idx}, 原索引{remove_idx})")
-                logger.info(f"[EXPORT] 行{row_idx} 处理完成，删除了 {len(cells_to_remove_in_row)} 个被合并的单元格")
+                    else:
+                        logger.warning(f"[EXPORT] ⚠️ 无法找到单元格的父元素 (行{row_idx}, 原索引{remove_idx})")
+                
+                # 验证：删除后，检查每行的单元格数
+                tc_elements_after = row_xml.findall(f'.//{ns}tc')
+                expected_cells = len(cells)  # 逻辑单元格数（不考虑 colspan）
+                logger.info(f"[EXPORT] 行{row_idx} 处理完成：删除了 {len(valid_removals)} 个被合并的单元格，删除前={len(tc_elements_before)}，删除后={len(tc_elements_after)}，期望={expected_cells}")
+                
+                if len(tc_elements_after) != expected_cells:
+                    logger.warning(f"[EXPORT] ⚠️ 行{row_idx} 单元格数不匹配：实际={len(tc_elements_after)}，期望={expected_cells}")
 
         return table
 

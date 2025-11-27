@@ -623,7 +623,7 @@ export function DocumentGenerationPage() {
           } else {
             // 处理普通字段：优先使用DOM中的值（因为DOM中的值是最新的用户输入）
             // 这样可以确保保存时使用的是用户在页面上看到和输入的最新值
-            newFormData[fieldKey] = value
+              newFormData[fieldKey] = value
           }
         }
       })
@@ -655,7 +655,7 @@ export function DocumentGenerationPage() {
         }
       })
       checkboxGroups.forEach((values, fieldKey) => {
-        newFormData[fieldKey] = values
+          newFormData[fieldKey] = values
       })
       
       // 从DOM读取select的值（优先使用DOM中的值）

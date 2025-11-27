@@ -303,16 +303,16 @@ export function ReplicableCell({
       
       {/* 添加按钮 - 仅在非复杂表单且只有一个副本时显示 */}
       {shouldShowAddButton && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={(e) => handleAdd(e)}
-          className="mt-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          添加
-        </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={(e) => handleAdd(e)}
+        className="mt-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+      >
+        <Plus className="h-4 w-4 mr-1" />
+        添加
+      </Button>
       )}
     </div>
   )

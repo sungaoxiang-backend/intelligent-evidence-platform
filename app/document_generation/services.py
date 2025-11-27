@@ -921,27 +921,31 @@ class DocumentGenerationService:
                     meta = placeholder_map.get(placeholder_name)
                     
                     # 调试日志
-                    logger.debug(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}, 要素式: {is_element_style}")
+                    logger.info(f"处理 placeholder 节点: {placeholder_name}, 在 form_data 中: {placeholder_name in form_data if form_data else False}, 要素式: {is_element_style}")
+                    if form_data and placeholder_name in form_data:
+                        logger.info(f"  form_data[{placeholder_name}] = {form_data[placeholder_name]} (type: {type(form_data[placeholder_name])})")
                     
                     # 首先尝试直接获取值（优先使用直接值，因为数组值在表格行复制时已经处理了）
                     value = form_data.get(placeholder_name) if form_data else None
+                    logger.info(f"  直接获取值: {placeholder_name} = {value}")
                     
                     # 如果直接值不存在，检查是否有数组格式的数据
                     if value is None:
                         array_values = get_all_array_values(placeholder_name, form_data)
                         if array_values:
                             value = array_values[0][1]  # 使用第一个数组值
-                            logger.debug(f"从数组获取值: {placeholder_name} = {value}")
+                            logger.info(f"  从数组获取值: {placeholder_name} = {value}")
                     
                     # 如果还是没有值，尝试检查是否有数组格式的字段名（如 fieldName[0]）
                     if value is None:
                         array_field_name = f"{placeholder_name}[0]"
                         value = form_data.get(array_field_name) if form_data else None
                         if value is not None:
-                            logger.debug(f"从数组格式字段名获取值: {array_field_name} = {value}")
+                            logger.info(f"  从数组格式字段名获取值: {array_field_name} = {value}")
                     
                     # 获取占位符类型
                     placeholder_type = meta.get("type", "text") if meta else "text"
+                    logger.info(f"  占位符类型: {placeholder_type}, 最终值: {value}")
                     
                     # file 类型占位符：无论是要素式还是陈述式，都保留为 placeholder 节点，以便导出时插入图片
                     if placeholder_type == "file":
@@ -955,6 +959,7 @@ class DocumentGenerationService:
                             if meta.get("options"):
                                 attrs["options"] = meta["options"]
                         node["attrs"] = attrs
+                        logger.info(f"  设置 file 类型占位符值: {placeholder_name} = {value}")
                         # 保留 placeholder 节点类型，不转换为 text
                     elif is_element_style:
                         # 要素式：保留 placeholder 节点，将值添加到 attrs 中
@@ -967,6 +972,7 @@ class DocumentGenerationService:
                             if meta.get("options"):
                                 attrs["options"] = meta["options"]
                         node["attrs"] = attrs
+                        logger.info(f"  设置要素式占位符值: {placeholder_name} = {value}, attrs = {node['attrs']}")
                         # 保留 placeholder 节点类型，不转换为 text
                     else:
                         # 陈述式：将 placeholder 节点替换为 text 节点
