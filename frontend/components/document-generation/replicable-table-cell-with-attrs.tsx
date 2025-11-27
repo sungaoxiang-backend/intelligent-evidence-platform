@@ -6,7 +6,7 @@ import { Node } from "@tiptap/core"
 import React from "react"
 import { createRoot } from "react-dom/client"
 import { ReplicableCell } from "./replicable-cell"
-import { extractPlaceholdersFromCell } from "./replicable-cell-utils"
+import { extractPlaceholdersFromCell, parseArrayFieldName } from "./replicable-cell-utils"
 import type { JSONContent } from "@tiptap/core"
 import { PlaceholderInfo } from "./placeholder-form-fields"
 import { createNarrativeTableCell } from "./narrative-table-cell"
@@ -40,6 +40,15 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
     return ({ node, getPos, view }) => {
       const dom = document.createElement(node.attrs.isHeader ? "th" : "td")
       dom.setAttribute("data-type", "tableCell")
+      
+      // 关键修复：正确设置 colspan 和 rowspan 属性
+      const attrs = node.attrs as any
+      if (attrs.colspan && attrs.colspan > 1) {
+        dom.setAttribute("colspan", String(attrs.colspan))
+      }
+      if (attrs.rowspan && attrs.rowspan > 1) {
+        dom.setAttribute("rowspan", String(attrs.rowspan))
+      }
 
       // 检查单元格内容和模板类型
       const cellNode = node.toJSON() as JSONContent
@@ -328,9 +337,25 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
         )
       }
 
-      if (isElementStyle && placeholders.length > 1) {
-        // 要素式模板多个占位符：使用 ReplicableCell
-        console.log("使用 ReplicableCell 处理要素式模板单元格", { placeholders: placeholders.length })
+      // 检查是否有数组数据（用于判断是否需要使用 ReplicableCell）
+      const hasArrayData = (): boolean => {
+        const formData = this.options.getFormData?.() || {}
+        // 检查是否有任何占位符存在数组格式的数据（如 fieldName[0], fieldName[1]）
+        for (const placeholder of placeholders) {
+          for (const key of Object.keys(formData)) {
+            const parsed = parseArrayFieldName(key)
+            if (parsed && parsed.baseName === placeholder && parsed.index >= 0) {
+              console.log(`检测到数组数据: ${key}，使用 ReplicableCell`)
+              return true
+            }
+          }
+        }
+        return false
+      }
+
+      if (isElementStyle && placeholders.length > 1 && hasArrayData()) {
+        // 要素式模板多个占位符且有数组数据：使用 ReplicableCell（垂直排列多个副本）
+        console.log("使用 ReplicableCell 处理要素式模板单元格（有数组数据）", { placeholders: placeholders.length })
 
         let root: ReturnType<typeof createRoot> | null = null
         let isDestroyed = false
@@ -419,8 +444,22 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
 
             const updatedCellNode = updatedNode.toJSON() as JSONContent
             const updatedPlaceholders = extractPlaceholdersFromCell(updatedCellNode)
+            const formData = this.options.getFormData?.() || {}
+            
+            // 检查是否有数组数据
+            const hasArrayData = (): boolean => {
+              for (const placeholder of updatedPlaceholders) {
+                for (const key of Object.keys(formData)) {
+                  const parsed = parseArrayFieldName(key)
+                  if (parsed && parsed.baseName === placeholder && parsed.index >= 0) {
+                    return true
+                  }
+                }
+              }
+              return false
+            }
 
-            if (updatedPlaceholders.length > 1) {
+            if (updatedPlaceholders.length > 1 && hasArrayData()) {
               // 更新渲染
               if (root) {
                 try {
@@ -429,7 +468,7 @@ export const ReplicableTableCellWithAttrs = TableCellWithAttrs.extend<Replicable
                       cellNode: updatedCellNode,
                       placeholders: updatedPlaceholders,
                       placeholderInfos: this.options.getPlaceholderInfos?.() || [],
-                      formData: this.options.getFormData?.() || {},
+                      formData: formData,
                       onFormDataChange: (newFormData) => {
                         if (this.options.onFormDataChange) {
                           this.options.onFormDataChange(newFormData)

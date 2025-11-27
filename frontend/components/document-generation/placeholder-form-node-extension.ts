@@ -68,6 +68,7 @@ export const PlaceholderFormNode = Node.create<PlaceholderFormNodeOptions>({
       dom.contentEditable = "false"
       dom.style.display = "inline-block"
       dom.style.verticalAlign = "baseline"
+      dom.style.pointerEvents = "auto" // 确保子元素（输入框）可以接收事件
 
       let root: ReturnType<typeof createRoot> | null = null
       let isDestroyed = false

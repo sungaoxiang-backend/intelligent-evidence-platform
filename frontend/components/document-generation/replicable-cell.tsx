@@ -38,11 +38,16 @@ export function ReplicableCell({
   templateCategory,
   cellId,
 }: ReplicableCellProps) {
+  // 判断是否是复杂表单（要素式模板且单元格包含多个占位符）
+  // 复杂表单不需要"添加"和"删除"功能
+  const isComplexForm = templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式")
+  
   console.log("ReplicableCell render:", { 
     cellId, 
     placeholders, 
     formDataKeys: Object.keys(formData || {}),
-    formDataKeysCount: Object.keys(formData || {}).length
+    formDataKeysCount: Object.keys(formData || {}).length,
+    isComplexForm
   })
   
   // 获取当前有多少个副本
@@ -238,7 +243,15 @@ export function ReplicableCell({
         <div className="space-y-3">
           {placeholders.map(placeholder => {
             const info = placeholderInfoMap.get(placeholder)
-            if (!info) return null
+            if (!info) {
+              // 如果没有找到占位符信息，显示提示信息
+              console.warn(`ReplicableCell: 未找到占位符信息: ${placeholder}`)
+              return (
+                <div key={placeholder} className="text-sm text-gray-500">
+                  {placeholder}: 未找到占位符信息
+                </div>
+              )
+            }
             
             // 判断是否是要素式模板
             const isElementStyle = templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式")
@@ -263,8 +276,8 @@ export function ReplicableCell({
           })}
         </div>
         
-        {/* 删除按钮 */}
-        {replicaCount > 1 && (
+        {/* 删除按钮 - 复杂表单不显示删除按钮 */}
+        {!isComplexForm && replicaCount > 1 && (
           <Button
             type="button"
             variant="outline"
@@ -280,22 +293,27 @@ export function ReplicableCell({
     )
   }
   
+  // 判断是否显示添加按钮（复杂表单不显示）
+  const shouldShowAddButton = !isComplexForm && replicaCount === 1
+  
   return (
     <div className="replicable-cell">
       {/* 渲染所有字段组 */}
       {Array.from({ length: replicaCount }).map((_, index) => renderFieldGroup(index))}
       
-      {/* 添加按钮 */}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={(e) => handleAdd(e)}
-        className="mt-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-      >
-        <Plus className="h-4 w-4 mr-1" />
-        添加
-      </Button>
+      {/* 添加按钮 - 仅在非复杂表单且只有一个副本时显示 */}
+      {shouldShowAddButton && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={(e) => handleAdd(e)}
+          className="mt-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          添加
+        </Button>
+      )}
     </div>
   )
 }

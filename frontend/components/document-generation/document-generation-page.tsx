@@ -56,6 +56,7 @@ export function DocumentGenerationPage() {
   const lastSavedTemplateContentRef = useRef<JSONContent | null>(null) // 跟踪保存的templateContent
   const hasInitializedCaseIdRef = useRef(false)
   const hasInitializedTemplateRef = useRef(false)
+  const justSavedRef = useRef<number | null>(null) // 标记刚刚保存的时间戳，暂时跳过检查
   
   // 使用ref来存储最新的formData和templateContent，避免闭包问题
   const formDataRef = useRef<Record<string, any>>(formData)
@@ -194,6 +195,16 @@ export function DocumentGenerationPage() {
     
     // 延迟检测，等待 DOM 渲染完成
     const timeoutId = setTimeout(() => {
+      // 如果刚刚保存（3秒内），跳过检查（避免保存后立即误判为有变化）
+      if (justSavedRef.current && Date.now() - justSavedRef.current < 3000) {
+        console.log("DocumentGenerationPage: 刚刚保存，跳过检查")
+        return
+      }
+      // 如果超过3秒，清除标志
+      if (justSavedRef.current && Date.now() - justSavedRef.current >= 3000) {
+        justSavedRef.current = null
+      }
+      
       // 从 DOM 读取当前值
       const currentFormDataFromDOM: Record<string, any> = {}
       const allInputs = document.querySelectorAll('input[data-field-key], textarea[data-field-key]')
@@ -281,7 +292,12 @@ export function DocumentGenerationPage() {
         if (hasChanges) {
           return true
         }
-        // 如果没有变化，保持之前的状态（不覆盖事件设置的状态）
+        // 如果没有变化，且之前是 false（已保存状态），保持 false
+        // 这样可以避免保存后立即变为"未保存"
+        if (!prev) {
+          return false
+        }
+        // 如果之前是 true，保持 true（可能是事件设置的）
         return prev
       })
     }, 500) // 延迟 500ms，等待 DOM 渲染完成
@@ -292,6 +308,16 @@ export function DocumentGenerationPage() {
   // 立即检查未保存状态的函数
   const checkUnsavedChangesImmediately = useCallback(() => {
     if (!generationId) return
+    
+    // 如果刚刚保存（3秒内），跳过检查（避免保存后立即误判为有变化）
+    if (justSavedRef.current && Date.now() - justSavedRef.current < 3000) {
+      console.log("DocumentGenerationPage: 刚刚保存，跳过立即检查")
+      return
+    }
+    // 如果超过3秒，清除标志
+    if (justSavedRef.current && Date.now() - justSavedRef.current >= 3000) {
+      justSavedRef.current = null
+    }
     
     const currentFormDataFromDOM: Record<string, any> = {}
     const allInputs = document.querySelectorAll('input[data-field-key]:not([type="radio"]):not([type="checkbox"]), textarea[data-field-key]')
@@ -461,6 +487,16 @@ export function DocumentGenerationPage() {
     // 延迟启动检测，避免初始化时误触发
     const timeoutId = setTimeout(() => {
       const intervalId = setInterval(() => {
+        // 如果刚刚保存（3秒内），跳过检查（避免保存后立即误判为有变化）
+        if (justSavedRef.current && Date.now() - justSavedRef.current < 3000) {
+          console.log("DocumentGenerationPage: 刚刚保存，跳过定期检查")
+          return
+        }
+        // 如果超过3秒，清除标志
+        if (justSavedRef.current && Date.now() - justSavedRef.current >= 3000) {
+          justSavedRef.current = null
+        }
+        
         const currentFormDataFromDOM: Record<string, any> = {}
         const allInputs = document.querySelectorAll('input[data-field-key]:not([type="radio"]):not([type="checkbox"]), textarea[data-field-key]')
 
@@ -585,25 +621,24 @@ export function DocumentGenerationPage() {
             }
             newFormData[fieldKey][index] = value
           } else {
-            // 处理普通字段（只有当formData中没有该字段时才使用DOM值）
-            if (!(fieldKey in newFormData)) {
-              newFormData[fieldKey] = value
-            }
+            // 处理普通字段：优先使用DOM中的值（因为DOM中的值是最新的用户输入）
+            // 这样可以确保保存时使用的是用户在页面上看到和输入的最新值
+            newFormData[fieldKey] = value
           }
         }
       })
       
-      // 从DOM读取radio按钮的值
+      // 从DOM读取radio按钮的值（优先使用DOM中的值）
       const allRadios = document.querySelectorAll('input[type="radio"][data-field-key]:checked')
       allRadios.forEach((radio) => {
         const fieldKey = radio.getAttribute('data-field-key')
         const value = (radio as HTMLInputElement).value
-        if (fieldKey && !(fieldKey in newFormData)) {
+        if (fieldKey) {
           newFormData[fieldKey] = value
         }
       })
       
-      // 从DOM读取checkbox的值（多选）
+      // 从DOM读取checkbox的值（多选，优先使用DOM中的值）
       const checkboxGroups = new Map<string, string[]>()
       const allCheckboxes = document.querySelectorAll('input[type="checkbox"][data-field-key]')
       allCheckboxes.forEach((checkbox) => {
@@ -620,18 +655,16 @@ export function DocumentGenerationPage() {
         }
       })
       checkboxGroups.forEach((values, fieldKey) => {
-        if (!(fieldKey in newFormData)) {
-          newFormData[fieldKey] = values
-        }
+        newFormData[fieldKey] = values
       })
       
-      // 从DOM读取select的值
+      // 从DOM读取select的值（优先使用DOM中的值）
       const allSelects = document.querySelectorAll('[role="combobox"][data-field-key]')
       allSelects.forEach((select) => {
         const fieldKey = select.getAttribute('data-field-key')
         // Select组件的值需要通过其内部的input获取
         const selectInput = select.querySelector('input[value]') as HTMLInputElement
-        if (fieldKey && selectInput && !(fieldKey in newFormData)) {
+        if (fieldKey && selectInput) {
           newFormData[fieldKey] = selectInput.value
         }
       })
@@ -652,9 +685,16 @@ export function DocumentGenerationPage() {
       //   }
       // }
 
-      // 关键修复：合并现有的 formData（保留非输入框字段，包括段落计数等）
+      // 关键修复：优先使用newFormData（DOM中的最新值），然后保留formData中的特殊字段
       // 确保所有 __paragraph_count_* 和 __template_content__ 等特殊key都被保留
-      const currentFormData = { ...formData, ...newFormData }
+      const currentFormData = { ...newFormData }
+      
+      // 保留formData中的特殊字段（段落计数、模板内容等），这些不在DOM中
+      Object.keys(formData).forEach(key => {
+        if (key.startsWith("__paragraph_count_") || key === "__template_content__") {
+          currentFormData[key] = formData[key]
+        }
+      })
       
       // 关键修复：从templateContent中扫描所有单元格，确保所有需要段落数量key的单元格都有对应的key
       // 这样可以避免因为cellId不稳定导致的段落数量key丢失
@@ -823,7 +863,13 @@ export function DocumentGenerationPage() {
       // 更新 formData 以确保与服务器同步（使用包含段落数量key的数据）
       setFormData(savedDataWithParagraphCounts)
       
-      // 清除未保存状态
+      // 关键修复：立即同步 formDataRef，确保后续的比较逻辑使用正确的值
+      formDataRef.current = savedDataWithParagraphCounts
+      
+      // 标记刚刚保存的时间戳，暂时跳过检查逻辑（避免保存后立即误判为有变化）
+      justSavedRef.current = Date.now()
+      
+      // 清除未保存状态（在更新 ref 之后）
       setHasUnsavedChanges(false)
       
       toast({

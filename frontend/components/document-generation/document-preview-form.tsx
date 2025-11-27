@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useCallback, useState } from "react"
+import React, { useEffect, useRef, useCallback, useState, useMemo } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
 import StarterKit from "@tiptap/starter-kit"
@@ -25,6 +25,9 @@ import { identifyReplicableCells, type ReplicableCellInfo } from "./replicable-c
 import { createRoot } from "react-dom/client"
 import { ReplicableCell } from "./replicable-cell"
 import { updateRowExportEnabled, extractTableRows } from "./table-row-export-control"
+import { loadTemplateRenderConfig } from "@/lib/template-config-loader"
+import { extractPlaceholders } from "@/lib/placeholder-extraction"
+import { hasMixedContent } from "@/lib/content-type-detector"
 
 interface DocumentPreviewFormProps {
   /** 文档内容（ProseMirror JSON） */
@@ -70,6 +73,60 @@ export function DocumentPreviewForm({
   const checkboxStatesRef = useRef<Map<string, boolean>>(new Map()) // 存储每个checkbox的状态
   const latestContentRef = useRef<JSONContent | null>(content || null) // 存储最新的content
   
+  // 加载模板渲染配置
+  const renderConfig = React.useMemo(() => {
+    return loadTemplateRenderConfig(
+      {
+        category: templateCategory || null,
+        // 可以从模板元数据中加载配置，这里暂时使用默认配置
+        renderConfig: undefined,
+      },
+      templateCategory || null
+    )
+  }, [templateCategory])
+  
+  // 检测是否为混合内容
+  const isMixedContent = React.useMemo(() => {
+    return hasMixedContent(content)
+  }, [content])
+  
+  // 如果配置允许，从非表格节点提取占位符并合并
+  const enhancedPlaceholders = React.useMemo(() => {
+    if (!content) return placeholders
+    
+    const config = renderConfig.placeholderExtraction
+    if (config?.extractFromNonTable) {
+      // 从所有节点类型提取占位符
+      const extractedPlaceholders = extractPlaceholders(content, {
+        extractFromNonTable: true,
+        supportedNodeTypes: config.supportedNodeTypes || ["paragraph", "heading", "tableCell"],
+      })
+      
+      // 合并现有占位符和提取的占位符
+      const placeholderMap = new Map<string, PlaceholderInfo>()
+      
+      // 先添加现有占位符
+      placeholders.forEach((p) => {
+        placeholderMap.set(p.name, p)
+      })
+      
+      // 添加提取的占位符（如果不存在）
+      extractedPlaceholders.forEach((name) => {
+        if (!placeholderMap.has(name)) {
+          placeholderMap.set(name, {
+            id: placeholderMap.size + 1,
+            name,
+            type: "text", // 默认类型
+          })
+        }
+      })
+      
+      return Array.from(placeholderMap.values())
+    }
+    
+    return placeholders
+  }, [content, placeholders, renderConfig])
+  
   // 保持 formDataRef 与 formData 同步
   useEffect(() => {
     formDataRef.current = formData || {}
@@ -88,10 +145,10 @@ export function DocumentPreviewForm({
     return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
   }, [])
   
-  // 获取占位符信息
+  // 获取占位符信息（使用增强的占位符列表）
   const getPlaceholderInfo = useCallback((fieldKey: string): PlaceholderInfo | undefined => {
-    return placeholders.find((p) => p.name === fieldKey)
-  }, [placeholders])
+    return enhancedPlaceholders.find((p) => p.name === fieldKey)
+  }, [enhancedPlaceholders])
   
   // 获取表单值
   const getFormValue = useCallback((fieldKey: string) => {
@@ -217,13 +274,15 @@ export function DocumentPreviewForm({
       }),
       TableRowWithAttrs.configure({
         HTMLAttributes: {},
+        // 要素式模板禁用表格行勾选功能
+        isComplexForm: templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式"),
       }),
       TableHeader.configure({
         HTMLAttributes: {},
       }),
       ReplicableTableCellWithAttrs.configure({
         HTMLAttributes: {},
-        getPlaceholderInfos: () => placeholders,
+        getPlaceholderInfos: () => enhancedPlaceholders,
         getFormData: () => {
           // 使用 ref 获取最新的 formData，避免闭包问题
           return formDataRef.current || {}
@@ -831,14 +890,29 @@ export function DocumentPreviewForm({
       <style jsx global>{templateBaseStyles}</style>
       <style jsx global>{`
         /* 判断是否是要素式模板的函数式CSS类 */
-        ${templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式") ? `
+        ${templateCategory && (templateCategory.includes("要素") || templateCategory === "要素式") && !(templateCategory === "混合式" || templateCategory.includes("混合")) ? `
           /* 要素式模板：表格单元格布局优化 - 50%:50%布局 */
           /* 表格单元格中包含占位符字段时，使用flex布局实现50%:50%分配 */
           
-          /* 要素式模板：确保表格使用固定布局 */
+          /* 要素式模板：确保表格使用固定布局，但允许列宽根据内容调整 */
           .template-doc table {
             table-layout: fixed !important;
             width: 100% !important;
+            min-width: 100% !important;
+          }
+          
+          /* 确保表格列宽不被过度限制 */
+          .template-doc table td,
+          .template-doc table th {
+            min-width: 80px !important;
+            overflow: visible !important;
+          }
+          
+          /* 第一列（标签列）应该有足够的宽度 */
+          .template-doc table tr td:first-child:not(.export-control-checkbox-cell),
+          .template-doc table tr th:first-child:not(.export-control-checkbox-cell) {
+            min-width: 120px !important;
+            white-space: nowrap !important;
           }
           
           /* 要素式模板：行使用相对定位，为checkbox覆盖层提供定位上下文 */
@@ -921,9 +995,42 @@ export function DocumentPreviewForm({
           .template-doc table td .placeholder-form-field,
           .template-doc table th .placeholder-form-field {
             display: inline-block;
-            width: 50%;
+            width: auto;
+            min-width: 150px;
+            max-width: 100%;
             vertical-align: middle;
             margin-left: auto;
+          }
+          
+          /* 要素式模板：ReplicableCell 容器应该有足够的宽度 */
+          .template-doc table td .replicable-cell,
+          .template-doc table th .replicable-cell {
+            width: 100%;
+            min-width: 300px;
+            max-width: 100%;
+            display: block;
+          }
+          
+          /* 要素式模板：ReplicableCell 中的输入框应该有足够的宽度 */
+          .template-doc table td .replicable-cell .placeholder-form-field,
+          .template-doc table th .replicable-cell .placeholder-form-field {
+            display: block;
+            width: 100%;
+            min-width: 200px;
+            max-width: 100%;
+            margin-bottom: 8px;
+          }
+          
+          .template-doc table td .replicable-cell .placeholder-form-field input,
+          .template-doc table td .replicable-cell .placeholder-form-field textarea,
+          .template-doc table td .replicable-cell .placeholder-form-field [role="combobox"],
+          .template-doc table th .replicable-cell .placeholder-form-field input,
+          .template-doc table th .replicable-cell .placeholder-form-field textarea,
+          .template-doc table th .replicable-cell .placeholder-form-field [role="combobox"] {
+            width: 100% !important;
+            min-width: 200px !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
           }
 
           /* 要素式模板：确保输入框样式统一 */
@@ -954,20 +1061,47 @@ export function DocumentPreviewForm({
             text-align: left;
           }
         ` : `
-          /* 陈述式模板：表格保持原有的文档结构，不强制表单布局 */
+          /* 陈述式/混合式模板：表格保持原有的文档结构，不强制表单布局 */
           .template-doc table {
             border-collapse: collapse;
-            width: 100%;
+            width: 100% !important;
             margin: 16px 0;
+            table-layout: auto !important;
+            max-width: 100% !important;
           }
 
           .template-doc table td,
           .template-doc table th {
             border: 1px solid #d1d5db;
-            padding: 8px 12px;
+            padding: 8px 12px !important;
             text-align: left;
             vertical-align: top;
             position: relative;
+            min-width: 100px !important;
+            box-sizing: border-box !important;
+          }
+          
+          /* 确保表格列宽根据内容自适应，不被限制 */
+          .template-doc table td:not(.export-control-checkbox-cell),
+          .template-doc table th:not(.export-control-checkbox-cell) {
+            width: auto !important;
+            max-width: none !important;
+            min-width: 100px !important;
+          }
+          
+          /* 确保第一列（标签列）有足够的宽度 */
+          .template-doc table tr td:first-child:not(.export-control-checkbox-cell),
+          .template-doc table tr th:first-child:not(.export-control-checkbox-cell) {
+            min-width: 150px !important;
+            white-space: nowrap !important;
+          }
+          
+          /* 确保表格单元格内容可以正常显示 */
+          .template-doc table td,
+          .template-doc table th {
+            overflow: visible !important;
+            word-wrap: break-word !important;
+            word-break: break-word !important;
           }
           
           /* 确保checkbox单元格不影响表格布局 */
@@ -1030,31 +1164,34 @@ export function DocumentPreviewForm({
             border-width: 0 2px 2px 0 !important;
           }
 
-          /* 陈述式模板：表格中的占位符字段保持自然布局 */
+          /* 陈述式/混合式模板：表格中的占位符字段保持自然布局 */
           .template-doc table td .placeholder-form-field,
           .template-doc table th .placeholder-form-field {
             display: inline-block;
             width: auto;
-            min-width: 120px;
+            min-width: 150px;
+            max-width: 100%;
             vertical-align: baseline;
           }
 
-          /* 陈述式模板：表格中的输入框样式 */
+          /* 陈述式/混合式模板：表格中的输入框样式 */
           .template-doc table td .placeholder-form-field input,
           .template-doc table td .placeholder-form-field textarea,
           .template-doc table td .placeholder-form-field [role="combobox"],
           .template-doc table th .placeholder-form-field input,
           .template-doc table th .placeholder-form-field textarea,
           .template-doc table th .placeholder-form-field [role="combobox"] {
-            width: 100%;
-            min-width: 120px;
-            height: 32px;
-            padding: 4px 8px;
-            font-size: 14px;
-            line-height: 1.5;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            background-color: #ffffff;
+            width: 100% !important;
+            min-width: 150px !important;
+            max-width: 100% !important;
+            height: 32px !important;
+            padding: 4px 8px !important;
+            font-size: 14px !important;
+            line-height: 1.5 !important;
+            border: 1px solid #d1d5db !important;
+            border-radius: 4px !important;
+            background-color: #ffffff !important;
+            box-sizing: border-box !important;
           }
 
           .template-doc table td .placeholder-form-field textarea,
@@ -1069,15 +1206,67 @@ export function DocumentPreviewForm({
         .template-doc .placeholder-form-field input,
         .template-doc .placeholder-form-field textarea,
         .template-doc .placeholder-form-field [role="combobox"] {
-          width: 100%;
-          height: 32px;
-          padding: 4px 8px;
-          font-size: 14px;
-          line-height: 1.5;
-          border: 1px solid #d1d5db;
-          border-radius: 4px;
-          background-color: #ffffff;
+          width: 100% !important;
+          min-width: 150px !important;
+          height: 32px !important;
+          padding: 4px 8px !important;
+          font-size: 14px !important;
+          line-height: 1.5 !important;
+          border: 1px solid #d1d5db !important;
+          border-radius: 4px !important;
+          background-color: #ffffff !important;
+          box-sizing: border-box !important;
           transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        
+        /* 确保输入框可以正常编辑 */
+        .template-doc .placeholder-form-field input:not([disabled]),
+        .template-doc .placeholder-form-field textarea:not([disabled]),
+        .template-doc .placeholder-form-field [role="combobox"]:not([disabled]) {
+          pointer-events: auto !important;
+          cursor: text !important;
+        }
+        
+        /* 确保占位符字段容器不限制子元素 */
+        .template-doc .placeholder-form-field {
+          display: inline-block !important;
+          min-width: 150px !important;
+          max-width: 100% !important;
+          vertical-align: baseline !important;
+          position: relative !important;
+          z-index: 1 !important;
+        }
+        
+        /* 确保输入框在表格单元格中正常显示 */
+        .template-doc table td .placeholder-form-field,
+        .template-doc table th .placeholder-form-field {
+          display: inline-block !important;
+          width: auto !important;
+          min-width: 150px !important;
+          max-width: calc(100% - 16px) !important;
+          margin: 2px 0 !important;
+        }
+        
+        /* 确保输入框本身可以正常显示和编辑 */
+        .template-doc .placeholder-form-field input,
+        .template-doc .placeholder-form-field textarea,
+        .template-doc .placeholder-form-field select {
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+        
+        /* 段落和标题中的占位符字段 */
+        .template-doc p .placeholder-form-field,
+        .template-doc h1 .placeholder-form-field,
+        .template-doc h2 .placeholder-form-field,
+        .template-doc h3 .placeholder-form-field,
+        .template-doc h4 .placeholder-form-field,
+        .template-doc h5 .placeholder-form-field,
+        .template-doc h6 .placeholder-form-field {
+          display: inline-block !important;
+          min-width: 200px !important;
+          margin: 0 4px !important;
         }
 
         .template-doc .placeholder-form-field textarea {

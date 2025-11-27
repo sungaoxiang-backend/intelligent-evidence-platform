@@ -211,8 +211,9 @@ export const TableWithAttrs = Table.extend({
     const style = buildTableStyle(attrs)
     const colWidths: number[] | null = attrs.colWidths
 
+    // 确保 colWidths 是数组且不为空
     const colgroup =
-      colWidths && colWidths.length
+      Array.isArray(colWidths) && colWidths.length > 0
         ? [
             "colgroup",
             {},
@@ -237,7 +238,13 @@ export const TableWithAttrs = Table.extend({
   },
 })
 
-export const TableRowWithAttrs = TableRow.extend({
+export const TableRowWithAttrs = TableRow.extend<{ isComplexForm?: boolean }>({
+  addOptions() {
+    return {
+      ...this.parent?.(),
+      isComplexForm: false,
+    }
+  },
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -256,10 +263,16 @@ export const TableRowWithAttrs = TableRow.extend({
       const exportEnabled = node.attrs.exportEnabled !== false
       console.log("TableRowWithAttrs: exportEnabled", exportEnabled)
       
-      // 创建checkbox容器（作为第一个单元格）
+      // 检查是否是复杂表单，如果是则禁用checkbox
+      const isComplexForm = this.options.isComplexForm || false
+      
+      // 创建checkbox容器（作为第一个单元格，仅在非复杂表单时显示）
       const checkboxCell = document.createElement("td")
       checkboxCell.className = "export-control-checkbox-cell"
       checkboxCell.setAttribute("data-export-control", "true")
+      if (isComplexForm) {
+        checkboxCell.style.display = "none"
+      }
       // 使用较小的宽度，减少占据空间
       checkboxCell.style.cssText = "width: 24px !important; min-width: 24px !important; max-width: 24px !important; padding: 0 !important; vertical-align: middle !important; text-align: center !important; border-right: 1px solid #e5e7eb !important; box-sizing: border-box !important; display: table-cell !important; visibility: visible !important; opacity: 1 !important;"
       
@@ -555,17 +568,58 @@ export const TableCellWithAttrs = TableCell.extend({
       backgroundColor: { default: null },
       cellWidth: { default: null },
       verticalAlign: { default: null },
+      colspan: {
+        default: 1,
+        parseHTML: (element) => {
+          const colspan = element.getAttribute("colspan")
+          return colspan ? parseInt(colspan, 10) : 1
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.colspan || attributes.colspan === 1) {
+            return {}
+          }
+          return {
+            colspan: attributes.colspan,
+          }
+        },
+      },
+      rowspan: {
+        default: 1,
+        parseHTML: (element) => {
+          const rowspan = element.getAttribute("rowspan")
+          return rowspan ? parseInt(rowspan, 10) : 1
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.rowspan || attributes.rowspan === 1) {
+            return {}
+          }
+          return {
+            rowspan: attributes.rowspan,
+          }
+        },
+      },
     }
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const attrs = node.attrs as TableCellAttrs
+    const attrs = node.attrs as TableCellAttrs & { colspan?: number; rowspan?: number }
     const style = buildCellStyle(attrs)
+    
+    // 合并 colspan 和 rowspan 属性
+    const cellAttrs: Record<string, any> = {}
+    if (attrs.colspan && attrs.colspan > 1) {
+      cellAttrs.colspan = attrs.colspan
+    }
+    if (attrs.rowspan && attrs.rowspan > 1) {
+      cellAttrs.rowspan = attrs.rowspan
+    }
+    
     return [
       node.attrs.isHeader ? "th" : "td",
       mergeAttributes(
         this.options.HTMLAttributes,
         HTMLAttributes,
+        cellAttrs,
         style ? { style } : {}
       ),
       0,
