@@ -298,6 +298,8 @@ html {
     vertical-align: top;
     box-sizing: border-box;
     position: relative;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 
     > * {
       margin-bottom: 0;

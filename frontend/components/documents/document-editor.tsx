@@ -27,6 +27,16 @@ import {
   Heading2,
   Heading3,
   Table,
+  PlusCircle,
+  MinusCircle,
+  Merge,
+  Split,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Columns,
+  Rows,
 } from "lucide-react"
 import {
   HeadingWithAttrs,
@@ -41,6 +51,7 @@ import {
 } from "@/components/template-editor/extensions"
 import { normalizeHardBreaks } from "@/components/template-editor/utils"
 import { FontSize } from "./font-size-extension"
+// import { TableContextMenu } from "./table-context-menu"
 import { cn } from "@/lib/utils"
 
 interface DocumentEditorProps {
@@ -84,6 +95,7 @@ export function DocumentEditor({
       HeadingWithAttrs,
       TableWithAttrs.configure({
         resizable: true,
+        allowTableNodeSelection: true, // 允许表格选择，支持单元格多选
         HTMLAttributes: {},
       }),
       TableRow.configure({
@@ -167,6 +179,38 @@ export function DocumentEditor({
               // 这样可以避免 WPS 粘贴时带来的过大行高
               if (value < 1.0 || value > 1.8 || (value > 5 && value > 25)) {
                 el.style.lineHeight = ""
+              }
+            }
+          }
+          
+          // 5. 处理表格单元格：防止内容溢出
+          if (el.tagName === "TD" || el.tagName === "TH") {
+            // 移除可能导致溢出的宽度样式
+            if (el.style.width === "auto" || el.style.minWidth) {
+              // 移除 auto 宽度和过大的 min-width
+              const minWidth = el.style.minWidth
+              if (minWidth) {
+                const minWidthValue = parseFloat(minWidth)
+                // 如果 min-width 超过 500px，移除它（通常是不合理的值）
+                if (minWidthValue > 500) {
+                  el.style.minWidth = ""
+                }
+              }
+              el.style.width = ""
+            }
+            
+            // 确保 box-sizing
+            el.style.boxSizing = "border-box"
+            
+            // 添加自动换行样式，防止内容溢出
+            el.style.wordWrap = "break-word"
+            el.style.overflowWrap = "break-word"
+            
+            // 移除可能导致溢出的 max-width（如果设置得过大）
+            if (el.style.maxWidth) {
+              const maxWidthValue = parseFloat(el.style.maxWidth)
+              if (maxWidthValue > 1000) {
+                el.style.maxWidth = ""
               }
             }
           }
@@ -307,8 +351,110 @@ export function DocumentEditor({
             variant="ghost"
             size="sm"
             onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            title="插入表格"
           >
             <Table className="h-4 w-4" />
+          </Button>
+          {/* 表格操作按钮 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Tiptap 的 addColumnBefore 会自动将焦点设置到新添加的列
+              editor.chain().focus().addColumnBefore().run()
+            }}
+            disabled={!editor.can().addColumnBefore()}
+            title="在左侧添加列"
+          >
+            <div className="flex items-center gap-0.5">
+              <ChevronLeft className="h-3 w-3" />
+              <PlusCircle className="h-3.5 w-3.5" />
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Tiptap 的 addColumnAfter 会自动将焦点设置到新添加的列
+              editor.chain().focus().addColumnAfter().run()
+            }}
+            disabled={!editor.can().addColumnAfter()}
+            title="在右侧添加列"
+          >
+            <div className="flex items-center gap-0.5">
+              <PlusCircle className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3 w-3" />
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().deleteColumn().run()}
+            disabled={!editor.can().deleteColumn()}
+            title="删除列"
+          >
+            <Columns className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Tiptap 的 addRowBefore 会自动将焦点设置到新添加的行
+              editor.chain().focus().addRowBefore().run()
+            }}
+            disabled={!editor.can().addRowBefore()}
+            title="在上方添加行"
+          >
+            <div className="flex flex-col items-center gap-0.5">
+              <ChevronUp className="h-3 w-3" />
+              <PlusCircle className="h-3.5 w-3.5" />
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Tiptap 的 addRowAfter 会自动将焦点设置到新添加的行
+              editor.chain().focus().addRowAfter().run()
+            }}
+            disabled={!editor.can().addRowAfter()}
+            title="在下方添加行"
+          >
+            <div className="flex flex-col items-center gap-0.5">
+              <PlusCircle className="h-3.5 w-3.5" />
+              <ChevronDown className="h-3 w-3" />
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().deleteRow().run()}
+            disabled={!editor.can().deleteRow()}
+            title="删除行"
+          >
+            <Rows className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // 尝试合并单元格
+              // 注意：需要先选中多个单元格（可以通过拖拽或 Shift+点击）
+              editor.chain().focus().mergeCells().run()
+            }}
+            disabled={!editor.can().mergeCells?.()}
+            title="合并单元格（需要选中至少2个单元格，可通过拖拽或 Shift+点击选择）"
+          >
+            <Merge className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().splitCell().run()}
+            disabled={!editor.can().splitCell?.()}
+            title="拆分单元格（需要选中已合并的单元格）"
+          >
+            <Split className="h-4 w-4" />
           </Button>
         </div>
         <div className="flex gap-2">
