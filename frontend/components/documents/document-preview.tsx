@@ -12,7 +12,9 @@ import TableRow from "@tiptap/extension-table-row"
 import TableHeader from "@tiptap/extension-table-header"
 import HardBreak from "@tiptap/extension-hard-break"
 import { Button } from "@/components/ui/button"
-import { Edit, Download } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { PlayCircle } from "lucide-react"
 import {
   HeadingWithAttrs,
   ParagraphWithAttrs,
@@ -24,15 +26,19 @@ import { cn } from "@/lib/utils"
 
 interface DocumentPreviewProps {
   content: JSONContent | null
+  status?: "draft" | "published"
   onEdit?: () => void
-  onExport?: () => void
+  onGenerate?: () => void
+  onStatusChange?: (status: "draft" | "published") => void
   className?: string
 }
 
 export function DocumentPreview({
   content,
+  status,
   onEdit,
-  onExport,
+  onGenerate,
+  onStatusChange,
   className,
 }: DocumentPreviewProps) {
   const editor = useEditor({
@@ -95,21 +101,63 @@ export function DocumentPreview({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* 工具栏 */}
-      {(onEdit || onExport) && (
+      {/* 工具栏 - 统一布局，避免抖动 */}
+      {(onEdit || onGenerate || onStatusChange) && (
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-semibold">预览</h2>
-          <div className="flex gap-2">
-            {onExport && (
-              <Button variant="outline" size="sm" onClick={onExport}>
-                <Download className="h-4 w-4 mr-2" />
-                导出 PDF
+          <div className="flex items-center gap-3">
+            {onStatusChange && (
+              <div className="flex items-center gap-2.5">
+                <Label 
+                  htmlFor="status-switch" 
+                  className={cn(
+                    "text-sm font-medium transition-colors cursor-pointer",
+                    status === "draft" ? "text-gray-700" : "text-gray-400"
+                  )}
+                >
+                  草稿
+                </Label>
+                <Switch
+                  id="status-switch"
+                  checked={status === "published"}
+                  onCheckedChange={(checked) => {
+                    onStatusChange(checked ? "published" : "draft")
+                  }}
+                  className={cn(
+                    "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300"
+                  )}
+                />
+                <Label 
+                  htmlFor="status-switch" 
+                  className={cn(
+                    "text-sm font-medium transition-colors cursor-pointer",
+                    status === "published" ? "text-green-700" : "text-gray-400"
+                  )}
+                >
+                  已发布
+                </Label>
+              </div>
+            )}
+            {/* 草稿状态：模板编辑按钮 */}
+            {onEdit && (
+              <Button 
+                size="sm" 
+                onClick={onEdit} 
+                className="min-w-[110px] flex items-center justify-center"
+              >
+                <PlayCircle className="h-4 w-4 mr-1.5" />
+                <span>进入编辑模式</span>
               </Button>
             )}
-            {onEdit && (
-              <Button size="sm" onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                编辑
+            {/* 已发布状态：文书生成按钮 */}
+            {onGenerate && (
+              <Button 
+                size="sm" 
+                onClick={onGenerate} 
+                className="min-w-[110px] flex items-center justify-center"
+              >
+                <PlayCircle className="h-4 w-4 mr-1.5" />
+                <span>进入表单模式</span>
               </Button>
             )}
           </div>

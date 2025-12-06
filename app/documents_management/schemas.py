@@ -32,7 +32,9 @@ class DocumentResponse(BaseModel):
     name: str = Field(..., description="文书名称")
     description: Optional[str] = Field(None, description="文书描述")
     category: Optional[str] = Field(None, description="分类名称")
+    status: str = Field(..., description="状态：draft（草稿）/published（发布）")
     content_json: Dict[str, Any] = Field(..., description="ProseMirror JSON 格式的文档内容")
+    placeholder_metadata: Optional[Dict[str, Any]] = Field(None, description="占位符元数据")
     created_by_id: Optional[int] = Field(None, description="创建人ID")
     updated_by_id: Optional[int] = Field(None, description="更新人ID")
     created_at: datetime = Field(..., description="创建时间")
@@ -64,4 +66,22 @@ class DocumentExportRequest(BaseModel):
     
     html_content: str = Field(..., description="HTML 内容（由前端从 ProseMirror JSON 转换生成）")
     filename: Optional[str] = Field(None, description="导出文件名（可选）")
+
+
+class DocumentStatusUpdateRequest(BaseModel):
+    """更新文书状态请求"""
+    
+    status: str = Field(..., description="状态：draft（草稿）/published（发布）")
+
+
+class PlaceholderMetadataUpdateRequest(BaseModel):
+    """更新占位符元数据请求"""
+    
+    placeholder_metadata: Dict[str, Any] = Field(..., description="占位符元数据")
+
+
+class DocumentGenerateRequest(BaseModel):
+    """生成文书请求（基于表单数据）"""
+    
+    form_data: Dict[str, Any] = Field(..., description="表单数据，键为占位符名称，值为填充的值")
 

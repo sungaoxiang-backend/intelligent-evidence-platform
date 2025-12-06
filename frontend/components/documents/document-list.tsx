@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { FileText, Search, Edit, Trash2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import type { Document } from "@/lib/documents-api"
 import { cn } from "@/lib/utils"
 
@@ -29,9 +30,11 @@ interface DocumentListProps {
   documents: Document[]
   searchTerm: string
   category: string
+  status: string
   selectedDocumentId?: number
   onSearchChange: (value: string) => void
   onCategoryChange: (value: string) => void
+  onStatusChange: (value: string) => void
   onDocumentSelect: (document: Document) => void
   onEdit?: (document: Document) => void
   onDelete?: (document: Document) => void
@@ -41,9 +44,11 @@ export function DocumentList({
   documents,
   searchTerm,
   category,
+  status,
   selectedDocumentId,
   onSearchChange,
   onCategoryChange,
+  onStatusChange,
   onDocumentSelect,
   onEdit,
   onDelete,
@@ -88,6 +93,7 @@ export function DocumentList({
             className="pl-9"
           />
         </div>
+        <div className="grid grid-cols-2 gap-2">
         <Select value={category || "all"} onValueChange={(value) => onCategoryChange(value === "all" ? "" : value)}>
           <SelectTrigger>
             <SelectValue placeholder="全部分类" />
@@ -101,6 +107,17 @@ export function DocumentList({
             ))}
           </SelectContent>
         </Select>
+          <Select value={status || "all"} onValueChange={(value) => onStatusChange(value === "all" ? "" : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="全部状态" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="draft">草稿</SelectItem>
+              <SelectItem value="published">已发布</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 文书列表 */}
@@ -129,7 +146,19 @@ export function DocumentList({
                         {document.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {document.status && (
+                        <Badge
+                          className={cn(
+                            "text-xs font-medium",
+                            document.status === "published"
+                              ? "bg-green-100 text-green-800 hover:bg-green-100"
+                              : "bg-gray-200 text-gray-800 hover:bg-gray-200"
+                          )}
+                        >
+                          {document.status === "published" ? "已发布" : "草稿"}
+                        </Badge>
+                      )}
                       {document.category && (
                         <span className="text-xs px-2 py-1 bg-secondary rounded">
                           {document.category}
@@ -179,7 +208,7 @@ export function DocumentList({
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除文书"{documentToDelete?.name}"吗？此操作无法撤销。
+              确定要删除文书"{documentToDelete?.name}"（状态：{documentToDelete?.status === "published" ? "已发布" : "草稿"}）吗？此操作无法撤销。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

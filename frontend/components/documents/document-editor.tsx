@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useCallback } from "react"
+import React, { useEffect, useRef, useCallback, useState } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
 import StarterKit from "@tiptap/starter-kit"
@@ -37,6 +37,7 @@ import {
   Rows,
   ChevronDown as ChevronDownIcon,
 } from "lucide-react"
+import { X, Check } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +59,8 @@ import {
 } from "@/components/template-editor/extensions"
 import { normalizeHardBreaks } from "@/components/template-editor/utils"
 import { FontSize } from "./font-size-extension"
+import { PlaceholderChipExtension } from "./placeholder-chip-extension"
+import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
 // import { TableContextMenu } from "./table-context-menu"
 import { cn } from "@/lib/utils"
 
@@ -69,6 +72,12 @@ interface DocumentEditorProps {
   onExport?: () => void
   isLoading?: boolean
   className?: string
+  placeholderMetadata?: Record<string, {
+    name: string
+    type: "text" | "radio" | "checkbox" | ""
+    options: string[]
+  }>
+  onPlaceholderMetadataUpdate?: (metadata: Record<string, any>) => void
 }
 
 export function DocumentEditor({
@@ -79,13 +88,38 @@ export function DocumentEditor({
   onExport,
   isLoading = false,
   className,
+  placeholderMetadata,
+  onPlaceholderMetadataUpdate,
 }: DocumentEditorProps) {
   const contentSetRef = useRef(false)
+  const [selectedPlaceholder, setSelectedPlaceholder] = useState<string | null>(null)
+  const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false)
 
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
     return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
   }, [])
+
+  const handlePlaceholderClick = useCallback((fieldKey: string) => {
+    setSelectedPlaceholder(fieldKey)
+    setIsMetadataDialogOpen(true)
+  }, [])
+
+  const handleSaveMetadata = useCallback((metadata: {
+    name: string
+    type: "text" | "radio" | "checkbox" | ""
+    options: string[]
+  }) => {
+    if (!placeholderMetadata || !onPlaceholderMetadataUpdate || !selectedPlaceholder) return
+
+    const updated = {
+      ...placeholderMetadata,
+      [selectedPlaceholder]: metadata,
+    }
+    onPlaceholderMetadataUpdate(updated)
+    setIsMetadataDialogOpen(false)
+    setSelectedPlaceholder(null)
+  }, [placeholderMetadata, onPlaceholderMetadataUpdate, selectedPlaceholder])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -123,6 +157,9 @@ export function DocumentEditor({
       TextStyle, // 必须在 FontSize 之前
       Color,
       FontSize, // 依赖于 TextStyle，必须在之后加载
+      PlaceholderChipExtension.configure({
+        onPlaceholderClick: handlePlaceholderClick,
+      }),
     ],
     content: normalizeContent(initialContent) || { type: "doc", content: [] },
     editable: !isLoading,
@@ -493,13 +530,17 @@ export function DocumentEditor({
         </div>
         <div className="flex gap-2 flex-shrink-0">
           {onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel}>
-              取消
+            <Button variant="outline" size="sm" onClick={onCancel} title="取消">
+              <X className="h-4 w-4" />
             </Button>
           )}
           {onSave && (
-            <Button size="sm" onClick={onSave} disabled={isLoading}>
-              {isLoading ? "保存中..." : "保存"}
+            <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"}>
+              {isLoading ? (
+                <span className="text-xs">保存中...</span>
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
             </Button>
           )}
         </div>
@@ -512,6 +553,38 @@ export function DocumentEditor({
         </div>
       </div>
     </div>
+      <style jsx global>{`
+        .placeholder-chip-editor {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 6px;
+          margin: 0 2px;
+          border-radius: 4px;
+          background-color: rgba(59, 130, 246, 0.15);
+          border: 1px solid rgba(59, 130, 246, 0.4);
+          color: #1d4ed8;
+          cursor: pointer;
+          transition: background-color 0.2s ease, border-color 0.2s ease;
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+          font-size: 0.9em;
+        }
+        .placeholder-chip-editor:hover {
+          background-color: rgba(59, 130, 246, 0.3);
+          border-color: rgba(37, 99, 235, 0.8);
+        }
+      `}</style>
+      {selectedPlaceholder && (
+        <PlaceholderMetadataDialog
+          open={isMetadataDialogOpen}
+          placeholderName={selectedPlaceholder}
+          metadata={placeholderMetadata?.[selectedPlaceholder] || null}
+          onClose={() => {
+            setIsMetadataDialogOpen(false)
+            setSelectedPlaceholder(null)
+          }}
+          onSave={handleSaveMetadata}
+        />
+      )}
     </>
   )
 }

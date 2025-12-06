@@ -2,7 +2,7 @@
 文书管理服务
 完全独立实现，不依赖现有模板管理和文书生成模块
 """
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -11,6 +11,11 @@ from app.documents_management.models import Document
 from app.documents_management.schemas import (
     DocumentCreateRequest,
     DocumentUpdateRequest,
+)
+from app.documents_management.utils import (
+    extract_placeholders,
+    initialize_placeholder_metadata,
+    merge_placeholder_metadata,
 )
 
 
@@ -34,11 +39,17 @@ class DocumentManagementService:
         Returns:
             创建的文书对象
         """
+        # 提取占位符并初始化元数据
+        placeholder_names = extract_placeholders(request.content_json)
+        placeholder_metadata = initialize_placeholder_metadata(placeholder_names)
+        
         document = Document(
             name=request.name,
             description=request.description,
             category=request.category,
             content_json=request.content_json,
+            status="draft",  # 默认状态为草稿
+            placeholder_metadata=placeholder_metadata,
             created_by_id=staff_id,
             updated_by_id=staff_id,
         )
@@ -47,7 +58,7 @@ class DocumentManagementService:
         await db.commit()
         await db.refresh(document)
         
-        logger.info(f"创建文书成功: {document.id} - {document.name}")
+        logger.info(f"创建文书成功: {document.id} - {document.name}, 占位符数量: {len(placeholder_names)}")
         return document
     
     async def get_document(
@@ -76,7 +87,8 @@ class DocumentManagementService:
         skip: int = 0,
         limit: int = 100,
         search: Optional[str] = None,
-        category: Optional[str] = None
+        category: Optional[str] = None,
+        status: Optional[str] = None
     ) -> Tuple[List[Document], int]:
         """
         获取文书列表
@@ -97,6 +109,10 @@ class DocumentManagementService:
         # 分类过滤
         if category:
             query = query.where(Document.category == category)
+        
+        # 状态过滤
+        if status and status != "all":
+            query = query.where(Document.status == status)
         
         # 关键词搜索（搜索名称和描述）
         if search:
@@ -152,6 +168,13 @@ class DocumentManagementService:
             document.category = request.category
         if request.content_json is not None:
             document.content_json = request.content_json
+            # 如果更新了内容，重新提取占位符并合并元数据
+            placeholder_names = extract_placeholders(request.content_json)
+            existing_metadata = document.placeholder_metadata or {}
+            document.placeholder_metadata = merge_placeholder_metadata(
+                placeholder_names,
+                existing_metadata
+            )
         
         document.updated_by_id = staff_id
         

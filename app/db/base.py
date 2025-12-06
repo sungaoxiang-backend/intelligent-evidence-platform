@@ -9,3 +9,4 @@ from app.evidences.models import Evidence, EvidenceCard  # noqa - 导入 Evidenc
 from app.wecom.models import WeComStaff, ExternalContact, CustomerSession, ContactWay, CustomerEventLog  # noqa
 from app.template_editor.models import DocumentTemplate, TemplatePlaceholder  # noqa
 from app.document_generation.models import DocumentGeneration  # noqa
+from app.documents_management.models import Document  # noqa

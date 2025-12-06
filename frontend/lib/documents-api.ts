@@ -18,7 +18,13 @@ export interface Document {
   name: string
   description?: string
   category?: string
+  status: "draft" | "published"  // 状态：草稿/发布
   content_json: any  // ProseMirror JSON 格式
+  placeholder_metadata?: Record<string, {
+    name: string
+    type: "text" | "radio" | "checkbox" | ""
+    options: string[]
+  }>  // 占位符元数据
   created_by_id?: number
   updated_by_id?: number
   created_at: string
@@ -57,6 +63,31 @@ export interface ExportDocumentRequest {
   filename?: string
 }
 
+export interface UpdateDocumentStatusRequest {
+  status: "draft" | "published"
+}
+
+export interface UpdatePlaceholderMetadataRequest {
+  placeholder_metadata: Record<string, {
+    name: string
+    type: "text" | "radio" | "checkbox" | ""
+    options: string[]
+  }>
+}
+
+export interface GenerateDocumentRequest {
+  form_data: Record<string, any>  // 表单数据，键为占位符名称，值为填充的值
+}
+
+export interface GenerateDocumentResponse {
+  code: number
+  message: string
+  data: {
+    content_json: any
+    template_name: string
+  }
+}
+
 // 文书管理 API
 export const documentsApi = {
   // 创建文书
@@ -87,12 +118,14 @@ export const documentsApi = {
     limit?: number
     search?: string
     category?: string
+    status?: "draft" | "published" | "all"
   }): Promise<DocumentListResponse> {
     const queryParams = new URLSearchParams()
     if (params?.skip !== undefined) queryParams.append("skip", String(params.skip))
     if (params?.limit !== undefined) queryParams.append("limit", String(params.limit))
     if (params?.search) queryParams.append("search", params.search)
     if (params?.category) queryParams.append("category", params.category)
+    if (params?.status) queryParams.append("status", params.status)
 
     const url = buildApiUrl(`/documents${queryParams.toString() ? `?${queryParams.toString()}` : ""}`)
     const response = await fetch(url, {
@@ -188,6 +221,81 @@ export const documentsApi = {
     }
 
     return await response.blob()
+  },
+
+  // 更新文书状态
+  async updateDocumentStatus(
+    documentId: number,
+    request: UpdateDocumentStatusRequest
+  ): Promise<DocumentDetailResponse> {
+    const response = await fetch(
+      buildApiUrl(`/documents/${documentId}/status`),
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "更新文书状态失败")
+    }
+
+    return await response.json()
+  },
+
+  // 更新占位符元数据
+  async updatePlaceholderMetadata(
+    documentId: number,
+    request: UpdatePlaceholderMetadataRequest
+  ): Promise<DocumentDetailResponse> {
+    const response = await fetch(
+      buildApiUrl(`/documents/${documentId}/placeholders`),
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "更新占位符元数据失败")
+    }
+
+    return await response.json()
+  },
+
+  // 生成文档（基于模板和表单数据）
+  async generateDocument(
+    documentId: number,
+    request: GenerateDocumentRequest
+  ): Promise<GenerateDocumentResponse> {
+    const response = await fetch(
+      buildApiUrl(`/documents/${documentId}/generate`),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "生成文档失败")
+    }
+
+    return await response.json()
   },
 }
 
