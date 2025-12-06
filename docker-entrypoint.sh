@@ -1,6 +1,81 @@
 #!/bin/sh
 set -e
 
+# 安装 Playwright 浏览器（如果尚未安装）
+# 这允许在容器启动时利用网络连接，避免构建时的网络问题
+# 注意：即使安装失败也不阻止容器启动
+install_playwright() {
+    # 检查 Playwright 浏览器是否已安装
+    if [ -d "/root/.cache/ms-playwright/chromium" ] && [ -f "/root/.cache/ms-playwright/chromium/chrome-linux/chrome" ]; then
+        echo "✓ Playwright 浏览器已安装，跳过安装步骤"
+        return 0
+    fi
+    
+    echo "=========================================="
+    echo "开始安装 Playwright 浏览器..."
+    echo "=========================================="
+    echo "提示：首次安装需要下载约 300MB，请确保网络连接正常"
+    echo "预计耗时：2-5 分钟（取决于网络速度）"
+    echo ""
+    
+    # 设置 Playwright 下载超时（默认 30 分钟）
+    export PLAYWRIGHT_DOWNLOAD_TIMEOUT=${PLAYWRIGHT_DOWNLOAD_TIMEOUT:-1800000}
+    
+    # 如果设置了下载源，使用它
+    if [ -n "$PLAYWRIGHT_DOWNLOAD_HOST" ]; then
+        echo "使用自定义下载源: $PLAYWRIGHT_DOWNLOAD_HOST"
+        export PLAYWRIGHT_DOWNLOAD_HOST
+    else
+        echo "使用默认下载源（可通过 PLAYWRIGHT_DOWNLOAD_HOST 环境变量配置国内镜像）"
+    fi
+    
+    # 尝试安装，最多重试 3 次
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+    INSTALL_SUCCESS=false
+    
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        echo "[尝试 $RETRY_COUNT/$MAX_RETRIES] 正在安装 Playwright Chromium 浏览器..."
+        
+        if . /app/.venv/bin/activate && playwright install chromium 2>&1; then
+            INSTALL_SUCCESS=true
+            echo ""
+            echo "✓ Playwright 浏览器安装成功！"
+            echo "=========================================="
+            break
+        else
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo ""
+                echo "✗ 安装失败，将在 10 秒后重试..."
+                echo ""
+                sleep 10
+            fi
+        fi
+    done
+    
+    if [ "$INSTALL_SUCCESS" = false ]; then
+        echo ""
+        echo "=========================================="
+        echo "⚠ 警告: Playwright 浏览器安装失败"
+        echo "=========================================="
+        echo "PDF 导出功能将不可用"
+        echo ""
+        echo "解决方案："
+        echo "1. 检查容器网络连接"
+        echo "2. 手动安装：docker exec <container> /app/.venv/bin/playwright install chromium"
+        echo "3. 检查环境变量 PLAYWRIGHT_DOWNLOAD_HOST 是否正确配置"
+        echo "=========================================="
+        echo ""
+        return 1
+    fi
+    
+    return 0
+}
+
+# 执行安装（即使失败也不阻止容器启动）
+install_playwright || true
+
 # 等待PostgreSQL数据库准备就绪
 echo "等待PostgreSQL数据库准备就绪..."
 

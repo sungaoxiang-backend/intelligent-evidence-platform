@@ -14,9 +14,14 @@ services:
       - .env.docker
     environment:
       - POSTGRES_SERVER=db  # 覆盖.env.docker中的配置，确保在容器环境中使用正确的数据库主机
+      # Playwright 配置：使用国内镜像源加速下载
+      - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+      # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
+      - playwright_cache:/root/.cache/ms-playwright
     restart: always
 
   db:
@@ -68,11 +73,16 @@ services:
       - .env.docker
     environment:
       - SERVICE_TYPE=celery-worker
+      # Playwright 配置：使用国内镜像源加速下载
+      - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
     depends_on:
       - redis
       - db
     volumes:
       - ./app:/app/app
+      # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
+      - playwright_cache:/root/.cache/ms-playwright
     restart: always
 
   celery-beat:
@@ -83,12 +93,17 @@ services:
       - .env.docker
     environment:
       - SERVICE_TYPE=celery-beat
+      # Playwright 配置：使用国内镜像源加速下载
+      - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
     depends_on:
       - redis
       - db
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+      # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
+      - playwright_cache:/root/.cache/ms-playwright
     restart: always
 
   frontend:
@@ -112,6 +127,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  playwright_cache:  # Playwright 浏览器缓存，避免重复下载
 
 networks:
   app-network:

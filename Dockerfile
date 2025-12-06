@@ -30,6 +30,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH
 
+# 配置 Debian apt 镜像源（使用清华镜像加速，适用于 Debian 12/13）
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list && \
+        sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list; \
+    fi && \
+    echo "已配置 Debian apt 镜像源为清华镜像"
+
 # 安装PostgreSQL客户端（使用缓存挂载加速）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -40,6 +50,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # 从构建阶段复制虚拟环境
 COPY --from=builder /app/.venv /app/.venv
+
+# 安装 Playwright 系统依赖（浏览器将在运行时安装，避免构建时网络问题）
+# 注意：系统依赖体积小，可以正常安装；浏览器（~300MB）将在容器启动时通过 docker-entrypoint.sh 安装
+RUN . /app/.venv/bin/activate && \
+    playwright install-deps chromium || echo "警告: Playwright 系统依赖安装失败，但不会阻止构建"
 
 # 复制项目文件
 COPY app/ ./app/
