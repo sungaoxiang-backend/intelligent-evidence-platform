@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 启用 Docker BuildKit 以加速构建
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 # 显示帮助信息
 show_help() {
     echo "用法: ./deploy.sh [-r|-b|-f|-c] [-h]"

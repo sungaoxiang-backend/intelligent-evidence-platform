@@ -11,8 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 复制依赖文件
 COPY pyproject.toml uv.lock* ./
 
-# 安装uv并创建虚拟环境
-RUN pip install uv && \
+# 安装uv并创建虚拟环境（使用缓存挂载加速）
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/root/.cache/uv \
+    pip install uv && \
     uv venv /app/.venv && \
     . /app/.venv/bin/activate && \
     UV_HTTP_TIMEOUT=120 UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
@@ -28,8 +30,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH
 
-# 安装PostgreSQL客户端
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 安装PostgreSQL客户端（使用缓存挂载加速）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
