@@ -143,11 +143,79 @@ export const buildCellStyle = (attrs: TableCellAttrs = {}) => {
 export const ParagraphWithAttrs = Paragraph.extend({
   addAttributes() {
     return {
-      textAlign: { default: null },
-      indent: { default: null },
-      firstLineIndent: { default: null },
-      spacing: { default: null },
-      lineHeight: { default: null },
+      textAlign: {
+        default: null,
+        parseHTML: (element) => {
+          const align = element.style.textAlign || element.getAttribute("align")
+          return align || null
+        },
+      },
+      indent: {
+        default: null,
+        parseHTML: (element) => {
+          const marginLeft = element.style.marginLeft
+          if (marginLeft) {
+            // 将 px 转换为 pt (假设 96dpi)
+            const px = parseFloat(marginLeft)
+            return px ? px * 0.75 : null // 1px = 0.75pt (96dpi)
+          }
+          return null
+        },
+      },
+      firstLineIndent: {
+        default: null,
+        parseHTML: (element) => {
+          const textIndent = element.style.textIndent
+          if (textIndent) {
+            const px = parseFloat(textIndent)
+            return px ? px * 0.75 : null
+          }
+          return null
+        },
+      },
+      spacing: {
+        default: null,
+        parseHTML: (element) => {
+          const marginTop = element.style.marginTop
+          const marginBottom = element.style.marginBottom
+          if (marginTop || marginBottom) {
+            return {
+              before: marginTop ? parseFloat(marginTop) * 0.75 : null,
+              after: marginBottom ? parseFloat(marginBottom) * 0.75 : null,
+            }
+          }
+          return null
+        },
+      },
+      lineHeight: {
+        default: null,
+        parseHTML: (element) => {
+          const lineHeight = element.style.lineHeight
+          if (lineHeight) {
+            let value = parseFloat(lineHeight)
+            // 处理百分比
+            if (lineHeight.includes("%")) {
+              value = value / 100
+            }
+            // 只保留合理的行高（1.0-1.8 相对值，或 12-25px 绝对值）
+            // 忽略 WPS 粘贴时带来的过大行高
+            if (value > 0) {
+              if (value < 5) {
+                // 相对值（如 1.5, 2.0）
+                if (value >= 1.0 && value <= 1.8) {
+                  return value
+                }
+              } else {
+                // 绝对值（px）
+                if (value >= 12 && value <= 25) {
+                  return value
+                }
+              }
+            }
+          }
+          return null
+        },
+      },
       list: { default: null },
     }
   },
@@ -171,10 +239,67 @@ export const HeadingWithAttrs = Heading.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      textAlign: { default: null },
-      indent: { default: null },
-      spacing: { default: null },
-      lineHeight: { default: null },
+      textAlign: {
+        default: null,
+        parseHTML: (element) => {
+          const align = element.style.textAlign || element.getAttribute("align")
+          return align || null
+        },
+      },
+      indent: {
+        default: null,
+        parseHTML: (element) => {
+          const marginLeft = element.style.marginLeft
+          if (marginLeft) {
+            const px = parseFloat(marginLeft)
+            return px ? px * 0.75 : null
+          }
+          return null
+        },
+      },
+      spacing: {
+        default: null,
+        parseHTML: (element) => {
+          const marginTop = element.style.marginTop
+          const marginBottom = element.style.marginBottom
+          if (marginTop || marginBottom) {
+            return {
+              before: marginTop ? parseFloat(marginTop) * 0.75 : null,
+              after: marginBottom ? parseFloat(marginBottom) * 0.75 : null,
+            }
+          }
+          return null
+        },
+      },
+      lineHeight: {
+        default: null,
+        parseHTML: (element) => {
+          const lineHeight = element.style.lineHeight
+          if (lineHeight) {
+            let value = parseFloat(lineHeight)
+            // 处理百分比
+            if (lineHeight.includes("%")) {
+              value = value / 100
+            }
+            // 只保留合理的行高（1.0-1.8 相对值，或 12-25px 绝对值）
+            // 忽略 WPS 粘贴时带来的过大行高
+            if (value > 0) {
+              if (value < 5) {
+                // 相对值（如 1.5, 2.0）
+                if (value >= 1.0 && value <= 1.8) {
+                  return value
+                }
+              } else {
+                // 绝对值（px）
+                if (value >= 12 && value <= 25) {
+                  return value
+                }
+              }
+            }
+          }
+          return null
+        },
+      },
     }
   },
 
@@ -627,12 +752,77 @@ export const TableCellWithAttrs = TableCell.extend({
   },
 })
 
+// A4 页面尺寸常量（96 DPI，标准屏幕分辨率）
+export const A4_PAGE_WIDTH = 794 // A4 宽度 210mm = 794px (96 DPI)
+export const A4_PAGE_HEIGHT = 1123 // A4 高度 297mm = 1123px (96 DPI)
+export const A4_PAGE_MARGIN = 96 // 标准页边距 25.4mm = 96px (96 DPI)
+export const A4_CONTENT_WIDTH = A4_PAGE_WIDTH - (A4_PAGE_MARGIN * 2) // 内容区域宽度
+
 export const templateBaseStyles = `
+  /* 页面容器样式 - 模拟 A4 纸张 */
+  .template-doc-container {
+    width: ${A4_PAGE_WIDTH}px;
+    min-height: ${A4_PAGE_HEIGHT}px;
+    margin: 0 auto;
+    background: white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    padding: ${A4_PAGE_MARGIN}px;
+    box-sizing: border-box;
+    position: relative;
+    pointer-events: auto;
+  }
+  
   .template-doc {
     font-family: "SimSun", "宋体", serif;
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.5;
     color: #0f172a;
+    width: ${A4_CONTENT_WIDTH}px;
+    max-width: 100%;
+    margin: 0 auto;
+    position: relative;
+    min-height: 100%;
+  }
+  
+  /* 统一段落和标题的行高，避免 WPS 粘贴带来的过大行高 */
+  .template-doc p,
+  .template-doc h1,
+  .template-doc h2,
+  .template-doc h3,
+  .template-doc h4,
+  .template-doc h5,
+  .template-doc h6 {
+    line-height: 1.5 !important;
+    margin: 0.5em 0 !important;
+  }
+  
+  /* 确保编辑器内容可交互 */
+  .template-doc [contenteditable="true"],
+  .template-doc [contenteditable="true"] * {
+    cursor: text;
+  }
+  
+  .template-doc [contenteditable="true"]:focus {
+    outline: none;
+  }
+  
+  /* 确保 ProseMirror 编辑器可以正常交互 */
+  .template-doc .ProseMirror {
+    outline: none;
+    cursor: text;
+    min-height: 200px;
+  }
+  
+  .template-doc .ProseMirror:focus {
+    outline: none;
+  }
+  
+  .template-doc .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #adb5bd;
+    pointer-events: none;
+    height: 0;
   }
   .template-doc table {
     width: 100%;

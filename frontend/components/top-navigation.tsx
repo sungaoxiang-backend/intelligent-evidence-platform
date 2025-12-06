@@ -49,6 +49,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     if (pathname.startsWith("/document-templates")) return "document-templates"
     if (pathname.startsWith("/template-editor")) return "template-editor"
     if (pathname.startsWith("/document-generation")) return "document-generation"
+    if (pathname.startsWith("/documents")) return "documents"
     return "workbench"
   }
   const activeModule = getActiveModule()
@@ -57,6 +58,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
+    { id: "documents", label: "文书管理", icon: FileText, href: "/documents" },
     { id: "document-templates", label: "文书模板", icon: FileText, href: "/document-templates" },
     { id: "document-generation", label: "文书生成", icon: FileEdit, href: "/document-generation" },
   ]
