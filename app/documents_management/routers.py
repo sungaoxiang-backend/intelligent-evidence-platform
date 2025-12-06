@@ -19,7 +19,7 @@ from app.documents_management.schemas import (
     DocumentDetailResponse,
     DocumentExportRequest,
 )
-from app.documents_management.pdf_export import html_to_pdf_sync
+from app.documents_management.pdf_export import html_to_pdf
 
 router = APIRouter()
 
@@ -256,8 +256,8 @@ async def export_document_to_pdf(
                 detail="文书不存在"
             )
         
-        # 生成 PDF
-        pdf_bytes = html_to_pdf_sync(
+        # 生成 PDF（直接使用异步函数，因为路由已经是异步的）
+        pdf_bytes = await html_to_pdf(
             html_content=request.html_content,
             filename=request.filename or f"{document.name}.pdf"
         )

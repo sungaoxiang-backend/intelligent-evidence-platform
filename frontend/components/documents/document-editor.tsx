@@ -21,8 +21,6 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
-  ListOrdered,
-  List,
   Heading1,
   Heading2,
   Heading3,
@@ -37,7 +35,16 @@ import {
   ChevronDown,
   Columns,
   Rows,
+  ChevronDown as ChevronDownIcon,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   HeadingWithAttrs,
   ParagraphWithAttrs,
@@ -257,8 +264,8 @@ export function DocumentEditor({
       <style jsx global>{templateBaseStyles}</style>
       <div className={cn("flex flex-col h-full", className)}>
         {/* 工具栏 */}
-        <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between p-4 border-b gap-4">
+        <div className="flex items-center gap-1 flex-1 overflow-x-auto min-w-0">
           <Button
             variant={editor.isActive("bold") ? "default" : "ghost"}
             size="sm"
@@ -281,42 +288,69 @@ export function DocumentEditor({
             <UnderlineIcon className="h-4 w-4" />
           </Button>
           <Separator orientation="vertical" className="h-6" />
-          <Button
-            variant={editor.isActive("heading", { level: 1 }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          >
-            <Heading1 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive("heading", { level: 2 }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          >
-            <Heading2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive("heading", { level: 3 }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          >
-            <Heading3 className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          <Button
-            variant={editor.isActive("bulletList") ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive("orderedList") ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered className="h-4 w-4" />
-          </Button>
+          {/* 标题下拉菜单 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1">
+                {editor.isActive("heading", { level: 1 }) ? (
+                  <Heading1 className="h-4 w-4" />
+                ) : editor.isActive("heading", { level: 2 }) ? (
+                  <Heading2 className="h-4 w-4" />
+                ) : editor.isActive("heading", { level: 3 }) ? (
+                  <Heading3 className="h-4 w-4" />
+                ) : (
+                  <Heading1 className="h-4 w-4" />
+                )}
+                <ChevronDownIcon className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>标题</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                  editor.chain()
+                    .focus()
+                    .toggleHeading({ level: 1 })
+                    .unsetFontSize()
+                    .run()
+                }}
+                className={editor.isActive("heading", { level: 1 }) ? "bg-accent" : ""}
+              >
+                <Heading1 className="h-4 w-4 mr-2" />
+                标题 1
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                  editor.chain()
+                    .focus()
+                    .toggleHeading({ level: 2 })
+                    .unsetFontSize()
+                    .run()
+                }}
+                className={editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""}
+              >
+                <Heading2 className="h-4 w-4 mr-2" />
+                标题 2
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                  editor.chain()
+                    .focus()
+                    .toggleHeading({ level: 3 })
+                    .unsetFontSize()
+                    .run()
+                }}
+                className={editor.isActive("heading", { level: 3 }) ? "bg-accent" : ""}
+              >
+                <Heading3 className="h-4 w-4 mr-2" />
+                标题 3
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Separator orientation="vertical" className="h-6" />
           <Button
             variant={editor.isActive({ textAlign: "left" }) ? "default" : "ghost"}
@@ -457,12 +491,7 @@ export function DocumentEditor({
             <Split className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex gap-2">
-          {onExport && (
-            <Button variant="outline" size="sm" onClick={onExport}>
-              导出 PDF
-            </Button>
-          )}
+        <div className="flex gap-2 flex-shrink-0">
           {onCancel && (
             <Button variant="outline" size="sm" onClick={onCancel}>
               取消

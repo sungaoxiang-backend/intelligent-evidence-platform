@@ -306,15 +306,39 @@ export const HeadingWithAttrs = Heading.extend({
 
   renderHTML({ node, HTMLAttributes }) {
     const hasLevel = this.options.levels.includes(node.attrs.level)
-    const tag = hasLevel ? `h${node.attrs.level}` : this.options.levels[0]
+    const level = hasLevel ? node.attrs.level : this.options.levels[0]
+    const tag = `h${level}`
     const headingAttrs = node.attrs as ParagraphAttrs
-    const style = buildParagraphStyle(headingAttrs)
+    
+    // 为标题设置默认字号（参考常见标准，比WPS默认稍大）
+    // 标题1=22pt, 标题2=18pt, 标题3=16pt
+    // 这样即使从WPS复制的大字号内容（如22pt）应用标题后也不会变小
+    const defaultFontSizes: Record<number, string> = {
+      1: "22pt",
+      2: "18pt",
+      3: "16pt",
+    }
+    
+    const baseStyle = buildParagraphStyle(headingAttrs)
+    const fontSize = defaultFontSizes[level]
+    
+    // 合并样式，确保标题有字号和加粗（使用 !important 覆盖文本 mark 的 fontSize）
+    let finalStyle = baseStyle
+    if (fontSize) {
+      const styleParts: string[] = []
+      if (baseStyle) styleParts.push(baseStyle)
+      // 使用内联样式设置字号，但文本 mark 的 fontSize 会覆盖它
+      // 所以我们通过 CSS 的 !important 来确保标题字号生效
+      styleParts.push(`font-weight: bold`)
+      finalStyle = styleParts.join("; ")
+    }
+    
     return [
       tag,
       mergeAttributes(
         this.options.HTMLAttributes,
         HTMLAttributes,
-        style ? { style } : {}
+        finalStyle ? { style: finalStyle } : {}
       ),
       0,
     ]
@@ -956,13 +980,44 @@ export const templateBaseStyles = `
   }
   
   /* 统一段落和标题的行高，避免 WPS 粘贴带来的过大行高 */
-  .template-doc p,
-  .template-doc h1,
-  .template-doc h2,
-  .template-doc h3,
+  .template-doc p {
+    line-height: 1.5 !important;
+    margin: 0.5em 0 !important;
+  }
+  
+  /* 标题样式 - 参考常见标准（比WPS默认稍大，避免从WPS复制的大字号内容变小） */
+  /* 常见约定：
+   * - H1: 22-24pt（二号/小二号），用于文档主标题
+   * - H2: 18-20pt（小三号），用于章节标题
+   * - H3: 16-18pt（四号），用于小节标题
+   * 普通文本通常是 12-14pt，标题应该明显更大
+   */
+  .template-doc h1 {
+    font-size: 22pt !important;
+    font-weight: bold !important;
+    line-height: 1.5 !important;
+    margin: 0.5em 0 !important;
+  }
+  
+  .template-doc h2 {
+    font-size: 18pt !important;
+    font-weight: bold !important;
+    line-height: 1.5 !important;
+    margin: 0.5em 0 !important;
+  }
+  
+  .template-doc h3 {
+    font-size: 16pt !important;
+    font-weight: bold !important;
+    line-height: 1.5 !important;
+    margin: 0.5em 0 !important;
+  }
+  
   .template-doc h4,
   .template-doc h5,
   .template-doc h6 {
+    font-size: 14pt !important;
+    font-weight: bold !important;
     line-height: 1.5 !important;
     margin: 0.5em 0 !important;
   }
@@ -999,6 +1054,7 @@ export const templateBaseStyles = `
     width: 100%;
     border-collapse: collapse;
     margin: 16px 0;
+    table-layout: auto;
   }
   .template-doc td,
   .template-doc th {
@@ -1008,6 +1064,7 @@ export const templateBaseStyles = `
     box-sizing: border-box;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    text-align: left;
   }
   .template-doc ul,
   .template-doc ol {

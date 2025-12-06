@@ -2,6 +2,24 @@
 
 import React, { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentList } from "@/components/documents/document-list"
@@ -23,7 +41,9 @@ import {
   ParagraphWithAttrs,
   TableCellWithAttrs,
   TableWithAttrs,
+  templateBaseStyles,
 } from "@/components/template-editor/extensions"
+import { FontSize } from "@/components/documents/font-size-extension"
 
 type ViewMode = "list" | "preview" | "edit" | "create"
 
@@ -35,6 +55,15 @@ export default function DocumentsPage() {
   const [category, setCategory] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [draftContent, setDraftContent] = useState<JSONContent | null>(null)
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
+  const [documentName, setDocumentName] = useState("")
+  const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false)
+  const [editingDocument, setEditingDocument] = useState<Document | null>(null)
+  const [metadataForm, setMetadataForm] = useState({
+    name: "",
+    description: "",
+    category: "",
+  })
   const { toast } = useToast()
 
   // 加载文书列表
@@ -86,24 +115,20 @@ export default function DocumentsPage() {
   const handleSave = async () => {
     if (!draftContent) return
 
-    try {
-      setIsLoading(true)
-      if (viewMode === "create") {
-        // 创建新文书
-        const response = await documentsApi.createDocument({
-          name: "新文书",
-          content_json: draftContent,
-        })
-        toast({
-          title: "成功",
-          description: "文书创建成功",
-        })
-        setSelectedDocument(response.data)
-        setViewMode("preview")
-      } else if (viewMode === "edit" && selectedDocument) {
-        // 更新文书
+    // 如果是新建模式，弹出命名对话框
+    if (viewMode === "create") {
+      setDocumentName("")
+      setIsSaveDialogOpen(true)
+      return
+    }
+
+    // 如果是编辑模式，直接保存（不更新名称，只更新内容）
+    if (viewMode === "edit" && selectedDocument) {
+      try {
+        setIsLoading(true)
         const response = await documentsApi.updateDocument(selectedDocument.id, {
           content_json: draftContent,
+          // 不传递 name，保持原有名称
         })
         toast({
           title: "成功",
@@ -111,8 +136,49 @@ export default function DocumentsPage() {
         })
         setSelectedDocument(response.data)
         setViewMode("preview")
+        await loadDocuments()
+      } catch (error) {
+        toast({
+          title: "错误",
+          description: error instanceof Error ? error.message : "保存失败",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
+    }
+  }
+
+  // 确认保存（仅用于新建模式）
+  const handleConfirmSave = async () => {
+    if (!draftContent) return
+
+    const nameToSave = documentName.trim() || "新文书"
+    
+    if (!documentName.trim()) {
+      toast({
+        title: "错误",
+        description: "请输入文书名称",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      // 创建新文书
+      const response = await documentsApi.createDocument({
+        name: nameToSave,
+        content_json: draftContent,
+      })
+      toast({
+        title: "成功",
+        description: "文书创建成功",
+      })
+      setSelectedDocument(response.data)
+      setViewMode("preview")
       await loadDocuments()
+      setIsSaveDialogOpen(false)
     } catch (error) {
       toast({
         title: "错误",
@@ -134,14 +200,100 @@ export default function DocumentsPage() {
     }
   }
 
+  // 从列表编辑文书元数据
+  const handleEditFromList = (document: Document) => {
+    setEditingDocument(document)
+    setMetadataForm({
+      name: document.name,
+      description: document.description || "",
+      category: document.category || "",
+    })
+    setIsMetadataDialogOpen(true)
+  }
+
+  // 保存元数据
+  const handleSaveMetadata = async () => {
+    if (!editingDocument) return
+
+    if (!metadataForm.name.trim()) {
+      toast({
+        title: "错误",
+        description: "请输入文书名称",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const response = await documentsApi.updateDocument(editingDocument.id, {
+        name: metadataForm.name.trim(),
+        description: metadataForm.description.trim() || undefined,
+        category: metadataForm.category.trim() || undefined,
+      })
+      toast({
+        title: "成功",
+        description: "文书信息更新成功",
+      })
+      // 如果当前选中的是正在编辑的文书，更新选中状态
+      if (selectedDocument?.id === editingDocument.id) {
+        setSelectedDocument(response.data)
+      }
+      await loadDocuments()
+      setIsMetadataDialogOpen(false)
+      setEditingDocument(null)
+    } catch (error) {
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : "更新失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 删除文书
+  const handleDelete = async (document: Document) => {
+    try {
+      setIsLoading(true)
+      await documentsApi.deleteDocument(document.id)
+      toast({
+        title: "成功",
+        description: "文书删除成功",
+      })
+      // 如果删除的是当前选中的文书，返回列表视图
+      if (selectedDocument?.id === document.id) {
+        setSelectedDocument(null)
+        setViewMode("list")
+      }
+      await loadDocuments()
+    } catch (error) {
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : "删除失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // 导出 PDF
   const handleExport = async () => {
     if (!selectedDocument) return
 
     try {
       setIsLoading(true)
-      // 将 ProseMirror JSON 转换为 HTML
-      const html = generateHTML(selectedDocument.content_json, [
+      
+      // 使用与预览完全相同的扩展配置和渲染逻辑
+      // 关键：使用 Editor 实例的 getHTML() 方法，而不是 generateHTML
+      // 这样可以确保扩展的 renderHTML 方法被正确调用
+      const { Editor } = await import("@tiptap/core")
+      const { normalizeHardBreaks } = await import("@/components/template-editor/utils")
+      
+      // 使用与预览完全相同的扩展配置（与 DocumentPreview 组件一致）
+      const extensions = [
         StarterKit.configure({
           heading: false,
           paragraph: false,
@@ -152,18 +304,76 @@ export default function DocumentsPage() {
         }),
         ParagraphWithAttrs,
         HeadingWithAttrs,
-        TableWithAttrs,
-        TableRow,
-        TableHeader,
-        TableCellWithAttrs,
-        TextAlign,
+        TableWithAttrs.configure({
+          resizable: false,
+          HTMLAttributes: {},
+        }),
+        TableRow.configure({
+          HTMLAttributes: {},
+        }),
+        TableHeader.configure({
+          HTMLAttributes: {},
+        }),
+        TableCellWithAttrs.configure({
+          HTMLAttributes: {},
+        }),
+        TextAlign.configure({
+          types: ["heading", "paragraph", "tableCell"],
+          alignments: ["left", "center", "right", "justify"],
+          defaultAlignment: "left",
+        }),
         Underline,
         TextStyle,
         Color,
-      ])
+        FontSize,
+      ]
+
+      // 创建临时编辑器实例，使用与预览相同的配置
+      const normalizedContent = normalizeHardBreaks(selectedDocument.content_json)
+      const tempEditor = new Editor({
+        extensions,
+        content: normalizedContent || { type: "doc", content: [] },
+      })
+
+      // 关键：使用 editor.getHTML() 而不是 generateHTML()
+      // editor.getHTML() 会正确调用所有扩展的 renderHTML 方法
+      // 这与预览时 Tiptap 编辑器内部使用的渲染逻辑完全一致
+      const htmlContent = tempEditor.getHTML()
+      
+      // 清理临时编辑器
+      tempEditor.destroy()
+
+      // 将 HTML 内容包装在完整的 HTML 文档中，并注入 CSS 样式
+      const fullHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${selectedDocument.name}</title>
+  <style>
+    ${templateBaseStyles}
+    /* PDF 导出专用样式优化 */
+    body {
+      margin: 0;
+      padding: 0;
+      background: white;
+    }
+    .template-doc-container {
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="template-doc-container">
+    <div class="template-doc">
+      ${htmlContent}
+    </div>
+  </div>
+</body>
+</html>`
 
       const blob = await documentsApi.exportDocumentToPdf(selectedDocument.id, {
-        html_content: html,
+        html_content: fullHtml,
         filename: `${selectedDocument.name}.pdf`,
       })
 
@@ -212,6 +422,8 @@ export default function DocumentsPage() {
               onSearchChange={setSearchTerm}
               onCategoryChange={setCategory}
               onDocumentSelect={handleDocumentSelect}
+              onEdit={handleEditFromList}
+              onDelete={handleDelete}
             />
           </div>
         )}
@@ -241,12 +453,97 @@ export default function DocumentsPage() {
               onChange={setDraftContent}
               onSave={handleSave}
               onCancel={handleCancel}
-              onExport={viewMode === "edit" && selectedDocument ? handleExport : undefined}
               isLoading={isLoading}
             />
           )}
         </div>
       </div>
+
+      {/* 保存命名对话框 */}
+      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewMode === "create" ? "创建文书" : "保存文书"}</DialogTitle>
+            <DialogDescription>请输入文书的名称</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="document-name">文书名称</Label>
+            <Input
+              id="document-name"
+              value={documentName}
+              onChange={(e) => setDocumentName(e.target.value)}
+              placeholder="请输入文书名称"
+              className="mt-2"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleConfirmSave()
+                }
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSaveDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleConfirmSave} disabled={isLoading}>
+              {isLoading ? "保存中..." : "确认"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 元数据编辑对话框 */}
+      <Dialog open={isMetadataDialogOpen} onOpenChange={setIsMetadataDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑文书信息</DialogTitle>
+            <DialogDescription>修改文书的名称、描述和分类</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="metadata-name">文书名称</Label>
+              <Input
+                id="metadata-name"
+                value={metadataForm.name}
+                onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })}
+                placeholder="请输入文书名称"
+                className="mt-2"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="metadata-description">描述</Label>
+              <Textarea
+                id="metadata-description"
+                value={metadataForm.description}
+                onChange={(e) => setMetadataForm({ ...metadataForm, description: e.target.value })}
+                placeholder="请输入文书描述（可选）"
+                className="mt-2"
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="metadata-category">分类</Label>
+              <Input
+                id="metadata-category"
+                value={metadataForm.category}
+                onChange={(e) => setMetadataForm({ ...metadataForm, category: e.target.value })}
+                placeholder="请输入分类（可选）"
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsMetadataDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveMetadata} disabled={isLoading}>
+              {isLoading ? "保存中..." : "确认"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
