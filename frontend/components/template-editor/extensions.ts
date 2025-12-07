@@ -391,10 +391,11 @@ export const TableWithAttrs = Table.extend({
             try {
               const colWidths = JSON.parse(colWidthsStr)
               if (Array.isArray(colWidths) && colWidths.length > 0) {
+                console.log("[TableWithAttrs] Parsed colWidths from data attribute:", colWidths)
                 return colWidths
               }
             } catch (e) {
-              console.warn("Failed to parse colWidths:", e)
+              console.warn("[TableWithAttrs] Failed to parse colWidths:", e)
             }
           }
           
@@ -629,7 +630,7 @@ export const TableWithAttrs = Table.extend({
 
   renderHTML({ node, HTMLAttributes }) {
     const attrs = (node.attrs || {}) as TableAttrs
-    const colWidths: number[] | null = attrs.colWidths
+    const colWidths: number[] | null = attrs.colWidths || null
     
     // 检查是否有 style 属性包含百分比宽度，但 tableWidth 不正确
     // 如果 tableWidth 太小（可能是之前保存时的错误），尝试从 style 中提取正确的宽度
@@ -665,10 +666,15 @@ export const TableWithAttrs = Table.extend({
         ? [
             "colgroup",
             {},
-            ...colWidths.map((width) => [
-              "col",
-              { style: `width: ${twipsToPx(width)}` },
-            ]),
+            ...colWidths
+              .filter((width) => width && width > 0) // 过滤掉无效的列宽
+              .map((width) => {
+                const widthPx = twipsToPx(width)
+                return [
+                  "col",
+                  widthPx ? { style: `width: ${widthPx}` } : {},
+                ]
+              }),
           ]
         : null
 
@@ -697,15 +703,131 @@ export const TableRowWithAttrs = TableRow.extend<{ isComplexForm?: boolean }>({
     return {
       ...this.parent?.(),
       exportEnabled: { default: true },
+      rowHeight: {
+        default: null,
+        parseHTML: (element) => {
+          // 从 data-row-height 属性或 style.height 中读取行高信息
+          console.log("[TableRowWithAttrs] parseHTML called for rowHeight, element:", element)
+          
+          // 首先尝试从 data-row-height 属性读取
+          let rowHeightStr = element.getAttribute("data-row-height")
+          console.log("[TableRowWithAttrs] data-row-height attribute:", rowHeightStr)
+          
+          // 如果没有 data 属性，尝试从 style.height 读取
+          if (!rowHeightStr) {
+            const rowEl = element as HTMLElement
+            const heightStyle = rowEl.style.height
+            if (heightStyle) {
+              // 从 px 转换为 twips
+              const px = parseFloat(heightStyle)
+              if (!isNaN(px) && px > 0) {
+                // 将 px 转换为 twips: 1 twip = 96/1440 px
+                const twips = Math.round(px * 1440 / 96)
+                rowHeightStr = twips.toString()
+                console.log("[TableRowWithAttrs] Extracted rowHeight from style.height:", px, "px =", twips, "twips")
+              }
+            }
+          }
+          
+          if (rowHeightStr) {
+            const rowHeight = parseFloat(rowHeightStr)
+            if (!isNaN(rowHeight) && rowHeight > 0) {
+              // 验证行高值的合理性（10-5000 twips，约 7-3333px）
+              // 放宽范围以适应 WPS 导出的各种行高值
+              if (rowHeight >= 10 && rowHeight <= 5000) {
+                console.log("[TableRowWithAttrs] Parsed rowHeight:", rowHeight, "twips (≈", Math.round(rowHeight * 96 / 1440), "px)")
+                return rowHeight
+              } else {
+                console.warn(`[TableRowWithAttrs] Row height ${rowHeight} twips is out of valid range (10-5000)`)
+              }
+            }
+          } else {
+            console.log("[TableRowWithAttrs] No rowHeight found (neither data-row-height nor style.height)")
+          }
+          return null
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.rowHeight) {
+            return {}
+          }
+          // 将 twips 转换为 px 用于 CSS
+          // 1 twip = 1/1440 inch = 1/15 point = 1/20 point (96 DPI)
+          // 1 twip = 96/1440 px = 0.0667px
+          const px = attributes.rowHeight * (96 / 1440)
+          return {
+            style: `height: ${px}px;`,
+          }
+        },
+      },
     }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "tr",
+        getAttrs: (element) => {
+          const el = element as HTMLElement
+          console.log("[TableRowWithAttrs] parseHTML (node level) called for tr element:", el)
+          
+          // 从 data-row-height 属性或 style.height 中读取行高信息
+          let rowHeightStr = el.getAttribute("data-row-height")
+          console.log("[TableRowWithAttrs] parseHTML (node level) - data-row-height:", rowHeightStr)
+          
+          // 如果没有 data 属性，尝试从 style.height 读取
+          if (!rowHeightStr) {
+            const heightStyle = el.style.height
+            if (heightStyle) {
+              // 从 px 转换为 twips
+              const px = parseFloat(heightStyle)
+              if (!isNaN(px) && px > 0) {
+                // 将 px 转换为 twips: 1 twip = 96/1440 px
+                const twips = Math.round(px * 1440 / 96)
+                rowHeightStr = twips.toString()
+                console.log("[TableRowWithAttrs] parseHTML (node level) - Extracted from style.height:", px, "px =", twips, "twips")
+              }
+            }
+          }
+          
+          const attrs: any = {}
+          
+          if (rowHeightStr) {
+            const rowHeight = parseFloat(rowHeightStr)
+            if (!isNaN(rowHeight) && rowHeight > 0) {
+              // 验证行高值的合理性（10-5000 twips，约 7-3333px）
+              if (rowHeight >= 10 && rowHeight <= 5000) {
+                attrs.rowHeight = rowHeight
+                console.log("[TableRowWithAttrs] parseHTML (node level) - Setting rowHeight:", rowHeight, "twips")
+              }
+            }
+          }
+          
+          return attrs
+        },
+      },
+    ]
   },
 
   addNodeView() {
     return ({ node, getPos, editor }) => {
-      console.log("TableRowWithAttrs: addNodeView called", { node, getPos, editor: !!editor })
+      console.log("TableRowWithAttrs: addNodeView called", { node, getPos, editor: !!editor, attrs: node.attrs })
       
       const dom = document.createElement("tr")
       dom.setAttribute("data-type", "tableRow")
+      
+      // 应用行高样式（如果存在）
+      const rowHeight = node.attrs.rowHeight as number | null | undefined
+      console.log("[TableRowWithAttrs] addNodeView - rowHeight from node.attrs:", rowHeight, "full attrs:", node.attrs)
+      if (rowHeight && rowHeight > 0) {
+        // 将 twips 转换为 px 用于 CSS
+        // 1 twip = 96/1440 px = 0.0667px
+        const px = rowHeight * (96 / 1440)
+        // 使用 !important 确保行高样式不被覆盖
+        dom.style.setProperty("height", `${px}px`, "important")
+        console.log("[TableRowWithAttrs] Applied rowHeight style with !important:", `${px}px`)
+      } else {
+        console.warn("[TableRowWithAttrs] No rowHeight found in node.attrs, node.attrs:", node.attrs)
+      }
       
       // 获取exportEnabled状态
       const exportEnabled = node.attrs.exportEnabled !== false
@@ -974,13 +1096,25 @@ export const TableRowWithAttrs = TableRow.extend<{ isComplexForm?: boolean }>({
         },
         update: (updatedNode) => {
           console.log("TableRowWithAttrs: update called", { 
-            exportEnabled: updatedNode.attrs.exportEnabled 
+            exportEnabled: updatedNode.attrs.exportEnabled,
+            rowHeight: updatedNode.attrs.rowHeight
           })
           // 更新checkbox状态
           const updatedExportEnabled = updatedNode.attrs.exportEnabled !== false
           if (checkbox.checked !== updatedExportEnabled) {
             checkbox.checked = updatedExportEnabled
             updateCheckboxVisual(updatedExportEnabled)
+          }
+          // 更新行高样式
+          const updatedRowHeight = updatedNode.attrs.rowHeight as number | null | undefined
+          if (updatedRowHeight && updatedRowHeight > 0) {
+            const px = updatedRowHeight * (96 / 1440)
+            // 使用 !important 确保行高样式不被覆盖
+            dom.style.setProperty("height", `${px}px`, "important")
+            console.log("[TableRowWithAttrs] Updated rowHeight style in update with !important:", `${px}px`)
+          } else {
+            dom.style.removeProperty("height")
+            console.warn("[TableRowWithAttrs] No rowHeight in updatedNode.attrs")
           }
           // 确保checkbox始终在最前面
           ensureCheckboxFirst()
@@ -991,18 +1125,31 @@ export const TableRowWithAttrs = TableRow.extend<{ isComplexForm?: boolean }>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const attrs = node.attrs as TableRowAttrs
+    const attrs = node.attrs as TableRowAttrs & { rowHeight?: number | null }
     // 将exportEnabled作为data属性存储，但不影响渲染
     const dataAttrs: Record<string, string> = {}
     if (attrs.exportEnabled !== undefined && attrs.exportEnabled !== null) {
       dataAttrs["data-export-enabled"] = String(attrs.exportEnabled)
     }
+    
+    // 应用行高样式
+    const styleAttrs: Record<string, string> = {}
+    if (attrs.rowHeight && attrs.rowHeight > 0) {
+      // 将 twips 转换为 px 用于 CSS
+      // 1 twip = 96/1440 px = 0.0667px
+      const px = attrs.rowHeight * (96 / 1440)
+      // 使用 !important 确保行高样式不被覆盖
+      styleAttrs.style = `height: ${px}px !important;`
+      console.log("[TableRowWithAttrs] renderHTML - Applied rowHeight style:", `${px}px !important`)
+    }
+    
     return [
       "tr",
       mergeAttributes(
         this.options.HTMLAttributes,
         HTMLAttributes,
-        dataAttrs
+        dataAttrs,
+        styleAttrs
       ),
       0,
     ]

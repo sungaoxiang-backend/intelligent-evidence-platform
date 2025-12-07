@@ -387,6 +387,20 @@ html {
   th[style*="vertical-align"] {
     vertical-align: inherit !important;
   }
+
+  /* 表格行高支持 - 确保行高样式不被覆盖 */
+  /* 注意：这里不设置 height: inherit，因为我们需要使用实际的行高值 */
+  
+  /* 确保从 data-row-height 属性应用的行高生效 */
+  tr[data-row-height] {
+    /* 行高将通过内联样式应用，这里不需要 CSS 变量 */
+  }
+  
+  /* 确保表格行的行高样式优先级最高 */
+  .template-doc tr[style*="height"],
+  .ProseMirror tr[style*="height"] {
+    /* 确保内联样式生效 */
+  }
 }
 
 /* A4 纸张容器样式 */

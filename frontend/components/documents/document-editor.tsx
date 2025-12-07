@@ -170,50 +170,156 @@ export function DocumentEditor({
           const colWidths: number[] = []
           const colgroup = tableEl.querySelector("colgroup")
           
+          // 辅助函数：将宽度字符串转换为 twips
+          const parseWidthToTwips = (widthStr: string, tableWidthPx: number | null = null): number | null => {
+            if (!widthStr) return null
+            
+            const widthValue = parseFloat(widthStr)
+            if (isNaN(widthValue)) return null
+            
+            if (widthStr.includes("px")) {
+              return pxToTwips(widthValue)
+            } else if (widthStr.includes("pt")) {
+              return ptToTwips(widthValue)
+            } else if (widthStr.includes("cm")) {
+              // 1cm = 37.8px (96 DPI)
+              return pxToTwips(widthValue * 37.8)
+            } else if (widthStr.includes("%")) {
+              // 百分比需要根据表格宽度计算
+              if (tableWidthPx !== null) {
+                const actualWidth = (widthValue / 100) * tableWidthPx
+                return pxToTwips(actualWidth)
+              } else if (tableWidth) {
+                // 如果表格宽度是 twips，先转换为 px
+                const tableWidthPx = tableWidth / (1440 / 96)
+                const actualWidth = (widthValue / 100) * tableWidthPx
+                return pxToTwips(actualWidth)
+              } else {
+                // 如果没有表格宽度，使用 A4 内容区域宽度作为基准
+                const A4_CONTENT_WIDTH = 602
+                const actualWidth = (widthValue / 100) * A4_CONTENT_WIDTH
+                return pxToTwips(actualWidth)
+              }
+            } else {
+              // 假设是 px（无单位）
+              return pxToTwips(widthValue)
+            }
+          }
+          
+          // 计算表格实际宽度（px），用于百分比计算
+          let tableWidthPx: number | null = null
+          if (tableWidth) {
+            tableWidthPx = tableWidth / (1440 / 96) // twips 转 px
+          } else if (tableEl.style.width) {
+            const widthStr = tableEl.style.width
+            const widthValue = parseFloat(widthStr)
+            if (!isNaN(widthValue)) {
+              if (widthStr.includes("px")) {
+                tableWidthPx = widthValue
+              } else if (widthStr.includes("pt")) {
+                tableWidthPx = widthValue * 1.333 // pt 转 px (1pt = 1.333px)
+              } else if (widthStr.includes("%")) {
+                const A4_CONTENT_WIDTH = 602
+                tableWidthPx = (widthValue / 100) * A4_CONTENT_WIDTH
+              }
+            }
+          }
+          
           if (colgroup) {
             // 从 colgroup 中提取列宽
             const cols = colgroup.querySelectorAll("col")
             cols.forEach((col) => {
               const colEl = col as HTMLElement
               const widthStr = colEl.style.width || colEl.getAttribute("width") || ""
-              const widthValue = parseFloat(widthStr)
-              
-              if (!isNaN(widthValue)) {
-                let twips: number
-                if (widthStr.includes("px")) {
-                  twips = pxToTwips(widthValue)
-                } else if (widthStr.includes("pt")) {
-                  twips = ptToTwips(widthValue)
-                } else if (widthStr.includes("%")) {
-                  // 百分比需要根据表格宽度计算，这里先跳过
-                  return
-                } else {
-                  // 假设是 px
-                  twips = pxToTwips(widthValue)
-                }
+              const twips = parseWidthToTwips(widthStr, tableWidthPx)
+              if (twips !== null) {
                 colWidths.push(twips)
               }
             })
-          } else {
-            // 如果没有 colgroup，尝试从第一行的单元格宽度提取
+          }
+          
+          // 如果没有 colgroup 或 colgroup 中没有足够的列宽信息，从第一行的单元格宽度提取
+          if (colWidths.length === 0) {
             const firstRow = tableEl.querySelector("tr")
             if (firstRow) {
               const cells = firstRow.querySelectorAll("td, th")
               cells.forEach((cell) => {
                 const cellEl = cell as HTMLElement
-                const widthStr = cellEl.style.width || ""
-                const widthValue = parseFloat(widthStr)
+                // 检查是否是合并单元格（跳过合并的列）
+                const colspan = cellEl.getAttribute("colspan")
+                const colspanNum = colspan ? parseInt(colspan, 10) : 1
                 
-                if (!isNaN(widthValue) && widthStr.includes("px")) {
-                  colWidths.push(pxToTwips(widthValue))
+                // 尝试从多个来源获取宽度
+                const widthStr = cellEl.style.width || 
+                                 cellEl.getAttribute("width") || 
+                                 cellEl.style.minWidth || 
+                                 ""
+                
+                if (widthStr) {
+                  const twips = parseWidthToTwips(widthStr, tableWidthPx)
+                  if (twips !== null) {
+                    // 如果是合并单元格，将宽度平均分配到各列
+                    const widthPerCol = Math.round(twips / colspanNum)
+                    for (let i = 0; i < colspanNum; i++) {
+                      colWidths.push(widthPerCol)
+                    }
+                  }
+                } else if (colspanNum > 1) {
+                  // 合并单元格但没有宽度信息，为每列添加占位符（稍后会被实际宽度替换）
+                  for (let i = 0; i < colspanNum; i++) {
+                    colWidths.push(0) // 0 表示未知宽度
+                  }
                 }
               })
             }
           }
           
+          // 验证列宽数组长度与表格列数匹配
+          // 计算表格实际列数（考虑合并单元格）
+          const firstRow = tableEl.querySelector("tr")
+          if (firstRow && colWidths.length > 0) {
+            const cells = firstRow.querySelectorAll("td, th")
+            let actualColCount = 0
+            cells.forEach((cell) => {
+              const colspan = cell.getAttribute("colspan")
+              const colspanNum = colspan ? parseInt(colspan, 10) : 1
+              actualColCount += colspanNum
+            })
+            
+            // 如果列宽数组长度不匹配，调整数组
+            if (colWidths.length !== actualColCount) {
+              if (colWidths.length < actualColCount) {
+                // 如果列宽数组太短，用平均宽度填充
+                const avgWidth = colWidths.length > 0 
+                  ? Math.round(colWidths.reduce((a, b) => a + b, 0) / colWidths.length)
+                  : pxToTwips(100) // 默认 100px
+                while (colWidths.length < actualColCount) {
+                  colWidths.push(avgWidth)
+                }
+              } else {
+                // 如果列宽数组太长，截断
+                colWidths.splice(actualColCount)
+              }
+            }
+            
+            // 移除占位符（值为 0 的列宽），用平均宽度替换
+            const nonZeroWidths = colWidths.filter(w => w > 0)
+            if (nonZeroWidths.length > 0) {
+              const avgWidth = Math.round(nonZeroWidths.reduce((a, b) => a + b, 0) / nonZeroWidths.length)
+              for (let i = 0; i < colWidths.length; i++) {
+                if (colWidths[i] === 0) {
+                  colWidths[i] = avgWidth
+                }
+              }
+            }
+          }
+          
           // 将列宽信息保存到 data 属性中，供 Tiptap 解析
-          if (colWidths.length > 0) {
+          if (colWidths.length > 0 && colWidths.every(w => w > 0)) {
             tableEl.setAttribute("data-col-widths", JSON.stringify(colWidths))
+            console.log("[DocumentEditor] Extracted colWidths:", colWidths)
+          } else {
+            console.warn("[DocumentEditor] No valid colWidths extracted from table")
           }
           
           // 保存表格宽度
@@ -221,6 +327,73 @@ export function DocumentEditor({
             tableEl.setAttribute("data-table-width", tableWidth.toString())
             tableEl.setAttribute("data-table-width-type", "twips")
           }
+          
+          // 提取行高信息
+          const rows = tableEl.querySelectorAll("tr")
+          rows.forEach((row, rowIndex) => {
+            const rowEl = row as HTMLElement
+            
+            // 辅助函数：将行高字符串转换为 twips
+            const parseHeightToTwips = (heightStr: string): number | null => {
+              if (!heightStr) return null
+              const heightValue = parseFloat(heightStr)
+              if (isNaN(heightValue)) return null
+              
+              if (heightStr.includes("px")) {
+                return pxToTwips(heightValue)
+              } else if (heightStr.includes("pt")) {
+                return ptToTwips(heightValue)
+              } else if (heightStr.includes("cm")) {
+                // 1cm = 37.8px (96 DPI)
+                return pxToTwips(heightValue * 37.8)
+              } else {
+                // 假设是 px（无单位）
+                return pxToTwips(heightValue)
+              }
+            }
+            
+            // 尝试从多个来源提取行高：
+            // 1. 从 tr 元素的 style.height 或 height 属性
+            let heightStr = rowEl.style.height || rowEl.getAttribute("height") || ""
+            let twips: number | null = null
+            
+            if (heightStr) {
+              twips = parseHeightToTwips(heightStr)
+            }
+            
+            // 2. 如果 tr 没有行高，尝试从第一个单元格的高度提取（WPS 可能将行高设置在单元格上）
+            if (!twips) {
+              const firstCell = rowEl.querySelector("td, th") as HTMLElement | null
+              if (firstCell) {
+                // 检查单元格的计算高度（包括 padding、border 等）
+                const computedStyle = window.getComputedStyle(firstCell)
+                const cellHeight = parseFloat(computedStyle.height)
+                if (!isNaN(cellHeight) && cellHeight > 0) {
+                  // 使用单元格高度作为行高
+                  twips = pxToTwips(cellHeight)
+                } else {
+                  // 尝试从单元格的 style.height
+                  const cellHeightStr = firstCell.style.height || firstCell.getAttribute("height") || ""
+                  if (cellHeightStr) {
+                    twips = parseHeightToTwips(cellHeightStr)
+                  }
+                }
+              }
+            }
+            
+            // 验证行高值的合理性（10-5000 twips，约 7-3333px）
+            // 放宽范围以适应 WPS 导出的各种行高值
+            if (twips !== null && twips >= 10 && twips <= 5000) {
+              // 同时设置 data 属性和 style，确保 Tiptap 能够解析
+              rowEl.setAttribute("data-row-height", twips.toString())
+              // 直接将行高应用到 style，这样 Tiptap 在解析时就能看到
+              const px = twips * (96 / 1440)
+              rowEl.style.height = `${px}px`
+              console.log(`[DocumentEditor] Extracted rowHeight for row ${rowIndex}:`, twips, "twips (≈", Math.round(px), "px), applied to style")
+            } else if (twips !== null) {
+              console.warn(`[DocumentEditor] Row height ${twips} twips is out of valid range (10-5000) for row ${rowIndex}`)
+            }
+          })
         })
         
         // 处理所有元素，基于 A4 页面尺寸保留样式
@@ -432,6 +605,91 @@ export function DocumentEditor({
         checkFontSize(json, "root")
       }
       
+      // 在更新后立即同步行高（延迟执行，避免频繁更新）
+      setTimeout(() => {
+        const editorElement = editor.view.dom
+        const pxToTwips = (px: number) => Math.round(px * 1440 / 96)
+        
+        const tables = editorElement.querySelectorAll("table")
+        tables.forEach((table) => {
+          const rows = table.querySelectorAll("tr")
+          rows.forEach((row) => {
+            const rowEl = row as HTMLElement
+            const dataRowHeight = rowEl.getAttribute("data-row-height")
+            const styleHeight = rowEl.style.height
+            
+            if (dataRowHeight || styleHeight) {
+              // 如果 DOM 中有行高信息，但节点属性中没有，需要同步
+              let rowHeightTwips: number | null = null
+              
+              if (dataRowHeight) {
+                rowHeightTwips = parseFloat(dataRowHeight)
+              } else if (styleHeight) {
+                const px = parseFloat(styleHeight)
+                if (!isNaN(px) && px > 0) {
+                  rowHeightTwips = pxToTwips(px)
+                }
+              }
+              
+              if (rowHeightTwips !== null && rowHeightTwips >= 10 && rowHeightTwips <= 5000) {
+                try {
+                  const rowPos = editor.view.posAtDOM(row, 0)
+                  if (rowPos !== null && rowPos >= 0) {
+                    const $pos = editor.state.doc.resolve(rowPos)
+                    let rowNode = $pos.nodeAfter
+                    
+                    if (!rowNode || rowNode.type.name !== "tableRow") {
+                      const parent = $pos.parent
+                      if (parent && parent.type.name === "tableRow") {
+                        rowNode = parent
+                      }
+                    }
+                    
+                    if (rowNode && rowNode.type.name === "tableRow") {
+                      const currentRowHeight = rowNode.attrs.rowHeight
+                      if (!currentRowHeight || Math.abs(currentRowHeight - rowHeightTwips) > 1) {
+                        editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+                          if (node.type.name === "tableRow" && node === rowNode) {
+                            const tr = editor.state.tr
+                            tr.setNodeMarkup(pos, undefined, {
+                              ...node.attrs,
+                              rowHeight: rowHeightTwips,
+                            })
+                            editor.view.dispatch(tr)
+                            console.log(`[DocumentEditor] onUpdate - Synced rowHeight for row at pos ${pos}:`, rowHeightTwips, "twips")
+                            return false
+                          }
+                          return true
+                        })
+                      }
+                    }
+                  }
+                } catch (error) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.warn("[DocumentEditor] onUpdate - Failed to sync rowHeight:", error)
+                  }
+                }
+              }
+            }
+          })
+        })
+      }, 150)
+      
+      // 调试：检查表格行的行高属性
+      if (process.env.NODE_ENV === "development") {
+        const checkRowHeights = (node: any, path: string = ""): void => {
+          if (node.type === "tableRow") {
+            console.log(`[DocumentEditor] Found tableRow at ${path}, rowHeight:`, node.attrs?.rowHeight)
+          }
+          if (node.content && Array.isArray(node.content)) {
+            node.content.forEach((child: any, idx: number) => {
+              checkRowHeights(child, `${path}.content[${idx}]`)
+            })
+          }
+        }
+        checkRowHeights(json, "root")
+      }
+      
       const normalized = normalizeContentUtil(JSON.parse(JSON.stringify(json)))
       if (normalized) {
         onChange?.(normalized)
@@ -581,6 +839,141 @@ export function DocumentEditor({
     return () => {
       observer.disconnect()
       editorElement.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [editor])
+
+  // 同步表格行高到节点属性
+  useEffect(() => {
+    if (!editor) return
+
+    const editorElement = editor.view.dom
+    const pxToTwips = (px: number) => Math.round(px * 1440 / 96)
+
+    // 同步表格行高的函数
+    const syncTableRowHeights = () => {
+      const tables = editorElement.querySelectorAll("table")
+      
+      tables.forEach((table) => {
+        const rows = table.querySelectorAll("tr")
+        
+        rows.forEach((row) => {
+          const rowEl = row as HTMLElement
+          // 检查是否有 data-row-height 属性或 style.height
+          const dataRowHeight = rowEl.getAttribute("data-row-height")
+          const styleHeight = rowEl.style.height
+          
+          let rowHeightTwips: number | null = null
+          
+          if (dataRowHeight) {
+            rowHeightTwips = parseFloat(dataRowHeight)
+          } else if (styleHeight) {
+            const px = parseFloat(styleHeight)
+            if (!isNaN(px) && px > 0) {
+              rowHeightTwips = pxToTwips(px)
+            }
+          }
+          
+          // 如果检测到行高，尝试更新表格行节点的 rowHeight 属性
+          if (rowHeightTwips !== null && rowHeightTwips >= 10 && rowHeightTwips <= 5000) {
+            try {
+              // 找到表格行节点
+              const rowPos = editor.view.posAtDOM(row, 0)
+              if (rowPos !== null && rowPos >= 0) {
+                const $pos = editor.state.doc.resolve(rowPos)
+                let rowNode = $pos.nodeAfter
+                
+                // 如果 nodeAfter 不是表格行，尝试向上查找
+                if (!rowNode || rowNode.type.name !== "tableRow") {
+                  const parent = $pos.parent
+                  if (parent && parent.type.name === "tableRow") {
+                    rowNode = parent
+                  }
+                }
+                
+                if (rowNode && rowNode.type.name === "tableRow") {
+                  const currentRowHeight = rowNode.attrs.rowHeight
+                  // 检查行高是否发生变化（允许 1 twips 的误差）
+                  const hasChanged = currentRowHeight !== rowHeightTwips &&
+                    (!currentRowHeight || Math.abs(currentRowHeight - rowHeightTwips) > 1)
+                  
+                  if (hasChanged) {
+                    // 找到表格行节点的确切位置
+                    editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+                      if (node.type.name === "tableRow" && node === rowNode) {
+                        // 使用 setNodeMarkup 更新特定表格行节点的属性
+                        const tr = editor.state.tr
+                        tr.setNodeMarkup(pos, undefined, {
+                          ...node.attrs,
+                          rowHeight: rowHeightTwips,
+                        })
+                        editor.view.dispatch(tr)
+                        console.log(`[DocumentEditor] Synced rowHeight for row at pos ${pos}:`, rowHeightTwips, "twips")
+                        return false // 停止遍历
+                      }
+                      return true
+                    })
+                  }
+                }
+              }
+            } catch (error) {
+              // 忽略错误，避免干扰正常编辑
+              if (process.env.NODE_ENV === "development") {
+                console.warn("[DocumentEditor] Failed to sync table rowHeight:", error)
+              }
+            }
+          }
+        })
+      })
+    }
+
+    // 在粘贴后延迟同步行高
+    const handlePaste = () => {
+      setTimeout(() => {
+        syncTableRowHeights()
+      }, 200)
+    }
+
+    // 监听粘贴事件
+    editorElement.addEventListener("paste", handlePaste)
+
+    // 也监听内容更新事件
+    const handleUpdate = () => {
+      setTimeout(() => {
+        syncTableRowHeights()
+      }, 100)
+    }
+    
+    // 使用 MutationObserver 监听表格行高变化
+    const observer = new MutationObserver((mutations) => {
+      let shouldSync = false
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes" && mutation.attributeName === "style") {
+          const target = mutation.target as HTMLElement
+          if (target.tagName === "TR" && target.style.height) {
+            shouldSync = true
+          }
+        } else if (mutation.type === "attributes" && mutation.attributeName === "data-row-height") {
+          shouldSync = true
+        }
+      })
+      
+      if (shouldSync) {
+        // 延迟执行，避免频繁更新
+        setTimeout(syncTableRowHeights, 100)
+      }
+    })
+
+    // 监听整个编辑器 DOM 的变化
+    observer.observe(editorElement, {
+      attributes: true,
+      attributeFilter: ["style", "data-row-height"],
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      observer.disconnect()
+      editorElement.removeEventListener("paste", handlePaste)
     }
   }, [editor])
 
