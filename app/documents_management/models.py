@@ -5,7 +5,7 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, JSON, Index
+from sqlalchemy import String, Text, ForeignKey, JSON, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
@@ -68,5 +68,65 @@ class Document(Base):
         Index("idx_documents_name", "name"),
         Index("idx_documents_category", "category"),
         Index("idx_documents_status", "status"),
+    )
+
+
+class DocumentDraft(Base):
+    """文书草稿模型 - 存储某个案件+模板的表单草稿数据"""
+    
+    __tablename__ = "document_drafts"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    
+    # 关联案件和模板
+    case_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=False,
+        index=True,
+        comment="案件ID"
+    )
+    document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("documents.id"),
+        nullable=False,
+        index=True,
+        comment="模板ID"
+    )
+    
+    # 表单数据（JSON格式，存储占位符的填充值）
+    form_data: Mapped[Dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        comment="表单数据，格式：{\"placeholder_name\": \"value\"}"
+    )
+    
+    # 创建和更新信息
+    created_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("staffs.id"),
+        nullable=True,
+        comment="创建人ID"
+    )
+    updated_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("staffs.id"),
+        nullable=True,
+        comment="最后更新人ID"
+    )
+    
+    # 时间戳（继承自 Base）
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+    
+    # 关系
+    case = relationship("Case", foreign_keys=[case_id], back_populates=None)
+    document = relationship("Document", foreign_keys=[document_id], back_populates=None)
+    created_by = relationship("Staff", foreign_keys=[created_by_id], back_populates=None)
+    updated_by = relationship("Staff", foreign_keys=[updated_by_id], back_populates=None)
+    
+    __table_args__ = (
+        UniqueConstraint("case_id", "document_id", name="uq_document_drafts_case_document"),
+        Index("idx_document_drafts_case_id", "case_id"),
+        Index("idx_document_drafts_document_id", "document_id"),
+        Index("idx_document_drafts_case_document", "case_id", "document_id"),
     )
 

@@ -7,7 +7,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
-from app.documents_management.models import Document
+from app.documents_management.models import Document, DocumentDraft
 from app.documents_management.schemas import (
     DocumentCreateRequest,
     DocumentUpdateRequest,
@@ -16,6 +16,7 @@ from app.documents_management.utils import (
     extract_placeholders,
     initialize_placeholder_metadata,
     merge_placeholder_metadata,
+    replace_placeholders_in_prosemirror,
 )
 
 
@@ -212,4 +213,167 @@ class DocumentManagementService:
 
 # 全局服务实例
 document_management_service = DocumentManagementService()
+
+
+class DocumentDraftService:
+    """文书草稿管理服务类"""
+    
+    async def get_draft(
+        self,
+        db: AsyncSession,
+        case_id: int,
+        document_id: int
+    ) -> Optional[DocumentDraft]:
+        """
+        获取草稿
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            document_id: 模板ID
+            
+        Returns:
+            草稿对象，如果不存在则返回 None
+        """
+        result = await db.execute(
+            select(DocumentDraft).where(
+                DocumentDraft.case_id == case_id,
+                DocumentDraft.document_id == document_id
+            )
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_or_update_draft(
+        self,
+        db: AsyncSession,
+        case_id: int,
+        document_id: int,
+        form_data: Dict[str, Any],
+        staff_id: Optional[int]
+    ) -> DocumentDraft:
+        """
+        创建或更新草稿
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            document_id: 模板ID
+            form_data: 表单数据
+            staff_id: 操作人ID
+            
+        Returns:
+            创建或更新后的草稿对象
+        """
+        # 查询是否已存在
+        existing_draft = await self.get_draft(db, case_id, document_id)
+        
+        if existing_draft:
+            # 更新现有草稿
+            existing_draft.form_data = form_data
+            existing_draft.updated_by_id = staff_id
+            await db.commit()
+            await db.refresh(existing_draft)
+            logger.info(f"更新草稿成功: {existing_draft.id} - case_id={case_id}, document_id={document_id}")
+            return existing_draft
+        else:
+            # 创建新草稿
+            draft = DocumentDraft(
+                case_id=case_id,
+                document_id=document_id,
+                form_data=form_data,
+                created_by_id=staff_id,
+                updated_by_id=staff_id,
+            )
+            db.add(draft)
+            await db.commit()
+            await db.refresh(draft)
+            logger.info(f"创建草稿成功: {draft.id} - case_id={case_id}, document_id={document_id}")
+            return draft
+    
+    async def delete_draft(
+        self,
+        db: AsyncSession,
+        draft_id: int
+    ) -> bool:
+        """
+        删除草稿
+        
+        Args:
+            db: 数据库会话
+            draft_id: 草稿ID
+            
+        Returns:
+            是否删除成功
+        """
+        result = await db.execute(
+            select(DocumentDraft).where(DocumentDraft.id == draft_id)
+        )
+        draft = result.scalar_one_or_none()
+        if not draft:
+            return False
+        
+        await db.delete(draft)
+        await db.commit()
+        
+        logger.info(f"删除草稿成功: {draft_id}")
+        return True
+    
+    async def list_drafts_by_case(
+        self,
+        db: AsyncSession,
+        case_id: int
+    ) -> List[DocumentDraft]:
+        """
+        获取某个案件的所有草稿
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            
+        Returns:
+            草稿列表
+        """
+        result = await db.execute(
+            select(DocumentDraft).where(DocumentDraft.case_id == case_id)
+            .order_by(DocumentDraft.updated_at.desc())
+        )
+        return list(result.scalars().all())
+    
+    async def generate_document(
+        self,
+        db: AsyncSession,
+        case_id: int,
+        document_id: int,
+        form_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        生成填充后的文档
+        
+        Args:
+            db: 数据库会话
+            case_id: 案件ID
+            document_id: 模板ID
+            form_data: 表单数据
+            
+        Returns:
+            填充后的文档内容（ProseMirror JSON格式）
+        """
+        # 获取模板
+        document = await document_management_service.get_document(db, document_id)
+        if not document:
+            raise ValueError(f"模板不存在: {document_id}")
+        
+        # 替换占位符
+        filled_content = replace_placeholders_in_prosemirror(
+            document.content_json,
+            form_data,
+            document.placeholder_metadata
+        )
+        
+        logger.info(f"生成文档成功: case_id={case_id}, document_id={document_id}")
+        return filled_content
+
+
+# 全局服务实例
+document_draft_service = DocumentDraftService()
 

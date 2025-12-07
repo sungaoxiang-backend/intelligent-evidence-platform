@@ -297,5 +297,200 @@ export const documentsApi = {
 
     return await response.json()
   },
+
+  // 获取已发布模板列表（用于文书制作页面）
+  async getPublishedDocuments(params?: {
+    skip?: number
+    limit?: number
+    search?: string
+    category?: string
+  }): Promise<DocumentListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.skip !== undefined) queryParams.append("skip", String(params.skip))
+    if (params?.limit !== undefined) queryParams.append("limit", String(params.limit))
+    if (params?.search) queryParams.append("search", params.search)
+    if (params?.category) queryParams.append("category", params.category)
+
+    const url = buildApiUrl(`/documents/published${queryParams.toString() ? `?${queryParams.toString()}` : ""}`)
+    const response = await fetch(url, {
+      headers: getAuthHeader(),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "获取已发布模板列表失败")
+    }
+
+    return await response.json()
+  },
+}
+
+// 草稿相关类型定义
+export interface DocumentDraft {
+  id: number
+  case_id: number
+  document_id: number
+  form_data: Record<string, any>
+  created_by_id?: number
+  updated_by_id?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentDraftDetailResponse {
+  code: number
+  message: string
+  data: DocumentDraft | null
+}
+
+export interface DocumentDraftListResponse {
+  code: number
+  message: string
+  data: DocumentDraft[]
+}
+
+export interface CreateOrUpdateDraftRequest {
+  case_id: number
+  document_id: number
+  form_data: Record<string, any>
+}
+
+// 文书制作相关类型定义
+export interface DocumentCreationGenerateRequest {
+  case_id: number
+  document_id: number
+  form_data: Record<string, any>
+}
+
+export interface DocumentCreationGenerateResponse {
+  code: number
+  message: string
+  data: any  // ProseMirror JSON 格式
+}
+
+// 草稿管理 API
+export const documentDraftsApi = {
+  // 获取草稿
+  async getDraft(caseId: number, documentId: number): Promise<DocumentDraftDetailResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append("case_id", String(caseId))
+    queryParams.append("document_id", String(documentId))
+
+    const response = await fetch(
+      buildApiUrl(`/document-drafts?${queryParams.toString()}`),
+      {
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "获取草稿失败")
+    }
+
+    return await response.json()
+  },
+
+  // 创建或更新草稿
+  async createOrUpdateDraft(request: CreateOrUpdateDraftRequest): Promise<DocumentDraftDetailResponse> {
+    const response = await fetch(
+      buildApiUrl("/document-drafts"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "保存草稿失败")
+    }
+
+    return await response.json()
+  },
+
+  // 删除草稿
+  async deleteDraft(draftId: number): Promise<void> {
+    const response = await fetch(
+      buildApiUrl(`/document-drafts/${draftId}`),
+      {
+        method: "DELETE",
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "删除草稿失败")
+    }
+  },
+
+  // 获取某个案件的所有草稿
+  async getDraftsByCase(caseId: number): Promise<DocumentDraftListResponse> {
+    const response = await fetch(
+      buildApiUrl(`/document-drafts/case/${caseId}`),
+      {
+        headers: getAuthHeader(),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "获取草稿列表失败")
+    }
+
+    return await response.json()
+  },
+}
+
+// 文书制作 API
+export const documentCreationApi = {
+  // 生成填充后的文档
+  async generateDocument(request: DocumentCreationGenerateRequest): Promise<DocumentCreationGenerateResponse> {
+    const response = await fetch(
+      buildApiUrl("/document-creation/generate"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "生成文档失败")
+    }
+
+    return await response.json()
+  },
+
+  // 导出填充后的文档为 PDF
+  async exportDocumentToPdf(request: ExportDocumentRequest): Promise<Blob> {
+    const response = await fetch(
+      buildApiUrl("/document-creation/export"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(request),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "导出 PDF 失败")
+    }
+
+    return await response.blob()
+  },
 }
 

@@ -85,3 +85,63 @@ class DocumentGenerateRequest(BaseModel):
     
     form_data: Dict[str, Any] = Field(..., description="表单数据，键为占位符名称，值为填充的值")
 
+
+# 草稿相关 Schema
+
+class DocumentDraftCreateRequest(BaseModel):
+    """创建/更新草稿请求"""
+    
+    case_id: int = Field(..., description="案件ID", gt=0)
+    document_id: int = Field(..., description="模板ID", gt=0)
+    form_data: Dict[str, Any] = Field(..., description="表单数据，键为占位符名称，值为填充的值")
+
+
+class DocumentDraftResponse(BaseModel):
+    """草稿响应"""
+    
+    id: int = Field(..., description="草稿ID")
+    case_id: int = Field(..., description="案件ID")
+    document_id: int = Field(..., description="模板ID")
+    form_data: Dict[str, Any] = Field(..., description="表单数据")
+    created_by_id: Optional[int] = Field(None, description="创建人ID")
+    updated_by_id: Optional[int] = Field(None, description="更新人ID")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
+    
+    class Config:
+        from_attributes = True
+
+
+class DocumentDraftDetailResponse(BaseModel):
+    """草稿详情响应"""
+    
+    code: int = Field(200, description="状态码")
+    message: str = Field("查询成功", description="消息")
+    data: Optional[DocumentDraftResponse] = Field(None, description="草稿详情")
+
+
+class DocumentDraftListResponse(BaseModel):
+    """草稿列表响应"""
+    
+    code: int = Field(200, description="状态码")
+    message: str = Field("查询成功", description="消息")
+    data: List[DocumentDraftResponse] = Field(..., description="草稿列表")
+
+
+# 文书制作相关 Schema
+
+class DocumentCreationGenerateRequest(BaseModel):
+    """生成填充后的文档请求"""
+    
+    case_id: int = Field(..., description="案件ID", gt=0)
+    document_id: int = Field(..., description="模板ID", gt=0)
+    form_data: Dict[str, Any] = Field(..., description="表单数据，键为占位符名称，值为填充的值")
+
+
+class DocumentCreationGenerateResponse(BaseModel):
+    """生成填充后的文档响应"""
+    
+    code: int = Field(200, description="状态码")
+    message: str = Field("生成成功", description="消息")
+    data: Dict[str, Any] = Field(..., description="填充后的文档内容（ProseMirror JSON格式）")
+

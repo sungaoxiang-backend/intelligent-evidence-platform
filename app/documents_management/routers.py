@@ -10,7 +10,7 @@ from loguru import logger
 
 from app.core.deps import get_current_staff, get_db
 from app.staffs.models import Staff
-from app.documents_management.services import document_management_service
+from app.documents_management.services import document_management_service, document_draft_service
 from app.documents_management.schemas import (
     DocumentCreateRequest,
     DocumentUpdateRequest,
@@ -21,10 +21,18 @@ from app.documents_management.schemas import (
     DocumentStatusUpdateRequest,
     PlaceholderMetadataUpdateRequest,
     DocumentGenerateRequest,
+    DocumentDraftCreateRequest,
+    DocumentDraftResponse,
+    DocumentDraftDetailResponse,
+    DocumentDraftListResponse,
+    DocumentCreationGenerateRequest,
+    DocumentCreationGenerateResponse,
 )
 from app.documents_management.pdf_export import html_to_pdf
 
 router = APIRouter()
+draft_router = APIRouter()
+creation_router = APIRouter()
 
 
 @router.post("", response_model=DocumentDetailResponse, status_code=http_status.HTTP_201_CREATED)
@@ -61,6 +69,53 @@ async def create_document(
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="创建文书失败"
+        )
+
+
+@router.get("/published", response_model=DocumentListResponse)
+async def list_published_documents(
+    skip: int = Query(0, ge=0, description="跳过数量"),
+    limit: int = Query(100, ge=1, le=1000, description="返回数量"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    category: Optional[str] = Query(None, description="分类筛选"),
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取已发布模板列表（用于文书制作页面）
+    
+    Args:
+        skip: 跳过数量
+        limit: 返回数量
+        search: 搜索关键词
+        category: 分类筛选
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        已发布的模板列表
+    """
+    try:
+        documents, total = await document_management_service.list_documents(
+            db=db,
+            skip=skip,
+            limit=limit,
+            search=search,
+            category=category,
+            status="published"  # 仅返回已发布的模板
+        )
+        
+        return DocumentListResponse(
+            code=200,
+            message="查询成功",
+            data=[DocumentResponse.model_validate(doc) for doc in documents],
+            total=total
+        )
+    except Exception as e:
+        logger.error(f"获取已发布模板列表失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取已发布模板列表失败"
         )
 
 
@@ -463,5 +518,248 @@ async def generate_document(
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="生成文档失败"
+        )
+
+
+# ==================== 草稿相关 API ====================
+
+@draft_router.get("", response_model=DocumentDraftDetailResponse)
+async def get_draft(
+    case_id: int = Query(..., description="案件ID", gt=0),
+    document_id: int = Query(..., description="模板ID", gt=0),
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取草稿
+    
+    Args:
+        case_id: 案件ID
+        document_id: 模板ID
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        草稿详情（如果存在）
+    """
+    try:
+        draft = await document_draft_service.get_draft(db, case_id, document_id)
+        if not draft:
+            return DocumentDraftDetailResponse(
+                code=404,
+                message="草稿不存在",
+                data=None
+            )
+        
+        return DocumentDraftDetailResponse(
+            code=200,
+            message="查询成功",
+            data=DocumentDraftResponse.model_validate(draft)
+        )
+    except Exception as e:
+        logger.error(f"获取草稿失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取草稿失败"
+        )
+
+
+@draft_router.post("", response_model=DocumentDraftDetailResponse, status_code=http_status.HTTP_201_CREATED)
+async def create_or_update_draft(
+    request: DocumentDraftCreateRequest,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    创建或更新草稿
+    
+    Args:
+        request: 创建/更新请求
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        创建或更新后的草稿详情
+    """
+    try:
+        draft = await document_draft_service.create_or_update_draft(
+            db=db,
+            case_id=request.case_id,
+            document_id=request.document_id,
+            form_data=request.form_data,
+            staff_id=current_staff.id if current_staff else None
+        )
+        
+        return DocumentDraftDetailResponse(
+            code=201,
+            message="保存成功",
+            data=DocumentDraftResponse.model_validate(draft)
+        )
+    except Exception as e:
+        logger.error(f"保存草稿失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="保存草稿失败"
+        )
+
+
+@draft_router.delete("/{draft_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def delete_draft(
+    draft_id: int,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    删除草稿
+    
+    Args:
+        draft_id: 草稿ID
+        current_staff: 当前登录用户
+        db: 数据库会话
+    """
+    try:
+        success = await document_draft_service.delete_draft(db, draft_id)
+        if not success:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="草稿不存在"
+            )
+        
+        return Response(status_code=http_status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除草稿失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="删除草稿失败"
+        )
+
+
+@draft_router.get("/case/{case_id}", response_model=DocumentDraftListResponse)
+async def list_drafts_by_case(
+    case_id: int,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取某个案件的所有草稿
+    
+    Args:
+        case_id: 案件ID
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        草稿列表
+    """
+    try:
+        drafts = await document_draft_service.list_drafts_by_case(db, case_id)
+        
+        return DocumentDraftListResponse(
+            code=200,
+            message="查询成功",
+            data=[DocumentDraftResponse.model_validate(draft) for draft in drafts]
+        )
+    except Exception as e:
+        logger.error(f"获取草稿列表失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取草稿列表失败"
+        )
+
+
+# ==================== 文书制作相关 API ====================
+
+@creation_router.post("/generate", response_model=DocumentCreationGenerateResponse)
+async def generate_document_for_creation(
+    request: DocumentCreationGenerateRequest,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    生成填充后的文档（基于表单数据和模板）
+    
+    Args:
+        request: 生成请求
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        填充后的文档内容（ProseMirror JSON格式）
+    """
+    try:
+        filled_content = await document_draft_service.generate_document(
+            db=db,
+            case_id=request.case_id,
+            document_id=request.document_id,
+            form_data=request.form_data
+        )
+        
+        return DocumentCreationGenerateResponse(
+            code=200,
+            message="生成成功",
+            data=filled_content
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"生成文档失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="生成文档失败"
+        )
+
+
+@creation_router.post("/export")
+async def export_document_for_creation(
+    request: DocumentExportRequest,
+    current_staff: Staff = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    导出填充后的文档为 PDF
+    
+    Args:
+        request: 导出请求（包含 HTML 内容）
+        current_staff: 当前登录用户
+        db: 数据库会话
+        
+    Returns:
+        PDF 文件流
+    """
+    try:
+        # 生成 PDF
+        pdf_bytes = await html_to_pdf(
+            html_content=request.html_content,
+            filename=request.filename or "document.pdf"
+        )
+        
+        # 确定文件名
+        filename = request.filename or "document.pdf"
+        if not filename.endswith(".pdf"):
+            filename = f"{filename}.pdf"
+        
+        # 处理文件名编码
+        from urllib.parse import quote
+        encoded_filename = quote(filename, safe='')
+        safe_filename = "document.pdf"
+        content_disposition = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": content_disposition
+            }
+        )
+    except Exception as e:
+        logger.error(f"导出 PDF 失败: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="导出 PDF 失败"
         )
 

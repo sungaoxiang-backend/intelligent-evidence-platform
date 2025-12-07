@@ -25,7 +25,6 @@ import { useToast } from "@/hooks/use-toast"
 import { DocumentList } from "@/components/documents/document-list"
 import { DocumentPreview } from "@/components/documents/document-preview"
 import { DocumentEditor } from "@/components/documents/document-editor"
-import { DocumentFormFields } from "@/components/documents/document-form-fields"
 import { documentsApi, type Document } from "@/lib/documents-api"
 import type { JSONContent } from "@tiptap/core"
 import { generateHTML } from "@tiptap/html"
@@ -46,7 +45,7 @@ import {
 } from "@/components/template-editor/extensions"
 import { FontSize } from "@/components/documents/font-size-extension"
 
-type ViewMode = "list" | "preview" | "edit" | "create" | "generate"
+type ViewMode = "list" | "preview" | "edit" | "create"
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([])
@@ -66,9 +65,6 @@ export default function DocumentsPage() {
     description: "",
     category: "",
   })
-  // 表单填写相关状态（用于已发布模板）
-  const [formData, setFormData] = useState<Record<string, any>>({})
-  const [filledPreviewContent, setFilledPreviewContent] = useState<JSONContent | null>(null)
   const { toast } = useToast()
 
   // 加载文书列表
@@ -100,29 +96,6 @@ export default function DocumentsPage() {
   const handleDocumentSelect = (document: Document) => {
     setSelectedDocument(document)
     setViewMode("preview")
-    // 清空表单数据（只在进入生成模式时初始化）
-    setFormData({})
-    setFilledPreviewContent(null)
-  }
-
-  // 进入生成模式
-  const handleGenerate = () => {
-    if (!selectedDocument || selectedDocument.status !== "published") return
-    
-    // 初始化表单数据
-    const initialData: Record<string, any> = {}
-    const placeholderMetadata = selectedDocument.placeholder_metadata || {}
-    Object.keys(placeholderMetadata).forEach((key) => {
-      const meta = placeholderMetadata[key]
-      if (meta.type === "checkbox") {
-        initialData[key] = []
-      } else {
-        initialData[key] = ""
-      }
-    })
-    setFormData(initialData)
-    setFilledPreviewContent(selectedDocument.content_json)
-    setViewMode("generate")
   }
 
   // 新增文书
@@ -361,232 +334,6 @@ export default function DocumentsPage() {
     }
   }
 
-  // 处理表单数据变化（实时更新预览）- 仅在生成模式下
-  useEffect(() => {
-    if (viewMode !== "generate" || !selectedDocument) return
-    if (!selectedDocument.content_json) return
-
-    // 替换占位符
-    const replacePlaceholders = (node: any): any => {
-      if (node.type === "text") {
-        let text = node.text || ""
-        // 替换 {{placeholder}} 格式
-        Object.keys(formData).forEach((key) => {
-          const value = formData[key]
-          const meta = selectedDocument.placeholder_metadata?.[key]
-          
-          // 格式化显示值
-          let displayValue = ""
-          if (meta && (meta.type === "radio" || meta.type === "checkbox") && meta.options) {
-            // 单选/复选：显示所有选项及其勾选状态
-            const selectedValues = meta.type === "radio" 
-              ? (value ? [value] : [])
-              : (Array.isArray(value) ? value : [])
-            
-            const formattedOptions = meta.options.map((option: string) => {
-              const isSelected = selectedValues.includes(option)
-              return isSelected ? `☑ ${option}` : `☐ ${option}`
-            })
-            displayValue = formattedOptions.join("  ")
-          } else {
-            // 普通文本或未配置类型
-            displayValue = Array.isArray(value) ? value.join(", ") : String(value || "")
-          }
-          
-          text = text.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), displayValue)
-        })
-        return { ...node, text }
-      }
-
-      if (node.type === "placeholder") {
-        const fieldKey = node.attrs?.fieldKey || node.attrs?.field_key
-        if (fieldKey && fieldKey in formData) {
-          const value = formData[fieldKey]
-          const meta = selectedDocument.placeholder_metadata?.[fieldKey]
-          
-          // 格式化显示值
-          let displayValue = ""
-          if (meta && (meta.type === "radio" || meta.type === "checkbox") && meta.options) {
-            // 单选/复选：显示所有选项及其勾选状态
-            const selectedValues = meta.type === "radio" 
-              ? (value ? [value] : [])
-              : (Array.isArray(value) ? value : [])
-            
-            const formattedOptions = meta.options.map((option: string) => {
-              const isSelected = selectedValues.includes(option)
-              return isSelected ? `☑ ${option}` : `☐ ${option}`
-            })
-            displayValue = formattedOptions.join("  ")
-          } else {
-            // 普通文本或未配置类型
-            displayValue = Array.isArray(value) ? value.join(", ") : String(value || "")
-          }
-          
-          return {
-            type: "text",
-            text: displayValue,
-          }
-        }
-        return {
-          type: "text",
-          text: "",
-        }
-      }
-
-      if (node.content && Array.isArray(node.content)) {
-        return {
-          ...node,
-          content: node.content.map(replacePlaceholders),
-        }
-      }
-
-      return node
-    }
-
-    const updatedContent = replacePlaceholders(selectedDocument.content_json)
-    setFilledPreviewContent(updatedContent)
-  }, [formData, selectedDocument, viewMode])
-
-  // 处理表单字段变化
-  const handleFormChange = (key: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [key]: value }))
-  }
-
-  // 处理复选框变化
-  const handleCheckboxChange = (key: string, option: string, checked: boolean) => {
-    setFormData((prev) => {
-      const current = prev[key] || []
-      const newValue = checked
-        ? [...current, option]
-        : current.filter((v: string) => v !== option)
-      return { ...prev, [key]: newValue }
-    })
-  }
-
-  // 下载生成的文档
-  const handleDownloadGeneratedDocument = async () => {
-    if (!selectedDocument) return
-
-    try {
-      setIsLoading(true)
-      // 生成文档
-      const generateResponse = await documentsApi.generateDocument(selectedDocument.id, {
-        form_data: formData,
-      })
-
-      // 使用与导出 PDF 完全相同的扩展配置和渲染逻辑
-      const { Editor } = await import("@tiptap/core")
-      const { normalizeContent } = await import("@/components/template-editor/utils")
-      
-      // 使用与 handleExport 完全相同的扩展配置（包含 FontSize）
-      const extensions = [
-        StarterKit.configure({
-          heading: false,
-          paragraph: false,
-          hardBreak: false,
-        }),
-        HardBreak.configure({
-          keepMarks: true,
-        }),
-        ParagraphWithAttrs,
-        HeadingWithAttrs,
-        TableWithAttrs.configure({
-          resizable: false,
-          HTMLAttributes: {},
-        }),
-        TableRow.configure({
-          HTMLAttributes: {},
-        }),
-        TableHeader.configure({
-          HTMLAttributes: {},
-        }),
-        TableCellWithAttrs.configure({
-          HTMLAttributes: {},
-        }),
-        TextAlign.configure({
-          types: ["heading", "paragraph", "tableCell"],
-          alignments: ["left", "center", "right", "justify"],
-          defaultAlignment: "left",
-        }),
-        Underline,
-        TextStyle,
-        Color,
-        FontSize,
-      ]
-
-      // 创建临时编辑器实例，使用与导出相同的配置
-      const normalizedContent = normalizeContent(generateResponse.data.content_json)
-      const tempEditor = new Editor({
-        extensions,
-        content: normalizedContent || { type: "doc", content: [] },
-      })
-
-      // 关键：使用 editor.getHTML() 而不是 generateHTML()
-      // editor.getHTML() 会正确调用所有扩展的 renderHTML 方法
-      const htmlContent = tempEditor.getHTML()
-      
-      // 清理临时编辑器
-      tempEditor.destroy()
-
-      // 将 HTML 内容包装在完整的 HTML 文档中，并注入 CSS 样式（与 handleExport 保持一致）
-      const fullHtml = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${selectedDocument.name}</title>
-  <style>
-    ${templateBaseStyles}
-    /* PDF 导出专用样式优化 */
-    body {
-      margin: 0;
-      padding: 0;
-      background: white;
-    }
-    .template-doc-container {
-      box-shadow: none !important;
-    }
-  </style>
-</head>
-<body>
-  <div class="template-doc-container">
-    <div class="template-doc">
-      ${htmlContent}
-    </div>
-  </div>
-</body>
-</html>`
-
-      // 导出 PDF
-      const blob = await documentsApi.exportDocumentToPdf(selectedDocument.id, {
-        html_content: fullHtml,
-        filename: `${selectedDocument.name}_生成.pdf`,
-      })
-
-      // 下载文件
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${selectedDocument.name}_生成.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-
-      toast({
-        title: "成功",
-        description: "文档生成并下载成功",
-      })
-    } catch (error) {
-      toast({
-        title: "错误",
-        description: error instanceof Error ? error.message : "生成文档失败",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   // 导出 PDF
   const handleExport = async () => {
@@ -714,50 +461,28 @@ export default function DocumentsPage() {
   return (
     <div className="h-screen flex flex-col pt-12">
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：列表或表单 */}
-        {(viewMode === "list" || viewMode === "preview" || viewMode === "edit" || viewMode === "generate") && (
+        {/* 左侧：列表 */}
+        {(viewMode === "list" || viewMode === "preview" || viewMode === "edit") && (
           <div className="w-80 border-r flex flex-col">
-            {viewMode === "generate" ? (
-              // 生成模式：显示表单
-              <div className="flex flex-col h-full">
-                <div className="p-4 border-b">
-                  <h3 className="font-semibold">填写表单</h3>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  {selectedDocument && (
-                    <DocumentFormFields
-                      placeholderMetadata={selectedDocument.placeholder_metadata || {}}
-                      formData={formData}
-                      onFormChange={handleFormChange}
-                      onCheckboxChange={handleCheckboxChange}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : (
-              // 其他情况：显示列表
-              <>
-                <div className="p-4 border-b">
-                  <Button onClick={handleCreateNew} className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    新增文书
-                  </Button>
-                </div>
-                <DocumentList
-                  documents={documents}
-                  searchTerm={searchTerm}
-                  category={category}
-                  status={status}
-                  selectedDocumentId={selectedDocument?.id}
-                  onSearchChange={setSearchTerm}
-                  onCategoryChange={setCategory}
-                  onStatusChange={setStatus}
-                  onDocumentSelect={handleDocumentSelect}
-                  onEdit={handleEditFromList}
-                  onDelete={handleDelete}
-                />
-              </>
-            )}
+            <div className="p-4 border-b">
+              <Button onClick={handleCreateNew} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                新增文书
+              </Button>
+            </div>
+            <DocumentList
+              documents={documents}
+              searchTerm={searchTerm}
+              category={category}
+              status={status}
+              selectedDocumentId={selectedDocument?.id}
+              onSearchChange={setSearchTerm}
+              onCategoryChange={setCategory}
+              onStatusChange={setStatus}
+              onDocumentSelect={handleDocumentSelect}
+              onEdit={handleEditFromList}
+              onDelete={handleDelete}
+            />
           </div>
         )}
 
@@ -773,53 +498,13 @@ export default function DocumentsPage() {
           )}
 
           {viewMode === "preview" && selectedDocument && (
-            // 统一预览模式：根据状态显示不同的操作按钮
+            // 预览模式：根据状态显示不同的操作按钮
             <DocumentPreview
               content={selectedDocument.content_json}
               status={selectedDocument.status}
               onEdit={selectedDocument.status === "draft" ? handleEdit : undefined}
-              onGenerate={selectedDocument.status === "published" ? handleGenerate : undefined}
               onStatusChange={handleStatusChange}
             />
-          )}
-
-          {viewMode === "generate" && selectedDocument && (
-            // 生成模式：右侧显示实时预览
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h2 className="font-semibold">文档预览</h2>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline"
-                    size="sm" 
-                    onClick={() => {
-                      setViewMode("preview")
-                    }}
-                    title="返回"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    onClick={handleDownloadGeneratedDocument}
-                    disabled={isLoading}
-                    title={isLoading ? "生成中..." : "下载"}
-                  >
-                    {isLoading ? (
-                      <span className="text-xs">生成中...</span>
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <DocumentPreview
-                  content={filledPreviewContent || selectedDocument.content_json}
-                  status={selectedDocument.status}
-                />
-              </div>
-            </div>
           )}
 
           {(viewMode === "edit" || viewMode === "create") && (
