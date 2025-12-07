@@ -41,10 +41,35 @@ export const FontSize = Extension.create<FontSizeOptions>({
           fontSize: {
             default: null,
             parseHTML: (element) => {
+              // 首先检查元素本身的字体大小
               const fontSize = element.style.fontSize
               if (fontSize) {
-                return fontSize
+                // 标准化字体大小格式
+                let normalized = fontSize.trim()
+                // 如果已经是 pt、px 或 em，直接返回
+                if (normalized.includes("pt") || normalized.includes("px") || normalized.includes("em")) {
+                  return normalized
+                }
+                // 如果是纯数字，假设是 pt
+                const numValue = parseFloat(normalized)
+                if (!isNaN(numValue)) {
+                  return `${numValue}pt`
+                }
+                return normalized
               }
+              
+              // 检查父元素的字体大小（WPS 可能将字体大小设置在父元素上）
+              let parent = element.parentElement
+              while (parent && parent !== document.body) {
+                if (parent.style.fontSize) {
+                  const parentFontSize = parent.style.fontSize.trim()
+                  if (parentFontSize) {
+                    return parentFontSize
+                  }
+                }
+                parent = parent.parentElement
+              }
+              
               // 尝试从 font 标签的 size 属性解析
               const fontTag = element.closest("font")
               if (fontTag && fontTag.getAttribute("size")) {
@@ -61,6 +86,7 @@ export const FontSize = Extension.create<FontSizeOptions>({
                 }
                 return sizeMap[size || "3"] || "16pt"
               }
+              
               return null
             },
             renderHTML: (attributes) => {

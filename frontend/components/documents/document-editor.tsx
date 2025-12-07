@@ -94,6 +94,11 @@ export function DocumentEditor({
   const contentSetRef = useRef(false)
   const [selectedPlaceholder, setSelectedPlaceholder] = useState<string | null>(null)
   const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false)
+  // 用于强制重新渲染工具栏，以便字号选择器能同步更新
+  const [, forceUpdate] = useState({})
+  const updateToolbar = useCallback(() => {
+    forceUpdate({})
+  }, [])
 
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
@@ -174,8 +179,89 @@ export function DocumentEditor({
         const tempDiv = document.createElement("div")
         tempDiv.innerHTML = html
         
+        // 辅助函数：将各种单位转换为 twips
+        const pxToTwips = (px: number) => Math.round(px * 1440 / 96) // 96 DPI
+        const ptToTwips = (pt: number) => Math.round(pt * 20) // 1pt = 20 twips
+        
+        // 处理表格：提取列宽信息和表格宽度
+        const tables = tempDiv.querySelectorAll("table")
+        tables.forEach((table) => {
+          const tableEl = table as HTMLElement
+          
+          // 提取表格宽度
+          let tableWidth: number | null = null
+          if (tableEl.style.width) {
+            const widthStr = tableEl.style.width
+            const widthValue = parseFloat(widthStr)
+            if (!isNaN(widthValue)) {
+              if (widthStr.includes("px")) {
+                tableWidth = pxToTwips(widthValue)
+              } else if (widthStr.includes("pt")) {
+                tableWidth = ptToTwips(widthValue)
+              }
+            }
+          }
+          
+          // 提取列宽信息
+          const colWidths: number[] = []
+          const colgroup = tableEl.querySelector("colgroup")
+          
+          if (colgroup) {
+            // 从 colgroup 中提取列宽
+            const cols = colgroup.querySelectorAll("col")
+            cols.forEach((col) => {
+              const colEl = col as HTMLElement
+              const widthStr = colEl.style.width || colEl.getAttribute("width") || ""
+              const widthValue = parseFloat(widthStr)
+              
+              if (!isNaN(widthValue)) {
+                let twips: number
+                if (widthStr.includes("px")) {
+                  twips = pxToTwips(widthValue)
+                } else if (widthStr.includes("pt")) {
+                  twips = ptToTwips(widthValue)
+                } else if (widthStr.includes("%")) {
+                  // 百分比需要根据表格宽度计算，这里先跳过
+                  return
+                } else {
+                  // 假设是 px
+                  twips = pxToTwips(widthValue)
+                }
+                colWidths.push(twips)
+              }
+            })
+          } else {
+            // 如果没有 colgroup，尝试从第一行的单元格宽度提取
+            const firstRow = tableEl.querySelector("tr")
+            if (firstRow) {
+              const cells = firstRow.querySelectorAll("td, th")
+              cells.forEach((cell) => {
+                const cellEl = cell as HTMLElement
+                const widthStr = cellEl.style.width || ""
+                const widthValue = parseFloat(widthStr)
+                
+                if (!isNaN(widthValue) && widthStr.includes("px")) {
+                  colWidths.push(pxToTwips(widthValue))
+                }
+              })
+            }
+          }
+          
+          // 将列宽信息保存到 data 属性中，供 Tiptap 解析
+          if (colWidths.length > 0) {
+            tableEl.setAttribute("data-col-widths", JSON.stringify(colWidths))
+          }
+          
+          // 保存表格宽度
+          if (tableWidth) {
+            tableEl.setAttribute("data-table-width", tableWidth.toString())
+            tableEl.setAttribute("data-table-width-type", "twips")
+          }
+        })
+        
         // 处理所有元素，基于 A4 页面尺寸保留样式
         const allElements = tempDiv.querySelectorAll("*")
+        
         allElements.forEach((element) => {
           const el = element as HTMLElement
           
@@ -191,7 +277,7 @@ export function DocumentEditor({
             }
           }
           
-          // 2. 处理 font 标签的 size 属性，转换为 CSS 样式（1:1 保留）
+          // 2. 处理 font 标签的 size 属性，转换为 CSS 样式（保留原始字体大小）
           if (el.tagName === "FONT" && el.getAttribute("size")) {
             const size = el.getAttribute("size")
             const sizeMap: Record<string, string> = {
@@ -202,7 +288,56 @@ export function DocumentEditor({
             el.removeAttribute("size")
           }
           
-          // 3. 检查父元素的 text-align，传递到子元素
+          // 3. 处理所有元素的字体大小：确保保留 WPS 中的字体大小样式
+          // WPS 的"小四"字号是 12pt，需要正确保留
+          // 关键：将字体大小从父元素传递到文本节点，确保 Tiptap 能正确解析
+          
+          // 首先检查元素本身是否有字体大小
+          let elementFontSize = el.style.fontSize
+          
+          // 如果没有，检查父元素的字体大小（WPS 可能将字体大小设置在父元素上）
+          if (!elementFontSize) {
+            let parent = el.parentElement
+            while (parent && parent !== document.body) {
+              if (parent.style.fontSize) {
+                elementFontSize = parent.style.fontSize
+                break
+              }
+              parent = parent.parentElement
+            }
+          }
+          
+          if (elementFontSize) {
+            const fontSizeStr = elementFontSize.trim()
+            // 标准化字体大小格式，确保单位正确
+            let normalizedFontSize = fontSizeStr
+            if (!fontSizeStr.includes("pt") && !fontSizeStr.includes("px") && !fontSizeStr.includes("em")) {
+              const fontSizeValue = parseFloat(fontSizeStr)
+              if (!isNaN(fontSizeValue)) {
+                // 假设是 pt
+                normalizedFontSize = `${fontSizeValue}pt`
+              }
+            }
+            
+            // 将字体大小应用到当前元素
+            el.style.fontSize = normalizedFontSize
+            
+            // 关键修复：将字体大小样式应用到所有文本子节点（span 等）
+            // 这样 Tiptap 的 parseHTML 才能正确解析字体大小
+            // 注意：只应用到 span 和 font 标签，不要应用到 p、div、td、th 等块级元素
+            const textNodes = el.querySelectorAll("span, font")
+            if (textNodes.length > 0) {
+              textNodes.forEach((node) => {
+                const nodeEl = node as HTMLElement
+                // 如果子元素没有字体大小，继承父元素的
+                if (!nodeEl.style.fontSize) {
+                  nodeEl.style.fontSize = normalizedFontSize
+                }
+              })
+            }
+          }
+          
+          // 4. 检查父元素的 text-align，传递到子元素
           const parent = el.parentElement
           if (parent && parent.style.textAlign && !el.style.textAlign) {
             if (["P", "H1", "H2", "H3", "H4", "H5", "H6", "DIV"].includes(el.tagName)) {
@@ -210,7 +345,7 @@ export function DocumentEditor({
             }
           }
           
-          // 4. 清理所有行高样式（WPS 粘贴的内容经常带有行高，导致"隐形空白"）
+          // 5. 清理所有行高样式（WPS 粘贴的内容经常带有行高，导致"隐形空白"）
           // 对于段落和标题，统一移除行高，使用默认的 1.6
           if (["P", "H1", "H2", "H3", "H4", "H5", "H6", "DIV", "SPAN"].includes(el.tagName)) {
             if (el.style.lineHeight) {
@@ -227,7 +362,7 @@ export function DocumentEditor({
             }
           }
           
-          // 5. 处理表格单元格：防止内容溢出
+          // 6. 处理表格单元格：保留字体大小，只处理宽度和溢出
           if (el.tagName === "TD" || el.tagName === "TH") {
             // 移除可能导致溢出的宽度样式
             if (el.style.width === "auto" || el.style.minWidth) {
@@ -277,6 +412,12 @@ export function DocumentEditor({
       if (normalized) {
         onChange?.(normalized)
       }
+      // 更新工具栏状态，确保字号选择器同步
+      updateToolbar()
+    },
+    onSelectionUpdate: () => {
+      // 当选择变化时，更新工具栏状态
+      updateToolbar()
     },
   })
 
@@ -324,6 +465,84 @@ export function DocumentEditor({
           >
             <UnderlineIcon className="h-4 w-4" />
           </Button>
+          <Separator orientation="vertical" className="h-6" />
+          {/* 字号选择器 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1 min-w-[60px]">
+                {(() => {
+                  const fontSize = editor.getAttributes("textStyle").fontSize
+                  if (fontSize) {
+                    // 提取数字部分显示
+                    const match = fontSize.match(/(\d+(?:\.\d+)?)/)
+                    if (match) {
+                      const num = parseFloat(match[1])
+                      // 转换为中文字号（正确的中文字号对应关系）
+                      // 初号=42pt, 小初=36pt, 一号=26pt, 小一=24pt, 二号=22pt, 小二=18pt
+                      // 三号=16pt, 小三=15pt, 四号=14pt, 小四=12pt, 五号=10.5pt, 小五=9pt
+                      // 六号=7.5pt, 小六=6.5pt
+                      if (num >= 42) return "初号"
+                      if (num >= 36 && num < 42) return "小初"
+                      if (num >= 26 && num < 36) return "一号"
+                      if (num >= 24 && num < 26) return "小一"
+                      if (num >= 22 && num < 24) return "二号"
+                      if (num >= 18 && num < 22) return "小二"
+                      if (num >= 16 && num < 18) return "三号"
+                      if (num >= 15 && num < 16) return "小三"
+                      if (num >= 14 && num < 15) return "四号"
+                      if (num >= 12 && num < 14) return "小四"  // 12pt = 小四
+                      if (num >= 10.5 && num < 12) return "五号"
+                      if (num >= 9 && num < 10.5) return "小五"
+                      if (num >= 7.5 && num < 9) return "六号"
+                      if (num >= 6.5 && num < 7.5) return "小六"
+                      return `${num}pt`
+                    }
+                    return fontSize
+                  }
+                  return "字号"
+                })()}
+                <ChevronDownIcon className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-32">
+              <DropdownMenuLabel>字号</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {[
+                { label: "初号", size: "42pt" },
+                { label: "小初", size: "36pt" },
+                { label: "一号", size: "26pt" },
+                { label: "小一", size: "24pt" },
+                { label: "二号", size: "22pt" },
+                { label: "小二", size: "18pt" },
+                { label: "三号", size: "16pt" },
+                { label: "小三", size: "15pt" },
+                { label: "四号", size: "14pt" },
+                { label: "小四", size: "12pt" },
+                { label: "五号", size: "10.5pt" },
+                { label: "小五", size: "9pt" },
+                { label: "六号", size: "7.5pt" },
+                { label: "小六", size: "6.5pt" },
+              ].map((item) => {
+                const currentFontSize = editor.getAttributes("textStyle").fontSize
+                const isActive = currentFontSize === item.size
+                return (
+                  <DropdownMenuItem
+                    key={item.size}
+                    onClick={() => {
+                      if (isActive) {
+                        editor.chain().focus().unsetFontSize().run()
+                      } else {
+                        editor.chain().focus().setFontSize(item.size).run()
+                      }
+                    }}
+                    className={isActive ? "bg-accent" : ""}
+                  >
+                    {item.label} ({item.size})
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Separator orientation="vertical" className="h-6" />
           {/* 标题下拉菜单 */}
           <DropdownMenu>

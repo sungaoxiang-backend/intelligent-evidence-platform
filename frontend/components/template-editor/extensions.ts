@@ -114,8 +114,15 @@ export const buildTableStyle = (attrs: TableAttrs = {}) => {
     "table-layout": attrs?.tableLayout || (attrs?.colWidths ? "fixed" : undefined),
   }
 
+  // 如果存在表格宽度，保留原始宽度（支持水平滚动）
   if (attrs?.tableWidth?.width) {
-    style["width"] = twipsToPx(attrs.tableWidth.width)
+    const width = twipsToPx(attrs.tableWidth.width)
+    style["width"] = width
+    // 如果表格宽度超过容器宽度，使用 min-width 确保表格不被压缩
+    const widthValue = parseFloat(width || "0")
+    if (widthValue > A4_CONTENT_WIDTH) {
+      style["min-width"] = width
+    }
   }
 
   return styleObjectToString(style)
@@ -132,10 +139,15 @@ export const buildCellStyle = (attrs: TableCellAttrs = {}) => {
     style["width"] = twipsToPx(attrs.cellWidth.width)
   }
 
+  // 所有单元格默认垂直居中，除非明确指定其他值
+  // 用户要求：所有对齐方式都是垂直居中，水平对齐由 TextAlign 控制
   if (attrs?.verticalAlign) {
     const alignValue =
       attrs.verticalAlign === "center" ? "middle" : attrs.verticalAlign
     style["vertical-align"] = alignValue
+  } else {
+    // 默认垂直居中
+    style["vertical-align"] = "middle"
   }
 
   return styleObjectToString(style)
@@ -147,6 +159,18 @@ export const ParagraphWithAttrs = Paragraph.extend({
       textAlign: {
         default: null,
         parseHTML: (element) => {
+          // 关键修复：如果段落在表格单元格内，不要解析段落的对齐方式
+          // 单元格的对齐方式应该由单元格本身控制，而不是段落
+          // 这样可以避免单元格和段落同时有对齐方式导致的冲突
+          let parent = element.parentElement
+          while (parent) {
+            if (parent.tagName === "TD" || parent.tagName === "TH") {
+              // 段落在单元格内，不解析段落的对齐方式，避免冲突
+              return null
+            }
+            parent = parent.parentElement
+          }
+          // 不在单元格内的段落，正常解析对齐方式
           const align = element.style.textAlign || element.getAttribute("align")
           return align || null
         },
@@ -349,8 +373,97 @@ export const TableWithAttrs = Table.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      colWidths: { default: null },
-      tableWidth: { default: null },
+      colWidths: {
+        default: null,
+        parseHTML: (element) => {
+          // 从 data-col-widths 属性中读取列宽信息
+          const colWidthsStr = element.getAttribute("data-col-widths")
+          if (colWidthsStr) {
+            try {
+              const colWidths = JSON.parse(colWidthsStr)
+              if (Array.isArray(colWidths) && colWidths.length > 0) {
+                return colWidths
+              }
+            } catch (e) {
+              console.warn("Failed to parse colWidths:", e)
+            }
+          }
+          
+          // 如果没有 data 属性，尝试从 colgroup 中提取
+          const colgroup = element.querySelector("colgroup")
+          if (colgroup) {
+            const cols = colgroup.querySelectorAll("col")
+            const widths: number[] = []
+            cols.forEach((col) => {
+              const colEl = col as HTMLElement
+              const widthStr = colEl.style.width || colEl.getAttribute("width") || ""
+              const widthValue = parseFloat(widthStr)
+              
+              if (!isNaN(widthValue)) {
+                // 转换为 twips
+                let twips: number
+                if (widthStr.includes("px")) {
+                  twips = Math.round(widthValue * 1440 / 96) // 96 DPI
+                } else if (widthStr.includes("pt")) {
+                  twips = Math.round(widthValue * 20) // 1pt = 20 twips
+                } else {
+                  // 假设是 px
+                  twips = Math.round(widthValue * 1440 / 96)
+                }
+                widths.push(twips)
+              }
+            })
+            
+            if (widths.length > 0) {
+              return widths
+            }
+          }
+          
+          return null
+        },
+      },
+      tableWidth: {
+        default: null,
+        parseHTML: (element) => {
+          // 从 data-table-width 属性中读取表格宽度
+          const tableWidthStr = element.getAttribute("data-table-width")
+          if (tableWidthStr) {
+            const width = parseFloat(tableWidthStr)
+            if (!isNaN(width)) {
+              return {
+                width: width,
+                type: element.getAttribute("data-table-width-type") || "twips",
+              }
+            }
+          }
+          
+          // 如果没有 data 属性，尝试从 style 中提取
+          const tableEl = element as HTMLElement
+          if (tableEl.style.width) {
+            const widthStr = tableEl.style.width
+            const widthValue = parseFloat(widthStr)
+            
+            if (!isNaN(widthValue)) {
+              let twips: number
+              if (widthStr.includes("px")) {
+                twips = Math.round(widthValue * 1440 / 96) // 96 DPI
+              } else if (widthStr.includes("pt")) {
+                twips = Math.round(widthValue * 20) // 1pt = 20 twips
+              } else {
+                // 假设是 px
+                twips = Math.round(widthValue * 1440 / 96)
+              }
+              
+              return {
+                width: twips,
+                type: "twips",
+              }
+            }
+          }
+          
+          return null
+        },
+      },
       tableLayout: { default: null },
       style: { default: null },
     }
@@ -938,6 +1051,9 @@ export const templateBaseStyles = `
     box-sizing: border-box;
     position: relative;
     pointer-events: auto;
+    /* 允许表格超出容器宽度时使用水平滚动 */
+    overflow-x: auto;
+    overflow-y: visible;
   }
   
   .template-doc {
@@ -1028,16 +1144,35 @@ export const templateBaseStyles = `
     border-collapse: collapse;
     margin: 16px 0;
     table-layout: auto;
+    /* 允许表格超出容器宽度时使用水平滚动 */
+    min-width: fit-content;
+  }
+  /* 如果表格有固定宽度，保留原始宽度 */
+  .template-doc table[style*="width"] {
+    width: auto !important;
   }
   .template-doc td,
   .template-doc th {
     border: 1px solid #d4d4d8;
     padding: 8px;
-    vertical-align: top;
+    /* 所有单元格默认垂直居中 */
+    vertical-align: middle;
     box-sizing: border-box;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    text-align: left;
+    /* 移除强制左对齐，水平对齐由 TextAlign 扩展通过内联样式控制 */
+    /* 统一表格字体，避免因字体导致的布局问题 */
+    font-family: "SimSun", "宋体", serif;
+    font-size: 14px;
+  }
+  
+  /* 确保单元格内的段落不会继承单元格的对齐方式，避免冲突 */
+  .template-doc td p,
+  .template-doc th p,
+  .template-doc td div,
+  .template-doc th div {
+    /* 段落的对齐方式由段落本身的 textAlign 属性控制，不继承单元格 */
+    text-align: inherit;
   }
   .template-doc ul,
   .template-doc ol {
