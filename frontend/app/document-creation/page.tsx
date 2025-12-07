@@ -1,13 +1,18 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { CaseSelector } from "@/components/document-generation/case-selector"
 import { TemplateSelector } from "@/components/document-creation/template-selector"
 import { DocumentForm } from "@/components/document-creation/document-form"
 import { DocumentPreview } from "@/components/document-creation/document-preview"
+import { EvidenceCardsList } from "@/components/document-generation/evidence-cards-list"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { caseApi } from "@/lib/api"
+import useSWR from "swr"
+import type { Case } from "@/lib/types"
 import { 
   documentsApi, 
   documentDraftsApi, 
@@ -33,10 +38,8 @@ import {
 import { FontSize } from "@/components/documents/font-size-extension"
 import { normalizeContent } from "@/components/template-editor/utils"
 
-type Step = "case" | "template" | "form"
-
 export default function DocumentCreationPage() {
-  const [step, setStep] = useState<Step>("case")
+  const searchParams = useSearchParams()
   const [selectedCaseId, setSelectedCaseId] = useState<number | undefined>()
   const [selectedTemplate, setSelectedTemplate] = useState<Document | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
@@ -45,7 +48,82 @@ export default function DocumentCreationPage() {
   const [hasChanges, setHasChanges] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [cases, setCases] = useState<Case[]>([])
   const { toast } = useToast()
+
+  // 获取案件列表
+  useEffect(() => {
+    const loadCases = async () => {
+      try {
+        const response = await caseApi.getCases({
+          page: 1,
+          pageSize: 100,
+        })
+        setCases(response.data || [])
+      } catch (error) {
+        console.error("Failed to load cases:", error)
+        setCases([])
+      }
+    }
+    loadCases()
+  }, [])
+
+  // 从URL参数读取caseId并自动选择案件
+  useEffect(() => {
+    const caseIdParam = searchParams.get('caseId')
+    if (caseIdParam) {
+      const caseId = Number(caseIdParam)
+      if (!isNaN(caseId) && caseId > 0) {
+        // 等待案件列表加载完成后再设置
+        if (cases.length > 0) {
+          const caseExists = cases.some(c => c.id === caseId)
+          if (caseExists) {
+            setSelectedCaseId(caseId)
+          }
+        } else if (cases.length === 0) {
+          // 如果案件列表为空，也尝试设置（可能正在加载）
+          setSelectedCaseId(caseId)
+        }
+      }
+    }
+  }, [searchParams, cases])
+
+  // 获取选中的案件详情
+  const caseFetcher = async ([_key, caseId]: [string, number]) => {
+    const response = await caseApi.getCaseById(caseId)
+    return response.data
+  }
+
+  const { data: caseData } = useSWR(
+    selectedCaseId ? ['/api/case', selectedCaseId] : null,
+    caseFetcher,
+    {
+      revalidateOnFocus: false,
+    }
+  )
+
+  const getCaseDisplayName = (caseItem: Case) => {
+    if (caseItem.creditor_name && caseItem.debtor_name) {
+      return `${caseItem.creditor_name} vs ${caseItem.debtor_name}`
+    }
+    if (caseItem.description) {
+      return caseItem.description
+    }
+    return `案件 #${caseItem.id}`
+  }
+
+  const getCaseCause = (caseItem: Case) => {
+    return caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
+           caseItem.case_type === 'contract' ? '买卖合同纠纷' : 
+           caseItem.case_type || "未设置"
+  }
+
+  const getPartyTypeLabel = (partyType: string | null | undefined): string => {
+    if (partyType === 'person') return '个人'
+    if (partyType === 'company') return '公司'
+    if (partyType === 'individual') return '个体工商户'
+    return 'N/A'
+  }
 
   // 加载草稿并初始化表单数据
   const loadDraft = useCallback(async () => {
@@ -116,25 +194,18 @@ export default function DocumentCreationPage() {
     setSavedFormData(initialData)
   }, [selectedCaseId, selectedTemplate, toast])
 
-  // 选择案件后进入模板选择
-  const handleCaseSelect = (caseId: number) => {
-    setSelectedCaseId(caseId)
-    setStep("template")
-  }
-
   // 选择模板后进入表单填写
   const handleTemplateSelect = async (template: Document) => {
     setSelectedTemplate(template)
-    setStep("form")
   }
 
   // 当案件和模板都选择后，自动加载草稿
   useEffect(() => {
-    if (step === "form" && selectedCaseId && selectedTemplate?.placeholder_metadata) {
+    if (selectedCaseId && selectedTemplate?.placeholder_metadata) {
       loadDraft()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, selectedCaseId, selectedTemplate?.id])
+  }, [selectedCaseId, selectedTemplate?.id])
 
   // 处理表单数据变化
   const handleFormChange = (key: string, value: any) => {
@@ -236,7 +307,14 @@ export default function DocumentCreationPage() {
 
   // 保存草稿
   const handleSaveDraft = async () => {
-    if (!selectedCaseId || !selectedTemplate) return
+    if (!selectedCaseId || !selectedTemplate) {
+      toast({
+        title: "保存失败",
+        description: "请先选择案件和模板",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
       setIsSaving(true)
@@ -398,107 +476,190 @@ export default function DocumentCreationPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col pt-12">
-      <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：步骤内容 */}
-        <div className="w-80 border-r flex flex-col">
-          {step === "case" && (
-            <div className="flex-1 overflow-y-auto p-4">
-              <CaseSelector
-                selectedCaseId={selectedCaseId}
-                onSelectCase={handleCaseSelect}
+    <div className="h-[calc(100vh-3rem)] flex overflow-hidden">
+      {/* 左侧：案件信息 + 证据卡片列表 (25%) */}
+      <div className="w-1/4 border-r bg-background flex flex-col flex-shrink-0">
+        {/* 紧凑的案件信息 */}
+        <div className="border-b bg-muted/30 p-3 flex-shrink-0">
+          <div className="flex items-center justify-between mb-2.5">
+            <h3 className="text-sm font-semibold text-foreground">案件信息</h3>
+            {/* 案件选择器 */}
+            <div className="w-44">
+              <Select
+                value={selectedCaseId?.toString() || ""}
+                onValueChange={(value) => {
+                  const newCaseId = Number(value)
+                  setSelectedCaseId(newCaseId)
+                  // 切换案件时重置模板和表单
+                  setSelectedTemplate(null)
+                  setFormData({})
+                  setSavedFormData({})
+                  setHasChanges(false)
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="选择案件" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cases.map((caseItem) => (
+                    <SelectItem key={caseItem.id} value={caseItem.id.toString()}>
+                      {getCaseDisplayName(caseItem)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {/* 紧凑的案件基本信息 */}
+          {selectedCaseId && caseData ? (
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div>
+                <label className="text-[10px] text-muted-foreground">案件ID</label>
+                <div className="text-xs font-semibold text-foreground">#{caseData.id}</div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">案由</label>
+                <div className="text-xs font-medium text-foreground truncate">{getCaseCause(caseData)}</div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">关联用户</label>
+                <div className="text-xs font-medium text-foreground truncate">
+                  {caseData.user?.name || 'N/A'}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">欠款金额</label>
+                <div className="text-xs font-semibold text-destructive">
+                  {caseData.loan_amount !== null && caseData.loan_amount !== undefined
+                    ? `¥${caseData.loan_amount.toLocaleString()}`
+                    : 'N/A'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground text-center py-2">
+              请选择案件查看详情
+            </div>
+          )}
+        </div>
+
+        {/* 证据卡片列表 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+            <h4 className="text-sm font-semibold text-foreground">证据卡片</h4>
+          </div>
+          <div className="flex-1 overflow-hidden p-3">
+            {selectedCaseId ? (
+              <EvidenceCardsList caseId={selectedCaseId} className="h-full" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-xs text-center px-2">
+                请先选择案件
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 中间：模板列表/表单字段列表 (25%) */}
+      <div className="w-1/4 border-r bg-background flex flex-col flex-shrink-0">
+        {!selectedCaseId ? (
+          // 未选择案件
+          <div className="flex-1 flex flex-col">
+            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <h3 className="text-sm font-semibold text-foreground">选择模板</h3>
+            </div>
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center px-4">
+                <p className="text-sm font-medium mb-1">请先选择案件</p>
+                <p className="text-xs">选择案件后，将显示模板列表</p>
+              </div>
+            </div>
+          </div>
+        ) : !selectedTemplate ? (
+          // 模板选择
+          <div className="flex-1 flex flex-col">
+            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <h3 className="text-sm font-semibold text-foreground">选择模板</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <TemplateSelector
+                selectedTemplateId={selectedTemplate?.id}
+                onSelectTemplate={handleTemplateSelect}
               />
             </div>
-          )}
-
-          {step === "template" && (
-            <div className="flex-1 flex flex-col">
-              <div className="p-4 border-b">
+          </div>
+        ) : (
+          // 表单填写
+          <div className="flex-1 flex flex-col">
+            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">填写表单</h3>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="h-7 px-2 text-xs"
                   onClick={() => {
-                    setStep("case")
-                    setSelectedTemplate(null)
-                  }}
-                  className="mb-2"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  返回选择案件
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <TemplateSelector
-                  selectedTemplateId={selectedTemplate?.id}
-                  onSelectTemplate={handleTemplateSelect}
-                />
-              </div>
-            </div>
-          )}
-
-          {step === "form" && selectedTemplate && (
-            <div className="flex-1 flex flex-col">
-              <div className="p-4 border-b">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setStep("template")
                     setSelectedTemplate(null)
                     setFormData({})
                     setSavedFormData({})
                     setHasChanges(false)
                   }}
-                  className="mb-2"
                 >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  返回选择模板
+                  <ArrowLeft className="h-3 w-3 mr-1" />
+                  返回
                 </Button>
-                <h3 className="font-semibold">填写表单</h3>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <DocumentForm
-                  placeholderMetadata={selectedTemplate.placeholder_metadata || {}}
-                  formData={formData}
-                  onFormChange={handleFormChange}
-                  onCheckboxChange={handleCheckboxChange}
-                  onDataChange={handleDataChange}
-                  savedFormData={savedFormData}
-                />
               </div>
             </div>
-          )}
-        </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <DocumentForm
+                placeholderMetadata={selectedTemplate.placeholder_metadata || {}}
+                formData={formData}
+                onFormChange={handleFormChange}
+                onCheckboxChange={handleCheckboxChange}
+                onDataChange={handleDataChange}
+                savedFormData={savedFormData}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
-        {/* 右侧：预览区域 */}
-        <div className="flex-1 flex flex-col">
-          {step === "form" && selectedTemplate ? (
-            <DocumentPreview
-              content={filledPreviewContent}
-              onSave={handleSaveDraft}
-              onDownload={handleDownload}
-              canSave={hasChanges && !isSaving}
-              canDownload={!hasChanges}
-            />
-          ) : (
+      {/* 右侧：文档预览 (50%) */}
+      <div className="flex-1 flex flex-col bg-background">
+        {!selectedCaseId ? (
+          <>
+            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+            </div>
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                {step === "case" && (
-                  <>
-                    <p className="text-lg mb-2">请先选择案件</p>
-                    <p className="text-sm">选择案件后，将进入模板选择步骤</p>
-                  </>
-                )}
-                {step === "template" && (
-                  <>
-                    <p className="text-lg mb-2">请先选择模板</p>
-                    <p className="text-sm">选择模板后，将进入表单填写步骤</p>
-                  </>
-                )}
+                <p className="text-sm font-medium mb-1">请先选择案件</p>
+                <p className="text-xs">选择案件后，将显示文档预览</p>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        ) : !selectedTemplate ? (
+          <>
+            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+            </div>
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <p className="text-sm font-medium mb-1">请先选择模板</p>
+                <p className="text-xs">选择模板后，将显示文档预览</p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <DocumentPreview
+            content={filledPreviewContent}
+            onSave={handleSaveDraft}
+            onDownload={handleDownload}
+            canSave={hasChanges && !isSaving && !!selectedCaseId}
+            canDownload={!hasChanges && !!selectedCaseId}
+          />
+        )}
       </div>
     </div>
   )

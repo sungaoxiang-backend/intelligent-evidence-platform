@@ -59,10 +59,10 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
-    { id: "documents", label: "文书管理", icon: FileText, href: "/documents" },
+    { id: "documents", label: "文书模板", icon: FileText, href: "/documents" },
     { id: "document-creation", label: "文书制作", icon: FilePen, href: "/document-creation" },
-    { id: "document-templates", label: "文书模板", icon: FileText, href: "/document-templates" },
-    { id: "document-generation", label: "文书生成", icon: FileEdit, href: "/document-generation" },
+    // { id: "document-templates", label: "文书模板", icon: FileText, href: "/document-templates" },
+    // { id: "document-generation", label: "文书生成", icon: FileEdit, href: "/document-generation" },
   ]
 
   if (userRole === "admin") {

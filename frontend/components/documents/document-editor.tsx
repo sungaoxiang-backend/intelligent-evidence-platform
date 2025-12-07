@@ -997,9 +997,10 @@ export function DocumentEditor({
     <>
       <style jsx global>{templateBaseStyles}</style>
       <div className={cn("flex flex-col h-full", className)}>
-        {/* 工具栏 */}
-        <div className="flex items-center justify-between p-4 border-b gap-4">
-        <div className="flex items-center gap-1 flex-1 overflow-x-auto min-w-0">
+        {/* 工具栏 - 与A4容器宽度对齐 */}
+        <div className="flex justify-center border-b bg-gray-50">
+          <div className="flex items-center p-3 gap-3" style={{ width: '794px', maxWidth: '100%' }}>
+            <div className="flex items-center gap-1.5 flex-1 overflow-x-auto min-w-0 scrollbar-hide">
           <Button
             variant={editor.isActive("bold") ? "default" : "ghost"}
             size="sm"
@@ -1302,29 +1303,32 @@ export function DocumentEditor({
           >
             <Split className="h-4 w-4" />
           </Button>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          {onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel} title="取消">
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-          {onSave && (
-            <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"}>
-              {isLoading ? (
-                <span className="text-xs">保存中...</span>
-              ) : (
-                <Check className="h-4 w-4" />
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              {onCancel && (
+                <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
+                  <X className="h-4 w-4" />
+                </Button>
               )}
-            </Button>
-          )}
+              {onSave && (
+                <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"} className="whitespace-nowrap">
+                  {isLoading ? (
+                    <span className="text-xs">保存中...</span>
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* 编辑器内容 - 带页面容器 */}
-      <div className="flex-1 overflow-y-auto bg-gray-100 p-4" onClick={() => editor?.commands.focus()}>
-        <div className="template-doc-container">
-          <EditorContent editor={editor} />
+      {/* 编辑器内容 - 带页面容器，与预览模式保持一致 */}
+      <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }} onClick={() => editor?.commands.focus()}>
+        <div className="flex justify-center">
+          <div className="template-doc-container">
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
     </div>

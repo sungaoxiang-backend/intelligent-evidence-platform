@@ -106,7 +106,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
         <main className="pt-12">
           <div
             className={
-              pathname?.includes("/card-factory")
+              pathname?.includes("/card-factory") || pathname?.includes("/document-creation")
                 ? "w-full px-4 lg:px-6 py-3"
                 : "container mx-auto px-4 lg:px-6 py-3 max-w-7xl"
             }

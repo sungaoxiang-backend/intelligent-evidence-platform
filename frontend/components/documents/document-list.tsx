@@ -132,45 +132,17 @@ export function DocumentList({
             <Card
               key={document.id}
               className={cn(
-                "cursor-pointer transition-colors hover:bg-accent group",
+                "cursor-pointer transition-colors hover:bg-accent group h-[100px]",
                 selectedDocumentId === document.id && "bg-accent"
               )}
               onClick={() => onDocumentSelect(document)}
             >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium truncate">{document.name}</h3>
-                    {document.description && (
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                        {document.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      {document.status && (
-                        <Badge
-                          className={cn(
-                            "text-xs font-medium",
-                            document.status === "published"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : "bg-gray-200 text-gray-800 hover:bg-gray-200"
-                          )}
-                        >
-                          {document.status === "published" ? "已发布" : "草稿"}
-                        </Badge>
-                      )}
-                      {document.category && (
-                        <span className="text-xs px-2 py-1 bg-secondary rounded">
-                          {document.category}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(document.updated_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+              <CardContent className="p-4 h-[100px] flex flex-col">
+                {/* 顶部：名称（左）+ 编辑/删除按钮（右） */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="font-medium truncate flex-1 min-w-0">{document.name}</h3>
                   {(onEdit || onDelete) && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       {onEdit && (
                         <Button
                           variant="ghost"
@@ -194,6 +166,45 @@ export function DocumentList({
                         </Button>
                       )}
                     </div>
+                  )}
+                </div>
+                
+                {/* 中间：描述（左）+ 分类（右） */}
+                <div className="flex items-center justify-between gap-2 flex-1 min-h-0 mb-2">
+                  <div className="flex-1 min-w-0">
+                    {document.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {document.description}
+                      </p>
+                    )}
+                  </div>
+                  {document.category && (
+                    <span className="text-xs px-2 py-1 bg-secondary rounded truncate max-w-[100px] shrink-0">
+                      {document.category}
+                    </span>
+                  )}
+                </div>
+                
+                {/* 底部：时间（左）+ 状态（右） */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground truncate">
+                    {new Date(document.updated_at).toLocaleDateString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit'
+                    })}
+                  </span>
+                  {document.status && (
+                    <Badge
+                      className={cn(
+                        "text-xs font-medium shrink-0",
+                        document.status === "published"
+                          ? "bg-green-100 text-green-800 hover:bg-green-100"
+                          : "bg-gray-200 text-gray-800 hover:bg-gray-200"
+                      )}
+                    >
+                      {document.status === "published" ? "已发布" : "草稿"}
+                    </Badge>
                   )}
                 </div>
               </CardContent>

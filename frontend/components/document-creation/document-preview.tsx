@@ -59,23 +59,24 @@ export function DocumentPreview({
   return (
     <>
       <style jsx global>{templateBaseStyles}</style>
-      <div className={cn("flex flex-col h-full", className)}>
+      <div className={cn("flex flex-col h-full bg-background", className)}>
         {/* 工具栏 */}
         {(onSave || onDownload) && (
-          <div className="flex items-center justify-between p-4 border-b">
-            <h2 className="font-semibold">文档预览</h2>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+            <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+            <div className="flex items-center gap-2">
               {onSave && (
                 <Button 
                   size="sm" 
                   onClick={onSave}
                   disabled={!canSave}
+                  variant={canSave ? "default" : "outline"}
                   className={cn(
-                    "min-w-[110px] flex items-center justify-center",
+                    "h-7 px-3 text-xs flex items-center justify-center",
                     !canSave && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  <Save className="h-4 w-4 mr-1.5" />
+                  <Save className="h-3 w-3 mr-1.5" />
                   <span>保存草稿</span>
                 </Button>
               )}
@@ -86,11 +87,11 @@ export function DocumentPreview({
                   disabled={!canDownload}
                   variant={canDownload ? "default" : "outline"}
                   className={cn(
-                    "min-w-[110px] flex items-center justify-center",
+                    "h-7 px-3 text-xs flex items-center justify-center",
                     !canDownload && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  <Download className="h-4 w-4 mr-1.5" />
+                  <Download className="h-3 w-3 mr-1.5" />
                   <span>下载文书</span>
                 </Button>
               )}

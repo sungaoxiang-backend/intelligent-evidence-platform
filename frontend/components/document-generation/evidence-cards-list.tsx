@@ -627,7 +627,7 @@ export function EvidenceCardsList({
 
   return (
     <div className={className}>
-      <div className="space-y-3 max-h-[600px] overflow-y-auto">
+      <div className="space-y-3 h-full overflow-y-auto">
         {cardList.map((card) => (
           <EvidenceCardItem
             key={card.id}

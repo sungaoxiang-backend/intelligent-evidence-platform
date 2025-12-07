@@ -54,7 +54,6 @@ import { evidenceApi, evidenceCardApi, caseApi, type EvidenceCard, type Evidence
 import { useToast } from "@/components/ui/use-toast"
 import { useGlobalTasks } from "@/contexts/global-task-context"
 import { useCardCasting } from "@/hooks/use-celery-tasks"
-import { storeCaseDataForDocument } from "@/lib/document-template-mapper"
 import {
   DndContext,
   DragOverlay,
@@ -4251,8 +4250,8 @@ export function CardFactory({
     setIsEditingCase(false)
   }
 
-  // 跳转到文书模板页面并传递案件数据
-  const handleGoToDocumentTemplates = () => {
+  // 跳转到文书制作页面并传递案件数据
+  const handleGoToDocumentCreation = () => {
     if (!finalCaseData) {
       toast({
         title: "提示",
@@ -4262,11 +4261,8 @@ export function CardFactory({
       return
     }
 
-    // 存储案件和卡片数据到 localStorage
-    storeCaseDataForDocument(caseId, finalCaseData, cardList, slotCards)
-
-    // 跳转到文书模板页面，通过 URL 参数传递案件ID
-    router.push(`/document-templates?caseId=${caseId}`)
+    // 跳转到文书制作页面，通过 URL 参数传递案件ID
+    router.push(`/document-creation?caseId=${caseId}`)
   }
 
   // 暴露上传对话框控制给外部
@@ -4656,20 +4652,11 @@ export function CardFactory({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleGoToDocumentTemplates}
+                      onClick={handleGoToDocumentCreation}
                       className="h-8 px-3 text-xs border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600"
                     >
                       <FileText className="h-3 w-3 mr-1.5" />
                       生成文书
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/document-generation?caseId=${caseId}`)}
-                      className="h-8 px-3 text-xs border-green-300 hover:border-green-400 hover:bg-green-50 text-green-600"
-                    >
-                      <FileEdit className="h-3 w-3 mr-1.5" />
-                      文书生成
                     </Button>
                     <Button
                       variant="outline"
