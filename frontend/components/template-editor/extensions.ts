@@ -34,6 +34,7 @@ type TableAttrs = {
   colWidths?: number[] | null
   tableWidth?: TableWidthAttr | null
   tableLayout?: string | null
+  style?: string | null
 }
 
 type CellWidthAttr = {
@@ -457,6 +458,12 @@ export const TableWithAttrs = Table.extend({
                 twips = Math.round(widthValue * 1440 / 96) // 96 DPI
               } else if (widthStr.includes("pt")) {
                 twips = Math.round(widthValue * 20) // 1pt = 20 twips
+              } else if (widthStr.includes("%")) {
+                // 处理百分比宽度：基于 A4 内容区域宽度计算
+                // A4_CONTENT_WIDTH = 794 - 96*2 = 602px
+                const A4_CONTENT_WIDTH = 602
+                const actualWidth = (widthValue / 100) * A4_CONTENT_WIDTH
+                twips = Math.round(actualWidth * 1440 / 96)
               } else {
                 // 假设是 px
                 twips = Math.round(widthValue * 1440 / 96)
@@ -622,8 +629,35 @@ export const TableWithAttrs = Table.extend({
 
   renderHTML({ node, HTMLAttributes }) {
     const attrs = (node.attrs || {}) as TableAttrs
-    const style = buildTableStyle(attrs)
     const colWidths: number[] | null = attrs.colWidths
+    
+    // 检查是否有 style 属性包含百分比宽度，但 tableWidth 不正确
+    // 如果 tableWidth 太小（可能是之前保存时的错误），尝试从 style 中提取正确的宽度
+    let correctedTableWidth = attrs.tableWidth
+    if (attrs.style && attrs.tableWidth) {
+      const styleStr = attrs.style
+      const widthMatch = styleStr.match(/width:\s*([\d.]+)%/)
+      if (widthMatch) {
+        const percentage = parseFloat(widthMatch[1])
+        const A4_CONTENT_WIDTH = 602 // 与 extensions.ts 中的值保持一致
+        const expectedWidth = (percentage / 100) * A4_CONTENT_WIDTH
+        const expectedTwips = Math.round(expectedWidth * 1440 / 96)
+        
+        // 如果 tableWidth 明显小于预期（差异超过 10%），使用从 style 计算的值
+        const currentTwips = attrs.tableWidth.width
+        if (currentTwips && expectedTwips > currentTwips * 1.1) {
+          console.warn(`[TableWithAttrs] 检测到表格宽度不一致，从 style 中提取: ${currentTwips} twips -> ${expectedTwips} twips`)
+          correctedTableWidth = {
+            width: expectedTwips,
+            type: "twips",
+          }
+        }
+      }
+    }
+    
+    // 使用修正后的 tableWidth 构建样式
+    const correctedAttrs = { ...attrs, tableWidth: correctedTableWidth }
+    const style = buildTableStyle(correctedAttrs)
 
     // 确保 colWidths 是数组且不为空
     const colgroup =
@@ -1080,7 +1114,9 @@ export const templateBaseStyles = `
   
   .template-doc {
     font-family: "SimSun", "宋体", serif;
-    font-size: 14px;
+    /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
+    /* 如果没有内联样式，浏览器会使用默认字体大小 */
+    /* font-size: 14px; */
     line-height: 1.5;
     color: #0f172a;
     width: ${A4_CONTENT_WIDTH}px;
@@ -1162,17 +1198,20 @@ export const templateBaseStyles = `
     height: 0;
   }
   .template-doc table {
-    width: 100%;
+    /* 移除默认 width: 100%，让内联样式（来自 tableWidth 属性）生效 */
+    /* width: 100%; */
     border-collapse: collapse;
     margin: 16px 0;
-    table-layout: auto;
+    /* 移除默认 table-layout: auto，让内联样式（来自 colWidths 属性）生效 */
+    /* table-layout: auto; */
     /* 允许表格超出容器宽度时使用水平滚动 */
     min-width: fit-content;
   }
-  /* 如果表格有固定宽度，保留原始宽度 */
-  .template-doc table[style*="width"] {
+  /* 移除这个规则，它会覆盖内联样式中的 width */
+  /* 如果表格有固定宽度，应该通过内联样式控制，而不是 CSS !important */
+  /* .template-doc table[style*="width"] {
     width: auto !important;
-  }
+  } */
   .template-doc td,
   .template-doc th {
     border: 1px solid #d4d4d8;
@@ -1185,7 +1224,8 @@ export const templateBaseStyles = `
     /* 移除强制左对齐，水平对齐由 TextAlign 扩展通过内联样式控制 */
     /* 统一表格字体，避免因字体导致的布局问题 */
     font-family: "SimSun", "宋体", serif;
-    font-size: 14px;
+    /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
+    /* font-size: 14px; */
   }
   
   /* 确保单元格内的段落不会继承单元格的对齐方式，避免冲突 */

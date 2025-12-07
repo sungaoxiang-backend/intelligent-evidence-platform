@@ -93,6 +93,8 @@ export const FontSize = Extension.create<FontSizeOptions>({
               if (!attributes.fontSize) {
                 return {}
               }
+              // 返回样式对象，Tiptap 会自动合并到 textStyle mark 的渲染中
+              // 注意：这里返回的是对象格式，Tiptap 会将其合并到最终的 style 属性中
               return {
                 style: `font-size: ${attributes.fontSize}`,
               }

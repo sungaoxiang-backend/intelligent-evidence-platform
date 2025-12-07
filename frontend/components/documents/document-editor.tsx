@@ -3,14 +3,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
-import StarterKit from "@tiptap/starter-kit"
-import Underline from "@tiptap/extension-underline"
-import TextAlign from "@tiptap/extension-text-align"
-import TextStyle from "@tiptap/extension-text-style"
-import Color from "@tiptap/extension-color"
-import TableRow from "@tiptap/extension-table-row"
-import TableHeader from "@tiptap/extension-table-header"
-import HardBreak from "@tiptap/extension-hard-break"
+// 扩展配置已移至 document-extensions.ts
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -47,10 +40,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  HeadingWithAttrs,
-  ParagraphWithAttrs,
-  TableCellWithAttrs,
-  TableWithAttrs,
   templateBaseStyles,
   A4_PAGE_WIDTH,
   A4_PAGE_HEIGHT,
@@ -58,7 +47,7 @@ import {
   A4_CONTENT_WIDTH,
 } from "@/components/template-editor/extensions"
 import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
-import { FontSize } from "./font-size-extension"
+import { createDocumentExtensions } from "./document-extensions"
 import { PlaceholderChipExtension } from "./placeholder-chip-extension"
 import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
 // import { TableContextMenu } from "./table-context-menu"
@@ -128,44 +117,13 @@ export function DocumentEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        heading: false,
-        paragraph: false,
-        hardBreak: false,
-      }),
-      HardBreak.configure({
-        keepMarks: true,
-      }),
-      ParagraphWithAttrs,
-      HeadingWithAttrs,
-      TableWithAttrs.configure({
-        resizable: true,
-        allowTableNodeSelection: true, // 允许表格选择，支持单元格多选
-        HTMLAttributes: {},
-      }),
-      TableRow.configure({
-        HTMLAttributes: {},
-      }),
-      TableHeader.configure({
-        HTMLAttributes: {},
-      }),
-      TableCellWithAttrs.configure({
-        HTMLAttributes: {},
-      }),
-      TextAlign.configure({
-        types: ["heading", "paragraph", "tableCell"],
-        alignments: ["left", "center", "right", "justify"],
-        defaultAlignment: "left",
-      }),
-      Underline,
-      TextStyle, // 必须在 FontSize 之前
-      Color,
-      FontSize, // 依赖于 TextStyle，必须在之后加载
-      PlaceholderChipExtension.configure({
+    extensions: createDocumentExtensions({
+      resizable: true, // 编辑模式，表格可调整大小
+      allowTableNodeSelection: true, // 允许表格选择，支持单元格多选
+      placeholderExtension: PlaceholderChipExtension.configure({
         onPlaceholderClick: handlePlaceholderClick,
       }),
-    ],
+    }),
     content: normalizeContent(initialContent) || { type: "doc", content: [] },
     editable: !isLoading,
     autofocus: false,
@@ -198,6 +156,12 @@ export function DocumentEditor({
                 tableWidth = pxToTwips(widthValue)
               } else if (widthStr.includes("pt")) {
                 tableWidth = ptToTwips(widthValue)
+              } else if (widthStr.includes("%")) {
+                // 处理百分比宽度：基于 A4 内容区域宽度计算
+                // A4_CONTENT_WIDTH = 794 - 96*2 = 602px
+                const A4_CONTENT_WIDTH = 602 // 与 extensions.ts 中的值保持一致
+                const actualWidth = (widthValue / 100) * A4_CONTENT_WIDTH
+                tableWidth = pxToTwips(actualWidth)
               }
             }
           }
@@ -440,11 +404,34 @@ export function DocumentEditor({
       },
       clipboardTextSerializer: ({ editor }) => {
         // 自定义剪贴板文本序列化，保留格式
+        // 检查 editor 是否存在且已初始化，避免在初始化过程中调用 getHTML()
+        if (!editor || !editor.getHTML) {
+          return ""
+        }
         return editor.getHTML()
       },
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON()
+      
+      // 调试：检查 JSON 结构，特别是 marks 中的 fontSize
+      if (process.env.NODE_ENV === "development") {
+        const checkFontSize = (node: any, path: string = ""): void => {
+          if (node.type === "text" && node.marks) {
+            const fontSizeMark = node.marks.find((m: any) => m.type === "textStyle" && m.attrs?.fontSize)
+            if (fontSizeMark) {
+              console.log(`[DocumentEditor] Found fontSize at ${path}:`, fontSizeMark.attrs.fontSize)
+            }
+          }
+          if (node.content && Array.isArray(node.content)) {
+            node.content.forEach((child: any, idx: number) => {
+              checkFontSize(child, `${path}.content[${idx}]`)
+            })
+          }
+        }
+        checkFontSize(json, "root")
+      }
+      
       const normalized = normalizeContentUtil(JSON.parse(JSON.stringify(json)))
       if (normalized) {
         onChange?.(normalized)
@@ -457,6 +444,145 @@ export function DocumentEditor({
       updateToolbar()
     },
   })
+
+  // 监听表格列宽变化，同步到 JSON
+  useEffect(() => {
+    if (!editor) return
+
+    const editorElement = editor.view.dom
+    const pxToTwips = (px: number) => Math.round(px * 1440 / 96)
+
+    // 同步表格列宽的函数
+    const syncTableColWidths = () => {
+      const tables = editorElement.querySelectorAll("table")
+      
+      tables.forEach((table) => {
+        const colgroup = table.querySelector("colgroup")
+        if (colgroup) {
+          const cols = colgroup.querySelectorAll("col")
+          const colWidths: number[] = []
+          
+          cols.forEach((col) => {
+            const colEl = col as HTMLElement
+            const widthStr = colEl.style.width || ""
+            const widthValue = parseFloat(widthStr)
+            
+            if (!isNaN(widthValue) && widthStr.includes("px")) {
+              colWidths.push(pxToTwips(widthValue))
+            }
+          })
+          
+          // 如果检测到列宽，尝试更新表格节点的 colWidths 属性
+          if (colWidths.length > 0) {
+            try {
+              // 找到表格节点
+              const tablePos = editor.view.posAtDOM(table, 0)
+              if (tablePos !== null && tablePos >= 0) {
+                const $pos = editor.state.doc.resolve(tablePos)
+                let tableNode = $pos.nodeAfter
+                
+                // 如果 nodeAfter 不是表格，尝试向上查找
+                if (!tableNode || tableNode.type.name !== "table") {
+                  const parent = $pos.parent
+                  if (parent && parent.type.name === "table") {
+                    tableNode = parent
+                  } else {
+                    // 尝试从 table 元素向上查找
+                    let current = table.parentElement
+                    while (current && current !== editorElement) {
+                      const pos = editor.view.posAtDOM(current, 0)
+                      if (pos !== null && pos >= 0) {
+                        const $p = editor.state.doc.resolve(pos)
+                        if ($p.nodeAfter?.type.name === "table") {
+                          tableNode = $p.nodeAfter
+                          break
+                        }
+                      }
+                      current = current.parentElement
+                    }
+                  }
+                }
+                
+                if (tableNode && tableNode.type.name === "table") {
+                  const currentColWidths = tableNode.attrs.colWidths
+                  // 检查列宽是否发生变化（允许 1 twips 的误差）
+                  const hasChanged = !currentColWidths || 
+                    currentColWidths.length !== colWidths.length ||
+                    currentColWidths.some((w: number, i: number) => 
+                      colWidths[i] !== undefined && Math.abs(w - colWidths[i]) > 1
+                    )
+                  
+                  if (hasChanged) {
+                    // 找到表格节点的确切位置
+                    editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+                      if (node.type.name === "table" && node === tableNode) {
+                        // 使用 setNodeMarkup 更新特定表格节点的属性
+                        const tr = editor.state.tr
+                        tr.setNodeMarkup(pos, undefined, {
+                          ...node.attrs,
+                          colWidths: colWidths,
+                        })
+                        editor.view.dispatch(tr)
+                        return false // 停止遍历
+                      }
+                      return true
+                    })
+                  }
+                }
+              }
+            } catch (error) {
+              // 忽略错误，避免干扰正常编辑
+              if (process.env.NODE_ENV === "development") {
+                console.warn("[DocumentEditor] Failed to sync table colWidths:", error)
+              }
+            }
+          }
+        }
+      })
+    }
+
+    // 使用 MutationObserver 监听表格列宽变化
+    const observer = new MutationObserver((mutations) => {
+      let shouldSync = false
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes" && mutation.attributeName === "style") {
+          const target = mutation.target as HTMLElement
+          if (target.tagName === "COL" || target.closest("colgroup")) {
+            shouldSync = true
+          }
+        } else if (mutation.type === "childList") {
+          if (mutation.target instanceof HTMLElement && 
+              (mutation.target.tagName === "COLGROUP" || mutation.target.closest("colgroup"))) {
+            shouldSync = true
+          }
+        }
+      })
+      
+      if (shouldSync) {
+        // 延迟执行，避免频繁更新
+        setTimeout(syncTableColWidths, 100)
+      }
+    })
+
+    // 监听整个编辑器 DOM 的变化
+    observer.observe(editorElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+      childList: true,
+      subtree: true,
+    })
+
+    // 也监听鼠标释放事件（列宽调整完成时）
+    const handleMouseUp = () => {
+      setTimeout(syncTableColWidths, 50)
+    }
+    editorElement.addEventListener("mouseup", handleMouseUp)
+
+    return () => {
+      observer.disconnect()
+      editorElement.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [editor])
 
   useEffect(() => {
     if (editor && initialContent && !contentSetRef.current) {
