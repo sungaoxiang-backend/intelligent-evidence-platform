@@ -45,6 +45,7 @@ type TableCellAttrs = {
   backgroundColor?: string | null
   cellWidth?: CellWidthAttr | null
   verticalAlign?: string | null
+  textAlign?: string | null
 }
 
 type TableRowAttrs = {
@@ -148,6 +149,13 @@ export const buildCellStyle = (attrs: TableCellAttrs = {}) => {
   } else {
     // 默认垂直居中
     style["vertical-align"] = "middle"
+  }
+
+  // 处理单元格的水平对齐方式
+  // 单元格的对齐方式由单元格本身控制，而不是段落
+  // 这样可以避免单元格和段落同时存在对齐方式导致的冲突
+  if (attrs?.textAlign) {
+    style["text-align"] = attrs.textAlign
   }
 
   return styleObjectToString(style)
@@ -974,6 +982,20 @@ export const TableCellWithAttrs = TableCell.extend({
       backgroundColor: { default: null },
       cellWidth: { default: null },
       verticalAlign: { default: null },
+      textAlign: {
+        default: null,
+        parseHTML: (element) => {
+          // 从粘贴的 HTML 中提取单元格的对齐方式
+          // 支持从 element.style.textAlign 和 element.getAttribute("align") 中提取
+          // 确保只解析单元格本身的对齐方式，不解析单元格内段落的对齐方式
+          const align = element.style.textAlign || element.getAttribute("align")
+          // 只返回有效的对齐值（left, center, right, justify）
+          if (align && ["left", "center", "right", "justify"].includes(align.toLowerCase())) {
+            return align.toLowerCase()
+          }
+          return null
+        },
+      },
       colspan: {
         default: 1,
         parseHTML: (element) => {

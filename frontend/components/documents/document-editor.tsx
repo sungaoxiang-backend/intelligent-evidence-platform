@@ -392,6 +392,43 @@ export function DocumentEditor({
                 el.style.maxWidth = ""
               }
             }
+            
+            // 修复单元格对齐方式冲突问题：
+            // 1. 如果单元格本身没有对齐样式，但单元格内的段落有对齐样式，将段落的对齐样式提升到单元格
+            // 2. 清理单元格内段落的对齐样式，确保单元格的对齐方式由单元格本身控制
+            const cellAlign = el.style.textAlign || el.getAttribute("align")
+            const paragraphs = el.querySelectorAll("p, div, h1, h2, h3, h4, h5, h6")
+            
+            if (paragraphs.length > 0) {
+              let paragraphAlign: string | null = null
+              
+              // 查找第一个有对齐样式的段落
+              for (const para of Array.from(paragraphs)) {
+                const paraEl = para as HTMLElement
+                const paraAlign = paraEl.style.textAlign || paraEl.getAttribute("align")
+                if (paraAlign && ["left", "center", "right", "justify"].includes(paraAlign.toLowerCase())) {
+                  paragraphAlign = paraAlign.toLowerCase()
+                  break
+                }
+              }
+              
+              // 如果单元格本身没有对齐样式，但段落有，将段落的对齐样式提升到单元格
+              if (!cellAlign && paragraphAlign) {
+                el.style.textAlign = paragraphAlign
+                if (el.hasAttribute("align")) {
+                  el.setAttribute("align", paragraphAlign)
+                }
+              }
+              
+              // 清理单元格内所有段落的对齐样式，避免冲突
+              paragraphs.forEach((para) => {
+                const paraEl = para as HTMLElement
+                paraEl.style.textAlign = ""
+                if (paraEl.hasAttribute("align")) {
+                  paraEl.removeAttribute("align")
+                }
+              })
+            }
           }
         })
         
