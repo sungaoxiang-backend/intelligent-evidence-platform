@@ -4,7 +4,7 @@ import Table from "@tiptap/extension-table"
 import TableRow from "@tiptap/extension-table-row"
 import TableCell from "@tiptap/extension-table-cell"
 import { mergeAttributes } from "@tiptap/core"
-import { findTable, getCellsInColumn, getCellsInRow, isInTable, mergeCells as pmMergeCells, splitCell as pmSplitCell, CellSelection, findCell } from "@tiptap/pm/tables"
+import { findTable, isInTable, mergeCells as pmMergeCells, splitCell as pmSplitCell, CellSelection, findCell } from "@tiptap/pm/tables"
 
 type ParagraphSpacing = {
   before?: number | null
@@ -368,35 +368,8 @@ export const TableWithAttrs = Table.extend({
       insertCellAbove: () => ({ tr, state, dispatch }) => {
         if (!isInTable(state)) return false
         
-        const { selection } = state
         const table = findTable(state.selection)
         if (!table) return false
-
-        const cells = getCellsInColumn(0)(state.selection)
-        if (!cells || cells.length === 0) return false
-
-        // 找到当前单元格所在的行
-        let currentRow = -1
-        let currentCol = -1
-        
-        state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
-          if (node.type.name === 'tableRow') {
-            const rowPos = pos
-            const row = node
-            row.content.forEach((cell, cellOffset) => {
-              const cellPos = rowPos + cellOffset + 1
-              if (selection.from >= cellPos && selection.from <= cellPos + cell.nodeSize) {
-                currentRow = cells.indexOf(cell.node)
-                currentCol = cellOffset
-              }
-            })
-          }
-        })
-
-        if (currentRow === -1) {
-          // 如果找不到，使用第一行
-          currentRow = 0
-        }
 
         // 在当前位置上方插入新行
         const addRowBefore = parentCommands.addRowBefore

@@ -18,7 +18,7 @@ import {
   templateBaseStyles,
 } from "@/components/template-editor/extensions"
 import { ReplicableTableCellWithAttrs } from "./replicable-table-cell-with-attrs"
-import { normalizeHardBreaks } from "@/components/template-editor/utils"
+import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
 import { PlaceholderFormNode } from "./placeholder-form-node-extension"
 import { PlaceholderInfo } from "./placeholder-form-fields"
 import { identifyReplicableCells, type ReplicableCellInfo } from "./replicable-cell-utils"
@@ -142,7 +142,7 @@ export function DocumentPreviewForm({
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }, [])
   
   // 获取占位符信息（使用增强的占位符列表）

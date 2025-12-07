@@ -21,7 +21,7 @@ import {
   TableCellWithAttrs,
   TableWithAttrs,
 } from "@/components/template-editor/extensions"
-import { normalizeHardBreaks } from "@/components/template-editor/utils"
+import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
 import { cn } from "@/lib/utils"
 
 interface DocumentPreviewProps {
@@ -76,7 +76,7 @@ export function DocumentPreview({
       TextStyle,
       Color,
     ],
-    content: normalizeHardBreaks(content) || { type: "doc", content: [] },
+    content: normalizeContentUtil(content) || { type: "doc", content: [] },
     editable: false,
     autofocus: false,
     editorProps: {
@@ -89,7 +89,7 @@ export function DocumentPreview({
 
   useEffect(() => {
     if (!editor || !content) return
-    const normalized = normalizeHardBreaks(content)
+    const normalized = normalizeContentUtil(content)
     if (normalized) {
       editor.commands.setContent(normalized)
     }

@@ -57,7 +57,7 @@ import {
   A4_PAGE_MARGIN,
   A4_CONTENT_WIDTH,
 } from "@/components/template-editor/extensions"
-import { normalizeHardBreaks } from "@/components/template-editor/utils"
+import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
 import { FontSize } from "./font-size-extension"
 import { PlaceholderChipExtension } from "./placeholder-chip-extension"
 import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
@@ -97,7 +97,7 @@ export function DocumentEditor({
 
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }, [])
 
   const handlePlaceholderClick = useCallback((fieldKey: string) => {
@@ -273,7 +273,7 @@ export function DocumentEditor({
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON()
-      const normalized = normalizeHardBreaks(JSON.parse(JSON.stringify(json)))
+      const normalized = normalizeContentUtil(JSON.parse(JSON.stringify(json)))
       if (normalized) {
         onChange?.(normalized)
       }

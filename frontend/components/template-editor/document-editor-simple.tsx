@@ -46,7 +46,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
-import { normalizeHardBreaks } from "./utils"
+import { normalizeContent as normalizeContentUtil } from "./utils"
 import { usePlaceholderManager } from "./placeholder-manager"
 import { cn } from "@/lib/utils"
 
@@ -86,7 +86,7 @@ export function DocumentEditorSimple({
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }, [])
   
   // 创建编辑器实例

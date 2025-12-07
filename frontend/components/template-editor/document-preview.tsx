@@ -19,7 +19,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
-import { normalizeHardBreaks } from "./utils"
+import { normalizeContent as normalizeContentUtil } from "./utils"
 
 interface DocumentPreviewProps {
   content?: JSONContent | null
@@ -31,7 +31,7 @@ export function DocumentPreview({ content }: DocumentPreviewProps) {
 
   const normalizeContent = (value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }
 
   const editor = useEditor({
@@ -94,20 +94,41 @@ export function DocumentPreview({ content }: DocumentPreviewProps) {
       previousContentRef.current = contentKey
 
       try {
-        // 使用 setContent 方法更新内容，这会正确处理内容变化
-        editor.commands.setContent(normalizeContent(content) || content)
+        // 规范化内容（清理空文本节点和处理硬换行）
+        const normalized = normalizeContent(content)
+        
+        // 如果规范化后内容为空，使用空文档
+        if (!normalized || (normalized.type === "doc" && (!normalized.content || normalized.content.length === 0))) {
+          editor.commands.setContent({ type: "doc", content: [] })
+          return
+        }
+        
+        // 使用 setContent 方法更新内容
+        editor.commands.setContent(normalized)
       } catch (error) {
         console.error("Failed to set content:", error)
-        // 如果 setContent 失败，尝试使用 transaction
+        // 如果 setContent 失败，尝试使用规范化后的内容创建 transaction
         try {
-          const tr = editor.state.tr
-          const newDoc = editor.schema.nodeFromJSON(content)
-          if (newDoc.content) {
-            tr.replaceWith(0, editor.state.doc.content.size, newDoc.content)
-            editor.view.dispatch(tr)
+          const normalized = normalizeContent(content)
+          if (normalized) {
+            const tr = editor.state.tr
+            const newDoc = editor.schema.nodeFromJSON(normalized)
+            if (newDoc.content) {
+              tr.replaceWith(0, editor.state.doc.content.size, newDoc.content)
+              editor.view.dispatch(tr)
+            }
+          } else {
+            // 如果规范化失败，设置为空文档
+            editor.commands.setContent({ type: "doc", content: [] })
           }
         } catch (e) {
           console.error("Failed to set content with transaction:", e)
+          // 最后的 fallback：设置为空文档，避免页面空白
+          try {
+            editor.commands.setContent({ type: "doc", content: [] })
+          } catch (finalError) {
+            console.error("Failed to set empty content:", finalError)
+          }
         }
       }
     }

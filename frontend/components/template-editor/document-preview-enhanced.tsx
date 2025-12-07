@@ -28,7 +28,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
-import { normalizeHardBreaks } from "./utils"
+import { normalizeContent as normalizeContentUtil } from "./utils"
 import { PlaceholderNode } from "./placeholder-node-extension"
 import { usePlaceholderManager } from "./placeholder-manager"
 
@@ -63,7 +63,7 @@ export function DocumentPreviewEnhanced({
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }, [])
   
   // 处理占位符点击 - 不再打开编辑对话框，只高亮显示

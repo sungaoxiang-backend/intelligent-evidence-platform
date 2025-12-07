@@ -22,7 +22,7 @@ import {
   TableCellWithAttrs,
   TableWithAttrs,
 } from "@/components/template-editor/extensions"
-import { normalizeHardBreaks } from "@/components/template-editor/utils"
+import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
 import { Download, X } from "lucide-react"
 import type { Document } from "@/lib/documents-api"
 import { cn } from "@/lib/utils"
@@ -140,7 +140,7 @@ export function DocumentFormGenerator({
       TextStyle,
       Color,
     ],
-    content: normalizeHardBreaks(previewContent) || { type: "doc", content: [] },
+    content: normalizeContentUtil(previewContent) || { type: "doc", content: [] },
     editable: false,
     autofocus: false,
     editorProps: {
@@ -153,7 +153,7 @@ export function DocumentFormGenerator({
 
   useEffect(() => {
     if (!editor || !previewContent) return
-    const normalized = normalizeHardBreaks(previewContent)
+    const normalized = normalizeContentUtil(previewContent)
     if (normalized) {
       editor.commands.setContent(normalized)
     }

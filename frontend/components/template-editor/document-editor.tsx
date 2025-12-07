@@ -80,7 +80,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
-import { normalizeHardBreaks } from "./utils"
+import { normalizeContent as normalizeContentUtil } from "./utils"
 import { PlaceholderExtension, placeholderPluginKey, requestPlaceholderRefresh } from "./placeholder-extension"
 import {
   usePlaceholderManager,
@@ -715,7 +715,7 @@ export function DocumentEditor({
 
   const normalizeContent = (content?: JSONContent | null) => {
     if (!content) return content
-    return normalizeHardBreaks(
+    return normalizeContentUtil(
       JSON.parse(JSON.stringify(content))
     )
   }
@@ -794,7 +794,7 @@ export function DocumentEditor({
     onUpdate: ({ editor }) => {
       try {
         const json = editor.getJSON()
-        const normalized = normalizeHardBreaks(
+        const normalized = normalizeContentUtil(
           JSON.parse(JSON.stringify(json))
         )
         if (normalized) {

@@ -28,7 +28,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
-import { normalizeHardBreaks } from "./utils"
+import { normalizeContent as normalizeContentUtil } from "./utils"
 import { PlaceholderNode } from "./placeholder-node-extension"
 import { usePlaceholderManager, usePlaceholderDocumentBridge } from "./placeholder-manager"
 import { PlaceholderInserter } from "./placeholder-inserter"
@@ -87,7 +87,7 @@ export function DocumentPreviewInteractive({
   // 规范化内容
   const normalizeContent = useCallback((value?: JSONContent | null) => {
     if (!value) return value
-    return normalizeHardBreaks(JSON.parse(JSON.stringify(value)))
+    return normalizeContentUtil(JSON.parse(JSON.stringify(value)))
   }, [])
   
   // Chip操作菜单状态

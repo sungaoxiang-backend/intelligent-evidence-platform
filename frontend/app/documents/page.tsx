@@ -476,7 +476,7 @@ export default function DocumentsPage() {
 
       // 使用与导出 PDF 完全相同的扩展配置和渲染逻辑
       const { Editor } = await import("@tiptap/core")
-      const { normalizeHardBreaks } = await import("@/components/template-editor/utils")
+      const { normalizeContent } = await import("@/components/template-editor/utils")
       
       // 使用与 handleExport 完全相同的扩展配置（包含 FontSize）
       const extensions = [
@@ -515,7 +515,7 @@ export default function DocumentsPage() {
       ]
 
       // 创建临时编辑器实例，使用与导出相同的配置
-      const normalizedContent = normalizeHardBreaks(generateResponse.data.content_json)
+      const normalizedContent = normalizeContent(generateResponse.data.content_json)
       const tempEditor = new Editor({
         extensions,
         content: normalizedContent || { type: "doc", content: [] },
@@ -599,7 +599,7 @@ export default function DocumentsPage() {
       // 关键：使用 Editor 实例的 getHTML() 方法，而不是 generateHTML
       // 这样可以确保扩展的 renderHTML 方法被正确调用
       const { Editor } = await import("@tiptap/core")
-      const { normalizeHardBreaks } = await import("@/components/template-editor/utils")
+      const { normalizeContent } = await import("@/components/template-editor/utils")
       
       // 使用与预览完全相同的扩展配置（与 DocumentPreview 组件一致）
       const extensions = [
@@ -638,7 +638,7 @@ export default function DocumentsPage() {
       ]
 
       // 创建临时编辑器实例，使用与预览相同的配置
-      const normalizedContent = normalizeHardBreaks(selectedDocument.content_json)
+      const normalizedContent = normalizeContent(selectedDocument.content_json)
       const tempEditor = new Editor({
         extensions,
         content: normalizedContent || { type: "doc", content: [] },
