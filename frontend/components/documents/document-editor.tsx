@@ -980,14 +980,26 @@ export function DocumentEditor({
   }, [editor])
 
   useEffect(() => {
-    if (editor && initialContent && !contentSetRef.current) {
+    if (editor && initialContent) {
       try {
         const normalizedContent = normalizeContent(initialContent) || initialContent
-        editor.commands.setContent(normalizedContent)
-        contentSetRef.current = true
+        // 检查内容是否真的改变了，避免不必要的更新
+        const currentContent = editor.getJSON()
+        const currentStr = JSON.stringify(normalizeContent(currentContent))
+        const newStr = JSON.stringify(normalizedContent)
+        
+        // 只有当内容真正改变时才更新
+        if (currentStr !== newStr) {
+          editor.commands.setContent(normalizedContent)
+          contentSetRef.current = true
+        }
       } catch (error) {
         console.error("设置初始内容失败:", error)
       }
+    } else if (editor && !initialContent) {
+      // 如果 initialContent 变为 null，清空编辑器
+      editor.commands.setContent({ type: "doc", content: [] })
+      contentSetRef.current = true
     }
   }, [editor, initialContent, normalizeContent])
 

@@ -128,11 +128,16 @@ export default function DocumentCreationPage() {
 
   // 加载草稿
   const loadDraft = useCallback(async () => {
-    if (!selectedCaseId || !selectedTemplate) return
+    if (!selectedCaseId || !selectedTemplate) {
+      console.log("[loadDraft] 缺少必要参数，selectedCaseId:", selectedCaseId, "selectedTemplate:", selectedTemplate?.id)
+      return
+    }
 
+    console.log("[loadDraft] 开始加载草稿，caseId:", selectedCaseId, "templateId:", selectedTemplate.id)
     try {
       // 先尝试加载草稿
       const response = await documentDraftsApi.getDraft(selectedCaseId, selectedTemplate.id)
+      console.log("[loadDraft] API 响应:", response)
       if (response.data) {
         // 如果草稿有 content_json，使用它
         if (response.data.content_json) {
@@ -161,25 +166,62 @@ export default function DocumentCreationPage() {
       }
     } catch (error) {
       // 草稿不存在是正常的，不显示错误
-      if (error instanceof Error && !error.message.includes("404") && !error.message.includes("草稿不存在")) {
-        console.error("加载草稿失败:", error)
+      console.log("[loadDraft] 捕获错误:", error)
+      if (error instanceof Error) {
+        const isNotFound = error.message.includes("404") || error.message.includes("草稿不存在")
+        if (isNotFound) {
+          console.log("[loadDraft] 404 错误（草稿不存在），这是正常情况，继续从模板加载")
+        } else {
+          console.error("[loadDraft] 加载草稿失败:", error)
+        }
       }
     }
     
     // 如果没有草稿，从模板深拷贝 content_json
+    console.log("[loadDraft] 从模板加载内容，template.content_json 存在:", !!selectedTemplate.content_json)
     if (selectedTemplate.content_json) {
       const templateContent = deepCopy(selectedTemplate.content_json)
       setDraftContent(templateContent)
       setSavedDraftContent(templateContent)
+      setHasChanges(false)
+      console.log("[loadDraft] 已从模板加载内容")
+    } else {
+      console.warn("[loadDraft] 模板没有 content_json，设置为空内容")
+      setDraftContent({ type: "doc", content: [] })
+      setSavedDraftContent({ type: "doc", content: [] })
       setHasChanges(false)
     }
   }, [selectedCaseId, selectedTemplate, toast])
 
   // 选择模板后进入编辑模式
   const handleTemplateSelect = async (template: Document) => {
+    console.log("[handleTemplateSelect] 被调用，模板ID:", template.id, "当前模板ID:", selectedTemplate?.id)
+    
+    // 如果选择的是同一个模板，不需要切换
+    if (selectedTemplate?.id === template.id) {
+      console.log("[handleTemplateSelect] 选择的是同一个模板，跳过")
+      return
+    }
+
+    // 如果有未保存的变更，提示用户
+    if (hasChanges) {
+      const confirmed = window.confirm("您有未保存的变更，确定要切换模板吗？切换后当前未保存的变更将丢失。")
+      if (!confirmed) {
+        console.log("[handleTemplateSelect] 用户取消切换")
+        return // 用户取消，不切换模板
+      }
+    }
+
+    console.log("[handleTemplateSelect] 开始切换模板，重置状态")
+    // 切换模板：重置状态并加载新模板
+    // 先重置状态，避免旧模板的内容闪烁
+    setDraftContent(null)
+    setSavedDraftContent(null)
+    setHasChanges(false)
     setSelectedTemplate(template)
     setViewMode("edit")
-    // 不再需要 template-select 模式，因为模板列表常驻显示
+    console.log("[handleTemplateSelect] 模板切换完成，新模板ID:", template.id)
+    // loadDraft 会在 useEffect 中自动调用
   }
 
   // 当案件和模板都选择后，自动加载草稿
@@ -606,6 +648,7 @@ export default function DocumentCreationPage() {
           </>
         ) : viewMode === "edit" ? (
           <DocumentEditor
+            key={`editor-${selectedTemplate.id}-${selectedCaseId}`}
             initialContent={draftContent}
             onChange={handleContentChange}
             onSave={handleSaveDraft}
