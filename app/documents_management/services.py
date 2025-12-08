@@ -3,6 +3,7 @@
 完全独立实现，不依赖现有模板管理和文书生成模块
 """
 from typing import Optional, Tuple, List, Dict, Any
+from copy import deepcopy
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -248,8 +249,9 @@ class DocumentDraftService:
         db: AsyncSession,
         case_id: int,
         document_id: int,
-        form_data: Dict[str, Any],
-        staff_id: Optional[int]
+        form_data: Optional[Dict[str, Any]] = None,
+        content_json: Optional[Dict[str, Any]] = None,
+        staff_id: Optional[int] = None
     ) -> DocumentDraft:
         """
         创建或更新草稿
@@ -258,7 +260,8 @@ class DocumentDraftService:
             db: 数据库会话
             case_id: 案件ID
             document_id: 模板ID
-            form_data: 表单数据
+            form_data: 表单数据（已废弃，向后兼容）
+            content_json: ProseMirror JSON 格式的文档内容
             staff_id: 操作人ID
             
         Returns:
@@ -269,7 +272,11 @@ class DocumentDraftService:
         
         if existing_draft:
             # 更新现有草稿
-            existing_draft.form_data = form_data
+            if content_json is not None:
+                existing_draft.content_json = deepcopy(content_json)
+            elif form_data is not None:
+                # 向后兼容：如果只提供了 form_data，保持原有逻辑
+                existing_draft.form_data = form_data
             existing_draft.updated_by_id = staff_id
             await db.commit()
             await db.refresh(existing_draft)
@@ -277,10 +284,26 @@ class DocumentDraftService:
             return existing_draft
         else:
             # 创建新草稿
+            # 如果未提供 content_json，从模板深拷贝
+            if content_json is None:
+                # 获取模板
+                document_service = DocumentManagementService()
+                template = await document_service.get_document(db, document_id)
+                if template:
+                    content_json = deepcopy(template.content_json)
+                else:
+                    # 如果模板不存在，使用空内容
+                    content_json = {"type": "doc", "content": []}
+            
+            # 向后兼容：如果提供了 form_data，也保存它
+            if form_data is None:
+                form_data = {}
+            
             draft = DocumentDraft(
                 case_id=case_id,
                 document_id=document_id,
                 form_data=form_data,
+                content_json=content_json,
                 created_by_id=staff_id,
                 updated_by_id=staff_id,
             )

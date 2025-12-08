@@ -25,7 +25,7 @@ import {
   Rows,
   ChevronDown as ChevronDownIcon,
 } from "lucide-react"
-import { X, Check } from "lucide-react"
+import { X, Check, Download } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +55,10 @@ interface DocumentEditorProps {
   onSave?: () => void
   onCancel?: () => void
   onExport?: () => void
-  isLoading?: boolean
+  isSaving?: boolean  // 保存中状态
+  isDownloading?: boolean  // 下载中状态
+  canSave?: boolean  // 是否允许保存（基于是否有变更）
+  canExport?: boolean  // 是否允许导出/下载（基于是否有变更）
   className?: string
   placeholderMetadata?: Record<string, {
     name: string
@@ -71,7 +74,10 @@ export function DocumentEditor({
   onSave,
   onCancel,
   onExport,
-  isLoading = false,
+  isSaving = false,  // 保存中状态
+  isDownloading = false,  // 下载中状态
+  canSave = true,  // 默认允许保存
+  canExport = true,  // 默认允许导出
   className,
   placeholderMetadata,
   onPlaceholderMetadataUpdate,
@@ -121,7 +127,7 @@ export function DocumentEditor({
       }),
     }),
     content: normalizeContent(initialContent) || { type: "doc", content: [] },
-    editable: !isLoading,
+    editable: !isSaving && !isDownloading,
     autofocus: false,
     editorProps: {
       attributes: {
@@ -1198,11 +1204,40 @@ export function DocumentEditor({
             </Button>
           )}
           {onSave && (
-            <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"} className="whitespace-nowrap">
-              {isLoading ? (
+            <Button 
+              size="sm" 
+              onClick={onSave} 
+              disabled={isSaving || !canSave} 
+              title={isSaving ? "保存中..." : canSave ? "保存草稿" : "无变更"} 
+              variant={canSave && !isSaving ? "default" : "outline"}
+              className={cn(
+                "whitespace-nowrap",
+                (!canSave || isSaving) && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isSaving ? (
                 <span className="text-xs">保存中...</span>
               ) : (
                 <Check className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          {onExport && (
+            <Button 
+              size="sm" 
+              onClick={onExport} 
+              disabled={!canExport || isDownloading} 
+              title={isDownloading ? "下载中..." : canExport ? "下载文书" : "请先保存变更"} 
+              variant={canExport && !isDownloading ? "default" : "outline"}
+              className={cn(
+                "whitespace-nowrap",
+                (!canExport || isDownloading) && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isDownloading ? (
+                <span className="text-xs">下载中...</span>
+              ) : (
+                <Download className="h-4 w-4" />
               )}
             </Button>
           )}

@@ -95,10 +95,18 @@ class DocumentDraft(Base):
     )
     
     # 表单数据（JSON格式，存储占位符的填充值）
+    # 注意：此字段已废弃，新功能使用 content_json 字段
     form_data: Mapped[Dict[str, Any]] = mapped_column(
         JSON,
         nullable=False,
-        comment="表单数据，格式：{\"placeholder_name\": \"value\"}"
+        comment="表单数据，格式：{\"placeholder_name\": \"value\"}（已废弃，新功能使用 content_json）"
+    )
+    
+    # ProseMirror JSON 内容（存储完整的文档内容副本）
+    content_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="ProseMirror JSON 格式的文档内容，存储完整的文档内容副本"
     )
     
     # 创建和更新信息

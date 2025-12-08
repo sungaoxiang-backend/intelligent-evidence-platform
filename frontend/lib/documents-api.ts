@@ -330,7 +330,8 @@ export interface DocumentDraft {
   id: number
   case_id: number
   document_id: number
-  form_data: Record<string, any>
+  form_data: Record<string, any>  // 已废弃，新功能使用 content_json
+  content_json?: any  // ProseMirror JSON 格式的文档内容
   created_by_id?: number
   updated_by_id?: number
   created_at: string
@@ -352,7 +353,8 @@ export interface DocumentDraftListResponse {
 export interface CreateOrUpdateDraftRequest {
   case_id: number
   document_id: number
-  form_data: Record<string, any>
+  form_data?: Record<string, any>  // 已废弃，新功能使用 content_json
+  content_json?: any  // ProseMirror JSON 格式的文档内容
 }
 
 // 文书制作相关类型定义

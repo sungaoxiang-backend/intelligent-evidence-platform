@@ -67,7 +67,7 @@ export function TemplateSelector({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* 搜索框 */}
+      {/* 搜索框 - 与案件选择器样式统一 */}
       <div className="mb-3">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

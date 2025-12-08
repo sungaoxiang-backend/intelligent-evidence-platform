@@ -1,13 +1,13 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { TemplateSelector } from "@/components/document-creation/template-selector"
-import { DocumentForm } from "@/components/document-creation/document-form"
-import { DocumentPreview } from "@/components/document-creation/document-preview"
+import { DocumentEditor } from "@/components/documents/document-editor"
+import { DocumentPreview } from "@/components/documents/document-preview"
 import { EvidenceCardsList } from "@/components/document-generation/evidence-cards-list"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { caseApi } from "@/lib/api"
@@ -20,6 +20,7 @@ import {
   type Document 
 } from "@/lib/documents-api"
 import type { JSONContent } from "@tiptap/core"
+import { Editor } from "@tiptap/core"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
@@ -37,14 +38,18 @@ import {
 } from "@/components/template-editor/extensions"
 import { FontSize } from "@/components/documents/font-size-extension"
 import { normalizeContent } from "@/components/template-editor/utils"
+import { cn } from "@/lib/utils"
+
+type ViewMode = "edit" | "preview"
 
 export default function DocumentCreationPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [selectedCaseId, setSelectedCaseId] = useState<number | undefined>()
   const [selectedTemplate, setSelectedTemplate] = useState<Document | null>(null)
-  const [formData, setFormData] = useState<Record<string, any>>({})
-  const [savedFormData, setSavedFormData] = useState<Record<string, any>>({})
-  const [filledPreviewContent, setFilledPreviewContent] = useState<JSONContent | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>("edit")
+  const [draftContent, setDraftContent] = useState<JSONContent | null>(null)
+  const [savedDraftContent, setSavedDraftContent] = useState<JSONContent | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -74,14 +79,12 @@ export default function DocumentCreationPage() {
     if (caseIdParam) {
       const caseId = Number(caseIdParam)
       if (!isNaN(caseId) && caseId > 0) {
-        // 等待案件列表加载完成后再设置
         if (cases.length > 0) {
           const caseExists = cases.some(c => c.id === caseId)
           if (caseExists) {
             setSelectedCaseId(caseId)
           }
         } else if (cases.length === 0) {
-          // 如果案件列表为空，也尝试设置（可能正在加载）
           setSelectedCaseId(caseId)
         }
       }
@@ -118,60 +121,43 @@ export default function DocumentCreationPage() {
            caseItem.case_type || "未设置"
   }
 
-  const getPartyTypeLabel = (partyType: string | null | undefined): string => {
-    if (partyType === 'person') return '个人'
-    if (partyType === 'company') return '公司'
-    if (partyType === 'individual') return '个体工商户'
-    return 'N/A'
+  // 深拷贝函数
+  const deepCopy = (obj: any): any => {
+    return JSON.parse(JSON.stringify(obj))
   }
 
-  // 加载草稿并初始化表单数据
+  // 加载草稿
   const loadDraft = useCallback(async () => {
-    if (!selectedCaseId || !selectedTemplate?.placeholder_metadata) return
+    if (!selectedCaseId || !selectedTemplate) return
 
     try {
       // 先尝试加载草稿
       const response = await documentDraftsApi.getDraft(selectedCaseId, selectedTemplate.id)
-      console.log("草稿API响应:", response)
-      if (response.data && response.data.form_data) {
-        // 确保form_data是对象，如果是字符串则解析
-        let draftFormData = response.data.form_data
-        console.log("草稿form_data类型:", typeof draftFormData, "值:", draftFormData)
-        if (typeof draftFormData === 'string') {
-          try {
-            draftFormData = JSON.parse(draftFormData)
-            console.log("解析后的form_data:", draftFormData)
-          } catch (e) {
-            console.error("解析草稿数据失败:", e)
-            draftFormData = {}
-          }
+      if (response.data) {
+        // 如果草稿有 content_json，使用它
+        if (response.data.content_json) {
+          setDraftContent(deepCopy(response.data.content_json))
+          setSavedDraftContent(deepCopy(response.data.content_json))
+          setHasChanges(false)
+          toast({
+            title: "已加载草稿",
+            description: "已自动加载之前保存的草稿",
+          })
+          return
         }
-        
-        // 合并草稿数据和模板的占位符元数据，确保所有占位符都有值
-        const mergedData: Record<string, any> = {}
-        Object.keys(selectedTemplate.placeholder_metadata || {}).forEach((key) => {
-          const meta = selectedTemplate.placeholder_metadata![key]
-          if (key in draftFormData) {
-            // 使用草稿中的值
-            mergedData[key] = draftFormData[key]
-          } else {
-            // 使用默认值
-            if (meta.type === "checkbox") {
-              mergedData[key] = []
-            } else {
-              mergedData[key] = ""
-            }
-          }
-        })
-        
-        setFormData(mergedData)
-        setSavedFormData(mergedData)
-        setHasChanges(false)
-        toast({
-          title: "已加载草稿",
-          description: "已自动加载之前保存的草稿",
-        })
-        return
+        // 向后兼容：如果只有 form_data，从模板重新生成（这种情况应该很少见）
+        else if (response.data.form_data) {
+          // 使用模板的 content_json 作为基础
+          const templateContent = deepCopy(selectedTemplate.content_json)
+          setDraftContent(templateContent)
+          setSavedDraftContent(templateContent)
+          setHasChanges(false)
+          toast({
+            title: "已加载草稿",
+            description: "已自动加载之前保存的草稿（已迁移到新格式）",
+          })
+          return
+        }
       }
     } catch (error) {
       // 草稿不存在是正常的，不显示错误
@@ -180,138 +166,136 @@ export default function DocumentCreationPage() {
       }
     }
     
-    // 如果没有草稿，初始化空表单数据
-    const initialData: Record<string, any> = {}
-    Object.keys(selectedTemplate.placeholder_metadata || {}).forEach((key) => {
-      const meta = selectedTemplate.placeholder_metadata![key]
-      if (meta.type === "checkbox") {
-        initialData[key] = []
-      } else {
-        initialData[key] = ""
-      }
-    })
-    setFormData(initialData)
-    setSavedFormData(initialData)
+    // 如果没有草稿，从模板深拷贝 content_json
+    if (selectedTemplate.content_json) {
+      const templateContent = deepCopy(selectedTemplate.content_json)
+      setDraftContent(templateContent)
+      setSavedDraftContent(templateContent)
+      setHasChanges(false)
+    }
   }, [selectedCaseId, selectedTemplate, toast])
 
-  // 选择模板后进入表单填写
+  // 选择模板后进入编辑模式
   const handleTemplateSelect = async (template: Document) => {
     setSelectedTemplate(template)
+    setViewMode("edit")
+    // 不再需要 template-select 模式，因为模板列表常驻显示
   }
 
   // 当案件和模板都选择后，自动加载草稿
   useEffect(() => {
-    if (selectedCaseId && selectedTemplate?.placeholder_metadata) {
+    if (selectedCaseId && selectedTemplate) {
       loadDraft()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCaseId, selectedTemplate?.id])
 
-  // 处理表单数据变化
-  const handleFormChange = (key: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [key]: value }))
-  }
+  // 处理内容变更（来自 DocumentEditor 的所有编辑操作）
+  const handleContentChange = useCallback((json: JSONContent) => {
+    setDraftContent(json)
+  }, [])
 
-  // 处理复选框变化
-  const handleCheckboxChange = (key: string, option: string, checked: boolean) => {
-    setFormData((prev) => {
-      const current = prev[key] || []
-      const newValue = checked
-        ? [...(Array.isArray(current) ? current : []), option]
-        : (Array.isArray(current) ? current : []).filter((v) => v !== option)
-      return { ...prev, [key]: newValue }
-    })
-  }
-
-  // 检测表单数据变化
-  const handleDataChange = (hasChanges: boolean) => {
-    setHasChanges(hasChanges)
-  }
-
-  // 实时更新预览内容
+  // 检测内容变化（使用防抖，避免过于频繁的比较）
+  // 这个效果会在 draftContent 或 savedDraftContent 变化时触发
+  // DocumentEditor 的所有编辑操作（包括表格拖动、内容变更、新增行或列等）都会通过 onChange 更新 draftContent
   useEffect(() => {
-    if (!selectedTemplate?.content_json) return
-
-    const replacePlaceholders = (node: any): any => {
-      if (node.type === "text") {
-        let text = node.text || ""
-        Object.keys(formData).forEach((key) => {
-          const value = formData[key]
-          const meta = selectedTemplate.placeholder_metadata?.[key]
-          
-          let displayValue = ""
-          if (meta && (meta.type === "radio" || meta.type === "checkbox") && meta.options) {
-            const selectedValues = meta.type === "radio" 
-              ? (value ? [value] : [])
-              : (Array.isArray(value) ? value : [])
-            
-            const formattedOptions = meta.options.map((option: string) => {
-              const isSelected = selectedValues.includes(option)
-              return isSelected ? `☑ ${option}` : `☐ ${option}`
-            })
-            displayValue = formattedOptions.join("  ")
-          } else {
-            displayValue = Array.isArray(value) ? value.join(", ") : String(value || "")
-          }
-          
-          text = text.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), displayValue)
-        })
-        return { ...node, text }
+    if (!draftContent || !savedDraftContent) {
+      setHasChanges(false)
+      return
+    }
+    
+    // 使用防抖来优化性能，避免每次变更都立即比较
+    // 这对于频繁的编辑操作（如拖动表格、连续输入等）特别重要
+    const timeoutId = setTimeout(() => {
+      // 深度比较两个 JSON 对象是否相等
+      // 使用 JSON.stringify 进行快速比较
+      // 注意：这能捕获所有类型的变更，包括：
+      // - 文本内容变更
+      // - 格式变更（字体、颜色、对齐等）
+      // - 表格结构变更（新增/删除行或列、合并/拆分单元格、列宽调整等）
+      // - 段落和标题变更
+      // - 所有其他 ProseMirror 节点变更
+      try {
+        // 规范化内容后再比较，确保比较的一致性
+        const currentNormalized = normalizeContent(draftContent)
+        const savedNormalized = normalizeContent(savedDraftContent)
+        const currentStr = JSON.stringify(currentNormalized)
+        const savedStr = JSON.stringify(savedNormalized)
+        const hasChanges = currentStr !== savedStr
+        setHasChanges(hasChanges)
+      } catch (error) {
+        // 如果序列化失败，保守地认为有变更
+        console.warn("Failed to compare content:", error)
+        setHasChanges(true)
       }
+    }, 300) // 300ms 防抖延迟，平衡响应速度和性能
 
-      if (node.type === "placeholder") {
-        const fieldKey = node.attrs?.fieldKey || node.attrs?.field_key
-        if (fieldKey && fieldKey in formData) {
-          const value = formData[fieldKey]
-          const meta = selectedTemplate.placeholder_metadata?.[fieldKey]
-          
-          let displayValue = ""
-          if (meta && (meta.type === "radio" || meta.type === "checkbox") && meta.options) {
-            const selectedValues = meta.type === "radio" 
-              ? (value ? [value] : [])
-              : (Array.isArray(value) ? value : [])
-            
-            const formattedOptions = meta.options.map((option: string) => {
-              const isSelected = selectedValues.includes(option)
-              return isSelected ? `☑ ${option}` : `☐ ${option}`
-            })
-            displayValue = formattedOptions.join("  ")
-          } else {
-            displayValue = Array.isArray(value) ? value.join(", ") : String(value || "")
-          }
-          
-          return {
-            type: "text",
-            text: displayValue,
-          }
-        }
-        return {
-          type: "text",
-          text: "",
-        }
-      }
+    return () => clearTimeout(timeoutId)
+  }, [draftContent, savedDraftContent])
 
-      if (node.content && Array.isArray(node.content)) {
-        return {
-          ...node,
-          content: node.content.map(replacePlaceholders),
-        }
-      }
+  // 离开页面保护：当有未保存的变更时，提示用户
+  useEffect(() => {
+    if (!hasChanges) return
 
-      return node
+    // 浏览器离开页面保护（刷新、关闭标签页等）
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // 现代浏览器会忽略自定义消息，但设置 returnValue 是必需的
+      e.returnValue = "您有未保存的变更，确定要离开吗？"
+      return "您有未保存的变更，确定要离开吗？"
     }
 
-    const updatedContent = replacePlaceholders(selectedTemplate.content_json)
-    setFilledPreviewContent(updatedContent)
-  }, [formData, selectedTemplate])
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [hasChanges])
+
+  // Next.js 路由离开保护（页面内路由跳转）
+  // 注意：Next.js App Router 使用 useRouter，但路由拦截需要在导航组件中处理
+  // 这里我们通过拦截浏览器后退按钮来提供基本保护
+  useEffect(() => {
+    if (!hasChanges) return
+
+    // 拦截浏览器后退按钮
+    const handlePopState = (e: PopStateEvent) => {
+      if (hasChanges) {
+        const confirmed = window.confirm("您有未保存的变更，确定要离开吗？")
+        if (!confirmed) {
+          // 阻止导航，恢复当前状态
+          window.history.pushState(null, "", window.location.href)
+        }
+      }
+    }
+
+    // 在历史记录中添加一个状态，以便拦截后退
+    window.history.pushState(null, "", window.location.href)
+    window.addEventListener("popstate", handlePopState)
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+    }
+  }, [hasChanges])
 
   // 保存草稿
-  const handleSaveDraft = async () => {
-    if (!selectedCaseId || !selectedTemplate) {
+  // 这个函数会在用户点击"保存"按钮时调用
+  // DocumentEditor 工具栏中的保存按钮会调用这个函数
+  const handleSaveDraft = useCallback(async () => {
+    if (!selectedCaseId || !selectedTemplate || !draftContent) {
       toast({
         title: "保存失败",
         description: "请先选择案件和模板",
         variant: "destructive",
+      })
+      return
+    }
+
+    // 如果没有变更，不需要保存
+    if (!hasChanges) {
+      toast({
+        title: "提示",
+        description: "没有需要保存的变更",
       })
       return
     }
@@ -321,10 +305,11 @@ export default function DocumentCreationPage() {
       await documentDraftsApi.createOrUpdateDraft({
         case_id: selectedCaseId,
         document_id: selectedTemplate.id,
-        form_data: formData,
+        content_json: draftContent,
       })
       
-      setSavedFormData({ ...formData })
+      // 更新已保存的内容，用于后续的变更检测
+      setSavedDraftContent(deepCopy(draftContent))
       setHasChanges(false)
       
       toast({
@@ -340,30 +325,16 @@ export default function DocumentCreationPage() {
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [selectedCaseId, selectedTemplate, draftContent, hasChanges, toast])
 
   // 下载文档
   const handleDownload = async () => {
-    if (!selectedCaseId || !selectedTemplate) return
+    if (!selectedCaseId || !selectedTemplate || !draftContent) return
 
     try {
       setIsLoading(true)
       
-      // 生成填充后的文档
-      const generateResponse = await documentCreationApi.generateDocument({
-        case_id: selectedCaseId,
-        document_id: selectedTemplate.id,
-        form_data: formData,
-      })
-
-      const filledContent = generateResponse.data
-
       // 使用与预览完全相同的扩展配置和渲染逻辑
-      // 关键：使用 Editor 实例的 getHTML() 方法，而不是 generateHTML
-      // 这样可以确保扩展的 renderHTML 方法被正确调用
-      const { Editor } = await import("@tiptap/core")
-      
-      // 使用与预览完全相同的扩展配置（与 DocumentPreview 组件一致）
       const extensions = [
         StarterKit.configure({
           heading: false,
@@ -400,15 +371,13 @@ export default function DocumentCreationPage() {
       ]
 
       // 创建临时编辑器实例，使用与预览相同的配置
-      const normalizedContent = normalizeContent(filledContent)
+      const normalizedContent = normalizeContent(draftContent)
       const tempEditor = new Editor({
         extensions,
         content: normalizedContent || { type: "doc", content: [] },
       })
 
-      // 关键：使用 editor.getHTML() 而不是 generateHTML()
-      // editor.getHTML() 会正确调用所有扩展的 renderHTML 方法
-      // 这与预览时 Tiptap 编辑器内部使用的渲染逻辑完全一致
+      // 使用 editor.getHTML() 生成 HTML
       const htmlContent = tempEditor.getHTML()
       
       // 清理临时编辑器
@@ -475,44 +444,68 @@ export default function DocumentCreationPage() {
     }
   }
 
+  // 取消编辑（清空模板选择，不保存变更）
+  const handleCancel = useCallback(() => {
+    // 如果有未保存的变更，提示用户
+    if (hasChanges) {
+      // 可以选择提示用户，或者直接取消
+      // 这里直接取消，不保存变更
+    }
+    setSelectedTemplate(null)
+    setDraftContent(null)
+    setSavedDraftContent(null)
+    setHasChanges(false)
+    // 不再需要设置 viewMode，因为模板列表常驻显示
+  }, [hasChanges])
+
+  // 切换到预览模式
+  const handlePreview = () => {
+    setViewMode("preview")
+  }
+
+  // 切换到编辑模式
+  const handleEdit = () => {
+    setViewMode("edit")
+  }
+
   return (
     <div className="h-[calc(100vh-3rem)] flex overflow-hidden">
       {/* 左侧：案件信息 + 证据卡片列表 (25%) */}
       <div className="w-1/4 border-r bg-background flex flex-col flex-shrink-0">
-        {/* 紧凑的案件信息 */}
-        <div className="border-b bg-muted/30 p-3 flex-shrink-0">
-          <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-sm font-semibold text-foreground">案件信息</h3>
-            {/* 案件选择器 */}
-            <div className="w-44">
-              <Select
-                value={selectedCaseId?.toString() || ""}
-                onValueChange={(value) => {
-                  const newCaseId = Number(value)
-                  setSelectedCaseId(newCaseId)
-                  // 切换案件时重置模板和表单
-                  setSelectedTemplate(null)
-                  setFormData({})
-                  setSavedFormData({})
-                  setHasChanges(false)
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="选择案件" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cases.map((caseItem) => (
-                    <SelectItem key={caseItem.id} value={caseItem.id.toString()}>
-                      {getCaseDisplayName(caseItem)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          {/* 紧凑的案件基本信息 */}
-          {selectedCaseId && caseData ? (
+        {/* 案件信息标题栏 */}
+        <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+          <h3 className="text-sm font-semibold text-foreground">案件信息</h3>
+        </div>
+        {/* 案件选择器 */}
+        <div className="px-3 py-2 border-b bg-background flex-shrink-0">
+          <Select
+            value={selectedCaseId?.toString() || ""}
+            onValueChange={(value) => {
+              const newCaseId = Number(value)
+              setSelectedCaseId(newCaseId)
+              // 切换案件时重置模板和草稿
+              setSelectedTemplate(null)
+              setDraftContent(null)
+              setSavedDraftContent(null)
+              setHasChanges(false)
+              // 不再需要设置 viewMode，因为模板列表常驻显示
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="选择案件" />
+            </SelectTrigger>
+            <SelectContent>
+              {cases.map((caseItem) => (
+                <SelectItem key={caseItem.id} value={caseItem.id.toString()}>
+                  {getCaseDisplayName(caseItem)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {/* 紧凑的案件基本信息 */}
+        {selectedCaseId && caseData ? (
+          <div className="p-3 border-b bg-background flex-shrink-0">
             <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
               <div>
                 <label className="text-[10px] text-muted-foreground">案件ID</label>
@@ -537,12 +530,14 @@ export default function DocumentCreationPage() {
                 </div>
               </div>
             </div>
-          ) : (
+          </div>
+        ) : (
+          <div className="p-3 border-b bg-background flex-shrink-0">
             <div className="text-xs text-muted-foreground text-center py-2">
               请选择案件查看详情
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* 证据卡片列表 */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -561,107 +556,114 @@ export default function DocumentCreationPage() {
         </div>
       </div>
 
-      {/* 中间：模板列表/表单字段列表 (25%) */}
+      {/* 中间：模板列表 (25%) */}
       <div className="w-1/4 border-r bg-background flex flex-col flex-shrink-0">
-        {!selectedCaseId ? (
-          // 未选择案件
-          <div className="flex-1 flex flex-col">
-            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
-              <h3 className="text-sm font-semibold text-foreground">选择模板</h3>
-            </div>
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center px-4">
-                <p className="text-sm font-medium mb-1">请先选择案件</p>
-                <p className="text-xs">选择案件后，将显示模板列表</p>
-              </div>
-            </div>
-          </div>
-        ) : !selectedTemplate ? (
-          // 模板选择
-          <div className="flex-1 flex flex-col">
-            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
-              <h3 className="text-sm font-semibold text-foreground">选择模板</h3>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              <TemplateSelector
-                selectedTemplateId={selectedTemplate?.id}
-                onSelectTemplate={handleTemplateSelect}
-              />
-            </div>
+        <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+          <h2 className="text-sm font-semibold text-foreground">模板列表</h2>
+        </div>
+        {selectedCaseId ? (
+          <div className="flex-1 overflow-y-auto p-3">
+            <TemplateSelector
+              selectedTemplateId={selectedTemplate?.id}
+              onSelectTemplate={handleTemplateSelect}
+            />
           </div>
         ) : (
-          // 表单填写
-          <div className="flex-1 flex flex-col">
-            <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">填写表单</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => {
-                    setSelectedTemplate(null)
-                    setFormData({})
-                    setSavedFormData({})
-                    setHasChanges(false)
-                  }}
-                >
-                  <ArrowLeft className="h-3 w-3 mr-1" />
-                  返回
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              <DocumentForm
-                placeholderMetadata={selectedTemplate.placeholder_metadata || {}}
-                formData={formData}
-                onFormChange={handleFormChange}
-                onCheckboxChange={handleCheckboxChange}
-                onDataChange={handleDataChange}
-                savedFormData={savedFormData}
-              />
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center px-3">
+              <p className="text-sm font-medium mb-1">请先选择案件</p>
+              <p className="text-xs">选择案件后，将显示模板列表</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* 右侧：文档预览 (50%) */}
-      <div className="flex-1 flex flex-col bg-background">
+      {/* 右侧：预览编辑区域 (50%) */}
+      <div className={cn(selectedCaseId ? "w-1/2" : "flex-1", "flex flex-col bg-background")}>
         {!selectedCaseId ? (
           <>
             <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
-              <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+              <h2 className="text-sm font-semibold text-foreground">文档编辑</h2>
             </div>
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
                 <p className="text-sm font-medium mb-1">请先选择案件</p>
-                <p className="text-xs">选择案件后，将显示文档预览</p>
+                <p className="text-xs">选择案件后，将显示模板列表和编辑区域</p>
               </div>
             </div>
           </>
         ) : !selectedTemplate ? (
           <>
             <div className="px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
-              <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+              <h2 className="text-sm font-semibold text-foreground">文档编辑</h2>
             </div>
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <p className="text-sm font-medium mb-1">请先选择模板</p>
-                <p className="text-xs">选择模板后，将显示文档预览</p>
+                <p className="text-sm font-medium mb-1">请选择模板</p>
+                <p className="text-xs">从左侧模板列表中选择一个模板开始编辑</p>
               </div>
             </div>
           </>
-        ) : (
-          <DocumentPreview
-            content={filledPreviewContent}
+        ) : viewMode === "edit" ? (
+          <DocumentEditor
+            initialContent={draftContent}
+            onChange={handleContentChange}
             onSave={handleSaveDraft}
-            onDownload={handleDownload}
-            canSave={hasChanges && !isSaving && !!selectedCaseId}
-            canDownload={!hasChanges && !!selectedCaseId}
+            onCancel={handleCancel}
+            onExport={handleDownload}
+            isSaving={isSaving}
+            isDownloading={isLoading}
+            canSave={hasChanges && !isSaving}
+            canExport={!hasChanges && !isLoading}
+            placeholderMetadata={selectedTemplate?.placeholder_metadata}
           />
+        ) : (
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
+              <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  onClick={handleEdit}
+                  variant="outline"
+                  className="h-7 px-3 text-xs"
+                >
+                  <ArrowLeft className="h-3 w-3 mr-1.5" />
+                  <span>返回编辑</span>
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleSaveDraft}
+                  disabled={!hasChanges || isSaving}
+                  variant={hasChanges && !isSaving ? "default" : "outline"}
+                  className={cn(
+                    "h-7 px-3 text-xs",
+                    (!hasChanges || isSaving) && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isSaving ? "保存中..." : "保存草稿"}
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleDownload}
+                  disabled={hasChanges || isLoading}
+                  variant={!hasChanges && !isLoading ? "default" : "outline"}
+                  className={cn(
+                    "h-7 px-3 text-xs",
+                    (hasChanges || isLoading) && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isLoading ? "下载中..." : "下载文书"}
+                </Button>
+              </div>
+            </div>
+            <DocumentPreview
+              content={draftContent}
+              onEdit={handleEdit}
+            />
+          </div>
         )}
       </div>
     </div>
   )
 }
-
