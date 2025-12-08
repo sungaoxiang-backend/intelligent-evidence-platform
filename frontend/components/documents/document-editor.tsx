@@ -17,15 +17,10 @@ import {
   Heading1,
   Heading2,
   Heading3,
-  Table,
-  PlusCircle,
-  MinusCircle,
+  Plus,
+  Minus,
   Merge,
   Split,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ChevronDown,
   Columns,
   Rows,
   ChevronDown as ChevronDownIcon,
@@ -52,6 +47,7 @@ import { PlaceholderChipExtension } from "./placeholder-chip-extension"
 import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
 // import { TableContextMenu } from "./table-context-menu"
 import { cn } from "@/lib/utils"
+import { findTable, findCell } from "@tiptap/pm/tables"
 
 interface DocumentEditorProps {
   initialContent?: JSONContent | null
@@ -997,10 +993,11 @@ export function DocumentEditor({
     <>
       <style jsx global>{templateBaseStyles}</style>
       <div className={cn("flex flex-col h-full", className)}>
-        {/* 工具栏 - 与A4容器宽度对齐 */}
+        {/* 工具栏 - 与A4容器宽度对齐，两行布局 */}
         <div className="flex justify-center border-b bg-gray-50">
-          <div className="flex items-center p-3 gap-3" style={{ width: '794px', maxWidth: '100%' }}>
-            <div className="flex items-center gap-1.5 flex-1 overflow-x-auto min-w-0 scrollbar-hide">
+          <div className="flex flex-col p-2 gap-2" style={{ width: '794px', maxWidth: '100%' }}>
+            {/* 第一行：文本格式、字号、标题、对齐、取消和保存 */}
+            <div className="flex items-center gap-1.5 justify-evenly">
           <Button
             variant={editor.isActive("bold") ? "default" : "ghost"}
             size="sm"
@@ -1194,43 +1191,66 @@ export function DocumentEditor({
             <AlignJustify className="h-4 w-4" />
           </Button>
           <Separator orientation="vertical" className="h-6" />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-            title="插入表格"
-          >
-            <Table className="h-4 w-4" />
-          </Button>
-          {/* 表格操作按钮 */}
+          {/* 取消和保存按钮 */}
+          {onCancel && (
+            <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+          {onSave && (
+            <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"} className="whitespace-nowrap">
+              {isLoading ? (
+                <span className="text-xs">保存中...</span>
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+            </div>
+            
+            {/* 第二行：表格操作按钮 */}
+            <div className="flex items-center gap-1.5 justify-evenly">
+          {/* 列操作 */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
+              // 如果不在表格中，先插入一个表格，然后再添加列
+              if (!editor.isActive("table")) {
+                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+              }
               // Tiptap 的 addColumnBefore 会自动将焦点设置到新添加的列
               editor.chain().focus().addColumnBefore().run()
             }}
-            disabled={!editor.can().addColumnBefore()}
             title="在左侧添加列"
           >
-            <div className="flex items-center gap-0.5">
-              <ChevronLeft className="h-3 w-3" />
-              <PlusCircle className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5">
+              {/* 垂直矩形，左半部分高亮 */}
+              <div className="relative w-3 h-4 border border-gray-400 rounded">
+                <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-l" />
+              </div>
+              <Plus className="h-3.5 w-3.5" />
             </div>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
+              // 如果不在表格中，先插入一个表格，然后再添加列
+              if (!editor.isActive("table")) {
+                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+              }
               // Tiptap 的 addColumnAfter 会自动将焦点设置到新添加的列
               editor.chain().focus().addColumnAfter().run()
             }}
-            disabled={!editor.can().addColumnAfter()}
             title="在右侧添加列"
           >
-            <div className="flex items-center gap-0.5">
-              <PlusCircle className="h-3.5 w-3.5" />
-              <ChevronRight className="h-3 w-3" />
+            <div className="flex items-center gap-1.5">
+              {/* 垂直矩形，右半部分高亮 */}
+              <div className="relative w-3 h-4 border border-gray-400 rounded">
+                <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-r" />
+              </div>
+              <Plus className="h-3.5 w-3.5" />
             </div>
           </Button>
           <Button
@@ -1240,36 +1260,185 @@ export function DocumentEditor({
             disabled={!editor.can().deleteColumn()}
             title="删除列"
           >
-            <Columns className="h-4 w-4" />
+            <div className="flex items-center gap-1.5">
+              {/* 垂直矩形，无高亮 */}
+              <div className="w-3 h-4 border border-gray-400 rounded" />
+              <Minus className="h-3.5 w-3.5" />
+            </div>
           </Button>
+          <Separator orientation="vertical" className="h-6" />
+          {/* 行操作 */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              // Tiptap 的 addRowBefore 会自动将焦点设置到新添加的行
-              editor.chain().focus().addRowBefore().run()
+              if (editor.isActive("table")) {
+                // 如果在表格中，直接在上方添加行
+                editor.chain().focus().addRowBefore().run()
+              } else {
+                // 如果不在表格中，尝试查找下方是否有表格
+                // 使用 DOM 方法更可靠
+                const editorElement = editor.view.dom
+                const currentSelection = window.getSelection()
+                const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
+                
+                if (range) {
+                  // 从当前光标位置向下查找表格元素
+                  let currentElement: Node | null = range.endContainer
+                  
+                  // 如果是文本节点，获取其父元素
+                  if (currentElement.nodeType === Node.TEXT_NODE) {
+                    currentElement = currentElement.parentElement
+                  }
+                  
+                  // 向下查找表格
+                  while (currentElement && currentElement !== editorElement) {
+                    // 检查当前元素的兄弟节点中是否有表格
+                    let sibling = currentElement.nextSibling
+                    while (sibling) {
+                      if (sibling.nodeType === Node.ELEMENT_NODE) {
+                        const element = sibling as Element
+                        if (element.tagName === 'TABLE') {
+                          // 找到表格，移动到第一个单元格
+                          const firstCell = element.querySelector('td, th')
+                          if (firstCell) {
+                            try {
+                              const cellPos = editor.view.posAtDOM(firstCell, 0)
+                              if (cellPos !== null && cellPos >= 0) {
+                                editor.chain()
+                                  .setTextSelection(cellPos + 1)
+                                  .focus()
+                                  .addRowBefore()
+                                  .run()
+                                return
+                              }
+                            } catch (error) {
+                              console.error('Error positioning in table:', error)
+                            }
+                          }
+                        }
+                      }
+                      sibling = sibling.nextSibling
+                    }
+                    
+                    // 向上查找父元素
+                    currentElement = currentElement.parentElement
+                  }
+                }
+                
+                // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
+                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+              }
             }}
-            disabled={!editor.can().addRowBefore()}
             title="在上方添加行"
           >
-            <div className="flex flex-col items-center gap-0.5">
-              <ChevronUp className="h-3 w-3" />
-              <PlusCircle className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5">
+              {/* 水平矩形，上半部分高亮 */}
+              <div className="relative w-4 h-3 border border-gray-400 rounded">
+                <div className="absolute left-0 top-0 right-0 h-1/2 bg-gray-600 rounded-t" />
+              </div>
+              <Plus className="h-3.5 w-3.5" />
             </div>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              // Tiptap 的 addRowAfter 会自动将焦点设置到新添加的行
-              editor.chain().focus().addRowAfter().run()
+              if (editor.isActive("table")) {
+                // 如果在表格中，直接在下方添加行
+                // addRowAfter 会自动匹配当前行的列数，创建一个空行（与当前行相同的列数）
+                const { state } = editor
+                const table = findTable(state.selection)
+                if (table) {
+                  // 获取当前行的列数
+                  const $pos = state.selection.$anchor
+                  let currentRow = null
+                  let rowColCount = 0
+                  
+                  // 向上查找当前行
+                  for (let depth = $pos.depth; depth >= 0; depth--) {
+                    const node = $pos.node(depth)
+                    if (node.type.name === 'tableRow') {
+                      currentRow = node
+                      // 计算行的实际列数（考虑 colspan）
+                      rowColCount = 0
+                      node.forEach((cell) => {
+                        const colspan = cell.attrs?.colspan || 1
+                        rowColCount += colspan
+                      })
+                      break
+                    }
+                  }
+                  
+                  // 使用 addRowAfter，它会自动匹配当前行的列数
+                  editor.chain().focus().addRowAfter().run()
+                } else {
+                  editor.chain().focus().addRowAfter().run()
+                }
+              } else {
+                // 如果不在表格中，尝试查找下方是否有表格
+                // 使用 DOM 方法更可靠
+                const editorElement = editor.view.dom
+                const currentSelection = window.getSelection()
+                const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
+                
+                if (range) {
+                  // 从当前光标位置向下查找表格元素
+                  let currentElement: Node | null = range.endContainer
+                  
+                  // 如果是文本节点，获取其父元素
+                  if (currentElement.nodeType === Node.TEXT_NODE) {
+                    currentElement = currentElement.parentElement
+                  }
+                  
+                  // 向下查找表格
+                  while (currentElement && currentElement !== editorElement) {
+                    // 检查当前元素的兄弟节点中是否有表格
+                    let sibling = currentElement.nextSibling
+                    while (sibling) {
+                      if (sibling.nodeType === Node.ELEMENT_NODE) {
+                        const element = sibling as Element
+                        if (element.tagName === 'TABLE') {
+                          // 找到表格，移动到第一个单元格
+                          // 在段落下方添加行，应该在表格第一行上方添加（addRowBefore）
+                          const firstCell = element.querySelector('td, th')
+                          if (firstCell) {
+                            try {
+                              const cellPos = editor.view.posAtDOM(firstCell, 0)
+                              if (cellPos !== null && cellPos >= 0) {
+                                editor.chain()
+                                  .setTextSelection(cellPos + 1)
+                                  .focus()
+                                  .addRowBefore()
+                                  .run()
+                                return
+                              }
+                            } catch (error) {
+                              console.error('Error positioning in table:', error)
+                            }
+                          }
+                        }
+                      }
+                      sibling = sibling.nextSibling
+                    }
+                    
+                    // 向上查找父元素
+                    currentElement = currentElement.parentElement
+                  }
+                }
+                
+                // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
+                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+              }
             }}
-            disabled={!editor.can().addRowAfter()}
             title="在下方添加行"
           >
-            <div className="flex flex-col items-center gap-0.5">
-              <PlusCircle className="h-3.5 w-3.5" />
-              <ChevronDown className="h-3 w-3" />
+            <div className="flex items-center gap-1.5">
+              {/* 水平矩形，下半部分高亮 */}
+              <div className="relative w-4 h-3 border border-gray-400 rounded">
+                <div className="absolute left-0 bottom-0 right-0 h-1/2 bg-gray-600 rounded-b" />
+              </div>
+              <Plus className="h-3.5 w-3.5" />
             </div>
           </Button>
           <Button
@@ -1279,8 +1448,14 @@ export function DocumentEditor({
             disabled={!editor.can().deleteRow()}
             title="删除行"
           >
-            <Rows className="h-4 w-4" />
+            <div className="flex items-center gap-1.5">
+              {/* 水平矩形，无高亮 */}
+              <div className="w-4 h-3 border border-gray-400 rounded" />
+              <Minus className="h-3.5 w-3.5" />
+            </div>
           </Button>
+          <Separator orientation="vertical" className="h-6" />
+          {/* 单元格操作 */}
           <Button
             variant="ghost"
             size="sm"
@@ -1303,22 +1478,6 @@ export function DocumentEditor({
           >
             <Split className="h-4 w-4" />
           </Button>
-            </div>
-            <div className="flex gap-2 flex-shrink-0">
-              {onCancel && (
-                <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-              {onSave && (
-                <Button size="sm" onClick={onSave} disabled={isLoading} title={isLoading ? "保存中..." : "保存"} className="whitespace-nowrap">
-                  {isLoading ? (
-                    <span className="text-xs">保存中...</span>
-                  ) : (
-                    <Check className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
             </div>
           </div>
         </div>

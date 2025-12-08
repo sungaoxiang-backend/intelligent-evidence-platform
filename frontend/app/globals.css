@@ -74,6 +74,7 @@
 /* 自定义滚动条 */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -86,6 +87,11 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/50;
+}
+
+/* 工具栏横向滚动条 */
+.custom-scrollbar::-webkit-scrollbar:horizontal {
+  height: 6px;
 }
 
 /* 精致的卡片阴影 */
@@ -288,6 +294,24 @@ html {
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;  /* Chrome, Safari and Opera */
+}
+
+/* 工具栏滚动条样式 - 细滚动条 */
+[style*="scrollbarWidth"]::-webkit-scrollbar {
+  height: 4px;
+}
+
+[style*="scrollbarWidth"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[style*="scrollbarWidth"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+[style*="scrollbarWidth"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* Tiptap 表格样式 */
