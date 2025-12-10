@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import type { JSONContent } from "@tiptap/core"
+import { PaginatedEditorWrapper } from "./paginated-editor-wrapper"
 // 扩展配置已移至 document-extensions.ts
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -1532,9 +1533,7 @@ export function DocumentEditor({
       {/* 编辑器内容 - 带页面容器，与预览模式保持一致 */}
       <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }} onClick={() => editor?.commands.focus()}>
         <div className="flex justify-center">
-          <div className="template-doc-container">
-            <EditorContent editor={editor} />
-          </div>
+          <PaginatedEditorWrapper editor={editor} />
         </div>
       </div>
     </div>

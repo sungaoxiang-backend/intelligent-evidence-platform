@@ -1259,6 +1259,56 @@ export const templateBaseStyles = `
     overflow-y: visible;
   }
   
+  /* 分页编辑器容器 */
+  .paginated-editor-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    background-color: #f5f5f5;
+    min-height: 100%;
+    position: relative;
+  }
+  
+  /* 分页内容包装器 - 使用CSS来创建多个页面的视觉效果 */
+  .paginated-content-wrapper {
+    position: relative;
+    background: transparent;
+    /* 内容在背景之上 */
+  }
+  
+  /* 确保编辑器内容在页面背景之上 */
+  .paginated-content-wrapper .ProseMirror {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+  }
+  
+  /* 页面背景 */
+  .page-background {
+    border-radius: 0;
+  }
+  
+  /* 页面分隔线 */
+  .page-break-line {
+    z-index: 1;
+  }
+  
+  /* 在打印时使用page-break */
+  @media print {
+    .paginated-content-wrapper {
+      page-break-after: always;
+    }
+    
+    .page-break-line {
+      display: none;
+    }
+    
+    .page-background {
+      box-shadow: none;
+    }
+  }
+  
   .template-doc {
     font-family: "SimSun", "宋体", serif;
     /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
