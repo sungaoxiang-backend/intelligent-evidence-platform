@@ -36,6 +36,7 @@ import Color from "@tiptap/extension-color"
 import TableRow from "@tiptap/extension-table-row"
 import TableHeader from "@tiptap/extension-table-header"
 import HardBreak from "@tiptap/extension-hard-break"
+import Image from "@tiptap/extension-image"
 import {
   HeadingWithAttrs,
   ParagraphWithAttrs,
@@ -156,7 +157,7 @@ export default function DocumentsPage() {
     if (!draftContent) return
 
     const nameToSave = documentName.trim() || "新文书"
-    
+
     if (!documentName.trim()) {
       toast({
         title: "错误",
@@ -341,13 +342,13 @@ export default function DocumentsPage() {
 
     try {
       setIsLoading(true)
-      
+
       // 使用与预览完全相同的扩展配置和渲染逻辑
       // 关键：使用 Editor 实例的 getHTML() 方法，而不是 generateHTML
       // 这样可以确保扩展的 renderHTML 方法被正确调用
       const { Editor } = await import("@tiptap/core")
       const { normalizeContent } = await import("@/components/template-editor/utils")
-      
+
       // 使用与预览完全相同的扩展配置（与 DocumentPreview 组件一致）
       const extensions = [
         StarterKit.configure({
@@ -381,6 +382,10 @@ export default function DocumentsPage() {
         Underline,
         TextStyle,
         Color,
+        Image.configure({
+          inline: true,
+          allowBase64: true,
+        }),
         FontSize,
       ]
 
@@ -395,7 +400,7 @@ export default function DocumentsPage() {
       // editor.getHTML() 会正确调用所有扩展的 renderHTML 方法
       // 这与预览时 Tiptap 编辑器内部使用的渲染逻辑完全一致
       const htmlContent = tempEditor.getHTML()
-      
+
       // 清理临时编辑器
       tempEditor.destroy()
 

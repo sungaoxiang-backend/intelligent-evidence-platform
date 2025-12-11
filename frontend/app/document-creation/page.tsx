@@ -13,11 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { caseApi } from "@/lib/api"
 import useSWR from "swr"
 import type { Case } from "@/lib/types"
-import { 
-  documentsApi, 
-  documentDraftsApi, 
+import {
+  documentsApi,
+  documentDraftsApi,
   documentCreationApi,
-  type Document 
+  type Document
 } from "@/lib/documents-api"
 import type { JSONContent } from "@tiptap/core"
 import { Editor } from "@tiptap/core"
@@ -25,6 +25,8 @@ import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
 import TextStyle from "@tiptap/extension-text-style"
+import Link from "@tiptap/extension-link"
+import Image from "@tiptap/extension-image"
 import Color from "@tiptap/extension-color"
 import TableRow from "@tiptap/extension-table-row"
 import TableHeader from "@tiptap/extension-table-header"
@@ -36,7 +38,7 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "@/components/template-editor/extensions"
-import { FontSize } from "@/components/documents/font-size-extension"
+import { createDocumentExtensions } from "@/components/documents/document-extensions"
 import { normalizeContent } from "@/components/template-editor/utils"
 import { cn } from "@/lib/utils"
 
@@ -126,9 +128,9 @@ export default function DocumentCreationPage() {
   }
 
   const getCaseCause = (caseItem: Case) => {
-    return caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
-           caseItem.case_type === 'contract' ? '买卖合同纠纷' : 
-           caseItem.case_type || "未设置"
+    return caseItem.case_type === 'debt' ? '民间借贷纠纷' :
+      caseItem.case_type === 'contract' ? '买卖合同纠纷' :
+        caseItem.case_type || "未设置"
   }
 
   // 深拷贝函数
@@ -154,7 +156,7 @@ export default function DocumentCreationPage() {
           setDraftContent(deepCopy(response.data.content_json))
           setSavedDraftContent(deepCopy(response.data.content_json))
           setHasChanges(false)
-          
+
           // 加载页面布局设置
           if (response.data.page_layout) {
             console.log("[loadDraft] 从草稿加载页面布局:", response.data.page_layout)
@@ -172,7 +174,7 @@ export default function DocumentCreationPage() {
             setPageLayout(deepCopy(layoutToUse))
             setSavedPageLayout(deepCopy(layoutToUse))
           }
-          
+
           toast({
             title: "已加载草稿",
             description: "已自动加载之前保存的草稿",
@@ -205,7 +207,7 @@ export default function DocumentCreationPage() {
         }
       }
     }
-    
+
     // 如果没有草稿，从模板深拷贝 content_json
     console.log("[loadDraft] 从模板加载内容，template.content_json 存在:", !!selectedTemplate.content_json)
     if (selectedTemplate.content_json) {
@@ -213,7 +215,7 @@ export default function DocumentCreationPage() {
       setDraftContent(templateContent)
       setSavedDraftContent(templateContent)
       setHasChanges(false)
-      
+
       // 加载模板的页面布局设置（如果有）
       const templateLayout = selectedTemplate.page_layout || null
       const defaultLayout = {
@@ -224,7 +226,7 @@ export default function DocumentCreationPage() {
       console.log("[loadDraft] 从模板加载页面布局:", layoutToUse)
       setPageLayout(deepCopy(layoutToUse))
       setSavedPageLayout(deepCopy(layoutToUse))
-      
+
       console.log("[loadDraft] 已从模板加载内容")
     } else {
       console.warn("[loadDraft] 模板没有 content_json，设置为空内容")
@@ -243,7 +245,7 @@ export default function DocumentCreationPage() {
   // 选择模板后进入编辑模式
   const handleTemplateSelect = async (template: Document) => {
     console.log("[handleTemplateSelect] 被调用，模板ID:", template.id, "当前模板ID:", selectedTemplate?.id)
-    
+
     // 如果选择的是同一个模板，不需要切换
     if (selectedTemplate?.id === template.id) {
       console.log("[handleTemplateSelect] 选择的是同一个模板，跳过")
@@ -298,7 +300,7 @@ export default function DocumentCreationPage() {
 
   // 使用 useRef 来存储防抖定时器，以便在保存时清除
   const changeDetectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
+
   // 检测内容变化（使用防抖，避免过于频繁的比较）
   // 这个效果会在 draftContent 或 savedDraftContent 变化时触发
   // DocumentEditor 的所有编辑操作（包括表格拖动、内容变更、新增行或列等）都会通过 onChange 更新 draftContent
@@ -307,12 +309,12 @@ export default function DocumentCreationPage() {
       setHasChanges(false)
       return
     }
-    
+
     // 清除之前的定时器
     if (changeDetectionTimeoutRef.current) {
       clearTimeout(changeDetectionTimeoutRef.current)
     }
-    
+
     // 使用防抖来优化性能，避免每次变更都立即比较
     // 这对于频繁的编辑操作（如拖动表格、连续输入等）特别重要
     changeDetectionTimeoutRef.current = setTimeout(() => {
@@ -331,13 +333,13 @@ export default function DocumentCreationPage() {
         const currentStr = JSON.stringify(currentNormalized)
         const savedStr = JSON.stringify(savedNormalized)
         const contentHasChanges = currentStr !== savedStr
-        
+
         // 同时检查页面布局是否有变更
         // 使用深度比较，确保能检测到嵌套对象的变化
         const currentLayoutStr = JSON.stringify(pageLayout)
         const savedLayoutStr = JSON.stringify(savedPageLayout)
         const layoutHasChanges = currentLayoutStr !== savedLayoutStr
-        
+
         if (layoutHasChanges) {
           console.log("[变更检测] 页面布局有变更:", {
             current: pageLayout,
@@ -346,7 +348,7 @@ export default function DocumentCreationPage() {
             savedStr: savedLayoutStr
           })
         }
-        
+
         const hasAnyChanges = contentHasChanges || layoutHasChanges
         setHasChanges(hasAnyChanges)
         changeDetectionTimeoutRef.current = null
@@ -436,29 +438,29 @@ export default function DocumentCreationPage() {
     try {
       setIsSaving(true)
       console.log("[handleSaveDraft] 保存草稿，包含页面布局:", pageLayout)
-      
+
       // 清除变更检测的防抖定时器，避免保存后立即重新检测导致 hasChanges 被设置为 true
       if (changeDetectionTimeoutRef.current) {
         clearTimeout(changeDetectionTimeoutRef.current)
         changeDetectionTimeoutRef.current = null
       }
-      
+
       await documentDraftsApi.createOrUpdateDraft({
         case_id: selectedCaseId,
         document_id: selectedTemplate.id,
         content_json: draftContent,
         page_layout: pageLayout,
       })
-      
+
       // 更新已保存的内容和布局，用于后续的变更检测
       // 使用函数式更新确保使用最新的值
       setSavedDraftContent(deepCopy(draftContent))
       setSavedPageLayout(deepCopy(pageLayout))
-      
+
       // 立即设置 hasChanges 为 false，避免防抖延迟导致的问题
       setHasChanges(false)
       console.log("[handleSaveDraft] 保存成功，已更新 savedPageLayout 并清除变更检测定时器")
-      
+
       toast({
         title: "保存成功",
         description: "草稿已保存",
@@ -480,42 +482,13 @@ export default function DocumentCreationPage() {
 
     try {
       setIsLoading(true)
-      
+
       // 使用与预览完全相同的扩展配置和渲染逻辑
-      const extensions = [
-        StarterKit.configure({
-          heading: false,
-          paragraph: false,
-          hardBreak: false,
-        }),
-        HardBreak.configure({
-          keepMarks: true,
-        }),
-        ParagraphWithAttrs,
-        HeadingWithAttrs,
-        TableWithAttrs.configure({
-          resizable: false,
-          HTMLAttributes: {},
-        }),
-        TableRow.configure({
-          HTMLAttributes: {},
-        }),
-        TableHeader.configure({
-          HTMLAttributes: {},
-        }),
-        TableCellWithAttrs.configure({
-          HTMLAttributes: {},
-        }),
-        TextAlign.configure({
-          types: ["heading", "paragraph", "tableCell"],
-          alignments: ["left", "center", "right", "justify"],
-          defaultAlignment: "left",
-        }),
-        Underline,
-        TextStyle,
-        Color,
-        FontSize,
-      ]
+      // 使用与预览和编辑器完全相同的扩展配置
+      const extensions = createDocumentExtensions({
+        resizable: false, // 导出时不需要调整大小功能
+        allowTableNodeSelection: false,
+      })
 
       // 创建临时编辑器实例，使用与预览相同的配置
       const normalizedContent = normalizeContent(draftContent)
@@ -526,7 +499,7 @@ export default function DocumentCreationPage() {
 
       // 使用 editor.getHTML() 生成 HTML
       const htmlContent = tempEditor.getHTML()
-      
+
       // 清理临时编辑器
       tempEditor.destroy()
 
@@ -567,6 +540,10 @@ export default function DocumentCreationPage() {
       max-width: 100%;
       margin: 0 auto; /* 内容居中 */
       padding: 0;
+      /* 关键修复：允许内容溢出容器，防止旋转图片被裁剪 */
+      overflow: visible !important;
+      /* 增加底部内边距，确保文档底部的旋转元素有足够的空间显示 */
+      padding-bottom: 200px !important; 
     }
     .template-doc p {
       line-height: var(--content-line-height) !important;
@@ -808,8 +785,8 @@ export default function DocumentCreationPage() {
             <div className="flex items-center justify-between px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
               <h2 className="text-sm font-semibold text-foreground">文档预览</h2>
               <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={handleEdit}
                   variant="outline"
                   className="h-7 px-3 text-xs"
@@ -817,8 +794,8 @@ export default function DocumentCreationPage() {
                   <ArrowLeft className="h-3 w-3 mr-1.5" />
                   <span>返回编辑</span>
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={handleSaveDraft}
                   disabled={!hasChanges || isSaving}
                   variant={hasChanges && !isSaving ? "default" : "outline"}
@@ -829,8 +806,8 @@ export default function DocumentCreationPage() {
                 >
                   {isSaving ? "保存中..." : "保存草稿"}
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={handleDownload}
                   disabled={hasChanges || isLoading}
                   variant={!hasChanges && !isLoading ? "default" : "outline"}

@@ -8,6 +8,8 @@ import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
 import TextStyle from "@tiptap/extension-text-style"
 import Color from "@tiptap/extension-color"
+// import Image from "@tiptap/extension-image"
+import { ImageExtension } from "./extensions/image-extension"
 import TableRow from "@tiptap/extension-table-row"
 import TableHeader from "@tiptap/extension-table-header"
 import HardBreak from "@tiptap/extension-hard-break"
@@ -70,6 +72,10 @@ export function createDocumentExtensions(options: {
     Underline,
     TextStyle, // 必须在 FontSize 之前
     Color,
+    ImageExtension.configure({
+      inline: true,
+      allowBase64: true,
+    }),
     FontSize, // 依赖于 TextStyle，必须在之后加载
   ]
 

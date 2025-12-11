@@ -103,22 +103,22 @@ export function DocumentEditor({
   const [currentLineSpacing, setCurrentLineSpacing] = useState(
     initialPageLayout?.lineSpacing || 1.5
   )
-  
+
   // 使用 useRef 来跟踪之前的 initialPageLayout，以便检测变化
   const prevInitialPageLayoutRef = useRef<string | null>(null)
-  
+
   // 当 initialPageLayout 变化时，更新内部状态（例如从草稿加载后）
   useEffect(() => {
     if (initialPageLayout) {
       // 使用 JSON.stringify 来深度比较，检测对象内部属性的变化
       const currentLayoutStr = JSON.stringify(initialPageLayout)
       const prevLayoutStr = prevInitialPageLayoutRef.current
-      
+
       // 只有当布局真正变化时才更新
       if (currentLayoutStr !== prevLayoutStr) {
         console.log("[DocumentEditor] initialPageLayout 变化，更新内部状态:", initialPageLayout)
         prevInitialPageLayoutRef.current = currentLayoutStr
-        
+
         // 只有当 margins 存在时才更新，创建新对象确保状态更新
         if (initialPageLayout.margins) {
           const newMargins = {
@@ -142,7 +142,7 @@ export function DocumentEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPageLayout])
-  
+
   // 用于强制重新渲染工具栏，以便字号选择器能同步更新
   const [, forceUpdate] = useState({})
   const updateToolbar = useCallback(() => {
@@ -251,20 +251,49 @@ export function DocumentEditor({
         class: "template-doc",
         style: "outline: none;",
       },
+      handlePaste: (view, event) => {
+        const items = Array.from(event.clipboardData?.items || [])
+        const images = items.filter(item => item.type.indexOf('image') === 0)
+
+        if (images.length === 0) {
+          return false
+        }
+
+        event.preventDefault()
+
+        images.forEach(item => {
+          const blob = item.getAsFile()
+          if (!blob) return
+
+          const reader = new FileReader()
+          reader.onload = (readerEvent) => {
+            const base64 = readerEvent.target?.result
+            if (typeof base64 === 'string') {
+              const { schema } = view.state
+              const imageNode = schema.nodes.image.create({ src: base64 })
+              const transaction = view.state.tr.replaceSelectionWith(imageNode)
+              view.dispatch(transaction)
+            }
+          }
+          reader.readAsDataURL(blob)
+        })
+
+        return true
+      },
       // 优化粘贴处理：基于 A4 页面尺寸 1:1 保留 WPS 样式
       transformPastedHTML(html, view) {
         const tempDiv = document.createElement("div")
         tempDiv.innerHTML = html
-        
+
         // 辅助函数：将各种单位转换为 twips
         const pxToTwips = (px: number) => Math.round(px * 1440 / 96) // 96 DPI
         const ptToTwips = (pt: number) => Math.round(pt * 20) // 1pt = 20 twips
-        
+
         // 处理表格：提取列宽信息和表格宽度
         const tables = tempDiv.querySelectorAll("table")
         tables.forEach((table) => {
           const tableEl = table as HTMLElement
-          
+
           // 提取表格宽度
           let tableWidth: number | null = null
           if (tableEl.style.width) {
@@ -284,18 +313,18 @@ export function DocumentEditor({
               }
             }
           }
-          
+
           // 提取列宽信息
           const colWidths: number[] = []
           const colgroup = tableEl.querySelector("colgroup")
-          
+
           // 辅助函数：将宽度字符串转换为 twips
           const parseWidthToTwips = (widthStr: string, tableWidthPx: number | null = null): number | null => {
             if (!widthStr) return null
-            
+
             const widthValue = parseFloat(widthStr)
             if (isNaN(widthValue)) return null
-            
+
             if (widthStr.includes("px")) {
               return pxToTwips(widthValue)
             } else if (widthStr.includes("pt")) {
@@ -324,7 +353,7 @@ export function DocumentEditor({
               return pxToTwips(widthValue)
             }
           }
-          
+
           // 计算表格实际宽度（px），用于百分比计算
           let tableWidthPx: number | null = null
           if (tableWidth) {
@@ -343,7 +372,7 @@ export function DocumentEditor({
               }
             }
           }
-          
+
           if (colgroup) {
             // 从 colgroup 中提取列宽
             const cols = colgroup.querySelectorAll("col")
@@ -356,7 +385,7 @@ export function DocumentEditor({
               }
             })
           }
-          
+
           // 如果没有 colgroup 或 colgroup 中没有足够的列宽信息，从第一行的单元格宽度提取
           if (colWidths.length === 0) {
             const firstRow = tableEl.querySelector("tr")
@@ -367,13 +396,13 @@ export function DocumentEditor({
                 // 检查是否是合并单元格（跳过合并的列）
                 const colspan = cellEl.getAttribute("colspan")
                 const colspanNum = colspan ? parseInt(colspan, 10) : 1
-                
+
                 // 尝试从多个来源获取宽度
-                const widthStr = cellEl.style.width || 
-                                 cellEl.getAttribute("width") || 
-                                 cellEl.style.minWidth || 
-                                 ""
-                
+                const widthStr = cellEl.style.width ||
+                  cellEl.getAttribute("width") ||
+                  cellEl.style.minWidth ||
+                  ""
+
                 if (widthStr) {
                   const twips = parseWidthToTwips(widthStr, tableWidthPx)
                   if (twips !== null) {
@@ -392,7 +421,7 @@ export function DocumentEditor({
               })
             }
           }
-          
+
           // 验证列宽数组长度与表格列数匹配
           // 计算表格实际列数（考虑合并单元格）
           const firstRow = tableEl.querySelector("tr")
@@ -404,12 +433,12 @@ export function DocumentEditor({
               const colspanNum = colspan ? parseInt(colspan, 10) : 1
               actualColCount += colspanNum
             })
-            
+
             // 如果列宽数组长度不匹配，调整数组
             if (colWidths.length !== actualColCount) {
               if (colWidths.length < actualColCount) {
                 // 如果列宽数组太短，用平均宽度填充
-                const avgWidth = colWidths.length > 0 
+                const avgWidth = colWidths.length > 0
                   ? Math.round(colWidths.reduce((a, b) => a + b, 0) / colWidths.length)
                   : pxToTwips(100) // 默认 100px
                 while (colWidths.length < actualColCount) {
@@ -420,7 +449,7 @@ export function DocumentEditor({
                 colWidths.splice(actualColCount)
               }
             }
-            
+
             // 移除占位符（值为 0 的列宽），用平均宽度替换
             const nonZeroWidths = colWidths.filter(w => w > 0)
             if (nonZeroWidths.length > 0) {
@@ -432,7 +461,7 @@ export function DocumentEditor({
               }
             }
           }
-          
+
           // 将列宽信息保存到 data 属性中，供 Tiptap 解析
           if (colWidths.length > 0 && colWidths.every(w => w > 0)) {
             tableEl.setAttribute("data-col-widths", JSON.stringify(colWidths))
@@ -440,24 +469,24 @@ export function DocumentEditor({
           } else {
             console.warn("[DocumentEditor] No valid colWidths extracted from table")
           }
-          
+
           // 保存表格宽度
           if (tableWidth) {
             tableEl.setAttribute("data-table-width", tableWidth.toString())
             tableEl.setAttribute("data-table-width-type", "twips")
           }
-          
+
           // 提取行高信息
           const rows = tableEl.querySelectorAll("tr")
           rows.forEach((row, rowIndex) => {
             const rowEl = row as HTMLElement
-            
+
             // 辅助函数：将行高字符串转换为 twips
             const parseHeightToTwips = (heightStr: string): number | null => {
               if (!heightStr) return null
               const heightValue = parseFloat(heightStr)
               if (isNaN(heightValue)) return null
-              
+
               if (heightStr.includes("px")) {
                 return pxToTwips(heightValue)
               } else if (heightStr.includes("pt")) {
@@ -470,16 +499,16 @@ export function DocumentEditor({
                 return pxToTwips(heightValue)
               }
             }
-            
+
             // 尝试从多个来源提取行高：
             // 1. 从 tr 元素的 style.height 或 height 属性
             let heightStr = rowEl.style.height || rowEl.getAttribute("height") || ""
             let twips: number | null = null
-            
+
             if (heightStr) {
               twips = parseHeightToTwips(heightStr)
             }
-            
+
             // 2. 如果 tr 没有行高，尝试从第一个单元格的高度提取（WPS 可能将行高设置在单元格上）
             if (!twips) {
               const firstCell = rowEl.querySelector("td, th") as HTMLElement | null
@@ -499,7 +528,7 @@ export function DocumentEditor({
                 }
               }
             }
-            
+
             // 验证行高值的合理性（10-5000 twips，约 7-3333px）
             // 放宽范围以适应 WPS 导出的各种行高值
             if (twips !== null && twips >= 10 && twips <= 5000) {
@@ -514,13 +543,13 @@ export function DocumentEditor({
             }
           })
         })
-        
+
         // 处理所有元素，基于 A4 页面尺寸保留样式
         const allElements = tempDiv.querySelectorAll("*")
-        
+
         allElements.forEach((element) => {
           const el = element as HTMLElement
-          
+
           // 1. 处理 <center> 标签：将样式应用到子元素
           if (el.tagName === "CENTER") {
             const children = el.querySelectorAll("p, h1, h2, h3, h4, h5, h6, div")
@@ -532,7 +561,7 @@ export function DocumentEditor({
               el.style.textAlign = "center"
             }
           }
-          
+
           // 2. 处理 font 标签的 size 属性，转换为 CSS 样式（保留原始字体大小）
           if (el.tagName === "FONT" && el.getAttribute("size")) {
             const size = el.getAttribute("size")
@@ -543,14 +572,14 @@ export function DocumentEditor({
             el.style.fontSize = sizeMap[size || "3"] || "16pt"
             el.removeAttribute("size")
           }
-          
+
           // 3. 处理所有元素的字体大小：确保保留 WPS 中的字体大小样式
           // WPS 的"小四"字号是 12pt，需要正确保留
           // 关键：将字体大小从父元素传递到文本节点，确保 Tiptap 能正确解析
-          
+
           // 首先检查元素本身是否有字体大小
           let elementFontSize = el.style.fontSize
-          
+
           // 如果没有，检查父元素的字体大小（WPS 可能将字体大小设置在父元素上）
           if (!elementFontSize) {
             let parent = el.parentElement
@@ -562,7 +591,7 @@ export function DocumentEditor({
               parent = parent.parentElement
             }
           }
-          
+
           if (elementFontSize) {
             const fontSizeStr = elementFontSize.trim()
             // 标准化字体大小格式，确保单位正确
@@ -574,10 +603,10 @@ export function DocumentEditor({
                 normalizedFontSize = `${fontSizeValue}pt`
               }
             }
-            
+
             // 将字体大小应用到当前元素
             el.style.fontSize = normalizedFontSize
-            
+
             // 关键修复：将字体大小样式应用到所有文本子节点（span 等）
             // 这样 Tiptap 的 parseHTML 才能正确解析字体大小
             // 注意：只应用到 span 和 font 标签，不要应用到 p、div、td、th 等块级元素
@@ -592,7 +621,7 @@ export function DocumentEditor({
               })
             }
           }
-          
+
           // 4. 检查父元素的 text-align，传递到子元素
           const parent = el.parentElement
           if (parent && parent.style.textAlign && !el.style.textAlign) {
@@ -600,7 +629,7 @@ export function DocumentEditor({
               el.style.textAlign = parent.style.textAlign
             }
           }
-          
+
           // 5. 清理所有行高样式（WPS 粘贴的内容经常带有行高，导致"隐形空白"）
           // 对于段落和标题，统一移除行高，使用默认的 1.6
           if (["P", "H1", "H2", "H3", "H4", "H5", "H6", "DIV", "SPAN"].includes(el.tagName)) {
@@ -617,7 +646,7 @@ export function DocumentEditor({
               }
             }
           }
-          
+
           // 6. 处理表格单元格：保留字体大小，只处理宽度和溢出
           if (el.tagName === "TD" || el.tagName === "TH") {
             // 移除可能导致溢出的宽度样式
@@ -633,14 +662,14 @@ export function DocumentEditor({
               }
               el.style.width = ""
             }
-            
+
             // 确保 box-sizing
             el.style.boxSizing = "border-box"
-            
+
             // 添加自动换行样式，防止内容溢出
             el.style.wordWrap = "break-word"
             el.style.overflowWrap = "break-word"
-            
+
             // 移除可能导致溢出的 max-width（如果设置得过大）
             if (el.style.maxWidth) {
               const maxWidthValue = parseFloat(el.style.maxWidth)
@@ -648,16 +677,16 @@ export function DocumentEditor({
                 el.style.maxWidth = ""
               }
             }
-            
+
             // 修复单元格对齐方式冲突问题：
             // 1. 如果单元格本身没有对齐样式，但单元格内的段落有对齐样式，将段落的对齐样式提升到单元格
             // 2. 清理单元格内段落的对齐样式，确保单元格的对齐方式由单元格本身控制
             const cellAlign = el.style.textAlign || el.getAttribute("align")
             const paragraphs = el.querySelectorAll("p, div, h1, h2, h3, h4, h5, h6")
-            
+
             if (paragraphs.length > 0) {
               let paragraphAlign: string | null = null
-              
+
               // 查找第一个有对齐样式的段落
               for (const para of Array.from(paragraphs)) {
                 const paraEl = para as HTMLElement
@@ -667,7 +696,7 @@ export function DocumentEditor({
                   break
                 }
               }
-              
+
               // 如果单元格本身没有对齐样式，但段落有，将段落的对齐样式提升到单元格
               if (!cellAlign && paragraphAlign) {
                 el.style.textAlign = paragraphAlign
@@ -675,7 +704,7 @@ export function DocumentEditor({
                   el.setAttribute("align", paragraphAlign)
                 }
               }
-              
+
               // 清理单元格内所有段落的对齐样式，避免冲突
               paragraphs.forEach((para) => {
                 const paraEl = para as HTMLElement
@@ -687,25 +716,17 @@ export function DocumentEditor({
             }
           }
         })
-        
+
         return tempDiv.innerHTML
       },
       transformPastedText(text, view) {
         // 对于纯文本，保持原样
         return text
       },
-      clipboardTextSerializer: ({ editor }) => {
-        // 自定义剪贴板文本序列化，保留格式
-        // 检查 editor 是否存在且已初始化，避免在初始化过程中调用 getHTML()
-        if (!editor || !editor.getHTML) {
-          return ""
-        }
-        return editor.getHTML()
-      },
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON()
-      
+
       // 调试：检查 JSON 结构，特别是 marks 中的 fontSize
       if (process.env.NODE_ENV === "development") {
         const checkFontSize = (node: any, path: string = ""): void => {
@@ -723,12 +744,12 @@ export function DocumentEditor({
         }
         checkFontSize(json, "root")
       }
-      
+
       // 在更新后立即同步行高（延迟执行，避免频繁更新）
       setTimeout(() => {
         const editorElement = editor.view.dom
         const pxToTwips = (px: number) => Math.round(px * 1440 / 96)
-        
+
         const tables = editorElement.querySelectorAll("table")
         tables.forEach((table) => {
           const rows = table.querySelectorAll("tr")
@@ -736,11 +757,11 @@ export function DocumentEditor({
             const rowEl = row as HTMLElement
             const dataRowHeight = rowEl.getAttribute("data-row-height")
             const styleHeight = rowEl.style.height
-            
+
             if (dataRowHeight || styleHeight) {
               // 如果 DOM 中有行高信息，但节点属性中没有，需要同步
               let rowHeightTwips: number | null = null
-              
+
               if (dataRowHeight) {
                 rowHeightTwips = parseFloat(dataRowHeight)
               } else if (styleHeight) {
@@ -749,21 +770,21 @@ export function DocumentEditor({
                   rowHeightTwips = pxToTwips(px)
                 }
               }
-              
+
               if (rowHeightTwips !== null && rowHeightTwips >= 10 && rowHeightTwips <= 5000) {
                 try {
                   const rowPos = editor.view.posAtDOM(row, 0)
                   if (rowPos !== null && rowPos >= 0) {
                     const $pos = editor.state.doc.resolve(rowPos)
                     let rowNode = $pos.nodeAfter
-                    
+
                     if (!rowNode || rowNode.type.name !== "tableRow") {
                       const parent = $pos.parent
                       if (parent && parent.type.name === "tableRow") {
                         rowNode = parent
                       }
                     }
-                    
+
                     if (rowNode && rowNode.type.name === "tableRow") {
                       const currentRowHeight = rowNode.attrs.rowHeight
                       if (!currentRowHeight || Math.abs(currentRowHeight - rowHeightTwips) > 1) {
@@ -793,7 +814,7 @@ export function DocumentEditor({
           })
         })
       }, 150)
-      
+
       // 调试：检查表格行的行高属性
       if (process.env.NODE_ENV === "development") {
         const checkRowHeights = (node: any, path: string = ""): void => {
@@ -808,7 +829,7 @@ export function DocumentEditor({
         }
         checkRowHeights(json, "root")
       }
-      
+
       const normalized = normalizeContentUtil(JSON.parse(JSON.stringify(json)))
       if (normalized) {
         onChange?.(normalized)
@@ -832,23 +853,23 @@ export function DocumentEditor({
     // 同步表格列宽的函数
     const syncTableColWidths = () => {
       const tables = editorElement.querySelectorAll("table")
-      
+
       tables.forEach((table) => {
         const colgroup = table.querySelector("colgroup")
         if (colgroup) {
           const cols = colgroup.querySelectorAll("col")
           const colWidths: number[] = []
-          
+
           cols.forEach((col) => {
             const colEl = col as HTMLElement
             const widthStr = colEl.style.width || ""
             const widthValue = parseFloat(widthStr)
-            
+
             if (!isNaN(widthValue) && widthStr.includes("px")) {
               colWidths.push(pxToTwips(widthValue))
             }
           })
-          
+
           // 如果检测到列宽，尝试更新表格节点的 colWidths 属性
           if (colWidths.length > 0) {
             try {
@@ -857,7 +878,7 @@ export function DocumentEditor({
               if (tablePos !== null && tablePos >= 0) {
                 const $pos = editor.state.doc.resolve(tablePos)
                 let tableNode = $pos.nodeAfter
-                
+
                 // 如果 nodeAfter 不是表格，尝试向上查找
                 if (!tableNode || tableNode.type.name !== "table") {
                   const parent = $pos.parent
@@ -879,16 +900,16 @@ export function DocumentEditor({
                     }
                   }
                 }
-                
+
                 if (tableNode && tableNode.type.name === "table") {
                   const currentColWidths = tableNode.attrs.colWidths
                   // 检查列宽是否发生变化（允许 1 twips 的误差）
-                  const hasChanged = !currentColWidths || 
+                  const hasChanged = !currentColWidths ||
                     currentColWidths.length !== colWidths.length ||
-                    currentColWidths.some((w: number, i: number) => 
+                    currentColWidths.some((w: number, i: number) =>
                       colWidths[i] !== undefined && Math.abs(w - colWidths[i]) > 1
                     )
-                  
+
                   if (hasChanged) {
                     // 找到表格节点的确切位置
                     editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
@@ -928,13 +949,13 @@ export function DocumentEditor({
             shouldSync = true
           }
         } else if (mutation.type === "childList") {
-          if (mutation.target instanceof HTMLElement && 
-              (mutation.target.tagName === "COLGROUP" || mutation.target.closest("colgroup"))) {
+          if (mutation.target instanceof HTMLElement &&
+            (mutation.target.tagName === "COLGROUP" || mutation.target.closest("colgroup"))) {
             shouldSync = true
           }
         }
       })
-      
+
       if (shouldSync) {
         // 延迟执行，避免频繁更新
         setTimeout(syncTableColWidths, 100)
@@ -971,18 +992,18 @@ export function DocumentEditor({
     // 同步表格行高的函数
     const syncTableRowHeights = () => {
       const tables = editorElement.querySelectorAll("table")
-      
+
       tables.forEach((table) => {
         const rows = table.querySelectorAll("tr")
-        
+
         rows.forEach((row) => {
           const rowEl = row as HTMLElement
           // 检查是否有 data-row-height 属性或 style.height
           const dataRowHeight = rowEl.getAttribute("data-row-height")
           const styleHeight = rowEl.style.height
-          
+
           let rowHeightTwips: number | null = null
-          
+
           if (dataRowHeight) {
             rowHeightTwips = parseFloat(dataRowHeight)
           } else if (styleHeight) {
@@ -991,7 +1012,7 @@ export function DocumentEditor({
               rowHeightTwips = pxToTwips(px)
             }
           }
-          
+
           // 如果检测到行高，尝试更新表格行节点的 rowHeight 属性
           if (rowHeightTwips !== null && rowHeightTwips >= 10 && rowHeightTwips <= 5000) {
             try {
@@ -1000,7 +1021,7 @@ export function DocumentEditor({
               if (rowPos !== null && rowPos >= 0) {
                 const $pos = editor.state.doc.resolve(rowPos)
                 let rowNode = $pos.nodeAfter
-                
+
                 // 如果 nodeAfter 不是表格行，尝试向上查找
                 if (!rowNode || rowNode.type.name !== "tableRow") {
                   const parent = $pos.parent
@@ -1008,13 +1029,13 @@ export function DocumentEditor({
                     rowNode = parent
                   }
                 }
-                
+
                 if (rowNode && rowNode.type.name === "tableRow") {
                   const currentRowHeight = rowNode.attrs.rowHeight
                   // 检查行高是否发生变化（允许 1 twips 的误差）
                   const hasChanged = currentRowHeight !== rowHeightTwips &&
                     (!currentRowHeight || Math.abs(currentRowHeight - rowHeightTwips) > 1)
-                  
+
                   if (hasChanged) {
                     // 找到表格行节点的确切位置
                     editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
@@ -1061,7 +1082,7 @@ export function DocumentEditor({
         syncTableRowHeights()
       }, 100)
     }
-    
+
     // 使用 MutationObserver 监听表格行高变化
     const observer = new MutationObserver((mutations) => {
       let shouldSync = false
@@ -1075,7 +1096,7 @@ export function DocumentEditor({
           shouldSync = true
         }
       })
-      
+
       if (shouldSync) {
         // 延迟执行，避免频繁更新
         setTimeout(syncTableRowHeights, 100)
@@ -1104,10 +1125,12 @@ export function DocumentEditor({
         const currentContent = editor.getJSON()
         const currentStr = JSON.stringify(normalizeContent(currentContent))
         const newStr = JSON.stringify(normalizedContent)
-        
+
         // 只有当内容真正改变时才更新
         if (currentStr !== newStr) {
-          editor.commands.setContent(normalizedContent)
+          queueMicrotask(() => {
+            editor.commands.setContent(normalizedContent)
+          })
           contentSetRef.current = true
         }
       } catch (error) {
@@ -1115,7 +1138,9 @@ export function DocumentEditor({
       }
     } else if (editor && !initialContent) {
       // 如果 initialContent 变为 null，清空编辑器
-      editor.commands.setContent({ type: "doc", content: [] })
+      queueMicrotask(() => {
+        editor.commands.setContent({ type: "doc", content: [] })
+      })
       contentSetRef.current = true
     }
   }, [editor, initialContent, normalizeContent])
@@ -1133,536 +1158,536 @@ export function DocumentEditor({
           <div className="flex flex-col p-2 gap-2" style={{ width: '794px', maxWidth: '100%' }}>
             {/* 第一行：文本格式、字号、标题、对齐、取消和保存 */}
             <div className="flex items-center gap-1.5 justify-evenly">
-          <Button
-            variant={editor.isActive("bold") ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleBold().run()}
-          >
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive("italic") ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-          >
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive("underline") ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-          >
-            <UnderlineIcon className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          {/* 字号选择器 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1 min-w-[60px]">
-                {(() => {
-                  const fontSize = editor.getAttributes("textStyle").fontSize
-                  if (fontSize) {
-                    // 提取数字部分显示
-                    const match = fontSize.match(/(\d+(?:\.\d+)?)/)
-                    if (match) {
-                      const num = parseFloat(match[1])
-                      // 转换为中文字号（正确的中文字号对应关系）
-                      // 初号=42pt, 小初=36pt, 一号=26pt, 小一=24pt, 二号=22pt, 小二=18pt
-                      // 三号=16pt, 小三=15pt, 四号=14pt, 小四=12pt, 五号=10.5pt, 小五=9pt
-                      // 六号=7.5pt, 小六=6.5pt
-                      if (num >= 42) return "初号"
-                      if (num >= 36 && num < 42) return "小初"
-                      if (num >= 26 && num < 36) return "一号"
-                      if (num >= 24 && num < 26) return "小一"
-                      if (num >= 22 && num < 24) return "二号"
-                      if (num >= 18 && num < 22) return "小二"
-                      if (num >= 16 && num < 18) return "三号"
-                      if (num >= 15 && num < 16) return "小三"
-                      if (num >= 14 && num < 15) return "四号"
-                      if (num >= 12 && num < 14) return "小四"  // 12pt = 小四
-                      if (num >= 10.5 && num < 12) return "五号"
-                      if (num >= 9 && num < 10.5) return "小五"
-                      if (num >= 7.5 && num < 9) return "六号"
-                      if (num >= 6.5 && num < 7.5) return "小六"
-                      return `${num}pt`
-                    }
-                    return fontSize
-                  }
-                  return "字号"
-                })()}
-                <ChevronDownIcon className="h-3 w-3" />
+              <Button
+                variant={editor.isActive("bold") ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().toggleBold().run()}
+              >
+                <Bold className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-32">
-              <DropdownMenuLabel>字号</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {[
-                { label: "初号", size: "42pt" },
-                { label: "小初", size: "36pt" },
-                { label: "一号", size: "26pt" },
-                { label: "小一", size: "24pt" },
-                { label: "二号", size: "22pt" },
-                { label: "小二", size: "18pt" },
-                { label: "三号", size: "16pt" },
-                { label: "小三", size: "15pt" },
-                { label: "四号", size: "14pt" },
-                { label: "小四", size: "12pt" },
-                { label: "五号", size: "10.5pt" },
-                { label: "小五", size: "9pt" },
-                { label: "六号", size: "7.5pt" },
-                { label: "小六", size: "6.5pt" },
-              ].map((item) => {
-                const currentFontSize = editor.getAttributes("textStyle").fontSize
-                const isActive = currentFontSize === item.size
-                return (
-                  <DropdownMenuItem
-                    key={item.size}
-                    onClick={() => {
-                      if (isActive) {
-                        editor.chain().focus().unsetFontSize().run()
-                      } else {
-                        editor.chain().focus().setFontSize(item.size).run()
+              <Button
+                variant={editor.isActive("italic") ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+              >
+                <Italic className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={editor.isActive("underline") ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().toggleUnderline().run()}
+              >
+                <UnderlineIcon className="h-4 w-4" />
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 字号选择器 */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1 min-w-[60px]">
+                    {(() => {
+                      const fontSize = editor.getAttributes("textStyle").fontSize
+                      if (fontSize) {
+                        // 提取数字部分显示
+                        const match = fontSize.match(/(\d+(?:\.\d+)?)/)
+                        if (match) {
+                          const num = parseFloat(match[1])
+                          // 转换为中文字号（正确的中文字号对应关系）
+                          // 初号=42pt, 小初=36pt, 一号=26pt, 小一=24pt, 二号=22pt, 小二=18pt
+                          // 三号=16pt, 小三=15pt, 四号=14pt, 小四=12pt, 五号=10.5pt, 小五=9pt
+                          // 六号=7.5pt, 小六=6.5pt
+                          if (num >= 42) return "初号"
+                          if (num >= 36 && num < 42) return "小初"
+                          if (num >= 26 && num < 36) return "一号"
+                          if (num >= 24 && num < 26) return "小一"
+                          if (num >= 22 && num < 24) return "二号"
+                          if (num >= 18 && num < 22) return "小二"
+                          if (num >= 16 && num < 18) return "三号"
+                          if (num >= 15 && num < 16) return "小三"
+                          if (num >= 14 && num < 15) return "四号"
+                          if (num >= 12 && num < 14) return "小四"  // 12pt = 小四
+                          if (num >= 10.5 && num < 12) return "五号"
+                          if (num >= 9 && num < 10.5) return "小五"
+                          if (num >= 7.5 && num < 9) return "六号"
+                          if (num >= 6.5 && num < 7.5) return "小六"
+                          return `${num}pt`
+                        }
+                        return fontSize
                       }
+                      return "字号"
+                    })()}
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-32">
+                  <DropdownMenuLabel>字号</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {[
+                    { label: "初号", size: "42pt" },
+                    { label: "小初", size: "36pt" },
+                    { label: "一号", size: "26pt" },
+                    { label: "小一", size: "24pt" },
+                    { label: "二号", size: "22pt" },
+                    { label: "小二", size: "18pt" },
+                    { label: "三号", size: "16pt" },
+                    { label: "小三", size: "15pt" },
+                    { label: "四号", size: "14pt" },
+                    { label: "小四", size: "12pt" },
+                    { label: "五号", size: "10.5pt" },
+                    { label: "小五", size: "9pt" },
+                    { label: "六号", size: "7.5pt" },
+                    { label: "小六", size: "6.5pt" },
+                  ].map((item) => {
+                    const currentFontSize = editor.getAttributes("textStyle").fontSize
+                    const isActive = currentFontSize === item.size
+                    return (
+                      <DropdownMenuItem
+                        key={item.size}
+                        onClick={() => {
+                          if (isActive) {
+                            editor.chain().focus().unsetFontSize().run()
+                          } else {
+                            editor.chain().focus().setFontSize(item.size).run()
+                          }
+                        }}
+                        className={isActive ? "bg-accent" : ""}
+                      >
+                        {item.label} ({item.size})
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 标题下拉菜单 */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    {editor.isActive("heading", { level: 1 }) ? (
+                      <Heading1 className="h-4 w-4" />
+                    ) : editor.isActive("heading", { level: 2 }) ? (
+                      <Heading2 className="h-4 w-4" />
+                    ) : editor.isActive("heading", { level: 3 }) ? (
+                      <Heading3 className="h-4 w-4" />
+                    ) : (
+                      <Heading1 className="h-4 w-4" />
+                    )}
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>标题</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                      editor.chain()
+                        .focus()
+                        .toggleHeading({ level: 1 })
+                        .unsetFontSize()
+                        .run()
                     }}
-                    className={isActive ? "bg-accent" : ""}
+                    className={editor.isActive("heading", { level: 1 }) ? "bg-accent" : ""}
                   >
-                    {item.label} ({item.size})
+                    <Heading1 className="h-4 w-4 mr-2" />
+                    标题 1
                   </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Separator orientation="vertical" className="h-6" />
-          {/* 标题下拉菜单 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1">
-                {editor.isActive("heading", { level: 1 }) ? (
-                  <Heading1 className="h-4 w-4" />
-                ) : editor.isActive("heading", { level: 2 }) ? (
-                  <Heading2 className="h-4 w-4" />
-                ) : editor.isActive("heading", { level: 3 }) ? (
-                  <Heading3 className="h-4 w-4" />
-                ) : (
-                  <Heading1 className="h-4 w-4" />
-                )}
-                <ChevronDownIcon className="h-3 w-3" />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                      editor.chain()
+                        .focus()
+                        .toggleHeading({ level: 2 })
+                        .unsetFontSize()
+                        .run()
+                    }}
+                    className={editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""}
+                  >
+                    <Heading2 className="h-4 w-4 mr-2" />
+                    标题 2
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
+                      editor.chain()
+                        .focus()
+                        .toggleHeading({ level: 3 })
+                        .unsetFontSize()
+                        .run()
+                    }}
+                    className={editor.isActive("heading", { level: 3 }) ? "bg-accent" : ""}
+                  >
+                    <Heading3 className="h-4 w-4 mr-2" />
+                    标题 3
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Separator orientation="vertical" className="h-6" />
+              <Button
+                variant={editor.isActive({ textAlign: "left" }) ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().setTextAlign("left").run()}
+              >
+                <AlignLeft className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>标题</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
-                  editor.chain()
-                    .focus()
-                    .toggleHeading({ level: 1 })
-                    .unsetFontSize()
-                    .run()
-                }}
-                className={editor.isActive("heading", { level: 1 }) ? "bg-accent" : ""}
+              <Button
+                variant={editor.isActive({ textAlign: "center" }) ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().setTextAlign("center").run()}
               >
-                <Heading1 className="h-4 w-4 mr-2" />
-                标题 1
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
-                  editor.chain()
-                    .focus()
-                    .toggleHeading({ level: 2 })
-                    .unsetFontSize()
-                    .run()
-                }}
-                className={editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""}
+                <AlignCenter className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={editor.isActive({ textAlign: "right" }) ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().setTextAlign("right").run()}
               >
-                <Heading2 className="h-4 w-4 mr-2" />
-                标题 2
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  // 应用标题时，清除文本上的 fontSize mark，让标题的 CSS 样式生效
-                  editor.chain()
-                    .focus()
-                    .toggleHeading({ level: 3 })
-                    .unsetFontSize()
-                    .run()
-                }}
-                className={editor.isActive("heading", { level: 3 }) ? "bg-accent" : ""}
+                <AlignRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={editor.isActive({ textAlign: "justify" }) ? "default" : "ghost"}
+                size="sm"
+                onClick={() => editor.chain().focus().setTextAlign("justify").run()}
               >
-                <Heading3 className="h-4 w-4 mr-2" />
-                标题 3
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Separator orientation="vertical" className="h-6" />
-          <Button
-            variant={editor.isActive({ textAlign: "left" }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().setTextAlign("left").run()}
-          >
-            <AlignLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive({ textAlign: "center" }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().setTextAlign("center").run()}
-          >
-            <AlignCenter className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive({ textAlign: "right" }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().setTextAlign("right").run()}
-          >
-            <AlignRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={editor.isActive({ textAlign: "justify" }) ? "default" : "ghost"}
-            size="sm"
-            onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-          >
-            <AlignJustify className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          {/* 页面布局控制 */}
-          <PageMarginControl
-            currentMargin={currentMargins.top}
-            onMarginChange={handleMarginChange}
-          />
-          <LineSpacingControl
-            currentSpacing={currentLineSpacing}
-            onSpacingChange={handleLineSpacingChange}
-          />
-          <Separator orientation="vertical" className="h-6" />
-          {/* 取消和保存按钮 */}
-          {onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-          {onSave && (
-            <Button 
-              size="sm" 
-              onClick={onSave} 
-              disabled={isSaving || !canSave} 
-              title={isSaving ? "保存中..." : canSave ? "保存草稿" : "无变更"} 
-              variant={canSave && !isSaving ? "default" : "outline"}
-              className={cn(
-                "whitespace-nowrap",
-                (!canSave || isSaving) && "opacity-50 cursor-not-allowed"
+                <AlignJustify className="h-4 w-4" />
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 页面布局控制 */}
+              <PageMarginControl
+                currentMargin={currentMargins.top}
+                onMarginChange={handleMarginChange}
+              />
+              <LineSpacingControl
+                currentSpacing={currentLineSpacing}
+                onSpacingChange={handleLineSpacingChange}
+              />
+              <Separator orientation="vertical" className="h-6" />
+              {/* 取消和保存按钮 */}
+              {onCancel && (
+                <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
+                  <X className="h-4 w-4" />
+                </Button>
               )}
-            >
-              {isSaving ? (
-                <span className="text-xs">保存中...</span>
-              ) : (
-                <Check className="h-4 w-4" />
+              {onSave && (
+                <Button
+                  size="sm"
+                  onClick={onSave}
+                  disabled={isSaving || !canSave}
+                  title={isSaving ? "保存中..." : canSave ? "保存草稿" : "无变更"}
+                  variant={canSave && !isSaving ? "default" : "outline"}
+                  className={cn(
+                    "whitespace-nowrap",
+                    (!canSave || isSaving) && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isSaving ? (
+                    <span className="text-xs">保存中...</span>
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
               )}
-            </Button>
-          )}
-          {onExport && (
-            <Button 
-              size="sm" 
-              onClick={onExport} 
-              disabled={!canExport || isDownloading} 
-              title={isDownloading ? "下载中..." : canExport ? "下载文书" : "请先保存变更"} 
-              variant={canExport && !isDownloading ? "default" : "outline"}
-              className={cn(
-                "whitespace-nowrap",
-                (!canExport || isDownloading) && "opacity-50 cursor-not-allowed"
+              {onExport && (
+                <Button
+                  size="sm"
+                  onClick={onExport}
+                  disabled={!canExport || isDownloading}
+                  title={isDownloading ? "下载中..." : canExport ? "下载文书" : "请先保存变更"}
+                  variant={canExport && !isDownloading ? "default" : "outline"}
+                  className={cn(
+                    "whitespace-nowrap",
+                    (!canExport || isDownloading) && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isDownloading ? (
+                    <span className="text-xs">下载中...</span>
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                </Button>
               )}
-            >
-              {isDownloading ? (
-                <span className="text-xs">下载中...</span>
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-            </Button>
-          )}
             </div>
-            
+
             {/* 第二行：表格操作按钮 */}
             <div className="flex items-center gap-1.5 justify-evenly">
-          {/* 列操作 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // 如果不在表格中，先插入一个表格，然后再添加列
-              if (!editor.isActive("table")) {
-                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
-              }
-              // Tiptap 的 addColumnBefore 会自动将焦点设置到新添加的列
-              editor.chain().focus().addColumnBefore().run()
-            }}
-            title="在左侧添加列"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 垂直矩形，左半部分高亮 */}
-              <div className="relative w-3 h-4 border border-gray-400 rounded">
-                <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-l" />
-              </div>
-              <Plus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // 如果不在表格中，先插入一个表格，然后再添加列
-              if (!editor.isActive("table")) {
-                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
-              }
-              // Tiptap 的 addColumnAfter 会自动将焦点设置到新添加的列
-              editor.chain().focus().addColumnAfter().run()
-            }}
-            title="在右侧添加列"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 垂直矩形，右半部分高亮 */}
-              <div className="relative w-3 h-4 border border-gray-400 rounded">
-                <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-r" />
-              </div>
-              <Plus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().deleteColumn().run()}
-            disabled={!editor.can().deleteColumn()}
-            title="删除列"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 垂直矩形，无高亮 */}
-              <div className="w-3 h-4 border border-gray-400 rounded" />
-              <Minus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          {/* 行操作 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (editor.isActive("table")) {
-                // 如果在表格中，直接在上方添加行
-                editor.chain().focus().addRowBefore().run()
-              } else {
-                // 如果不在表格中，尝试查找下方是否有表格
-                // 使用 DOM 方法更可靠
-                const editorElement = editor.view.dom
-                const currentSelection = window.getSelection()
-                const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
-                
-                if (range) {
-                  // 从当前光标位置向下查找表格元素
-                  let currentElement: Node | null = range.endContainer
-                  
-                  // 如果是文本节点，获取其父元素
-                  if (currentElement.nodeType === Node.TEXT_NODE) {
-                    currentElement = currentElement.parentElement
+              {/* 列操作 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // 如果不在表格中，先插入一个表格，然后再添加列
+                  if (!editor.isActive("table")) {
+                    editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
                   }
-                  
-                  // 向下查找表格
-                  while (currentElement && currentElement !== editorElement) {
-                    // 检查当前元素的兄弟节点中是否有表格
-                    let sibling = currentElement.nextSibling
-                    while (sibling) {
-                      if (sibling.nodeType === Node.ELEMENT_NODE) {
-                        const element = sibling as Element
-                        if (element.tagName === 'TABLE') {
-                          // 找到表格，移动到第一个单元格
-                          const firstCell = element.querySelector('td, th')
-                          if (firstCell) {
-                            try {
-                              const cellPos = editor.view.posAtDOM(firstCell, 0)
-                              if (cellPos !== null && cellPos >= 0) {
-                                editor.chain()
-                                  .setTextSelection(cellPos + 1)
-                                  .focus()
-                                  .addRowBefore()
-                                  .run()
-                                return
+                  // Tiptap 的 addColumnBefore 会自动将焦点设置到新添加的列
+                  editor.chain().focus().addColumnBefore().run()
+                }}
+                title="在左侧添加列"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 垂直矩形，左半部分高亮 */}
+                  <div className="relative w-3 h-4 border border-gray-400 rounded">
+                    <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-l" />
+                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // 如果不在表格中，先插入一个表格，然后再添加列
+                  if (!editor.isActive("table")) {
+                    editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+                  }
+                  // Tiptap 的 addColumnAfter 会自动将焦点设置到新添加的列
+                  editor.chain().focus().addColumnAfter().run()
+                }}
+                title="在右侧添加列"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 垂直矩形，右半部分高亮 */}
+                  <div className="relative w-3 h-4 border border-gray-400 rounded">
+                    <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-gray-600 rounded-r" />
+                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => editor.chain().focus().deleteColumn().run()}
+                disabled={!editor.can().deleteColumn()}
+                title="删除列"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 垂直矩形，无高亮 */}
+                  <div className="w-3 h-4 border border-gray-400 rounded" />
+                  <Minus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 行操作 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (editor.isActive("table")) {
+                    // 如果在表格中，直接在上方添加行
+                    editor.chain().focus().addRowBefore().run()
+                  } else {
+                    // 如果不在表格中，尝试查找下方是否有表格
+                    // 使用 DOM 方法更可靠
+                    const editorElement = editor.view.dom
+                    const currentSelection = window.getSelection()
+                    const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
+
+                    if (range) {
+                      // 从当前光标位置向下查找表格元素
+                      let currentElement: Node | null = range.endContainer
+
+                      // 如果是文本节点，获取其父元素
+                      if (currentElement.nodeType === Node.TEXT_NODE) {
+                        currentElement = currentElement.parentElement
+                      }
+
+                      // 向下查找表格
+                      while (currentElement && currentElement !== editorElement) {
+                        // 检查当前元素的兄弟节点中是否有表格
+                        let sibling = currentElement.nextSibling
+                        while (sibling) {
+                          if (sibling.nodeType === Node.ELEMENT_NODE) {
+                            const element = sibling as Element
+                            if (element.tagName === 'TABLE') {
+                              // 找到表格，移动到第一个单元格
+                              const firstCell = element.querySelector('td, th')
+                              if (firstCell) {
+                                try {
+                                  const cellPos = editor.view.posAtDOM(firstCell, 0)
+                                  if (cellPos !== null && cellPos >= 0) {
+                                    editor.chain()
+                                      .setTextSelection(cellPos + 1)
+                                      .focus()
+                                      .addRowBefore()
+                                      .run()
+                                    return
+                                  }
+                                } catch (error) {
+                                  console.error('Error positioning in table:', error)
+                                }
                               }
-                            } catch (error) {
-                              console.error('Error positioning in table:', error)
                             }
                           }
+                          sibling = sibling.nextSibling
+                        }
+
+                        // 向上查找父元素
+                        currentElement = currentElement.parentElement
+                      }
+                    }
+
+                    // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
+                    editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
+                  }
+                }}
+                title="在上方添加行"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 水平矩形，上半部分高亮 */}
+                  <div className="relative w-4 h-3 border border-gray-400 rounded">
+                    <div className="absolute left-0 top-0 right-0 h-1/2 bg-gray-600 rounded-t" />
+                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (editor.isActive("table")) {
+                    // 如果在表格中，直接在下方添加行
+                    // addRowAfter 会自动匹配当前行的列数，创建一个空行（与当前行相同的列数）
+                    const { state } = editor
+                    const table = findTable(state.selection.$anchor)
+                    if (table) {
+                      // 获取当前行的列数
+                      const $pos = state.selection.$anchor
+                      let currentRow = null
+                      let rowColCount = 0
+
+                      // 向上查找当前行
+                      for (let depth = $pos.depth; depth >= 0; depth--) {
+                        const node = $pos.node(depth)
+                        if (node.type.name === 'tableRow') {
+                          currentRow = node
+                          // 计算行的实际列数（考虑 colspan）
+                          rowColCount = 0
+                          node.forEach((cell) => {
+                            const colspan = cell.attrs?.colspan || 1
+                            rowColCount += colspan
+                          })
+                          break
                         }
                       }
-                      sibling = sibling.nextSibling
+
+                      // 使用 addRowAfter，它会自动匹配当前行的列数
+                      editor.chain().focus().addRowAfter().run()
+                    } else {
+                      editor.chain().focus().addRowAfter().run()
                     }
-                    
-                    // 向上查找父元素
-                    currentElement = currentElement.parentElement
-                  }
-                }
-                
-                // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
-                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
-              }
-            }}
-            title="在上方添加行"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 水平矩形，上半部分高亮 */}
-              <div className="relative w-4 h-3 border border-gray-400 rounded">
-                <div className="absolute left-0 top-0 right-0 h-1/2 bg-gray-600 rounded-t" />
-              </div>
-              <Plus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (editor.isActive("table")) {
-                // 如果在表格中，直接在下方添加行
-                // addRowAfter 会自动匹配当前行的列数，创建一个空行（与当前行相同的列数）
-                const { state } = editor
-                const table = findTable(state.selection)
-                if (table) {
-                  // 获取当前行的列数
-                  const $pos = state.selection.$anchor
-                  let currentRow = null
-                  let rowColCount = 0
-                  
-                  // 向上查找当前行
-                  for (let depth = $pos.depth; depth >= 0; depth--) {
-                    const node = $pos.node(depth)
-                    if (node.type.name === 'tableRow') {
-                      currentRow = node
-                      // 计算行的实际列数（考虑 colspan）
-                      rowColCount = 0
-                      node.forEach((cell) => {
-                        const colspan = cell.attrs?.colspan || 1
-                        rowColCount += colspan
-                      })
-                      break
-                    }
-                  }
-                  
-                  // 使用 addRowAfter，它会自动匹配当前行的列数
-                  editor.chain().focus().addRowAfter().run()
-                } else {
-                  editor.chain().focus().addRowAfter().run()
-                }
-              } else {
-                // 如果不在表格中，尝试查找下方是否有表格
-                // 使用 DOM 方法更可靠
-                const editorElement = editor.view.dom
-                const currentSelection = window.getSelection()
-                const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
-                
-                if (range) {
-                  // 从当前光标位置向下查找表格元素
-                  let currentElement: Node | null = range.endContainer
-                  
-                  // 如果是文本节点，获取其父元素
-                  if (currentElement.nodeType === Node.TEXT_NODE) {
-                    currentElement = currentElement.parentElement
-                  }
-                  
-                  // 向下查找表格
-                  while (currentElement && currentElement !== editorElement) {
-                    // 检查当前元素的兄弟节点中是否有表格
-                    let sibling = currentElement.nextSibling
-                    while (sibling) {
-                      if (sibling.nodeType === Node.ELEMENT_NODE) {
-                        const element = sibling as Element
-                        if (element.tagName === 'TABLE') {
-                          // 找到表格，移动到第一个单元格
-                          // 在段落下方添加行，应该在表格第一行上方添加（addRowBefore）
-                          const firstCell = element.querySelector('td, th')
-                          if (firstCell) {
-                            try {
-                              const cellPos = editor.view.posAtDOM(firstCell, 0)
-                              if (cellPos !== null && cellPos >= 0) {
-                                editor.chain()
-                                  .setTextSelection(cellPos + 1)
-                                  .focus()
-                                  .addRowBefore()
-                                  .run()
-                                return
+                  } else {
+                    // 如果不在表格中，尝试查找下方是否有表格
+                    // 使用 DOM 方法更可靠
+                    const editorElement = editor.view.dom
+                    const currentSelection = window.getSelection()
+                    const range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null
+
+                    if (range) {
+                      // 从当前光标位置向下查找表格元素
+                      let currentElement: Node | null = range.endContainer
+
+                      // 如果是文本节点，获取其父元素
+                      if (currentElement.nodeType === Node.TEXT_NODE) {
+                        currentElement = currentElement.parentElement
+                      }
+
+                      // 向下查找表格
+                      while (currentElement && currentElement !== editorElement) {
+                        // 检查当前元素的兄弟节点中是否有表格
+                        let sibling = currentElement.nextSibling
+                        while (sibling) {
+                          if (sibling.nodeType === Node.ELEMENT_NODE) {
+                            const element = sibling as Element
+                            if (element.tagName === 'TABLE') {
+                              // 找到表格，移动到第一个单元格
+                              // 在段落下方添加行，应该在表格第一行上方添加（addRowBefore）
+                              const firstCell = element.querySelector('td, th')
+                              if (firstCell) {
+                                try {
+                                  const cellPos = editor.view.posAtDOM(firstCell, 0)
+                                  if (cellPos !== null && cellPos >= 0) {
+                                    editor.chain()
+                                      .setTextSelection(cellPos + 1)
+                                      .focus()
+                                      .addRowBefore()
+                                      .run()
+                                    return
+                                  }
+                                } catch (error) {
+                                  console.error('Error positioning in table:', error)
+                                }
                               }
-                            } catch (error) {
-                              console.error('Error positioning in table:', error)
                             }
                           }
+                          sibling = sibling.nextSibling
                         }
+
+                        // 向上查找父元素
+                        currentElement = currentElement.parentElement
                       }
-                      sibling = sibling.nextSibling
                     }
-                    
-                    // 向上查找父元素
-                    currentElement = currentElement.parentElement
+
+                    // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
+                    editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
                   }
-                }
-                
-                // 如果没找到表格，插入新表格（insertTable已经创建了一行，不需要再添加行）
-                editor.chain().focus().insertTable({ rows: 1, cols: 1, withHeaderRow: false }).run()
-              }
-            }}
-            title="在下方添加行"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 水平矩形，下半部分高亮 */}
-              <div className="relative w-4 h-3 border border-gray-400 rounded">
-                <div className="absolute left-0 bottom-0 right-0 h-1/2 bg-gray-600 rounded-b" />
-              </div>
-              <Plus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().deleteRow().run()}
-            disabled={!editor.can().deleteRow()}
-            title="删除行"
-          >
-            <div className="flex items-center gap-1.5">
-              {/* 水平矩形，无高亮 */}
-              <div className="w-4 h-3 border border-gray-400 rounded" />
-              <Minus className="h-3.5 w-3.5" />
-            </div>
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          {/* 单元格操作 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // 尝试合并单元格
-              // 注意：需要先选中多个单元格（可以通过拖拽或 Shift+点击）
-              editor.chain().focus().mergeCells().run()
-            }}
-            disabled={!editor.can().mergeCells?.()}
-            title="合并单元格（需要选中至少2个单元格，可通过拖拽或 Shift+点击选择）"
-          >
-            <Merge className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().splitCell().run()}
-            disabled={!editor.can().splitCell?.()}
-            title="拆分单元格（需要选中已合并的单元格）"
-          >
-            <Split className="h-4 w-4" />
-          </Button>
+                }}
+                title="在下方添加行"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 水平矩形，下半部分高亮 */}
+                  <div className="relative w-4 h-3 border border-gray-400 rounded">
+                    <div className="absolute left-0 bottom-0 right-0 h-1/2 bg-gray-600 rounded-b" />
+                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => editor.chain().focus().deleteRow().run()}
+                disabled={!editor.can().deleteRow()}
+                title="删除行"
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* 水平矩形，无高亮 */}
+                  <div className="w-4 h-3 border border-gray-400 rounded" />
+                  <Minus className="h-3.5 w-3.5" />
+                </div>
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 单元格操作 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // 尝试合并单元格
+                  // 注意：需要先选中多个单元格（可以通过拖拽或 Shift+点击）
+                  editor.chain().focus().mergeCells().run()
+                }}
+                disabled={!editor.can().mergeCells?.()}
+                title="合并单元格（需要选中至少2个单元格，可通过拖拽或 Shift+点击选择）"
+              >
+                <Merge className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => editor.chain().focus().splitCell().run()}
+                disabled={!editor.can().splitCell?.()}
+                title="拆分单元格（需要选中已合并的单元格）"
+              >
+                <Split className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>
 
-      {/* 编辑器内容 - 带页面容器，与预览模式保持一致 */}
-      <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }} onClick={() => editor?.commands.focus()}>
-        <div className="flex justify-center">
-          <PaginatedEditorWrapper editor={editor} />
+        {/* 编辑器内容 - 带页面容器，与预览模式保持一致 */}
+        <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }} onClick={() => editor?.commands.focus()}>
+          <div className="flex justify-center">
+            <PaginatedEditorWrapper editor={editor} />
+          </div>
         </div>
       </div>
-    </div>
       <style jsx global>{`
         .placeholder-chip-editor {
           display: inline-flex;
