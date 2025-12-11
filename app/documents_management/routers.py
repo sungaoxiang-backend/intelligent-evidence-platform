@@ -592,6 +592,7 @@ async def create_or_update_draft(
             document_id=request.document_id,
             form_data=request.form_data,
             content_json=request.content_json,
+            page_layout=request.page_layout,
             staff_id=current_staff.id if current_staff else None
         )
         

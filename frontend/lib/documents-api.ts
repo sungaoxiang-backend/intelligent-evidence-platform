@@ -25,6 +25,10 @@ export interface Document {
     type: "text" | "radio" | "checkbox" | ""
     options: string[]
   }>  // 占位符元数据
+  page_layout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }  // 页面布局设置（页边距、行间距等）
   created_by_id?: number
   updated_by_id?: number
   created_at: string
@@ -337,6 +341,10 @@ export interface DocumentDraft {
   document_id: number
   form_data: Record<string, any>  // 已废弃，新功能使用 content_json
   content_json?: any  // ProseMirror JSON 格式的文档内容
+  page_layout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }  // 页面布局设置（页边距、行间距等）
   created_by_id?: number
   updated_by_id?: number
   created_at: string
@@ -360,6 +368,10 @@ export interface CreateOrUpdateDraftRequest {
   document_id: number
   form_data?: Record<string, any>  // 已废弃，新功能使用 content_json
   content_json?: any  // ProseMirror JSON 格式的文档内容
+  page_layout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }  // 页面布局设置（页边距、行间距等）
 }
 
 // 文书制作相关类型定义

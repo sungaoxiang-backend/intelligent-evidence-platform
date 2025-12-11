@@ -101,6 +101,7 @@ class DocumentDraftCreateRequest(BaseModel):
     document_id: int = Field(..., description="模板ID", gt=0)
     form_data: Optional[Dict[str, Any]] = Field(None, description="表单数据，键为占位符名称，值为填充的值（已废弃，新功能使用 content_json）")
     content_json: Optional[Dict[str, Any]] = Field(None, description="ProseMirror JSON 格式的文档内容，存储完整的文档内容副本")
+    page_layout: Optional[Dict[str, Any]] = Field(None, description="页面布局设置（页边距、行间距等）")
 
 
 class DocumentDraftResponse(BaseModel):
@@ -111,6 +112,7 @@ class DocumentDraftResponse(BaseModel):
     document_id: int = Field(..., description="模板ID")
     form_data: Dict[str, Any] = Field(..., description="表单数据（已废弃，新功能使用 content_json）")
     content_json: Optional[Dict[str, Any]] = Field(None, description="ProseMirror JSON 格式的文档内容，存储完整的文档内容副本")
+    page_layout: Optional[Dict[str, Any]] = Field(None, description="页面布局设置（页边距、行间距等）")
     created_by_id: Optional[int] = Field(None, description="创建人ID")
     updated_by_id: Optional[int] = Field(None, description="更新人ID")
     created_at: datetime = Field(..., description="创建时间")

@@ -251,6 +251,7 @@ class DocumentDraftService:
         document_id: int,
         form_data: Optional[Dict[str, Any]] = None,
         content_json: Optional[Dict[str, Any]] = None,
+        page_layout: Optional[Dict[str, Any]] = None,
         staff_id: Optional[int] = None
     ) -> DocumentDraft:
         """
@@ -262,6 +263,7 @@ class DocumentDraftService:
             document_id: 模板ID
             form_data: 表单数据（已废弃，向后兼容）
             content_json: ProseMirror JSON 格式的文档内容
+            page_layout: 页面布局设置（页边距、行间距等）
             staff_id: 操作人ID
             
         Returns:
@@ -277,10 +279,14 @@ class DocumentDraftService:
             elif form_data is not None:
                 # 向后兼容：如果只提供了 form_data，保持原有逻辑
                 existing_draft.form_data = form_data
+            # 页面布局可以独立更新，不需要依赖 content_json 或 form_data
+            if page_layout is not None:
+                existing_draft.page_layout = deepcopy(page_layout)
+                logger.info(f"更新草稿页面布局: {existing_draft.id} - page_layout={page_layout}")
             existing_draft.updated_by_id = staff_id
             await db.commit()
             await db.refresh(existing_draft)
-            logger.info(f"更新草稿成功: {existing_draft.id} - case_id={case_id}, document_id={document_id}")
+            logger.info(f"更新草稿成功: {existing_draft.id} - case_id={case_id}, document_id={document_id}, page_layout={existing_draft.page_layout}")
             return existing_draft
         else:
             # 创建新草稿
@@ -304,6 +310,7 @@ class DocumentDraftService:
                 document_id=document_id,
                 form_data=form_data,
                 content_json=content_json,
+                page_layout=deepcopy(page_layout) if page_layout is not None else None,
                 created_by_id=staff_id,
                 updated_by_id=staff_id,
             )

@@ -109,6 +109,13 @@ class DocumentDraft(Base):
         comment="ProseMirror JSON 格式的文档内容，存储完整的文档内容副本"
     )
     
+    # 页面布局设置（页边距、行间距等）
+    page_layout: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="页面布局设置（页边距、行间距等）"
+    )
+    
     # 创建和更新信息
     created_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("staffs.id"),

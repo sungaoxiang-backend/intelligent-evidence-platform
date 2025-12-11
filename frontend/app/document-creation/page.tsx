@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -58,6 +58,10 @@ export default function DocumentCreationPage() {
 
   // Layout state management
   const [pageLayout, setPageLayout] = useState({
+    margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+    lineSpacing: 1.5
+  })
+  const [savedPageLayout, setSavedPageLayout] = useState({
     margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
     lineSpacing: 1.5
   })
@@ -150,6 +154,25 @@ export default function DocumentCreationPage() {
           setDraftContent(deepCopy(response.data.content_json))
           setSavedDraftContent(deepCopy(response.data.content_json))
           setHasChanges(false)
+          
+          // 加载页面布局设置
+          if (response.data.page_layout) {
+            console.log("[loadDraft] 从草稿加载页面布局:", response.data.page_layout)
+            setPageLayout(deepCopy(response.data.page_layout))
+            setSavedPageLayout(deepCopy(response.data.page_layout))
+          } else {
+            // 如果没有保存的布局，尝试使用模板的布局，否则使用默认值
+            const templateLayout = selectedTemplate.page_layout || null
+            const defaultLayout = {
+              margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+              lineSpacing: 1.5
+            }
+            const layoutToUse = templateLayout || defaultLayout
+            console.log("[loadDraft] 使用模板或默认布局:", layoutToUse)
+            setPageLayout(deepCopy(layoutToUse))
+            setSavedPageLayout(deepCopy(layoutToUse))
+          }
+          
           toast({
             title: "已加载草稿",
             description: "已自动加载之前保存的草稿",
@@ -190,11 +213,29 @@ export default function DocumentCreationPage() {
       setDraftContent(templateContent)
       setSavedDraftContent(templateContent)
       setHasChanges(false)
+      
+      // 加载模板的页面布局设置（如果有）
+      const templateLayout = selectedTemplate.page_layout || null
+      const defaultLayout = {
+        margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+        lineSpacing: 1.5
+      }
+      const layoutToUse = templateLayout || defaultLayout
+      console.log("[loadDraft] 从模板加载页面布局:", layoutToUse)
+      setPageLayout(deepCopy(layoutToUse))
+      setSavedPageLayout(deepCopy(layoutToUse))
+      
       console.log("[loadDraft] 已从模板加载内容")
     } else {
       console.warn("[loadDraft] 模板没有 content_json，设置为空内容")
       setDraftContent({ type: "doc", content: [] })
       setSavedDraftContent({ type: "doc", content: [] })
+      const defaultLayout = {
+        margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+        lineSpacing: 1.5
+      }
+      setPageLayout(defaultLayout)
+      setSavedPageLayout(defaultLayout)
       setHasChanges(false)
     }
   }, [selectedCaseId, selectedTemplate, toast])
@@ -223,6 +264,12 @@ export default function DocumentCreationPage() {
     // 先重置状态，避免旧模板的内容闪烁
     setDraftContent(null)
     setSavedDraftContent(null)
+    const defaultLayout = {
+      margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+      lineSpacing: 1.5
+    }
+    setPageLayout(defaultLayout)
+    setSavedPageLayout(defaultLayout)
     setHasChanges(false)
     setSelectedTemplate(template)
     setViewMode("edit")
@@ -245,9 +292,13 @@ export default function DocumentCreationPage() {
 
   // 处理页面布局变化
   const handlePageLayoutChange = useCallback((layout: typeof pageLayout) => {
+    console.log("[handlePageLayoutChange] 页面布局变更:", layout)
     setPageLayout(layout)
   }, [])
 
+  // 使用 useRef 来存储防抖定时器，以便在保存时清除
+  const changeDetectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
   // 检测内容变化（使用防抖，避免过于频繁的比较）
   // 这个效果会在 draftContent 或 savedDraftContent 变化时触发
   // DocumentEditor 的所有编辑操作（包括表格拖动、内容变更、新增行或列等）都会通过 onChange 更新 draftContent
@@ -257,9 +308,14 @@ export default function DocumentCreationPage() {
       return
     }
     
+    // 清除之前的定时器
+    if (changeDetectionTimeoutRef.current) {
+      clearTimeout(changeDetectionTimeoutRef.current)
+    }
+    
     // 使用防抖来优化性能，避免每次变更都立即比较
     // 这对于频繁的编辑操作（如拖动表格、连续输入等）特别重要
-    const timeoutId = setTimeout(() => {
+    changeDetectionTimeoutRef.current = setTimeout(() => {
       // 深度比较两个 JSON 对象是否相等
       // 使用 JSON.stringify 进行快速比较
       // 注意：这能捕获所有类型的变更，包括：
@@ -274,17 +330,41 @@ export default function DocumentCreationPage() {
         const savedNormalized = normalizeContent(savedDraftContent)
         const currentStr = JSON.stringify(currentNormalized)
         const savedStr = JSON.stringify(savedNormalized)
-        const hasChanges = currentStr !== savedStr
-        setHasChanges(hasChanges)
+        const contentHasChanges = currentStr !== savedStr
+        
+        // 同时检查页面布局是否有变更
+        // 使用深度比较，确保能检测到嵌套对象的变化
+        const currentLayoutStr = JSON.stringify(pageLayout)
+        const savedLayoutStr = JSON.stringify(savedPageLayout)
+        const layoutHasChanges = currentLayoutStr !== savedLayoutStr
+        
+        if (layoutHasChanges) {
+          console.log("[变更检测] 页面布局有变更:", {
+            current: pageLayout,
+            saved: savedPageLayout,
+            currentStr: currentLayoutStr,
+            savedStr: savedLayoutStr
+          })
+        }
+        
+        const hasAnyChanges = contentHasChanges || layoutHasChanges
+        setHasChanges(hasAnyChanges)
+        changeDetectionTimeoutRef.current = null
       } catch (error) {
         // 如果序列化失败，保守地认为有变更
         console.warn("Failed to compare content:", error)
         setHasChanges(true)
+        changeDetectionTimeoutRef.current = null
       }
     }, 300) // 300ms 防抖延迟，平衡响应速度和性能
 
-    return () => clearTimeout(timeoutId)
-  }, [draftContent, savedDraftContent])
+    return () => {
+      if (changeDetectionTimeoutRef.current) {
+        clearTimeout(changeDetectionTimeoutRef.current)
+        changeDetectionTimeoutRef.current = null
+      }
+    }
+  }, [draftContent, savedDraftContent, pageLayout, savedPageLayout])
 
   // 离开页面保护：当有未保存的变更时，提示用户
   useEffect(() => {
@@ -355,15 +435,29 @@ export default function DocumentCreationPage() {
 
     try {
       setIsSaving(true)
+      console.log("[handleSaveDraft] 保存草稿，包含页面布局:", pageLayout)
+      
+      // 清除变更检测的防抖定时器，避免保存后立即重新检测导致 hasChanges 被设置为 true
+      if (changeDetectionTimeoutRef.current) {
+        clearTimeout(changeDetectionTimeoutRef.current)
+        changeDetectionTimeoutRef.current = null
+      }
+      
       await documentDraftsApi.createOrUpdateDraft({
         case_id: selectedCaseId,
         document_id: selectedTemplate.id,
         content_json: draftContent,
+        page_layout: pageLayout,
       })
       
-      // 更新已保存的内容，用于后续的变更检测
+      // 更新已保存的内容和布局，用于后续的变更检测
+      // 使用函数式更新确保使用最新的值
       setSavedDraftContent(deepCopy(draftContent))
+      setSavedPageLayout(deepCopy(pageLayout))
+      
+      // 立即设置 hasChanges 为 false，避免防抖延迟导致的问题
       setHasChanges(false)
+      console.log("[handleSaveDraft] 保存成功，已更新 savedPageLayout 并清除变更检测定时器")
       
       toast({
         title: "保存成功",

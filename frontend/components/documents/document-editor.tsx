@@ -103,6 +103,46 @@ export function DocumentEditor({
   const [currentLineSpacing, setCurrentLineSpacing] = useState(
     initialPageLayout?.lineSpacing || 1.5
   )
+  
+  // 使用 useRef 来跟踪之前的 initialPageLayout，以便检测变化
+  const prevInitialPageLayoutRef = useRef<string | null>(null)
+  
+  // 当 initialPageLayout 变化时，更新内部状态（例如从草稿加载后）
+  useEffect(() => {
+    if (initialPageLayout) {
+      // 使用 JSON.stringify 来深度比较，检测对象内部属性的变化
+      const currentLayoutStr = JSON.stringify(initialPageLayout)
+      const prevLayoutStr = prevInitialPageLayoutRef.current
+      
+      // 只有当布局真正变化时才更新
+      if (currentLayoutStr !== prevLayoutStr) {
+        console.log("[DocumentEditor] initialPageLayout 变化，更新内部状态:", initialPageLayout)
+        prevInitialPageLayoutRef.current = currentLayoutStr
+        
+        // 只有当 margins 存在时才更新，创建新对象确保状态更新
+        if (initialPageLayout.margins) {
+          const newMargins = {
+            top: initialPageLayout.margins.top,
+            bottom: initialPageLayout.margins.bottom,
+            left: initialPageLayout.margins.left,
+            right: initialPageLayout.margins.right,
+          }
+          console.log("[DocumentEditor] 更新页边距:", newMargins)
+          setCurrentMargins(newMargins)
+        }
+        // 只有当 lineSpacing 明确存在时才更新（包括 0 值）
+        if (initialPageLayout.lineSpacing !== undefined && initialPageLayout.lineSpacing !== null) {
+          console.log("[DocumentEditor] 更新行间距:", initialPageLayout.lineSpacing)
+          setCurrentLineSpacing(initialPageLayout.lineSpacing)
+        }
+      }
+    } else {
+      // 如果 initialPageLayout 变为 null/undefined，重置 ref
+      prevInitialPageLayoutRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPageLayout])
+  
   // 用于强制重新渲染工具栏，以便字号选择器能同步更新
   const [, forceUpdate] = useState({})
   const updateToolbar = useCallback(() => {
