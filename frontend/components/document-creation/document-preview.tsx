@@ -17,6 +17,10 @@ interface DocumentPreviewProps {
   canSave?: boolean
   canDownload?: boolean
   className?: string
+  pageLayout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }
 }
 
 export function DocumentPreview({
@@ -26,6 +30,7 @@ export function DocumentPreview({
   canSave = false,
   canDownload = false,
   className,
+  pageLayout,
 }: DocumentPreviewProps) {
   const editor = useEditor({
     immediatelyRender: false,
@@ -45,12 +50,33 @@ export function DocumentPreview({
 
   useEffect(() => {
     if (!editor || !content) return
-    
+
     const normalized = normalizeContentUtil(content)
     if (normalized) {
       editor.commands.setContent(normalized)
     }
   }, [editor, content])
+
+  // Apply layout CSS custom properties when pageLayout changes
+  useEffect(() => {
+    const container = document.querySelector('.template-doc-container') as HTMLElement
+    if (container && pageLayout) {
+      const defaultLayout = {
+        margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+        lineSpacing: 1.5
+      }
+      const layout = { ...defaultLayout, ...pageLayout }
+
+      // Convert mm to px (96 DPI: 1mm = 3.7795px)
+      const mmToPx = (mm: number) => mm * 3.7795
+
+      container.style.setProperty('--page-margin-top', `${mmToPx(layout.margins.top)}px`)
+      container.style.setProperty('--page-margin-bottom', `${mmToPx(layout.margins.bottom)}px`)
+      container.style.setProperty('--page-margin-left', `${mmToPx(layout.margins.left)}px`)
+      container.style.setProperty('--page-margin-right', `${mmToPx(layout.margins.right)}px`)
+      container.style.setProperty('--content-line-height', layout.lineSpacing.toString())
+    }
+  }, [pageLayout])
 
   if (!editor) {
     return <div className="p-4">加载中...</div>

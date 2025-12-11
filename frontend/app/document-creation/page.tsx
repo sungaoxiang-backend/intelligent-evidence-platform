@@ -437,6 +437,7 @@ export default function DocumentCreationPage() {
       tempEditor.destroy()
 
       // 将 HTML 内容包装在完整的 HTML 文档中，并注入 CSS 样式
+      const mmToPx = (mm: number) => mm * 3.7795
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -451,8 +452,38 @@ export default function DocumentCreationPage() {
       padding: 0;
       background: white;
     }
+    /* 应用当前布局设置 - PDF导出时使用Playwright的margin，HTML内容填满页面 */
     .template-doc-container {
+      --page-margin-top: ${mmToPx(pageLayout.margins.top)}px;
+      --page-margin-bottom: ${mmToPx(pageLayout.margins.bottom)}px;
+      --page-margin-left: ${mmToPx(pageLayout.margins.left)}px;
+      --page-margin-right: ${mmToPx(pageLayout.margins.right)}px;
+      --content-line-height: ${pageLayout.lineSpacing};
       box-shadow: none !important;
+      /* PDF导出时：容器填满整个页面，Playwright会在PDF页面周围添加margin */
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 794px; /* A4页面宽度 */
+      min-height: auto;
+    }
+    .template-doc {
+      line-height: var(--content-line-height) !important;
+      /* 内容区域宽度 = 页面宽度 - 左右边距，内容居中 */
+      width: ${794 - mmToPx(pageLayout.margins.left) - mmToPx(pageLayout.margins.right)}px;
+      max-width: 100%;
+      margin: 0 auto; /* 内容居中 */
+      padding: 0;
+    }
+    .template-doc p {
+      line-height: var(--content-line-height) !important;
+    }
+    .template-doc h1,
+    .template-doc h2,
+    .template-doc h3,
+    .template-doc h4,
+    .template-doc h5,
+    .template-doc h6 {
+      line-height: var(--content-line-height) !important;
     }
   </style>
 </head>
@@ -470,6 +501,11 @@ export default function DocumentCreationPage() {
       const blob = await documentCreationApi.exportDocumentToPdf({
         html_content: fullHtml,
         filename,
+        margin_top: pageLayout.margins.top,
+        margin_bottom: pageLayout.margins.bottom,
+        margin_left: pageLayout.margins.left,
+        margin_right: pageLayout.margins.right,
+        line_spacing: pageLayout.lineSpacing,
       })
 
       // 下载文件
@@ -716,6 +752,7 @@ export default function DocumentCreationPage() {
             <DocumentPreview
               content={draftContent}
               onEdit={handleEdit}
+              pageLayout={pageLayout}
             />
           </div>
         )}

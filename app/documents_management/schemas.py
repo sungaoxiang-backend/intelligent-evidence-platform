@@ -66,6 +66,12 @@ class DocumentExportRequest(BaseModel):
     
     html_content: str = Field(..., description="HTML 内容（由前端从 ProseMirror JSON 转换生成）")
     filename: Optional[str] = Field(None, description="导出文件名（可选）")
+    # 页边距设置（单位：mm，默认25.4mm = 1英寸）
+    margin_top: Optional[float] = Field(None, description="上边距（mm）")
+    margin_bottom: Optional[float] = Field(None, description="下边距（mm）")
+    margin_left: Optional[float] = Field(None, description="左边距（mm）")
+    margin_right: Optional[float] = Field(None, description="右边距（mm）")
+    line_spacing: Optional[float] = Field(None, description="行间距（相对值，如1.5）")
 
 
 class DocumentStatusUpdateRequest(BaseModel):

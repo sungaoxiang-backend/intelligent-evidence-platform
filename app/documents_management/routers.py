@@ -319,7 +319,11 @@ async def export_document_to_pdf(
         # 生成 PDF（直接使用异步函数，因为路由已经是异步的）
         pdf_bytes = await html_to_pdf(
             html_content=request.html_content,
-            filename=request.filename or f"{document.name}.pdf"
+            filename=request.filename or f"{document.name}.pdf",
+            margin_top=request.margin_top,
+            margin_bottom=request.margin_bottom,
+            margin_left=request.margin_left,
+            margin_right=request.margin_right,
         )
         
         # 确定文件名
@@ -736,7 +740,11 @@ async def export_document_for_creation(
         # 生成 PDF
         pdf_bytes = await html_to_pdf(
             html_content=request.html_content,
-            filename=request.filename or "document.pdf"
+            filename=request.filename or "document.pdf",
+            margin_top=request.margin_top,
+            margin_bottom=request.margin_bottom,
+            margin_left=request.margin_left,
+            margin_right=request.margin_right,
         )
         
         # 确定文件名

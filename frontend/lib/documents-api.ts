@@ -61,6 +61,11 @@ export interface UpdateDocumentRequest {
 export interface ExportDocumentRequest {
   html_content: string
   filename?: string
+  margin_top?: number  // 上边距（mm）
+  margin_bottom?: number  // 下边距（mm）
+  margin_left?: number  // 左边距（mm）
+  margin_right?: number  // 右边距（mm）
+  line_spacing?: number  // 行间距（相对值，如1.5）
 }
 
 export interface UpdateDocumentStatusRequest {
