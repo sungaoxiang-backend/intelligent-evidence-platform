@@ -56,6 +56,12 @@ export default function DocumentCreationPage() {
   const [cases, setCases] = useState<Case[]>([])
   const { toast } = useToast()
 
+  // Layout state management
+  const [pageLayout, setPageLayout] = useState({
+    margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+    lineSpacing: 1.5
+  })
+
   // 获取案件列表
   useEffect(() => {
     const loadCases = async () => {
@@ -235,6 +241,11 @@ export default function DocumentCreationPage() {
   // 处理内容变更（来自 DocumentEditor 的所有编辑操作）
   const handleContentChange = useCallback((json: JSONContent) => {
     setDraftContent(json)
+  }, [])
+
+  // 处理页面布局变化
+  const handlePageLayoutChange = useCallback((layout: typeof pageLayout) => {
+    setPageLayout(layout)
   }, [])
 
   // 检测内容变化（使用防抖，避免过于频繁的比较）
@@ -659,6 +670,8 @@ export default function DocumentCreationPage() {
             canSave={hasChanges && !isSaving}
             canExport={!hasChanges && !isLoading}
             placeholderMetadata={selectedTemplate?.placeholder_metadata}
+            initialPageLayout={pageLayout}
+            onPageLayoutChange={handlePageLayoutChange}
           />
         ) : (
           <div className="flex flex-col h-full">

@@ -46,6 +46,8 @@ import { normalizeContent as normalizeContentUtil } from "@/components/template-
 import { createDocumentExtensions } from "./document-extensions"
 import { PlaceholderChipExtension } from "./placeholder-chip-extension"
 import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
+import { PageMarginControl } from "@/components/template-editor/page-margin-control"
+import { LineSpacingControl } from "@/components/template-editor/line-spacing-control"
 // import { TableContextMenu } from "./table-context-menu"
 import { cn } from "@/lib/utils"
 import { findTable, findCell } from "@tiptap/pm/tables"
@@ -67,6 +69,11 @@ interface DocumentEditorProps {
     options: string[]
   }>
   onPlaceholderMetadataUpdate?: (metadata: Record<string, any>) => void
+  initialPageLayout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }
+  onPageLayoutChange?: (layout: { margins: { top: number; bottom: number; left: number; right: number }; lineSpacing: number }) => void
 }
 
 export function DocumentEditor({
@@ -82,10 +89,20 @@ export function DocumentEditor({
   className,
   placeholderMetadata,
   onPlaceholderMetadataUpdate,
+  initialPageLayout,
+  onPageLayoutChange,
 }: DocumentEditorProps) {
   const contentSetRef = useRef(false)
   const [selectedPlaceholder, setSelectedPlaceholder] = useState<string | null>(null)
   const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false)
+
+  // Layout state
+  const [currentMargins, setCurrentMargins] = useState(
+    initialPageLayout?.margins || { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 }
+  )
+  const [currentLineSpacing, setCurrentLineSpacing] = useState(
+    initialPageLayout?.lineSpacing || 1.5
+  )
   // 用于强制重新渲染工具栏，以便字号选择器能同步更新
   const [, forceUpdate] = useState({})
   const updateToolbar = useCallback(() => {
@@ -117,6 +134,65 @@ export function DocumentEditor({
     setIsMetadataDialogOpen(false)
     setSelectedPlaceholder(null)
   }, [placeholderMetadata, onPlaceholderMetadataUpdate, selectedPlaceholder])
+
+  // Utility function to update CSS custom properties
+  const updateLayoutCSS = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout | null = null
+      return (margins: { top: number; bottom: number; left: number; right: number }, lineSpacing: number) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+
+        timeoutId = setTimeout(() => {
+          const container = document.querySelector('.template-doc-container') as HTMLElement
+          if (container) {
+            // Convert mm to px (96 DPI: 1mm = 3.7795px)
+            const mmToPx = (mm: number) => mm * 3.7795
+
+            // Batch all style updates together to minimize layout thrashing
+            requestAnimationFrame(() => {
+              container.style.setProperty('--page-margin-top', `${mmToPx(margins.top)}px`)
+              container.style.setProperty('--page-margin-bottom', `${mmToPx(margins.bottom)}px`)
+              container.style.setProperty('--page-margin-left', `${mmToPx(margins.left)}px`)
+              container.style.setProperty('--page-margin-right', `${mmToPx(margins.right)}px`)
+              container.style.setProperty('--content-line-height', lineSpacing.toString())
+            })
+          }
+        }, 100) // 100ms debounce
+      }
+    })(),
+    []
+  )
+
+  // Apply initial layout settings when component mounts or layout changes
+  useEffect(() => {
+    updateLayoutCSS(currentMargins, currentLineSpacing)
+  }, [currentMargins, currentLineSpacing, updateLayoutCSS])
+
+  // Layout change handlers
+  const handleMarginChange = useCallback((margin: number) => {
+    const newMargins = { top: margin, bottom: margin, left: margin, right: margin }
+    setCurrentMargins(newMargins)
+
+    if (onPageLayoutChange) {
+      onPageLayoutChange({
+        margins: newMargins,
+        lineSpacing: currentLineSpacing
+      })
+    }
+  }, [currentLineSpacing, onPageLayoutChange])
+
+  const handleLineSpacingChange = useCallback((spacing: number) => {
+    setCurrentLineSpacing(spacing)
+
+    if (onPageLayoutChange) {
+      onPageLayoutChange({
+        margins: currentMargins,
+        lineSpacing: spacing
+      })
+    }
+  }, [currentMargins, onPageLayoutChange])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -1209,6 +1285,16 @@ export function DocumentEditor({
           >
             <AlignJustify className="h-4 w-4" />
           </Button>
+          <Separator orientation="vertical" className="h-6" />
+          {/* 页面布局控制 */}
+          <PageMarginControl
+            currentMargin={currentMargins.top}
+            onMarginChange={handleMarginChange}
+          />
+          <LineSpacingControl
+            currentSpacing={currentLineSpacing}
+            onSpacingChange={handleLineSpacingChange}
+          />
           <Separator orientation="vertical" className="h-6" />
           {/* 取消和保存按钮 */}
           {onCancel && (

@@ -266,11 +266,12 @@ class TemplateService:
         description: Optional[str] = None,
         category: Optional[str] = None,
         status: str = "draft",
+        page_layout: Optional[Dict[str, Any]] = None,
         created_by_id: Optional[int] = None,
     ) -> DocumentTemplate:
         """
         创建文书模板
-        
+
         Args:
             db: 数据库会话
             name: 模板名称
@@ -279,8 +280,9 @@ class TemplateService:
             description: 模板描述
             category: 分类名称
             status: 状态（draft/published）
+            page_layout: 页面布局设置（页边距、行间距等）
             created_by_id: 创建人ID
-            
+
         Returns:
             创建的模板对象
         """
@@ -295,6 +297,7 @@ class TemplateService:
             category=category,
             status=status,
             prosemirror_json=prosemirror_json,
+            page_layout=page_layout,
             docx_url=docx_url,
             created_by_id=created_by_id,
             updated_by_id=created_by_id,
@@ -439,6 +442,7 @@ class TemplateService:
         description: Optional[str] = None,
         category: Optional[str] = None,
         status: Optional[str] = None,
+        page_layout: Optional[Dict[str, Any]] = None,
         updated_by_id: Optional[int] = None,
     ) -> DocumentTemplate:
         """更新文书模板"""
@@ -452,6 +456,8 @@ class TemplateService:
             template.status = status
         if docx_url is not None:
             template.docx_url = docx_url
+        if page_layout is not None:
+            template.page_layout = page_layout
         if updated_by_id is not None:
             template.updated_by_id = updated_by_id
         

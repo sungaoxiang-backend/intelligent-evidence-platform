@@ -34,7 +34,10 @@ class DocumentTemplate(Base):
     
     # ProseMirror JSON 内容
     prosemirror_json: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, comment="ProseMirror JSON 格式的文档内容")
-    
+
+    # 页面布局设置
+    page_layout: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, comment="页面布局设置（页边距、行间距等）")
+
     # 原始 DOCX 文件在 COS 中的链接
     docx_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, comment="原始 DOCX 文件在 COS 中的 URL")
     

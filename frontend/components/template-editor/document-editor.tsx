@@ -80,6 +80,8 @@ import {
   TableWithAttrs,
   templateBaseStyles,
 } from "./extensions"
+import { PageMarginControl } from "./page-margin-control"
+import { LineSpacingControl } from "./line-spacing-control"
 import { normalizeContent as normalizeContentUtil } from "./utils"
 import { PlaceholderExtension, placeholderPluginKey, requestPlaceholderRefresh } from "./placeholder-extension"
 import {
@@ -104,6 +106,11 @@ interface DocumentEditorProps {
   onChange?: (content: JSONContent) => void
   isLoading?: boolean
   templateType?: string | null
+  initialPageLayout?: {
+    margins?: { top: number; bottom: number; left: number; right: number }
+    lineSpacing?: number
+  }
+  onPageLayoutChange?: (layout: { margins: { top: number; bottom: number; left: number; right: number }; lineSpacing: number }) => void
 }
 
 const FONT_FAMILIES = [
@@ -123,6 +130,10 @@ interface ToolbarProps {
   onInsertPlaceholder: (fieldKey: string) => Promise<void>
   onCreatePlaceholder: () => void
   isBusy?: boolean
+  currentMargins: { top: number; bottom: number; left: number; right: number }
+  currentLineSpacing: number
+  onMarginChange: (margin: number) => void
+  onLineSpacingChange: (spacing: number) => void
 }
 
 const Toolbar = ({
@@ -131,6 +142,10 @@ const Toolbar = ({
   onInsertPlaceholder,
   onCreatePlaceholder,
   isBusy,
+  currentMargins,
+  currentLineSpacing,
+  onMarginChange,
+  onLineSpacingChange,
 }: ToolbarProps) => {
   if (!editor) return null
 
@@ -360,6 +375,17 @@ const Toolbar = ({
             <Redo className="h-4 w-4" />
           </Button>
         </div>
+
+        <div className="flex items-center gap-1 border-r border-gray-300 pr-2">
+          <PageMarginControl
+            currentMargin={currentMargins.top}
+            onMarginChange={handleMarginChange}
+          />
+          <LineSpacingControl
+            currentSpacing={currentLineSpacing}
+            onSpacingChange={onLineSpacingChange}
+          />
+        </div>
         <PlaceholderPicker
           placeholders={placeholderOptions}
           onInsert={onInsertPlaceholder}
@@ -566,6 +592,8 @@ export function DocumentEditor({
   onChange,
   isLoading,
   templateType,
+  initialPageLayout,
+  onPageLayoutChange,
 }: DocumentEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const contentSetRef = useRef(false)
@@ -585,6 +613,14 @@ export function DocumentEditor({
     top: 0,
   })
   const [quickInsertQuery, setQuickInsertQuery] = useState("")
+
+  // Layout state
+  const [currentMargins, setCurrentMargins] = useState(
+    initialPageLayout?.margins || { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 }
+  )
+  const [currentLineSpacing, setCurrentLineSpacing] = useState(
+    initialPageLayout?.lineSpacing || 1.5
+  )
   const selectablePlaceholders = useMemo(
     () => placeholderManager.orderedPlaceholders.filter((meta) => meta.backendMeta),
     [placeholderManager.orderedPlaceholders]
@@ -1054,6 +1090,65 @@ export function DocumentEditor({
     }
   }
 
+  // Debounced utility function to update CSS custom properties
+  const updateLayoutCSS = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout | null = null
+      return (margins: { top: number; bottom: number; left: number; right: number }, lineSpacing: number) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+
+        timeoutId = setTimeout(() => {
+          const container = document.querySelector('.template-doc-container') as HTMLElement
+          if (container) {
+            // Convert mm to px (96 DPI: 1mm = 3.7795px)
+            const mmToPx = (mm: number) => mm * 3.7795
+
+            // Batch all style updates together to minimize layout thrashing
+            requestAnimationFrame(() => {
+              container.style.setProperty('--page-margin-top', `${mmToPx(margins.top)}px`)
+              container.style.setProperty('--page-margin-bottom', `${mmToPx(margins.bottom)}px`)
+              container.style.setProperty('--page-margin-left', `${mmToPx(margins.left)}px`)
+              container.style.setProperty('--page-margin-right', `${mmToPx(margins.right)}px`)
+              container.style.setProperty('--content-line-height', lineSpacing.toString())
+            })
+          }
+        }, 100) // 100ms debounce
+      }
+    })(),
+    []
+  )
+
+  // Apply initial layout settings when component mounts or layout changes
+  useEffect(() => {
+    updateLayoutCSS(currentMargins, currentLineSpacing)
+  }, [currentMargins, currentLineSpacing, updateLayoutCSS])
+
+  // Layout change handlers
+  const handleMarginChange = useCallback((margin: number) => {
+    const newMargins = { top: margin, bottom: margin, left: margin, right: margin }
+    setCurrentMargins(newMargins)
+
+    if (onPageLayoutChange) {
+      onPageLayoutChange({
+        margins: newMargins,
+        lineSpacing: currentLineSpacing
+      })
+    }
+  }, [currentLineSpacing, onPageLayoutChange])
+
+  const handleLineSpacingChange = useCallback((spacing: number) => {
+    setCurrentLineSpacing(spacing)
+
+    if (onPageLayoutChange) {
+      onPageLayoutChange({
+        margins: currentMargins,
+        lineSpacing: spacing
+      })
+    }
+  }, [currentMargins, onPageLayoutChange])
+
   // 只设置一次内容，避免重复设置导致光标跳转
   useEffect(() => {
     if (editor && initialContent && !isLoading && !contentSetRef.current) {
@@ -1117,6 +1212,10 @@ export function DocumentEditor({
         onInsertPlaceholder={handleInsertExisting}
         onCreatePlaceholder={openCreatePlaceholderDialog}
         isBusy={placeholderManager.isMutating}
+        currentMargins={currentMargins}
+        currentLineSpacing={currentLineSpacing}
+        onMarginChange={handleMarginChange}
+        onLineSpacingChange={handleLineSpacingChange}
       />
       <Tabs defaultValue="content">
         <TabsList className="w-full">

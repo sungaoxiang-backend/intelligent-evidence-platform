@@ -20,6 +20,12 @@ export default function TemplateEditorPage() {
   const [fileName, setFileName] = useState<string>("")
   const { toast } = useToast()
 
+  // Layout state management
+  const [pageLayout, setPageLayout] = useState({
+    margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+    lineSpacing: 1.5
+  })
+
   // 获取认证头
   const getAuthHeader = (): Record<string, string> => {
     if (typeof window !== "undefined") {
@@ -99,11 +105,20 @@ export default function TemplateEditorPage() {
     setProsemirrorJson(json)
   }, [])
 
+  // 处理页面布局变化
+  const handlePageLayoutChange = useCallback((layout: typeof pageLayout) => {
+    setPageLayout(layout)
+  }, [])
+
   // 清除当前文档
   const handleClear = useCallback(() => {
     setUploadedFile(null)
     setFileName("")
     setProsemirrorJson(null)
+    setPageLayout({
+      margins: { top: 25.4, bottom: 25.4, left: 25.4, right: 25.4 },
+      lineSpacing: 1.5
+    })
     toast({
       title: "已清除",
       description: "文档已清除",
@@ -135,6 +150,7 @@ export default function TemplateEditorPage() {
           },
           body: JSON.stringify({
             prosemirror_json: prosemirrorJson,
+            page_layout: pageLayout,
             filename: fileName.replace(".docx", "_edited.docx") || "document.docx",
           }),
         }
@@ -240,6 +256,8 @@ export default function TemplateEditorPage() {
                 initialContent={prosemirrorJson}
                 onChange={handleContentChange}
                 isLoading={isLoading}
+                initialPageLayout={pageLayout}
+                onPageLayoutChange={handlePageLayoutChange}
               />
               </PlaceholderProvider>
             </CardContent>

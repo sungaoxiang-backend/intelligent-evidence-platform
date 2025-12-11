@@ -175,6 +175,7 @@ async def parse_and_save_docx(
             'category': template.category,
             'status': template.status,
             'prosemirror_json': template.prosemirror_json,
+            'page_layout': template.page_layout,
             'docx_url': template.docx_url,
             'created_by_id': template.created_by_id,
             'updated_by_id': template.updated_by_id,
@@ -319,6 +320,7 @@ async def create_template(
             description=request.description,
             category=request.category,
             status=request.status,
+            page_layout=request.page_layout,
             created_by_id=current_staff.id,
         )
 
@@ -402,6 +404,7 @@ async def list_templates(
                 'category': template.category,
                 'status': template.status,
                 'prosemirror_json': template.prosemirror_json,
+                'page_layout': template.page_layout,
                 'docx_url': template.docx_url,
                 'created_by_id': template.created_by_id,
                 'updated_by_id': template.updated_by_id,
@@ -457,6 +460,7 @@ async def get_template(
         'category': template.category,
         'status': template.status,
         'prosemirror_json': template.prosemirror_json,
+        'page_layout': template.page_layout,
         'docx_url': template.docx_url,
         'created_by_id': template.created_by_id,
         'updated_by_id': template.updated_by_id,
@@ -508,6 +512,7 @@ async def update_template(
             description=request.description,
             category=request.category,
             status=request.status,
+            page_layout=request.page_layout,
             updated_by_id=current_staff.id,
         )
 
@@ -519,6 +524,7 @@ async def update_template(
             'category': updated_template.category,
             'status': updated_template.status,
             'prosemirror_json': updated_template.prosemirror_json,
+            'page_layout': updated_template.page_layout,
             'docx_url': updated_template.docx_url,
             'created_by_id': updated_template.created_by_id,
             'updated_by_id': updated_template.updated_by_id,

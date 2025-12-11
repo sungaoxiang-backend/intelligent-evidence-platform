@@ -1243,20 +1243,28 @@ export const A4_PAGE_MARGIN = 96 // 标准页边距 25.4mm = 96px (96 DPI)
 export const A4_CONTENT_WIDTH = A4_PAGE_WIDTH - (A4_PAGE_MARGIN * 2) // 内容区域宽度
 
 export const templateBaseStyles = `
-  /* 页面容器样式 - 模拟 A4 纸张 */
+  /* 页面布局 CSS 自定义属性 */
   .template-doc-container {
+    /* 默认页面布局变量 */
+    --page-margin-top: ${A4_PAGE_MARGIN}px;
+    --page-margin-bottom: ${A4_PAGE_MARGIN}px;
+    --page-margin-left: ${A4_PAGE_MARGIN}px;
+    --page-margin-right: ${A4_PAGE_MARGIN}px;
+    --content-line-height: 1.5;
+
     width: ${A4_PAGE_WIDTH}px;
     min-height: ${A4_PAGE_HEIGHT}px;
     margin: 0 auto;
     background: white;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    padding: ${A4_PAGE_MARGIN}px;
+    padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left);
     box-sizing: border-box;
     position: relative;
     pointer-events: auto;
     /* 允许表格超出容器宽度时使用水平滚动 */
     overflow-x: auto;
     overflow-y: visible;
+    transition: padding 0.2s ease-in-out;
   }
   
   /* 分页编辑器容器 */
@@ -1314,19 +1322,21 @@ export const templateBaseStyles = `
     /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
     /* 如果没有内联样式，浏览器会使用默认字体大小 */
     /* font-size: 14px; */
-    line-height: 1.5;
+    line-height: var(--content-line-height);
     color: #0f172a;
     width: ${A4_CONTENT_WIDTH}px;
     max-width: 100%;
     margin: 0 auto;
     position: relative;
     min-height: 100%;
+    transition: line-height 0.2s ease-in-out;
   }
-  
+
   /* 统一段落和标题的行高，避免 WPS 粘贴带来的过大行高 */
   .template-doc p {
-    line-height: 1.5 !important;
+    line-height: var(--content-line-height) !important;
     margin: 0.5em 0 !important;
+    transition: line-height 0.2s ease-in-out;
   }
   
   /* 标题样式 - 参考常见标准（比WPS默认稍大，避免从WPS复制的大字号内容变小） */
