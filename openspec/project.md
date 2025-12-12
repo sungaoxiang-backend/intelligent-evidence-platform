@@ -9,6 +9,14 @@
 
 ## Project Conventions
 
+### Agent Behavior
+- **Language**: The user is a native Chinese speaker. Use Chinese (Simplified) for:
+  - Interaction and thought processes
+  - Task planning and summaries
+  - Documentation (proposals, specs, design docs)
+  - Code comments
+  - Commit messages (unless conventional commits require English types, the description should be Chinese)
+
 ### Code Style
 [Describe your code style preferences, formatting rules, and naming conventions]
 

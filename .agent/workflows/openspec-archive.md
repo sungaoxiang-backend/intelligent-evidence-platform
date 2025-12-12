@@ -17,6 +17,12 @@ description: Archive a deployed OpenSpec change and update specs.
 3. Run `openspec archive <id> --yes` so the CLI moves the change and applies spec updates without prompts (use `--skip-specs` only for tooling-only work).
 4. Review the command output to confirm the target specs were updated and the change landed in `changes/archive/`.
 5. Validate with `openspec validate --strict` and inspect with `openspec show <id>` if anything looks off.
+6. Commit the archive operation: `git add . && git commit -m "chore: archive <id>"`.
+7. Merge into the target branch:
+   - `git checkout features` (or `main`/`develop` as appropriate)
+   - `git pull`
+   - `git merge <id>`
+   - `git branch -d <id>` (optional cleanup)
 
 **Reference**
 - Use `openspec list` to confirm change IDs before archiving.
