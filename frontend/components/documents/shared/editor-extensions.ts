@@ -68,10 +68,16 @@ const styleObjectToString = (style: Record<string, string | undefined>) =>
     .map(([key, value]) => `${key}: ${value}`)
     .join("; ")
 
-export const A4_PAGE_WIDTH = 794 // A4 宽度 210mm = 794px (96 DPI)
-export const A4_PAGE_HEIGHT = 1123 // A4 高度 297mm = 1123px (96 DPI)
-export const A4_PAGE_MARGIN = 96 // 标准页边距 25.4mm = 96px (96 DPI)
-export const A4_CONTENT_WIDTH = A4_PAGE_WIDTH - (A4_PAGE_MARGIN * 2) // 内容区域宽度
+import {
+  A4_PAGE_WIDTH,
+  A4_PAGE_HEIGHT,
+  A4_PAGE_MARGIN,
+  A4_CONTENT_WIDTH,
+  getDocumentBaseStyles
+} from "./document-styles"
+
+// Removed local constants in favor of imported ones
+
 
 export const buildParagraphStyle = (attrs: ParagraphAttrs = {}) => {
   const style: Record<string, string | undefined> = {}
@@ -467,7 +473,6 @@ export const TableWithAttrs = Table.extend({
               } else if (widthStr.includes("%")) {
                 // 处理百分比宽度：基于 A4 内容区域宽度计算
                 // A4_CONTENT_WIDTH = 794 - 96*2 = 602px
-                const A4_CONTENT_WIDTH = 602
                 const actualWidth = (widthValue / 100) * A4_CONTENT_WIDTH
                 twips = Math.round(actualWidth * 1440 / 96)
               } else {
@@ -645,7 +650,6 @@ export const TableWithAttrs = Table.extend({
       const widthMatch = styleStr.match(/width:\s*([\d.]+)%/)
       if (widthMatch) {
         const percentage = parseFloat(widthMatch[1])
-        const A4_CONTENT_WIDTH = 602 // 与 extensions.ts 中的值保持一致
         const expectedWidth = (percentage / 100) * A4_CONTENT_WIDTH
         const expectedTwips = Math.round(expectedWidth * 1440 / 96)
 
@@ -1244,313 +1248,7 @@ export const TableCellWithAttrs = TableCell.extend({
 // A4 页面尺寸常量（96 DPI，标准屏幕分辨率）
 
 
-export const templateBaseStyles = `
-  /* 页面布局 CSS 自定义属性 */
-  .template-doc-container {
-    /* 默认页面布局变量 */
-    --page-margin-top: ${A4_PAGE_MARGIN}px;
-    --page-margin-bottom: ${A4_PAGE_MARGIN}px;
-    --page-margin-left: ${A4_PAGE_MARGIN}px;
-    --page-margin-right: ${A4_PAGE_MARGIN}px;
-    --content-line-height: 1.5;
 
-    width: ${A4_PAGE_WIDTH}px;
-    min-height: ${A4_PAGE_HEIGHT}px;
-    margin: 0 auto;
-    background: white;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left);
-    box-sizing: border-box;
-    position: relative;
-    pointer-events: auto;
-    /* 允许表格超出容器宽度时使用水平滚动 */
-    overflow-x: auto;
-    overflow-y: visible;
-    transition: padding 0.2s ease-in-out;
-  }
-  
-  /* 分页编辑器容器 */
-  .paginated-editor-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 0;
-    background-color: #f5f5f5;
-    min-height: 100%;
-    position: relative;
-  }
-  
-  /* 分页内容包装器 - 使用CSS来创建多个页面的视觉效果 */
-  .paginated-content-wrapper {
-    position: relative;
-    background: transparent;
-    /* 内容在背景之上 */
-  }
-  
-  /* 确保编辑器内容在页面背景之上 */
-  .paginated-content-wrapper .ProseMirror {
-    position: relative;
-    z-index: 2;
-    background: transparent;
-  }
-  
-  /* 页面背景 */
-  .page-background {
-    border-radius: 0;
-  }
-  
-  /* 页面分隔线 */
-  .page-break-line {
-    z-index: 1;
-  }
-  
-  /* 在打印时使用page-break */
-  @media print {
-    .paginated-content-wrapper {
-      page-break-after: always;
-    }
-    
-    .page-break-line {
-      display: none;
-    }
-    
-    .page-background {
-      box-shadow: none;
-    }
-  }
-  
-  .template-doc {
-    font-family: "SimSun", "宋体", serif;
-    /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
-    /* 如果没有内联样式，浏览器会使用默认字体大小 */
-    /* font-size: 14px; */
-    line-height: var(--content-line-height);
-    color: #0f172a;
-    width: ${A4_CONTENT_WIDTH}px;
-    max-width: 100%;
-    margin: 0 auto;
-    position: relative;
-    min-height: 100%;
-    transition: line-height 0.2s ease-in-out;
-  }
 
-  /* 统一段落和标题的行高，避免 WPS 粘贴带来的过大行高 */
-  .template-doc p {
-    line-height: var(--content-line-height) !important;
-    margin: 0.5em 0 !important;
-    transition: line-height 0.2s ease-in-out;
-  }
-  
-  /* 标题样式 - 参考常见标准（比WPS默认稍大，避免从WPS复制的大字号内容变小） */
-  /* 常见约定：
-   * - H1: 22-24pt（二号/小二号），用于文档主标题
-   * - H2: 18-20pt（小三号），用于章节标题
-   * - H3: 16-18pt（四号），用于小节标题
-   * 普通文本通常是 12-14pt，标题应该明显更大
-   */
-  .template-doc h1 {
-    font-size: 22pt !important;
-    font-weight: bold !important;
-    line-height: 1.5 !important;
-    margin: 0.5em 0 !important;
-  }
-  
-  .template-doc h2 {
-    font-size: 18pt !important;
-    font-weight: bold !important;
-    line-height: 1.5 !important;
-    margin: 0.5em 0 !important;
-  }
-  
-  .template-doc h3 {
-    font-size: 16pt !important;
-    font-weight: bold !important;
-    line-height: 1.5 !important;
-    margin: 0.5em 0 !important;
-  }
-  
-  .template-doc h4,
-  .template-doc h5,
-  .template-doc h6 {
-    font-size: 14pt !important;
-    font-weight: bold !important;
-    line-height: 1.5 !important;
-    margin: 0.5em 0 !important;
-  }
-  
-  /* 确保编辑器内容可交互 */
-  .template-doc [contenteditable="true"],
-  .template-doc [contenteditable="true"] * {
-    cursor: text;
-  }
-  
-  .template-doc [contenteditable="true"]:focus {
-    outline: none;
-  }
-  
-  /* 确保 ProseMirror 编辑器可以正常交互 */
-  .template-doc .ProseMirror {
-    outline: none;
-    cursor: text;
-    min-height: 200px;
-  }
-  
-  .template-doc .ProseMirror:focus {
-    outline: none;
-  }
-  
-  .template-doc .ProseMirror p.is-editor-empty:first-child::before {
-    content: attr(data-placeholder);
-    float: left;
-    color: #adb5bd;
-    pointer-events: none;
-    height: 0;
-  }
-  .template-doc table {
-    /* 移除默认 width: 100%，让内联样式（来自 tableWidth 属性）生效 */
-    /* width: 100%; */
-    border-collapse: collapse;
-    margin: 16px 0;
-    /* 移除默认 table-layout: auto，让内联样式（来自 colWidths 属性）生效 */
-    /* table-layout: auto; */
-    /* 允许表格超出容器宽度时使用水平滚动 */
-    min-width: fit-content;
-  }
-  /* 移除这个规则，它会覆盖内联样式中的 width */
-  /* 如果表格有固定宽度，应该通过内联样式控制，而不是 CSS !important */
-  /* .template-doc table[style*="width"] {
-    width: auto !important;
-  } */
-  .template-doc td,
-  .template-doc th {
-    border: 1px solid #d4d4d8;
-    padding: 8px;
-    /* 所有单元格默认垂直居中 */
-    vertical-align: middle;
-    box-sizing: border-box;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    /* 移除强制左对齐，水平对齐由 TextAlign 扩展通过内联样式控制 */
-    /* 统一表格字体，避免因字体导致的布局问题 */
-    font-family: "SimSun", "宋体", serif;
-    /* 移除默认字体大小，让内联样式（来自 textStyle mark 的 fontSize）生效 */
-    /* font-size: 14px; */
-  }
-  
-  /* 确保单元格内的段落不会继承单元格的对齐方式，避免冲突 */
-  .template-doc td p,
-  .template-doc th p,
-  .template-doc td div,
-  .template-doc th div {
-    /* 段落的对齐方式由段落本身的 textAlign 属性控制，不继承单元格 */
-    text-align: inherit;
-  }
-  .template-doc ul,
-  .template-doc ol {
-    padding-left: 20px;
-  }
-  .template-doc .template-placeholder-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 4px;
-    border-radius: 4px;
-    background-color: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.4);
-    color: #1d4ed8;
-    cursor: pointer;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
-  }
-  .template-doc .template-placeholder-chip--selected,
-  .template-doc .template-placeholder-chip:hover {
-    background-color: rgba(59, 130, 246, 0.3);
-    border-color: rgba(37, 99, 235, 0.8);
-  }
-  .template-doc .template-placeholder-chip--highlighted {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-  }
-  /* 只在光标位于占位符后面时显示光标指示器 */
-  .template-doc .template-placeholder-chip--cursor-after::after {
-    content: "";
-    display: inline-block;
-    width: 1px;
-    min-width: 1px;
-    height: 1.2em;
-    vertical-align: baseline;
-    margin-left: 2px;
-    background-color: currentColor;
-    opacity: 0.6;
-    animation: blink-cursor 1s infinite;
-  }
-  @keyframes blink-cursor {
-    0%, 50% { opacity: 0.6; }
-    51%, 100% { opacity: 0; }
-  }
-  /* 当编辑器失去焦点时，隐藏光标动画 */
-  .template-doc:not(:focus-within) .template-placeholder-chip--cursor-after::after {
-    animation: none;
-    opacity: 0;
-  }
-  
-  /* ============================================
-     新增：轻量化占位符样式
-     用于编辑模式，仅提供视觉高亮，不阻断编辑
-     ============================================ */
-  
-  /* 编辑模式：轻量高亮（占位符是可编辑文本） */
-  .template-doc .placeholder-highlight {
-    background-color: #fef3c7;
-    border-radius: 3px;
-    padding: 1px 3px;
-    color: #92400e;
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    font-size: 0.95em;
-    transition: background-color 0.15s ease;
-  }
-  
-  .template-doc .placeholder-highlight:hover {
-    background-color: #fde68a;
-  }
-  
-  /* 预览模式：chip 样式（通过伪元素渲染内容） */
-  .template-doc .placeholder-chip-preview {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 8px;
-    margin: 0 2px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-    cursor: pointer;
-    user-select: none;
-    font-size: 0;
-    color: transparent;
-    line-height: 1.5;
-    white-space: nowrap;
-  }
-
-  .template-doc .placeholder-chip-preview::after {
-    content: attr(data-placeholder-display);
-    font-size: 12px;
-    font-weight: 500;
-    color: #fff;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .template-doc .placeholder-chip-preview:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-    background: linear-gradient(135deg, #5a67d8 0%, #6b3fa0 100%);
-  }
-
-  .template-doc .placeholder-chip-preview:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  }
-
-`
+export const templateBaseStyles = getDocumentBaseStyles()
 

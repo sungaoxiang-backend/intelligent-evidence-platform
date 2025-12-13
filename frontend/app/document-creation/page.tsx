@@ -36,8 +36,8 @@ import {
   ParagraphWithAttrs,
   TableCellWithAttrs,
   TableWithAttrs,
-  templateBaseStyles,
 } from "@/components/documents/shared/editor-extensions"
+import { getDocumentBaseStyles } from "@/components/documents/shared/document-styles"
 import { createDocumentExtensions } from "@/components/documents/document-extensions"
 import { normalizeContent } from "@/components/documents/shared/editor-utils"
 import { cn } from "@/lib/utils"
@@ -512,7 +512,7 @@ export default function DocumentCreationPage() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${selectedTemplate.name}</title>
   <style>
-    ${templateBaseStyles}
+    ${getDocumentBaseStyles()}
     /* PDF 导出专用样式优化 */
     body {
       margin: 0;
