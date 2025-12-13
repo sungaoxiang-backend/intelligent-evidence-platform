@@ -43,12 +43,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
 
   const getActiveModule = () => {
     if (pathname.startsWith("/cases")) return "cases"
-    if (pathname.startsWith("/users")) return "users"
-    if (pathname.startsWith("/staff")) return "staff"
-    if (pathname.startsWith("/profile")) return "profile"
-    if (pathname.startsWith("/document-templates")) return "document-templates"
-    if (pathname.startsWith("/template-editor")) return "template-editor"
-    if (pathname.startsWith("/document-generation")) return "document-generation"
+    if (pathname.startsWith("/evidences")) return "evidences"
     if (pathname.startsWith("/document-creation")) return "document-creation"
     if (pathname.startsWith("/documents")) return "documents"
     return "workbench"
@@ -61,8 +56,6 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
     { id: "documents", label: "文书模板", icon: FileText, href: "/documents" },
     { id: "document-creation", label: "文书制作", icon: FilePen, href: "/document-creation" },
-    // { id: "document-templates", label: "文书模板", icon: FileText, href: "/document-templates" },
-    // { id: "document-generation", label: "文书生成", icon: FileEdit, href: "/document-generation" },
   ]
 
   if (userRole === "admin") {
@@ -70,10 +63,10 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
   }
 
   // 任务相关逻辑
-  const sortedTasks = [...tasks].sort((a, b) => 
+  const sortedTasks = [...tasks].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
-  
+
   const runningTasks = sortedTasks.filter(task => task.status === 'running' || task.status === 'pending')
   const completedTasks = sortedTasks.filter(task => ['success', 'failure', 'revoked'].includes(task.status))
   const failedTasks = sortedTasks.filter(task => task.status === 'failure')
@@ -97,7 +90,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     const seconds = Math.floor(duration / 1000)
     const minutes = Math.floor(seconds / 60)
     const hours = Math.floor(minutes / 60)
-    
+
     if (hours > 0) {
       return `${hours}小时${minutes % 60}分钟`
     } else if (minutes > 0) {
@@ -112,7 +105,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     if (task.status === 'running' && task.message) {
       return task.message
     }
-    
+
     switch (task.status) {
       case 'pending': return '等待中'
       case 'running': return '运行中'
@@ -132,8 +125,8 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-      <div className={isCardFactoryPage 
-        ? "w-full px-4 lg:px-6" 
+      <div className={isCardFactoryPage
+        ? "w-full px-4 lg:px-6"
         : "container mx-auto px-4 lg:px-6 max-w-7xl"
       }>
         <div className="flex items-center justify-between h-12">
@@ -156,11 +149,10 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                     <Button
                       variant={activeModule === item.id ? "default" : "ghost"}
                       size="sm"
-                      className={`flex items-center space-x-1 transition-all duration-200 h-7 px-2.5 mx-0.5 ${
-                        activeModule === item.id
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                      }`}
+                      className={`flex items-center space-x-1 transition-all duration-200 h-7 px-2.5 mx-0.5 ${activeModule === item.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        }`}
                     >
                       <Icon className="h-3 w-3" />
                       <span className="text-xs font-medium">{item.label}</span>
@@ -206,23 +198,23 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                 >
                   <BarChart3 className="h-3.5 w-3.5 mr-1" />
                   <span className="text-xs">任务列表</span>
-                  
+
                   {/* 任务数量徽章 */}
                   {tasks.length > 0 && (
-                    <Badge 
+                    <Badge
                       variant={failedTasks.length > 0 ? "destructive" : runningTasks.length > 0 ? "default" : "secondary"}
                       className="ml-1 h-4 px-1 text-xs"
                     >
                       {tasks.length}
                     </Badge>
                   )}
-                  
+
                   {/* 运行中状态指示器 */}
                   {runningTasks.length > 0 && (
                     <div className="absolute -top-1 -right-1 w-2 h-2">
                       <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full animate-pulse" />
-                      <div 
-                        className="absolute inset-0 bg-blue-400 rounded-full opacity-40" 
+                      <div
+                        className="absolute inset-0 bg-blue-400 rounded-full opacity-40"
                         style={{
                           animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite'
                         }}
@@ -231,8 +223,8 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent 
-                align="end" 
+              <PopoverContent
+                align="end"
                 className={cn(
                   "w-96 p-0",
                   // 根据任务数量自适应高度，最大为屏幕高度的80%
@@ -253,7 +245,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                       {tasks.length}
                     </Badge>
                   </div>
-                  
+
                   <div className="flex items-center space-x-1">
                     {onClearCompleted && completedTasks.length > 0 && (
                       <Button
@@ -266,7 +258,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                         清理完成
                       </Button>
                     )}
-                    
+
                     {onClearAll && tasks.length > 0 && (
                       <Button
                         variant="ghost"
@@ -296,7 +288,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                         const caseId = task.context?.caseId
                         const duration = formatDuration(task.createdAt, task.status === 'success' || task.status === 'failure' ? task.updatedAt : undefined)
                         const isClickable = task.context?.pagePath
-                        
+
                         return (
                           <div
                             key={task.taskId}
@@ -312,13 +304,13 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                             onClick={() => isClickable && handleTaskClick(task)}
                             style={{
                               // 动态调整渐变位置来显示进度
-                              background: task.status === 'success' 
+                              background: task.status === 'success'
                                 ? `linear-gradient(to right, #dcfce7 0%, #bbf7d0 ${task.progress}%, #f0fdf4 ${task.progress}%, #f0fdf4 100%)`
                                 : task.status === 'failure'
-                                ? `linear-gradient(to right, #fef2f2 0%, #fecaca ${task.progress}%, #fef7f7 ${task.progress}%, #fef7f7 100%)`
-                                : task.status === 'running'
-                                ? `linear-gradient(to right, #eff6ff 0%, #dbeafe ${task.progress}%, #f8fafc ${task.progress}%, #f8fafc 100%)`
-                                : `linear-gradient(to right, #f9fafb 0%, #f3f4f6 ${task.progress}%, #f9fafb ${task.progress}%, #f9fafb 100%)`
+                                  ? `linear-gradient(to right, #fef2f2 0%, #fecaca ${task.progress}%, #fef7f7 ${task.progress}%, #fef7f7 100%)`
+                                  : task.status === 'running'
+                                    ? `linear-gradient(to right, #eff6ff 0%, #dbeafe ${task.progress}%, #f8fafc ${task.progress}%, #f8fafc 100%)`
+                                    : `linear-gradient(to right, #f9fafb 0%, #f3f4f6 ${task.progress}%, #f9fafb ${task.progress}%, #f9fafb 100%)`
                             }}
                           >
                             {/* 顶部：案件标题 + 操作按钮 */}
@@ -329,15 +321,15 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                 </div>
                                 {/* 任务类型标签 */}
                                 {task.context?.pageTitle && (
-                                  <Badge 
-                                    variant="outline" 
+                                  <Badge
+                                    variant="outline"
                                     className="text-xs px-2 py-0.5 shrink-0"
                                   >
                                     {task.context.pageTitle}
                                   </Badge>
                                 )}
                               </div>
-                              
+
                               {/* 操作按钮 */}
                               <div className="flex items-center space-x-1">
                                 {isClickable && (
@@ -354,7 +346,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                     <ExternalLink className="h-3 w-3" />
                                   </Button>
                                 )}
-                                
+
                                 {task.status === 'failure' && onRetryTask && (
                                   <Button
                                     variant="ghost"
@@ -369,7 +361,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                     <Activity className="h-3 w-3" />
                                   </Button>
                                 )}
-                                
+
                                 {task.status === 'running' && onRefreshTask && (
                                   <Button
                                     variant="ghost"
@@ -384,7 +376,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                     <Clock className="h-3 w-3" />
                                   </Button>
                                 )}
-                                
+
                                 {onRemoveTask && (
                                   <Button
                                     variant="ghost"
@@ -402,19 +394,19 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                 )}
                               </div>
                             </div>
-                            
+
                             {/* 中间：进度条和状态描述 */}
                             <div className="mb-3">
                               {/* 进度条 */}
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
-                                  <div 
+                                  <div
                                     className="h-2 rounded-full transition-all duration-300 ease-out"
                                     style={{
                                       width: `${task.progress}%`,
-                                      backgroundColor: task.status === 'success' ? '#10b981' : 
-                                                    task.status === 'failure' ? '#ef4444' : 
-                                                    task.status === 'running' ? '#3b82f6' : '#6b7280'
+                                      backgroundColor: task.status === 'success' ? '#10b981' :
+                                        task.status === 'failure' ? '#ef4444' :
+                                          task.status === 'running' ? '#3b82f6' : '#6b7280'
                                     }}
                                   />
                                 </div>
@@ -422,7 +414,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                   {task.progress}%
                                 </div>
                               </div>
-                              
+
                               {/* 状态描述 - 带动画效果 */}
                               <div className="flex items-center">
                                 <div className="flex-1 text-sm text-gray-600 dark:text-gray-400">
@@ -441,7 +433,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                 </div>
                               </div>
                             </div>
-                            
+
                             {/* 底部：时间信息 + 证据数量 */}
                             <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                               <div className="flex items-center space-x-2">
@@ -449,7 +441,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                                 <span>•</span>
                                 <span>耗时: {duration}</span>
                               </div>
-                              
+
                               {/* 右下角：证据数量 + 图标 */}
                               <div className="flex items-center space-x-1">
                                 <FileText className="h-3 w-3" />

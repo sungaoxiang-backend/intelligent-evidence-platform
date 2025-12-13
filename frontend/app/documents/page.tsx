@@ -43,7 +43,7 @@ import {
   TableCellWithAttrs,
   TableWithAttrs,
   templateBaseStyles,
-} from "@/components/template-editor/extensions"
+} from "@/components/documents/shared/editor-extensions"
 import { FontSize } from "@/components/documents/font-size-extension"
 
 type ViewMode = "list" | "preview" | "edit" | "create"
@@ -347,7 +347,7 @@ export default function DocumentsPage() {
       // 关键：使用 Editor 实例的 getHTML() 方法，而不是 generateHTML
       // 这样可以确保扩展的 renderHTML 方法被正确调用
       const { Editor } = await import("@tiptap/core")
-      const { normalizeContent } = await import("@/components/template-editor/utils")
+      const { normalizeContent } = await import("@/components/documents/shared/editor-utils")
 
       // 使用与预览完全相同的扩展配置（与 DocumentPreview 组件一致）
       const extensions = [
@@ -518,7 +518,7 @@ export default function DocumentsPage() {
               onChange={setDraftContent}
               onSave={handleSave}
               onCancel={handleCancel}
-              isLoading={isLoading}
+
               placeholderMetadata={selectedDocument?.placeholder_metadata}
               onPlaceholderMetadataUpdate={handlePlaceholderMetadataUpdate}
             />

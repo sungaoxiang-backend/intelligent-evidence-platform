@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react"
 import { Editor } from "@tiptap/react"
-import { A4_PAGE_WIDTH, A4_PAGE_HEIGHT, A4_PAGE_MARGIN, A4_CONTENT_WIDTH } from "@/components/template-editor/extensions"
+import { A4_PAGE_WIDTH, A4_PAGE_HEIGHT, A4_PAGE_MARGIN, A4_CONTENT_WIDTH } from "@/components/documents/shared/editor-extensions"
 import { A4_CONTENT_HEIGHT, calculatePageCount } from "./page-break-utils"
 import { cn } from "@/lib/utils"
 

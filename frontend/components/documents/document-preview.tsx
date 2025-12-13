@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { PlayCircle } from "lucide-react"
-import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
+import { normalizeContent as normalizeContentUtil } from "@/components/documents/shared/editor-utils"
 import { createDocumentExtensions } from "./document-extensions"
-import { templateBaseStyles } from "@/components/template-editor/extensions"
+import { templateBaseStyles } from "@/components/documents/shared/editor-extensions"
 import { cn } from "@/lib/utils"
 
 interface DocumentPreviewProps {

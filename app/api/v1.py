@@ -5,10 +5,7 @@ from app.cases.routers import router as cases_router
 from app.cases.services import get_multi_with_count
 from app.core.routers import router as config_router
 from app.db.session import get_db
-from app.documents.routers import router as documents_router
-from app.documents_template.routers import router as documents_template_router
-from app.template_editor.routers import router as template_editor_router
-from app.document_generation.routers import router as document_generation_router
+
 from app.documents_management.routers import (
     router as documents_management_router,
     draft_router as document_draft_router,
@@ -34,10 +31,7 @@ api_router.include_router(evidences_router, prefix="/evidences", tags=["evidence
 api_router.include_router(agentic_router, prefix="/agentic", tags=["agentic"])
 api_router.include_router(chain_router, prefix="/chain", tags=["chain"])
 api_router.include_router(documents_management_router, prefix="/documents", tags=["documents-management"])
-api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
-api_router.include_router(documents_template_router, prefix="/document-templates", tags=["document-templates"])
-api_router.include_router(template_editor_router, prefix="/template-editor", tags=["template-editor"])
-api_router.include_router(document_generation_router, prefix="/document-generation", tags=["document-generation"])
+
 api_router.include_router(document_draft_router, prefix="/document-drafts", tags=["document-drafts"])
 api_router.include_router(document_creation_router, prefix="/document-creation", tags=["document-creation"])
 api_router.include_router(ocr_router, prefix="/ocr", tags=["ocr"])

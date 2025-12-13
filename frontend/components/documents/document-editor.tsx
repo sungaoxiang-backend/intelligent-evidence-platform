@@ -41,13 +41,13 @@ import {
   A4_PAGE_HEIGHT,
   A4_PAGE_MARGIN,
   A4_CONTENT_WIDTH,
-} from "@/components/template-editor/extensions"
-import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
+} from "@/components/documents/shared/editor-extensions"
+import { normalizeContent as normalizeContentUtil } from "@/components/documents/shared/editor-utils"
 import { createDocumentExtensions } from "./document-extensions"
 import { PlaceholderChipExtension } from "./placeholder-chip-extension"
 import { PlaceholderMetadataDialog } from "./placeholder-metadata-dialog"
-import { PageMarginControl } from "@/components/template-editor/page-margin-control"
-import { LineSpacingControl } from "@/components/template-editor/line-spacing-control"
+import { PageMarginControl } from "@/components/documents/shared/page-margin-control"
+import { LineSpacingControl } from "@/components/documents/shared/line-spacing-control"
 // import { TableContextMenu } from "./table-context-menu"
 import { cn } from "@/lib/utils"
 import { findTable, findCell } from "@tiptap/pm/tables"

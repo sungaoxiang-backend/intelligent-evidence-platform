@@ -21,8 +21,8 @@ import {
   ParagraphWithAttrs,
   TableCellWithAttrs,
   TableWithAttrs,
-} from "@/components/template-editor/extensions"
-import { normalizeContent as normalizeContentUtil } from "@/components/template-editor/utils"
+} from "@/components/documents/shared/editor-extensions"
+import { normalizeContent as normalizeContentUtil } from "@/components/documents/shared/editor-utils"
 import { Download, X } from "lucide-react"
 import type { Document } from "@/lib/documents-api"
 import { cn } from "@/lib/utils"

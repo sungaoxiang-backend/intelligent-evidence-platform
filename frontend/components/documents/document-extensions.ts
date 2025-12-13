@@ -18,7 +18,7 @@ import {
   ParagraphWithAttrs,
   TableCellWithAttrs,
   TableWithAttrs,
-} from "@/components/template-editor/extensions"
+} from "@/components/documents/shared/editor-extensions"
 import { FontSize } from "./font-size-extension"
 
 /**

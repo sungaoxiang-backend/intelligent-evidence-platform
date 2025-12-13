@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { TemplateSelector } from "@/components/document-creation/template-selector"
 import { DocumentEditor } from "@/components/documents/document-editor"
 import { DocumentPreview } from "@/components/documents/document-preview"
-import { EvidenceCardsList } from "@/components/document-generation/evidence-cards-list"
+import { EvidenceCardsList } from "@/components/document-creation/evidence-cards-list"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { caseApi } from "@/lib/api"
 import useSWR from "swr"
@@ -37,9 +37,9 @@ import {
   TableCellWithAttrs,
   TableWithAttrs,
   templateBaseStyles,
-} from "@/components/template-editor/extensions"
+} from "@/components/documents/shared/editor-extensions"
 import { createDocumentExtensions } from "@/components/documents/document-extensions"
-import { normalizeContent } from "@/components/template-editor/utils"
+import { normalizeContent } from "@/components/documents/shared/editor-utils"
 import { cn } from "@/lib/utils"
 
 type ViewMode = "edit" | "preview"

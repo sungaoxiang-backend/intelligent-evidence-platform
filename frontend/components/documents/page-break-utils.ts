@@ -3,7 +3,7 @@
  * 用于计算内容高度并自动分页
  */
 
-import { A4_PAGE_HEIGHT, A4_PAGE_MARGIN, A4_CONTENT_WIDTH } from "@/components/template-editor/extensions"
+import { A4_PAGE_HEIGHT, A4_PAGE_MARGIN, A4_CONTENT_WIDTH } from "@/components/documents/shared/editor-extensions"
 
 /**
  * 计算内容区域的实际可用高度（减去页边距）
