@@ -10,7 +10,7 @@ export const A4_CONTENT_WIDTH = A4_PAGE_WIDTH - (A4_PAGE_MARGIN * 2) // Content 
  * This ensures consistency between the WYSIWYG editor and the generated PDF.
  */
 export function getDocumentBaseStyles(): string {
-    return `
+  return `
   /* Page Layout CSS Variables */
   .template-doc-container {
     /* Default Page Layout Variables */
@@ -29,14 +29,13 @@ export function getDocumentBaseStyles(): string {
     box-sizing: border-box;
     position: relative;
     pointer-events: auto;
-    /* Allow table to overflow container horizontally with scroll */
-    overflow-x: auto;
-    overflow-y: visible;
+    /* Do NOT allow page to scroll locally in Print Layout */
+    overflow: visible;
+    flex-shrink: 0;
     transition: padding 0.2s ease-in-out;
   }
   
   /* Paginated Editor Container */
-  .paginated-editor-container {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -91,9 +90,10 @@ export function getDocumentBaseStyles(): string {
     /* font-size: 14px; */
     line-height: var(--content-line-height);
     color: #0f172a;
-    width: ${A4_CONTENT_WIDTH}px;
-    max-width: 100%;
-    margin: 0 auto;
+    width: 100%;
+    /* Use inherit to respect container padding */
+    max-width: none;
+    margin: 0;
     position: relative;
     min-height: 100%;
     transition: line-height 0.2s ease-in-out;

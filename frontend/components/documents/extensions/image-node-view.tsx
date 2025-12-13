@@ -229,7 +229,8 @@ export const ImageNodeView: React.FC<NodeViewProps> = (props) => {
                     src={src}
                     alt={alt}
                     title={title}
-                    className="w-full h-full object-cover block"
+                    className="w-full h-full object-fill block"
+                    style={{ width: '100%', height: '100%', objectFit: 'fill' }}
                     draggable={true} // Allow Tiptap drag
                     data-drag-handle // Hint for drag handle
                 />

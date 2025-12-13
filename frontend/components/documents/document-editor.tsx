@@ -1682,10 +1682,12 @@ export function DocumentEditor({
         </div>
 
         {/* 编辑器内容 - 带页面容器，与预览模式保持一致 */}
-        <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#f5f5f5', minHeight: 0 }} onClick={() => editor?.commands.focus()}>
-          <div className="flex justify-center">
-            <PaginatedEditorWrapper editor={editor} />
-          </div>
+        <div className="flex-1 overflow-y-auto bg-muted/20 relative" style={{ height: "calc(100vh - 12rem)" }}>
+          {/*
+          使用 PaginatedEditorWrapper 替代 EditorContent
+          这个组件会负责管理 A4 页面、分页背景、页码和页边距标识
+        */}
+          <PaginatedEditorWrapper editor={editor} className="min-h-full" />
         </div>
       </div>
       <style jsx global>{`

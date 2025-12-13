@@ -86,13 +86,21 @@ export const ImageExtension = Image.extend({
                 [
                     "img",
                     mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-                        style: `transform: rotate(${rotate}deg); position: absolute; left: 50%; top: 50%; margin-left: -${w / 2}px; margin-top: -${h / 2}px; max-width: none;`
+                        style: `transform: rotate(${rotate}deg); position: absolute; left: 50%; top: 50%; margin-left: -${w / 2}px; margin-top: -${h / 2}px; max-width: none; width: ${w}px; height: ${h}px; object-fit: fill;`
                     })
                 ]
             ]
         }
 
-        return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)]
+        // Standard image (no rotation)
+        const style: string[] = []
+        if (width) style.push(`width: ${width}px`)
+        if (height) style.push(`height: ${height}px`)
+        if (width || height) style.push('object-fit: fill')
+
+        return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+            style: style.join('; ')
+        })]
     },
 
     addNodeView() {

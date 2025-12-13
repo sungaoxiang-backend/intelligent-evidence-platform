@@ -1250,5 +1250,8 @@ export const TableCellWithAttrs = TableCell.extend({
 
 
 
+
+export { A4_PAGE_WIDTH, A4_PAGE_HEIGHT, A4_PAGE_MARGIN, A4_CONTENT_WIDTH }
+
 export const templateBaseStyles = getDocumentBaseStyles()
 

@@ -39,7 +39,7 @@ export function PaginatedEditorWrapper({ editor, className }: PaginatedEditorWra
     setTimeout(() => {
       const calculatedPageCount = calculatePageCount(contentElement)
       setPageCount(calculatedPageCount)
-      
+
       // 设置CSS变量，用于CSS中创建多个页面
       if (containerRef.current) {
         containerRef.current.style.setProperty('--page-count', calculatedPageCount.toString())
@@ -106,7 +106,8 @@ export function PaginatedEditorWrapper({ editor, className }: PaginatedEditorWra
         }}
       >
         <EditorContent editor={editor} />
-        
+
+        {/* 动态创建页面背景和分隔线 */}
         {/* 动态创建页面背景和分隔线 */}
         {Array.from({ length: pageCount }).map((_, index) => (
           <React.Fragment key={`page-${index + 1}`}>
@@ -124,7 +125,68 @@ export function PaginatedEditorWrapper({ editor, className }: PaginatedEditorWra
                 zIndex: 0,
                 pointerEvents: 'none',
               }}
-            />
+            >
+              {/* Margin Indicators (Crop Marks) - Using CSS variables to sync with actual content padding */}
+              {/* Top-Left */}
+              <div style={{
+                position: 'absolute',
+                top: 'var(--page-margin-top)',
+                left: 'var(--page-margin-left)',
+                width: '20px',
+                height: '20px',
+                borderTop: '1px solid #ccc',
+                borderLeft: '1px solid #ccc',
+                zIndex: 10,
+              }} />
+              {/* Top-Right */}
+              <div style={{
+                position: 'absolute',
+                top: 'var(--page-margin-top)',
+                right: 'var(--page-margin-right)',
+                width: '20px',
+                height: '20px',
+                borderTop: '1px solid #ccc',
+                borderRight: '1px solid #ccc',
+                zIndex: 10,
+              }} />
+              {/* Bottom-Left */}
+              <div style={{
+                position: 'absolute',
+                bottom: 'var(--page-margin-bottom)',
+                left: 'var(--page-margin-left)',
+                width: '20px',
+                height: '20px',
+                borderBottom: '1px solid #ccc',
+                borderLeft: '1px solid #ccc',
+                zIndex: 10,
+              }} />
+              {/* Bottom-Right */}
+              <div style={{
+                position: 'absolute',
+                bottom: 'var(--page-margin-bottom)',
+                right: 'var(--page-margin-right)',
+                width: '20px',
+                height: '20px',
+                borderBottom: '1px solid #ccc',
+                borderRight: '1px solid #ccc',
+                zIndex: 10,
+              }} />
+
+              {/* Page Number */}
+              <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: 0,
+                right: 0,
+                textAlign: 'center',
+                fontSize: '12px',
+                color: '#64748b',
+                fontFamily: 'sans-serif'
+              }}>
+                {index + 1}
+              </div>
+
+            </div>
             {/* 页面分隔线 */}
             {index < pageCount - 1 && (
               <div
