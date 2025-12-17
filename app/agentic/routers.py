@@ -1,5 +1,5 @@
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, File, UploadFile, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, WebSocket, WebSocketDisconnect, HTTPException, Form
 from app.core.deps import DBSession, get_current_staff
 from app.staffs.models import Staff
 from app.agentic.services import (
@@ -160,3 +160,62 @@ async def extract_features_by_urls_endpoint(
         db=db
     )
     return SingleResponse(data=result)
+
+
+# --- Smart Doc Gen Endpoint ---
+from app.agentic.schemas import SmartDocGenResponse
+from app.agentic.agents.smart_doc_gen_agent import generate_document_for_case
+import os
+import tempfile
+import uuid
+from datetime import datetime
+
+
+GENERATED_DOCS_DIR = os.path.join(os.path.dirname(__file__), "agents", "generated_docs")
+os.makedirs(GENERATED_DOCS_DIR, exist_ok=True)
+
+
+@router.post("/smart-doc-gen/generate", response_model=SingleResponse[SmartDocGenResponse])
+async def generate_smart_document(
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    case_id: int = Form(..., description="案件ID"),
+    template: UploadFile = File(..., description="DOCX模板文件"),
+):
+    """
+    基于案件数据和上传的DOCX模板智能生成文书
+    """
+    # 1. Save uploaded template to a temporary file
+    template_suffix = os.path.splitext(template.filename)[1] or ".docx"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=template_suffix) as tmp_template:
+        content = await template.read()
+        tmp_template.write(content)
+        template_path = tmp_template.name
+    
+    # 2. Generate output path
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    output_filename = f"case_{case_id}_{timestamp}_{uuid.uuid4().hex[:8]}.docx"
+    output_path = os.path.join(GENERATED_DOCS_DIR, output_filename)
+    
+    try:
+        agent_message = await generate_document_for_case(
+            db, 
+            case_id, 
+            template_path, 
+            output_path
+        )
+        return SingleResponse(data=SmartDocGenResponse(
+            status="success",
+            output_path=output_path,
+            message=agent_message
+        ))
+    except Exception as e:
+        return SingleResponse(data=SmartDocGenResponse(
+            status="failed",
+            output_path=None,
+            message=str(e)
+        ))
+    finally:
+        # Cleanup temporary template file
+        if os.path.exists(template_path):
+            os.remove(template_path)

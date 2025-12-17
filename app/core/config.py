@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     OPENAI_IMAGE_MODEL: str
     OPENAI_BASE_URL: str
 
+    # Deepseek llm
+    DEEPSEEK_API_KEY: str
+    DEEPSEEK_REASONER_MODEL: str
+    DEEPSEEK_BASE_URL: str
+
     # Wecom
     WECOM_CORP_ID: str
     WECOM_CORP_SECRET: str

@@ -148,3 +148,15 @@ class EvidenceFeatureExtractionByUrlsRequest(BaseModel):
     evidence_type: str
     consider_correlations: bool = False
 
+
+class SmartDocGenRequest(BaseModel):
+    """智能文书生成请求 - 仅用于文档，实际参数通过Form和File传递"""
+    case_id: int = Field(..., description="案件ID")
+
+
+class SmartDocGenResponse(BaseModel):
+    """智能文书生成响应"""
+    status: str = Field(..., description="生成状态 (success/failed)")
+    output_path: Optional[str] = Field(None, description="生成的文档路径")
+    message: Optional[str] = Field(None, description="Agent返回的消息")
+
