@@ -154,9 +154,23 @@ class SmartDocGenRequest(BaseModel):
     case_id: int = Field(..., description="案件ID")
 
 
+
 class SmartDocGenResponse(BaseModel):
     """智能文书生成响应"""
     status: str = Field(..., description="生成状态 (success/failed)")
     output_path: Optional[str] = Field(None, description="生成的文档路径")
+    message: Optional[str] = Field(None, description="Agent返回的消息")
+
+
+class SmartFillRequest(BaseModel):
+    """智能填充请求"""
+    case_id: int = Field(..., description="案件ID")
+    content_json: Dict[str, Any] = Field(..., description="ProseMirror JSON 内容")
+
+
+class SmartFillResponse(BaseModel):
+    """智能填充响应"""
+    status: str = Field(..., description="填充状态 (success/failed)")
+    filled_content: Optional[Dict[str, Any]] = Field(None, description="填充后的JSON内容")
     message: Optional[str] = Field(None, description="Agent返回的消息")
 

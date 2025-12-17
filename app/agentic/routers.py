@@ -14,7 +14,9 @@ from app.core.response import SingleResponse
 import json
 from app.agentic.schemas import (
     EvidenceClassificationByUrlsRequest,
-    EvidenceFeatureExtractionByUrlsRequest
+    EvidenceFeatureExtractionByUrlsRequest,
+    SmartFillRequest,
+    SmartFillResponse
 )
 
 router = APIRouter()
@@ -165,6 +167,7 @@ async def extract_features_by_urls_endpoint(
 # --- Smart Doc Gen Endpoint ---
 from app.agentic.schemas import SmartDocGenResponse
 from app.agentic.agents.smart_doc_gen_agent import generate_document_for_case
+from app.agentic.agents.smart_json_doc_gen_agent import SmartJsonDocGenAgent
 import os
 import tempfile
 import uuid
@@ -219,3 +222,83 @@ async def generate_smart_document(
         # Cleanup temporary template file
         if os.path.exists(template_path):
             os.remove(template_path)
+
+
+@router.post("/smart-doc-gen/fill-json", response_model=SingleResponse[SmartFillResponse])
+async def smart_fill_json(
+    db: DBSession,
+    request: SmartFillRequest,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """
+    智能填充 ProseMirror JSON 文档内容
+    """
+    from app.cases.services import get_by_id as get_case_by_id
+    from app.evidences.services import list_evidences_by_case_id
+    
+    # 1. Fetch Case Data
+    case = await get_case_by_id(db, request.case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case with ID {request.case_id} not found.")
+
+    # 2. Fetch Evidence Data
+    evidences, _ = await list_evidences_by_case_id(db, request.case_id, limit=100)
+    
+    # 3. Serialize Data (Reuse logic if possible, but simpler to inline here for now)
+    case_dict = {
+        "id": case.id,
+        "loan_amount": case.loan_amount,
+        "case_type": case.case_type.value if case.case_type else None,
+        "case_status": case.case_status.value if case.case_status else None,
+        "loan_date": case.loan_date.isoformat() if case.loan_date else None,
+        "court_name": case.court_name,
+        "description": case.description,
+        "parties": [
+            {
+                "party_name": p.party_name,
+                "party_role": p.party_role,
+                "party_type": p.party_type,
+                "name": p.name,
+                "phone": p.phone,
+                "address": p.address,
+                "id_card": p.id_card,
+                "company_name": p.company_name,
+                "company_address": p.company_address,
+                "company_code": p.company_code
+            } for p in case.case_parties
+        ]
+    }
+    
+    evidence_list = [
+        {
+            "id": e.id,
+            "file_name": e.file_name,
+            "classification_category": e.classification_category,
+            "evidence_status": e.evidence_status
+        } for e in evidences
+    ]
+    
+    context_data = {
+        "case": case_dict,
+        "evidence": evidence_list
+    }
+    
+    case_context = json.dumps(context_data, ensure_ascii=False, indent=2)
+    
+    # 4. Invoke Agent
+    try:
+        agent = SmartJsonDocGenAgent()
+        filled_json = await agent.run(case_context, request.content_json)
+        
+        return SingleResponse(data=SmartFillResponse(
+            status="success",
+            filled_content=filled_json,
+            message="智能填充完成"
+        ))
+    except Exception as e:
+        print(f"Smart fill error: {e}")
+        return SingleResponse(data=SmartFillResponse(
+            status="failed",
+            filled_content=None,
+            message=f"智能填充失败: {str(e)}"
+        ))

@@ -26,7 +26,7 @@ import {
   Rows,
   ChevronDown as ChevronDownIcon,
 } from "lucide-react"
-import { X, Check, Download } from "lucide-react"
+import { X, Check, Download, Sparkles } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,8 +58,10 @@ interface DocumentEditorProps {
   onSave?: () => void
   onCancel?: () => void
   onExport?: () => void
+  onSmartFill?: (json: JSONContent) => Promise<JSONContent | void>
   isSaving?: boolean  // 保存中状态
   isDownloading?: boolean  // 下载中状态
+  isSmartFilling?: boolean // 智能填充中状态
   canSave?: boolean  // 是否允许保存（基于是否有变更）
   canExport?: boolean  // 是否允许导出/下载（基于是否有变更）
   className?: string
@@ -82,8 +84,10 @@ export function DocumentEditor({
   onSave,
   onCancel,
   onExport,
+  onSmartFill,
   isSaving = false,  // 保存中状态
   isDownloading = false,  // 下载中状态
+  isSmartFilling = false, // 智能填充中状态
   canSave = true,  // 默认允许保存
   canExport = true,  // 默认允许导出
   className,
@@ -1361,6 +1365,7 @@ export function DocumentEditor({
                 onSpacingChange={handleLineSpacingChange}
               />
               <Separator orientation="vertical" className="h-6" />
+
               {/* 取消和保存按钮 */}
               {onCancel && (
                 <Button variant="outline" size="sm" onClick={onCancel} title="取消" className="whitespace-nowrap">
@@ -1677,6 +1682,44 @@ export function DocumentEditor({
               >
                 <Split className="h-4 w-4" />
               </Button>
+              <Separator orientation="vertical" className="h-6" />
+              {/* 智能填充按钮 (下方compact版) */}
+              {onSmartFill && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    console.log("[SmartFill] Button clicked");
+                    if (onSmartFill) {
+                      try {
+                        const json = editor.getJSON();
+                        const result = await onSmartFill(json);
+                        if (result) {
+                          editor.commands.setContent(normalizeContent(result) || { type: "doc", content: [] });
+                        }
+                      } catch (e) {
+                        console.error("[SmartFill] Error in onClick:", e);
+                      }
+                    }
+                  }}
+                  disabled={isSmartFilling}
+                  title={isSmartFilling ? "智能填充中..." : "智能填写"}
+                  className={cn(
+                    "gap-1.5 transition-colors",
+                    isSmartFilling && "opacity-50 cursor-not-allowed",
+                    // 使用 text-purple-600 但保持 ghost 风格，更紧凑
+                    // 增强 Hover 效果：背景加深 (bg-purple-100)，文字更深 (text-purple-800)
+                    "text-purple-600 hover:text-purple-900 hover:bg-purple-100"
+                  )}
+                >
+                  {isSmartFilling ? (
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  <span className="text-xs font-medium">智能填写</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>

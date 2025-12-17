@@ -55,6 +55,7 @@ export default function DocumentCreationPage() {
   const [hasChanges, setHasChanges] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSmartFilling, setIsSmartFilling] = useState(false)
   const [cases, setCases] = useState<Case[]>([])
   const { toast } = useToast()
 
@@ -476,6 +477,43 @@ export default function DocumentCreationPage() {
     }
   }, [selectedCaseId, selectedTemplate, draftContent, hasChanges, toast])
 
+  // 智能填充
+  const handleSmartFill = useCallback(async (currentJson: JSONContent): Promise<JSONContent | void> => {
+    console.log("[SmartFill] handleSmartFill called", { selectedCaseId });
+    if (!selectedCaseId) {
+      console.warn("[SmartFill] No case selected");
+      toast({
+        title: "填充失败",
+        description: "请先选择案件",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsSmartFilling(true)
+      const filledContent = await documentCreationApi.smartFillJson(selectedCaseId, currentJson)
+
+      toast({
+        title: "智能填充成功",
+        description: "文档内容已根据案件数据自动填充",
+      })
+
+      // 更新草稿内容状态，以便触发变更检测
+      setDraftContent(filledContent)
+
+      return filledContent
+    } catch (error) {
+      toast({
+        title: "智能填充失败",
+        description: error instanceof Error ? error.message : "智能填充失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSmartFilling(false)
+    }
+  }, [selectedCaseId, toast])
+
   // 下载文档
   const handleDownload = async () => {
     if (!selectedCaseId || !selectedTemplate || !draftContent) return
@@ -772,8 +810,10 @@ export default function DocumentCreationPage() {
             onSave={handleSaveDraft}
             onCancel={handleCancel}
             onExport={handleDownload}
+            onSmartFill={handleSmartFill}
             isSaving={isSaving}
             isDownloading={isLoading}
+            isSmartFilling={isSmartFilling}
             canSave={hasChanges && !isSaving}
             canExport={!hasChanges && !isLoading}
             placeholderMetadata={selectedTemplate?.placeholder_metadata}

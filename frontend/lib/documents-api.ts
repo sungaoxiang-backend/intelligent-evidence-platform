@@ -511,5 +511,35 @@ export const documentCreationApi = {
 
     return await response.blob()
   },
+
+  // 智能填充
+  async smartFillJson(caseId: number, contentJson: any): Promise<any> {
+    console.log("[SmartFill] Calling API", { caseId });
+    const response = await fetch(
+      buildApiUrl("/agentic/smart-doc-gen/fill-json"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify({
+          case_id: caseId,
+          content_json: contentJson,
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || "智能填充失败")
+    }
+
+    const result = await response.json()
+    if (result.data && result.data.filled_content) {
+      return result.data.filled_content
+    }
+    throw new Error(result.data?.message || "智能填充返回数据为空")
+  }
 }
 
