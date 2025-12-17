@@ -56,6 +56,15 @@ COPY --from=builder /app/.venv /app/.venv
 RUN . /app/.venv/bin/activate && \
     playwright install-deps chromium || echo "警告: Playwright 系统依赖安装失败，但不会阻止构建"
 
+# 预下载 NLTK 数据 (unstructured/agno 依赖)
+# 避免运行时下载失败或 BadZipFile 错误
+RUN . /app/.venv/bin/activate && \
+    python -m nltk.downloader -d /app/nltk_data punkt averaged_perceptron_tagger && \
+    echo "NLTK data downloaded successfully"
+
+# 设置 NLTK 数据目录环境变量
+ENV NLTK_DATA=/app/nltk_data
+
 # 复制项目文件
 COPY app/ ./app/
 COPY .env.docker ./.env
