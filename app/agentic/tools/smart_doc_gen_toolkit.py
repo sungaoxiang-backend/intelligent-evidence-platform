@@ -129,6 +129,9 @@ class SmartDocGenToolkit(Toolkit):
                 pid = f"p_{i}"
                 if pid in fillings:
                     val = fillings[pid]
+                    if not val:
+                        continue
+                        
                     if val.startswith(p.text) and len(p.text) > 0:
                         # Smart Append: Keep original runs (preserving format/bolding) and append only the new content
                         diff = val[len(p.text):]
@@ -145,6 +148,9 @@ class SmartDocGenToolkit(Toolkit):
                         cid = f"t_{i}_r{r_idx}_c{c_idx}"
                         if cid in fillings:
                             val = fillings[cid]
+                            if not val:
+                                continue
+                                
                             current_text = cell.text
                             if val.startswith(current_text) and len(current_text) > 0:
                                 # Smart Append for cells

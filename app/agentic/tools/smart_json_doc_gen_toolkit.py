@@ -121,6 +121,9 @@ class SmartJsonDocGenToolkit(Toolkit):
                     pid = f"p_{p_counter}"
                     if pid in fillings:
                         val = fillings[pid]
+                        # Safety: If value is empty, ignore it (do not overwrite/delete)
+                        if not val:
+                            continue
                         # Get current text
                         current_text = ""
                         if "content" in node:
@@ -186,6 +189,10 @@ class SmartJsonDocGenToolkit(Toolkit):
                                     cid = f"{tid}_r{r_idx}_c{c_idx}"
                                     if cid in fillings:
                                         val = fillings[cid]
+                                        
+                                        # Safety: If value is empty, ignore it (do not overwrite/delete)
+                                        if not val:
+                                            continue
                                         
                                         # Get current text to check for smart append
                                         cell_text = ""

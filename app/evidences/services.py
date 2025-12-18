@@ -495,6 +495,23 @@ async def list_evidences_by_case_id(db: AsyncSession, case_id: int, search: Opti
     return data, total
 
 
+async def list_evidence_cards_by_case_id(
+    db: AsyncSession, 
+    case_id: int, 
+    skip: int = 0, 
+    limit: int = 100
+) -> List[EvidenceCard]:
+    """根据案件ID获取证据卡片"""
+    from sqlalchemy import select
+    
+    query = select(EvidenceCard).where(
+        EvidenceCard.case_id == case_id
+    ).order_by(EvidenceCard.updated_times.desc()).offset(skip).limit(limit)
+    
+    result = await db.execute(query)
+    return list(result.scalars().unique().all())
+
+
 async def batch_create(
     db: AsyncSession,
     case_id: int,

@@ -7,16 +7,11 @@ from app.agentic.tools.smart_doc_gen_toolkit import SmartDocGenToolkit
 from app.agentic.llm.base import qwen_muti_model, qwen_chat_model
 
 
-class PartyAnalysis(BaseModel):
-    """当事人角色分析"""
-    plaintiff_role_type: str = Field(..., description="原告类型: person(自然人) / company(公司) / individual(个体户)")
-    defendant_role_type: str = Field(..., description="被告类型: person(自然人) / company(公司) / individual(个体户)")
-
 class DocumentFillingMapping(BaseModel):
     """文档填充映射结果"""
-    analysis: PartyAnalysis = Field(..., description="当事人类型分析")
+    # analysis field removed explicitly
     fillings: Dict[str, str] = Field(
-        ..., 
+        default_factory=dict,
         description="从模板结构ID到填充内容的映射。例如: {'t_0_r1_c1': '张三', 'p_0': '☑'}。重要：仅包含只需填写的字段，不需要处理的字段直接省略。"
     )
     reasoning: str = Field(
@@ -35,63 +30,48 @@ class SmartDocGenAgent:
             model=qwen_chat_model,
             knowledge=smart_doc_gen_kb,
             search_knowledge=True,
-            response_model=DocumentFillingMapping,
+            # response_model=DocumentFillingMapping, # Removed to allow tool usage first
             instructions="""
-你是法律文书生成专家。你的核心能力是"基于当事人类型进行智能填充"。
-你拥有访问【法律文书生成知识库】的权限。
+你是法律文书填写专家。你的核心任务是利用知识库中的规则，将案件信息准确地映射到文书模板中。
 
-**核心心智模型 (Mental Model):**
+**核心能力 (Core Capabilities):**
+1.  **主动研究**: 你不会凭空猜测。遇到不确定的业务规则（如“个体工商户如何显示”），你会主动调用 `search_knowledge_base`。
+2.  **严格遵循 SOP**: 你严格按照既定的 4 步流程进行思考和操作。
 
-0.  **第零步：查阅知识库 (Retrieve Knowledge)**
-    *   **必须**根据当前需要填写的模板内容，主动搜索知识库中的**相关规则**和**类似范例**。
+**核心工作流程 (SOP):**
 
-1.  **第一步：分析当事人角色 (Party Analysis)**
-    *   阅读案件数据，确定原告 (Plaintiff) 和被告 (Defendant) 的类型。
-    *   类型通常为：`person` (自然人), `company` (公司), `individual` (个体工商户)。
+    **第一步：案件信息全貌理解 (Step 1: Understand Case)**
+    *   **分析案由与金额**: 确定案件的核心争议点基本事实。
+    *   **分析当事人 (重要)**: 识别每一方当事人的【主体类型】（自然人 vs 法人/非法人组织）。
+    *   **证据关联**: 扫描【证据卡片】，识别哪些证据属于哪个当事人。
 
-2.  **第二步：制定填充策略 (Filling Strategy)**
-    *   **关键原则**: 
-        *   **绝不修改原内容 (Immutable Template)**: 你只能在空白处填入内容，或将空方框 `□` 替换为勾选框 `☑`。绝对不允许删除、替换或修改模板中原有的任何文字（如"法定代表人："、"住所地："等标签必须保留）。
-        *   **只填有效项 (Fill Only Valid)**: 
-            *   如果是**自然人**，且模板中有"法定代表人"字段，请**直接忽略/省略**该字段 (Omit from mappings)，不要填写任何内容，也不要试图删除它。
-            *   如果是**公司**，则正常填写"法定代表人"等字段。
-        *   **勾选框处理**: 遇到选择题（如"是□ 否□"），请将选中的项映射为 `☑` (或其他文档约定符号)，未选中的项**不要**放入映射中（保持原样 `□`）。
+    **第二步：文书模板结构理解 (Step 2: Understand Template)**
+    *   **分析类型**: 判断模板是 "要素式" (Table) 还是 "陈述式" (Narrative)。
+    *   **识别意图**: 理解每个填充块 (`id`) 想要获取什么信息。
 
-3.  **第三步：执行映射 (Mapping)**
-    *   将案件数据准确映射到需要填写的模板字段ID。
-    *   **不要**生成任何 `__DELETE__` 指令。
-    *   对于不需要填写的字段，直接在 `fillings` 字典中**省略**该 Key。
+    **第三步：制定映射与填充策略 (Step 3: Mapping Strategy)**
+    *   **查阅规则 (CRITICAL)**: 调用 `search_knowledge_base`，查找 `rules.md` 中的业务逻辑。
+        *   **排他性原则**: 确认如何处理多重身份（如“原告自然人”与“原告法人”共存时）。
+        *   **信源优先级**: 确认 OCR 证据与用户录入数据的采用优先序。
+    *   **综合推断**: 结合案件信息和证据特征，确定最终要填入的值。
 
-**Few-Shot Examples (学习示例):**
+    **第四步：执行生成 (Step 4: Generation)**
+    *   **生成最终映射**: 将所有决策转化为最终结果。
 
-**场景 A：原告是自然人 (张三)，被告是公司 (李四有限公司)**
-*   **Case Data**: Plaintiff=Person(Name=张三), Defendant=Company(Name=李四公司, LegalRep=王五)
-*   **Template**: 
-    *   t_0_r1_c2: "原告/法定代表人"
-    *   t_0_r5_c2: "被告/法定代表人"
-*   **Result**:
-    *   `analysis`: { "plaintiff_role_type": "person", "defendant_role_type": "company" }
-    *   `fillings`: { "t_0_r5_c2": "王五" } 
-    *   *(解释: 原告是自然人，忽略 t_0_r1_c2；被告是公司，填写 t_0_r5_c2)*
-
-**场景 B：原告是公司 (甲公司)，被告是自然人 (乙某些)**
-*   **Case Data**: Plaintiff=Company(Name=甲公司, LegalRep=赵六), Defendant=Person(Name=乙某)
-*   **Template**:
-    *   p_10: "原告法定代表人：____"
-    *   p_20: "被告法定代表人：____"
-    *   p_30: "是否起诉：是□ 否□"
-*   **Result**:
-    *   `analysis`: { "plaintiff_role_type": "company", "defendant_role_type": "person" }
-    *   `fillings`: { "p_10": "赵六", "p_30": "是否起诉：是☑ 否□" }
-    *   *(解释: 原告是公司，填写 p_10；被告是自然人，忽略 p_20；p_30 勾选"是"，利用 Smart Append 或文本完整替换(Agent应给出完整替换文本如果需要))*
-    *   *注意：对于 p_30 这种既有文字又有框的段落，通常通过"完整替换"来实现勾选，即输出 "是否起诉：是☑ 否□"。*
-
-**输入:**
-- 案件数据 (Case Data)
-- 模板分析结果与结构 (Template Structure)
-
-**输出:**
-请严格按照 `DocumentFillingMapping` 格式输出 JSON。
+**Final Output Format**:
+At the very end, you MUST output a VALID JSON block inside markdown code fences, like this:
+```json
+{
+  "reasoning": "Your detailed step-by-step reasoning process...",
+  "fillings": {
+    "t_0_r1_c1": "Value1",
+    "p_0": "Value2"
+  }
+}
+```
+**Constraints**:
+- `fillings` map keys are Template IDs.
+- `reasoning` is a string explaining your logic.
             """,
             show_tool_calls=True,
             debug_mode=True,
@@ -126,15 +106,41 @@ class SmartDocGenAgent:
 请输出一个完整的填充映射。
         """
         
-        # Step 3: Get mapping from agent
+        # Step 3: Get mapping from agent (Text Response)
         response = await self.agent.arun(message)
-        mapping_result: DocumentFillingMapping = response.content
+        # Handle potential string or RunResponse output
+        response_text = response.content if hasattr(response, 'content') else str(response)
+
+        # Step 4: Parse JSON manually
+        try:
+            # Extract JSON block
+            if "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                 json_str = response_text.split("```")[1].split("```")[0].strip()
+            else:
+                # Try finding the first { and last }
+                start_idx = response_text.find("{")
+                end_idx = response_text.rfind("}")
+                if start_idx != -1 and end_idx != -1:
+                    json_str = response_text[start_idx:end_idx+1]
+                else:
+                    json_str = response_text
+
+            parsed_data = json.loads(json_str)
+            mapping_result = DocumentFillingMapping(**parsed_data)
         
-        # Step 4: Fill template using toolkit
+        except Exception as e:
+            print(f"Error parsing Agent response: {e}")
+            print(f"Raw response: {response_text}")
+            mapping_result = DocumentFillingMapping(reasoning="Failed to parse JSON", fillings={})
+
+        
+        # Step 5: Fill template using toolkit
         fillings_json = json.dumps(mapping_result.fillings, ensure_ascii=False)
         fill_result = self.toolkit.fill_template(template_path, output_path, fillings_json)
         
-        # Step 5: Return result
+        # Step 6: Return result
         return f"文档生成完成。\n推理过程: {mapping_result.reasoning}\n填充结果: {fill_result}"
 
 # Singleton or factory if needed

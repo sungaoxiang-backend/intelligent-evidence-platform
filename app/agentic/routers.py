@@ -234,7 +234,7 @@ async def smart_fill_json(
     智能填充 ProseMirror JSON 文档内容
     """
     from app.cases.services import get_by_id as get_case_by_id
-    from app.evidences.services import list_evidences_by_case_id
+    from app.evidences.services import list_evidences_by_case_id, list_evidence_cards_by_case_id
     
     # 1. Fetch Case Data
     case = await get_case_by_id(db, request.case_id)
@@ -244,7 +244,9 @@ async def smart_fill_json(
     # 2. Fetch Evidence Data
     evidences, _ = await list_evidences_by_case_id(db, request.case_id, limit=100)
     
-    # 3. Serialize Data (Reuse logic if possible, but simpler to inline here for now)
+    evidence_cards = await list_evidence_cards_by_case_id(db, request.case_id)
+    
+    # 3. Serialize Data
     case_dict = {
         "id": case.id,
         "loan_amount": case.loan_amount,
@@ -264,7 +266,8 @@ async def smart_fill_json(
                 "id_card": p.id_card,
                 "company_name": p.company_name,
                 "company_address": p.company_address,
-                "company_code": p.company_code
+                "company_code": p.company_code,
+                "legal_representative": p.owner_name  # Ensure legal representative is passed if available in DB
             } for p in case.case_parties
         ]
     }
@@ -274,13 +277,24 @@ async def smart_fill_json(
             "id": e.id,
             "file_name": e.file_name,
             "classification_category": e.classification_category,
-            "evidence_status": e.evidence_status
+            "evidence_features": e.evidence_features # Include extracted features
         } for e in evidences
+        if e.evidence_features # Only include evidences with features to save tokens
+    ]
+
+    card_list = [
+        {
+            "id": c.id,
+            "card_info": c.card_info,
+            "evidence_ids": c.evidence_ids
+        } for c in evidence_cards
+        if c.card_info # Only include validated cards
     ]
     
     context_data = {
         "case": case_dict,
-        "evidence": evidence_list
+        "evidence_files": evidence_list,
+        "evidence_cards": card_list
     }
     
     case_context = json.dumps(context_data, ensure_ascii=False, indent=2)
