@@ -70,3 +70,7 @@ logs/
 .claude/
 
 static/
+
+# NLTK Data (Local pre-download)
+nltk_data/
+nltk_data.zip

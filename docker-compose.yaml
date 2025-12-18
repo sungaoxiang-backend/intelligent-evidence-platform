@@ -22,6 +22,8 @@ services:
       - ./logs:/app/logs
       # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
       - playwright_cache:/root/.cache/ms-playwright
+      # 持久化 NLTK 数据，避免每次构建都重新下载（生产级优化）
+      - nltk_data_cache:/app/nltk_data
     restart: always
 
   db:
@@ -85,6 +87,8 @@ services:
       - ./app:/app/app
       # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
       - playwright_cache:/root/.cache/ms-playwright
+      # 持久化 NLTK 数据，避免每次构建都重新下载
+      - nltk_data_cache:/app/nltk_data
     restart: always
 
   celery-beat:
@@ -106,6 +110,8 @@ services:
       - ./logs:/app/logs
       # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
       - playwright_cache:/root/.cache/ms-playwright
+      # 持久化 NLTK 数据，避免每次构建都重新下载
+      - nltk_data_cache:/app/nltk_data
     restart: always
 
   frontend:
@@ -132,6 +138,7 @@ volumes:
   postgres_data:
   redis_data:
   playwright_cache:  # Playwright 浏览器缓存，避免重复下载
+  nltk_data_cache:   # NLTK 数据缓存，避免每次构建都重新下载（生产级优化）
 
 networks:
   app-network:

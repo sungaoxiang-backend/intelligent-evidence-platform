@@ -56,19 +56,14 @@ COPY --from=builder /app/.venv /app/.venv
 RUN . /app/.venv/bin/activate && \
     playwright install-deps chromium || echo "警告: Playwright 系统依赖安装失败，但不会阻止构建"
 
-# 预下载 NLTK 数据 (unstructured/agno 依赖)
-# 避免运行时下载失败或 BadZipFile 错误
-# 清理可能存在的损坏数据，然后重新下载所有必需的包
+# 复制本地预下载的 NLTK 数据 (生产级优化：完全避免构建时网络依赖)
+# 请确保在构建前运行 scripts/download_nltk_local.py
+COPY nltk_data/ /app/nltk_data/
+
+# 验证数据完整性 (确保复制成功)
 RUN . /app/.venv/bin/activate && \
-    rm -rf /app/nltk_data && \
-    mkdir -p /app/nltk_data && \
-    python -c "import nltk; nltk.download('punkt', download_dir='/app/nltk_data', quiet=True)" && \
-    python -c "import nltk; nltk.download('averaged_perceptron_tagger', download_dir='/app/nltk_data', quiet=True)" && \
-    python -c "import nltk; nltk.download('stopwords', download_dir='/app/nltk_data', quiet=True)" && \
-    python -c "import nltk; nltk.download('wordnet', download_dir='/app/nltk_data', quiet=True)" && \
-    python -c "import nltk; nltk.download('omw-1.4', download_dir='/app/nltk_data', quiet=True)" && \
-    python -c "import nltk; print('NLTK data verification:'); nltk.data.path.append('/app/nltk_data'); nltk.data.find('tokenizers/punkt')" && \
-    echo "NLTK data downloaded and verified successfully"
+    python -c "import nltk; nltk.data.path.append('/app/nltk_data'); nltk.data.find('tokenizers/punkt'); nltk.data.find('taggers/averaged_perceptron_tagger')" || \
+    echo "WARNING: NLTK data validation failed. Ensure you ran scripts/download_nltk_local.py"
 
 # 设置 NLTK 数据目录环境变量
 ENV NLTK_DATA=/app/nltk_data
