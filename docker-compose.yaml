@@ -125,6 +125,8 @@ services:
         - ./frontend/.env.docker
       environment:
         - NODE_ENV=production
+        # 后端服务地址：在容器环境中使用 Docker 服务名
+        - BACKEND_URL=http://app:8008
         
 volumes:
   postgres_data:

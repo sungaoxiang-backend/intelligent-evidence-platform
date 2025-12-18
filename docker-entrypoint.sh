@@ -6,9 +6,29 @@ set -e
 # 注意：即使安装失败也不阻止容器启动
 install_playwright() {
     # 检查 Playwright 浏览器是否已安装
-    if [ -d "/root/.cache/ms-playwright/chromium" ] && [ -f "/root/.cache/ms-playwright/chromium/chrome-linux/chrome" ]; then
+    # 使用 Python 脚本检查（更可靠）
+    if . /app/.venv/bin/activate && python -c "
+import sys
+from pathlib import Path
+cache_dir = Path('/root/.cache/ms-playwright/chromium')
+if cache_dir.exists():
+    # 查找 chrome 可执行文件
+    chrome_files = list(cache_dir.rglob('chrome'))
+    if chrome_files and any(f.is_file() and f.stat().st_size > 0 for f in chrome_files):
+        sys.exit(0)
+sys.exit(1)
+" 2>/dev/null; then
         echo "✓ Playwright 浏览器已安装，跳过安装步骤"
         return 0
+    fi
+    
+    # 如果 Python 检查失败，使用简单的文件检查作为备用
+    if [ -d "/root/.cache/ms-playwright/chromium" ]; then
+        # 查找 chrome 可执行文件（可能在不同路径）
+        if find /root/.cache/ms-playwright/chromium -name "chrome" -type f -executable 2>/dev/null | head -1 | grep -q .; then
+            echo "✓ Playwright 浏览器已安装（通过文件检查），跳过安装步骤"
+            return 0
+        fi
     fi
     
     echo "=========================================="
@@ -74,7 +94,11 @@ install_playwright() {
 }
 
 # 执行安装（即使失败也不阻止容器启动）
-install_playwright || true
+# 添加调试信息
+echo "检查 Playwright 浏览器安装状态..."
+install_playwright || {
+    echo "⚠ Playwright 安装检查或安装过程出现问题，但继续启动应用..."
+}
 
 # 等待PostgreSQL数据库准备就绪
 echo "等待PostgreSQL数据库准备就绪..."
