@@ -151,6 +151,10 @@ cd /app && alembic upgrade head
 echo "创建超级管理员..."
 python -m app.initial_data
 
+# 初始化知识库（创建向量表及加载数据）
+echo "初始化智能文档生成知识库..."
+python reload_kb.py
+
 # 根据SERVICE_TYPE环境变量决定启动什么服务
 if [ "$SERVICE_TYPE" = "celery-worker" ]; then
   echo "启动Celery Worker..."
