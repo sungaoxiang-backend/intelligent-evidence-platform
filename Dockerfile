@@ -58,9 +58,17 @@ RUN . /app/.venv/bin/activate && \
 
 # 预下载 NLTK 数据 (unstructured/agno 依赖)
 # 避免运行时下载失败或 BadZipFile 错误
+# 清理可能存在的损坏数据，然后重新下载所有必需的包
 RUN . /app/.venv/bin/activate && \
-    python -m nltk.downloader -d /app/nltk_data punkt averaged_perceptron_tagger && \
-    echo "NLTK data downloaded successfully"
+    rm -rf /app/nltk_data && \
+    mkdir -p /app/nltk_data && \
+    python -c "import nltk; nltk.download('punkt', download_dir='/app/nltk_data', quiet=True)" && \
+    python -c "import nltk; nltk.download('averaged_perceptron_tagger', download_dir='/app/nltk_data', quiet=True)" && \
+    python -c "import nltk; nltk.download('stopwords', download_dir='/app/nltk_data', quiet=True)" && \
+    python -c "import nltk; nltk.download('wordnet', download_dir='/app/nltk_data', quiet=True)" && \
+    python -c "import nltk; nltk.download('omw-1.4', download_dir='/app/nltk_data', quiet=True)" && \
+    python -c "import nltk; print('NLTK data verification:'); nltk.data.path.append('/app/nltk_data'); nltk.data.find('tokenizers/punkt')" && \
+    echo "NLTK data downloaded and verified successfully"
 
 # 设置 NLTK 数据目录环境变量
 ENV NLTK_DATA=/app/nltk_data

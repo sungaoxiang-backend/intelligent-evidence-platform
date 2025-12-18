@@ -93,12 +93,45 @@ sys.exit(1)
     return 0
 }
 
+# 验证 NLTK 数据完整性（避免 BadZipFile 错误）
+verify_nltk_data() {
+    echo "验证 NLTK 数据完整性..."
+    if . /app/.venv/bin/activate && python -c "
+import nltk
+import os
+nltk_data_dir = os.environ.get('NLTK_DATA', '/app/nltk_data')
+nltk.data.path.insert(0, nltk_data_dir)
+try:
+    # 验证关键包是否存在且可访问
+    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('taggers/averaged_perceptron_tagger')
+    print('✓ NLTK 数据验证成功')
+except Exception as e:
+    print(f'⚠ NLTK 数据验证失败: {e}')
+    print('尝试重新下载 NLTK 数据...')
+    import shutil
+    if os.path.exists(nltk_data_dir):
+        shutil.rmtree(nltk_data_dir)
+    os.makedirs(nltk_data_dir, exist_ok=True)
+    nltk.download('punkt', download_dir=nltk_data_dir, quiet=True)
+    nltk.download('averaged_perceptron_tagger', download_dir=nltk_data_dir, quiet=True)
+    print('✓ NLTK 数据重新下载完成')
+" 2>&1; then
+        echo "✓ NLTK 数据验证通过"
+    else
+        echo "⚠ NLTK 数据验证出现问题，但继续启动应用..."
+    fi
+}
+
 # 执行安装（即使失败也不阻止容器启动）
 # 添加调试信息
 echo "检查 Playwright 浏览器安装状态..."
 install_playwright || {
     echo "⚠ Playwright 安装检查或安装过程出现问题，但继续启动应用..."
 }
+
+# 验证 NLTK 数据
+verify_nltk_data
 
 # 等待PostgreSQL数据库准备就绪
 echo "等待PostgreSQL数据库准备就绪..."
