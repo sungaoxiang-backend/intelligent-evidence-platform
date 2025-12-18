@@ -75,6 +75,7 @@ COPY alembic.ini ./
 COPY alembic/ ./alembic/
 COPY templates/ ./templates/
 COPY static/ ./static/
+COPY reload_kb.py ./
 
 # 复制入口点脚本
 COPY docker-entrypoint.sh /docker-entrypoint.sh
