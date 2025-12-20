@@ -393,17 +393,19 @@ wheels = [
 
 [[package]]
 name = "cos-python-sdk-v5"
-version = "1.9.37"
+version = "1.9.40"
 source = { registry = "https://pypi.mirrors.ustc.edu.cn/simple/" }
 dependencies = [
-    { name = "certifi" },
     { name = "crcmod" },
     { name = "pycryptodome" },
     { name = "requests" },
     { name = "six" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/be/ab/e8ee64748f3b9ecf835041c26c519d276ba868c4726daad7bbfdb6a12bcd/cos_python_sdk_v5-1.9.37.tar.gz", hash = "sha256:59b34b39e55e3afbe9f94c396b57a13c7055c7e1013e5de873bd985cf7ca3858", size = 96356 }
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/15/8d/8695d405060d1943493c492480bcaae2c2f3a4a8d300f60965a11a1b4a1f/cos_python_sdk_v5-1.9.40.tar.gz", hash = "sha256:7221a56ef38d180776b48165f765f0e1df7c06b434fadfeb77a1341817f27c1a", size = 99457 }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/e3/45/ed796b6463f266f12c43341d90a363131f2ae918c969ff3ded6790dddbd6/cos_python_sdk_v5-1.9.40-py3-none-any.whl", hash = "sha256:0715924d02013305aa46c64ec726fda7e9b5760db61d5cea12d60eae4a226670", size = 94585 },
+]
 
 [[package]]
 name = "crcmod"
@@ -862,7 +864,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "redis", specifier = ">=4.5.0" },
-    { name = "requests", specifier = "==2.26.0" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.0.287" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "unstructured", specifier = ">=0.18.3" },
@@ -1819,7 +1821,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.26.0"
+version = "2.32.5"
 source = { registry = "https://pypi.mirrors.ustc.edu.cn/simple/" }
 dependencies = [
     { name = "certifi" },
@@ -1827,9 +1829,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/e7/01/3569e0b535fb2e4a6c384bdbed00c55b9d78b5084e0fb7f4d0bf523d7670/requests-2.26.0.tar.gz", hash = "sha256:b8aa58f8cf793ffd8782d3d8cb19e66ef36f7aba4353eec859e74678b01b07a7", size = 104433 }
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517 }
 wheels = [
-    { url = "https://mirrors.ustc.edu.cn/pypi/packages/92/96/144f70b972a9c0eabbd4391ef93ccd49d0f2747f4f6a2a2738e99e5adc65/requests-2.26.0-py2.py3-none-any.whl", hash = "sha256:6c1246513ecd5ecd4528a0906f910e8f0f9c6b8ec72030dc9fd154dc1a6efd24", size = 62251 },
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738 },
 ]
 
 [[package]]

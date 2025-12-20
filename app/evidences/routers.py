@@ -696,26 +696,33 @@ from app.evidences.models import EvidenceStatus
 @router.post("/auto-process", response_model=ListResponse[EvidenceResponse])
 async def auto_process(
     db: DBSession,
-    # current_staff: Annotated[Staff, Depends(get_current_staff)],
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
     case_id: int = Form(...),
     files: List[UploadFile] = File(None),
     evidence_ids: List[int] = Form(None),
     auto_classification: bool = Form(False),
     auto_feature_extraction: bool = Form(False),
     ):
-    from app.evidences.services import auto_process
+    # 导入 Celery 任务和必要服务
+    from app.tasks.real_evidence_tasks import batch_analyze_evidences_task
+    from app.evidences.services import batch_create, get_multi_by_ids
     from loguru import logger
+
     # evidence_ids 可能是字符串列表，需转为 int
     if evidence_ids is not None:
         evidence_ids = [int(eid) for eid in evidence_ids]
-    logger.info(f"收到 evidence_ids: {evidence_ids}")
+    
+    logger.info(f"收到 auto-process 请求: files={len(files) if files else 0}, evidence_ids={evidence_ids}")
+
     # 简单验证：必须提供其一且不能同时提供
     has_files = files is not None and len(files) > 0
     has_evidence_ids = evidence_ids is not None and len(evidence_ids) > 0
+    
     if not has_files and not has_evidence_ids:
         raise HTTPException(status_code=400, detail="必须提供 files 或 evidence_ids")
     if has_files and has_evidence_ids:
         raise HTTPException(status_code=400, detail="files 和 evidence_ids 不能同时提供")
+
     # 检查案件是否存在
     case = await case_service.get_by_id(db, case_id)
     if not case:
@@ -724,16 +731,57 @@ async def auto_process(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="案件不存在",
         )
+
     # 校验：不能只做特征提取，必须先分类
     if auto_feature_extraction and not auto_classification:
         raise HTTPException(status_code=400, detail="不能只做特征提取，必须先分类")
-    evidences = await auto_process(db, case_id=case_id, files=files, evidence_ids=evidence_ids, auto_classification=auto_classification, auto_feature_extraction=auto_feature_extraction)
+
+    # 1. 处理证据来源
+    target_evidence_ids = []
+    
+    # 如果是上传文件，先同步创建证据记录
+    if has_files:
+        try:
+            uploaded_evidences = await batch_create(db, case_id, files)
+            target_evidence_ids.extend([e.id for e in uploaded_evidences])
+            logger.info(f"成功上传并创建 {len(uploaded_evidences)} 个证据记录")
+        except Exception as e:
+            logger.error(f"文件上传失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
+    
+    # 如果是已有证据ID
+    if has_evidence_ids:
+        target_evidence_ids.extend(evidence_ids)
+    
+    # 去重
+    target_evidence_ids = list(set(target_evidence_ids))
+    
+    if not target_evidence_ids:
+        return ListResponse(data=[])
+
+    # 2. 触发异步 Celery 任务进行分析
+    if auto_classification or auto_feature_extraction:
+        logger.info(f"触发异步分析任务: evidence_ids={target_evidence_ids}")
+        batch_analyze_evidences_task.delay(
+            case_id=case_id,
+            evidence_ids=target_evidence_ids,
+            auto_classification=auto_classification,
+            auto_feature_extraction=auto_feature_extraction
+        )
+    
+    # 3. 获取所有涉及的证据对象以返回
+    # 注意：此时证据状态应该还是 UPLOADED (如果是新上传的)
+    evidences = await get_multi_by_ids(db, target_evidence_ids)
     
     # 由于 EvidenceResponse 现在继承了 BaseSchema，Pydantic 可以自动处理转换
     # 只需要确保 case 关系被正确加载
     for evidence in evidences:
         if evidence.case_id and not evidence.case:
-            evidence.case = await case_service.get_by_id(db, evidence.case_id)
+            # 这里如果 case 对象已经有了，直接赋值
+            if case.id == evidence.case_id:
+                evidence.case = case
+            else:
+                evidence.case = await case_service.get_by_id(db, evidence.case_id)
     
     return ListResponse(data=evidences)
 
