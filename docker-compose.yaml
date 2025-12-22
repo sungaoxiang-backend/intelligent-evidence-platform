@@ -13,10 +13,10 @@ services:
     env_file:
       - .env.docker
     environment:
-      - POSTGRES_SERVER=db  # 覆盖.env.docker中的配置，确保在容器环境中使用正确的数据库主机
+      - POSTGRES_SERVER=db # 覆盖.env.docker中的配置，确保在容器环境中使用正确的数据库主机
       # Playwright 配置：使用国内镜像源加速下载
       - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
@@ -36,30 +36,23 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    command: [
-      "postgres", 
-      "-c", "max_connections=50",
-      "-c", "shared_buffers=512MB",
-      "-c", "effective_cache_size=2GB",
-      "-c", "maintenance_work_mem=128MB",
-      "-c", "random_page_cost=1.1",
-      "-c", "effective_io_concurrency=200",
-      "-c", "work_mem=4MB",
-      "-c", "min_wal_size=1GB",
-      "-c", "max_wal_size=4GB",
-      "-c", "timezone=Asia/Shanghai",
-      "-c", "max_parallel_workers_per_gather=2",  # 新增：控制并行查询
-      "-c", "max_parallel_workers=4"             # 新增：限制并行工作进程
-    ]
+    command:
+      [
+        "postgres",
+        "-c",
+        "max_parallel_workers_per_gather=0",
+        "-c",
+        "max_parallel_workers=0" # 新增：限制并行工作进程
+      ]
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6380:6379"  # 使用6380端口避免与系统已占用的6379端口冲突
+      - "6380:6379" # 使用6380端口避免与系统已占用的6379端口冲突
     networks:
       - app-network
     restart: always
@@ -77,7 +70,7 @@ services:
       - SERVICE_TYPE=celery-worker
       # Playwright 配置：使用国内镜像源加速下载
       - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
     depends_on:
       - redis
       - db
@@ -97,7 +90,7 @@ services:
       - SERVICE_TYPE=celery-beat
       # Playwright 配置：使用国内镜像源加速下载
       - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000  # 30分钟超时
+      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
     depends_on:
       - redis
       - db
@@ -109,29 +102,30 @@ services:
     restart: always
 
   frontend:
-      build:
-        context: ./frontend
-        dockerfile: Dockerfile
-        args:
-          # 从 env_file 或宿主环境读取，以避免硬编码
-          NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL-/api/v1}
-      ports:
-        - "3000:3000"
-      networks:
-        - app-network
-      depends_on:
-        - app
-      env_file:
-        - ./frontend/.env.docker
-      environment:
-        - NODE_ENV=production
-        # 后端服务地址：在容器环境中使用 Docker 服务名
-        - BACKEND_URL=http://app:8008
-        
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # 从 env_file 或宿主环境读取，以避免硬编码
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL-/api/v1}
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - app
+    env_file:
+      - ./frontend/.env.docker
+    environment:
+      - NODE_ENV=production
+      # 后端服务地址：在容器环境中使用 Docker 服务名
+      - BACKEND_URL=http://app:8008
+
 volumes:
   postgres_data:
   redis_data:
-  playwright_cache:  # Playwright 浏览器缓存，避免重复下载
+  playwright_cache:
+    # Playwright 浏览器缓存，避免重复下载
 
 
 networks:
