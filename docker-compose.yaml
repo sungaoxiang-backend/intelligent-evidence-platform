@@ -80,26 +80,26 @@ services:
       - playwright_cache:/root/.cache/ms-playwright
     restart: always
 
-  celery-beat:
-    build: .
-    networks:
-      - app-network
-    env_file:
-      - .env.docker
-    environment:
-      - SERVICE_TYPE=celery-beat
-      # Playwright 配置：使用国内镜像源加速下载
-      - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-      - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
-    depends_on:
-      - redis
-      - db
-    volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
-      # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
-      - playwright_cache:/root/.cache/ms-playwright
-    restart: always
+  # celery-beat:
+  #   build: .
+  #   networks:
+  #     - app-network
+  #   env_file:
+  #     - .env.docker
+  #   environment:
+  #     - SERVICE_TYPE=celery-beat
+  #     # Playwright 配置：使用国内镜像源加速下载
+  #     - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+  #     - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
+  #   depends_on:
+  #     - redis
+  #     - db
+  #   volumes:
+  #     - ./app:/app/app
+  #     - ./logs:/app/logs
+  #     # 持久化 Playwright 浏览器缓存，避免每次重启都重新下载
+  #     - playwright_cache:/root/.cache/ms-playwright
+  #   restart: always
 
   frontend:
     build:
