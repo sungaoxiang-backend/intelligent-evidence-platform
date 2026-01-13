@@ -72,7 +72,7 @@ export default function CaseManagement() {
 
   // 用户ID筛选状态
   const [userIdFilter, setUserIdFilter] = useState("");
-  
+
   // 从 localStorage 恢复排序状态，避免页面刷新后丢失
   const getInitialSort = () => {
     if (typeof window !== 'undefined') {
@@ -87,7 +87,7 @@ export default function CaseManagement() {
     }
     return { field: "created_at", direction: "desc" as SortDirection };
   };
-  
+
   const [sort, setSort] = useState<{ field: string; direction: SortDirection }>(getInitialSort);
 
   // 处理用户ID筛选
@@ -119,7 +119,7 @@ export default function CaseManagement() {
       },
       {
         party_name: "",
-        party_role: "debtor", 
+        party_role: "debtor",
         party_type: null as null | PartyType,
         name: "", // 自然人姓名/经营者名称/法定代表人名称
         company_name: "", // 个体工商户名称/公司名称
@@ -127,15 +127,15 @@ export default function CaseManagement() {
     ]
   });
 
-    // 临时存储输入的金额字符串，用于显示
+  // 临时存储输入的金额字符串，用于显示
   const [loanAmountInput, setLoanAmountInput] = useState("");
-  
+
   // 用户筛选相关状态
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
-  
+
   // 表单验证状态
   const [addFormErrors, setAddFormErrors] = useState({
     user_id: "",
@@ -224,17 +224,17 @@ export default function CaseManagement() {
     setUserSearchLoading(true);
     try {
       console.log("🔍 Searching user by ID:", userId);
-      const result = await userApi.getUsers({ 
-        page: 1, 
-        pageSize: 1, 
-        user_id: parseInt(userId) 
+      const result = await userApi.getUsers({
+        page: 1,
+        pageSize: 1,
+        user_id: parseInt(userId)
       });
-      
+
       if (result.data && result.data.length > 0) {
         const user = result.data[0];
         setSearchedUser(user);
         console.log("🔍 User found:", user);
-        
+
         // 自动应用用户到表单
         setAddForm(prev => ({
           ...prev,
@@ -296,10 +296,10 @@ export default function CaseManagement() {
     } else if (!searchedUser) {
       errors.user_id = "未找到该用户ID，请检查输入";
     }
-    
+
     const creditor = addForm.case_parties.find(p => p.party_role === "creditor");
     const debtor = addForm.case_parties.find(p => p.party_role === "debtor");
-    
+
     // 验证当事人名称
     if (!creditor?.party_name.trim()) {
       errors.creditor_name = "请输入债权人姓名";
@@ -307,7 +307,7 @@ export default function CaseManagement() {
     if (!debtor?.party_name.trim()) {
       errors.debtor_name = "请输入债务人姓名";
     }
-    
+
     // 验证金额格式
     if (!loanAmountInput || loanAmountInput.trim() === "") {
       errors.loan_amount = "请输入欠款金额";
@@ -316,7 +316,7 @@ export default function CaseManagement() {
     } else if (parseFloat(loanAmountInput) <= 0) {
       errors.loan_amount = "金额必须大于0";
     }
-    
+
     if (!creditor?.party_type) {
       errors.creditor_type = "请选择债权人类型";
     }
@@ -404,16 +404,16 @@ export default function CaseManagement() {
           },
           {
             party_name: "",
-            party_role: "debtor", 
+            party_role: "debtor",
             party_type: null,
             name: "",
             company_name: "",
           }
         ]
       });
-        setLoanAmountInput("");
-        setUserSearchTerm("");
-        setSearchedUser(null);
+      setLoanAmountInput("");
+      setUserSearchTerm("");
+      setSearchedUser(null);
       setAddFormErrors({
         user_id: "",
         loan_amount: "",
@@ -427,23 +427,23 @@ export default function CaseManagement() {
         debtor_required_name: "",
         debtor_required_company: "",
       });
-      
+
       // 重置排序为创建时间倒序，确保新案件显示在最前面
       const newSort = { field: "created_at", direction: "desc" as SortDirection };
       setSort(newSort);
       if (typeof window !== 'undefined') {
         localStorage.setItem('case-management-sort', JSON.stringify(newSort));
       }
-      
+
       // 显示刷新loading状态
       setIsRefreshing(true);
-      
+
       // 强制刷新案件列表数据
       await mutate();
-      
+
       // 隐藏刷新loading状态
       setIsRefreshing(false);
-      
+
       // 显示成功提示（可选）
       console.log("案件创建成功，列表已刷新，排序已重置");
     } catch (error) {
@@ -453,7 +453,7 @@ export default function CaseManagement() {
 
   const openAddDialog = () => {
     setShowAddDialog(true);
-    
+
     // 如果当前有用户ID筛选，预填充到新增案件表单中
     if (userIdFilter && userIdFilter.trim()) {
       console.log("🔍 Pre-filling user ID from filter:", userIdFilter);
@@ -465,7 +465,7 @@ export default function CaseManagement() {
       setUserSearchTerm("");
       setSearchedUser(null);
     }
-    
+
     // 确保弹窗打开时没有输入框获得焦点
     setTimeout(() => {
       if (document.activeElement instanceof HTMLElement) {
@@ -511,7 +511,7 @@ export default function CaseManagement() {
 
       // 显示刷新loading状态
       setIsRefreshing(true);
-      
+
       // 刷新搜索的用户
       await searchUser(newUser.data.id.toString());
 
@@ -549,6 +549,10 @@ export default function CaseManagement() {
 
   const handleViewCardFactory = (caseId: number) => {
     router.push(`/cases/${caseId}/card-factory`);
+  };
+
+  const handleCaseAnalysis = (caseId: number) => {
+    router.push(`/case-analysis/${caseId}`);
   };
 
 
@@ -593,7 +597,7 @@ export default function CaseManagement() {
               {sortedCases.map((caseItem) => {
                 const creditor = caseItem.case_parties?.find((p: any) => p.party_role === "creditor");
                 const debtor = caseItem.case_parties?.find((p: any) => p.party_role === "debtor");
-                
+
                 return (
                   <TableRow key={caseItem.id}>
                     <TableCell className="whitespace-nowrap font-mono text-sm text-gray-600">
@@ -626,14 +630,22 @@ export default function CaseManagement() {
                         >
                           卡片工厂
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCaseAnalysis(caseItem.id)}
+                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 px-2 py-1 text-xs whitespace-nowrap min-w-0"
+                        >
+                          案情分析
+                        </Button>
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {caseItem.loan_amount !== null && caseItem.loan_amount !== undefined ? `¥${caseItem.loan_amount.toLocaleString()}` : "-"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {caseItem.case_type === 'debt' ? '民间借贷纠纷' : 
-                       caseItem.case_type === 'contract' ? '买卖合同纠纷' : '-'}
+                      {caseItem.case_type === 'debt' ? '民间借贷纠纷' :
+                        caseItem.case_type === 'contract' ? '买卖合同纠纷' : '-'}
                     </TableCell>
                     <TableCell className="font-medium whitespace-nowrap">
                       {creditor?.party_name || "-"}
@@ -707,8 +719,8 @@ export default function CaseManagement() {
       />
 
       {/* Add Case Dialog */}
-      <Dialog 
-        open={showAddDialog} 
+      <Dialog
+        open={showAddDialog}
         onOpenChange={(open) => {
           if (!open) {
             closeAddDialog();
@@ -716,7 +728,7 @@ export default function CaseManagement() {
         }}
         modal={true}
       >
-        <DialogContent 
+        <DialogContent
           className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
@@ -743,9 +755,9 @@ export default function CaseManagement() {
                       <div className={`flex items-center h-12 px-3 border rounded-md ${addFormErrors.user_id ? 'border-red-500' : 'border-green-500 bg-green-50'}`}>
                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3 text-sm font-medium text-gray-600">
                           {searchedUser.wechat_avatar ? (
-                            <img 
-                              src={searchedUser.wechat_avatar} 
-                              alt={searchedUser.name || '用户头像'} 
+                            <img
+                              src={searchedUser.wechat_avatar}
+                              alt={searchedUser.name || '用户头像'}
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
@@ -784,10 +796,10 @@ export default function CaseManagement() {
                       // 搜索输入框
                       <Input
                         placeholder={
-                          userSearchLoading 
-                            ? "搜索中..." 
-                            : userSearchTerm.trim() && !searchedUser 
-                              ? "未找到对应ID用户" 
+                          userSearchLoading
+                            ? "搜索中..."
+                            : userSearchTerm.trim() && !searchedUser
+                              ? "未找到对应ID用户"
                               : "输入用户ID进行搜索"
                         }
                         value={userSearchTerm}
@@ -801,7 +813,7 @@ export default function CaseManagement() {
                         className={`${addFormErrors.user_id ? 'border-red-500' : ''} ${userSearchTerm.trim() && !searchedUser ? 'text-red-500' : ''} h-12 pr-8`}
                       />
                     )}
-                    
+
                     {/* 搜索图标 */}
                     {!searchedUser && (
                       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -867,7 +879,7 @@ export default function CaseManagement() {
                       const value = e.target.value;
                       // 允许输入任何内容，包括小数点
                       setLoanAmountInput(value);
-                      
+
                       // 实时验证
                       if (value === "" || value === ".") {
                         setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入欠款金额" }));
@@ -887,24 +899,24 @@ export default function CaseManagement() {
                         setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入欠款金额" }));
                         return;
                       }
-                      
+
                       // 验证是否为有效数字格式
                       if (!/^\d+(\.\d{1,2})?$/.test(value)) {
                         setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的金额格式（最多两位小数）" }));
                         return;
                       }
-                      
+
                       const numValue = parseFloat(value);
                       if (numValue <= 0) {
                         setAddFormErrors(prev => ({ ...prev, loan_amount: "请输入有效的欠款金额" }));
                         return;
                       }
-                      
-                                              // 验证通过，自动格式化并更新表单数据
-                        const formattedValue = formatAmount(numValue);
-                        setLoanAmountInput(formattedValue);
-                        setAddForm(prev => ({ ...prev, loan_amount: numValue }));
-                        setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
+
+                      // 验证通过，自动格式化并更新表单数据
+                      const formattedValue = formatAmount(numValue);
+                      setLoanAmountInput(formattedValue);
+                      setAddForm(prev => ({ ...prev, loan_amount: numValue }));
+                      setAddFormErrors(prev => ({ ...prev, loan_amount: "" }));
                     }}
                     className={`${addFormErrors.loan_amount ? 'border-red-500' : ''} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
@@ -920,7 +932,7 @@ export default function CaseManagement() {
               {/* 左侧：债权人信息 */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-blue-600 border-b border-blue-200 pb-2">债权人信息</h3>
-                
+
                 {/* 债权人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="creditor_name" className="text-sm font-medium">
@@ -1144,7 +1156,7 @@ export default function CaseManagement() {
               {/* 右侧：债务人信息 */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-orange-600 border-b border-orange-200 pb-2">债务人信息</h3>
-                
+
                 {/* 债务人姓名 */}
                 <div className="space-y-2">
                   <Label htmlFor="debtor_name" className="text-sm font-medium">

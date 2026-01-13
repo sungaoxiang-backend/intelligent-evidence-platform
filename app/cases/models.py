@@ -87,6 +87,8 @@ class Case(Base):
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")
     association_evidence_features = relationship("AssociationEvidenceFeature", back_populates="case", cascade="all, delete-orphan")
     case_parties = relationship("CaseParty", back_populates="case", cascade="all, delete-orphan")
+    case_info_commits = relationship("CaseInfoCommit", back_populates="case", cascade="all, delete-orphan")
+    case_analysis_reports = relationship("CaseAnalysisReport", back_populates="case", cascade="all, delete-orphan")
 
 
 
@@ -138,3 +140,32 @@ class AssociationEvidenceFeature(Base):
     # 关系
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
     case = relationship("Case", back_populates="association_evidence_features")
+
+
+class CaseInfoCommit(Base):
+    """案件信息提交模型"""
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
+    
+    # 提交内容
+    statement: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 用户陈述
+    materials: Mapped[List[Dict]] = mapped_column(JSONB, default=[], nullable=False)  # 材料列表
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+    case = relationship("Case", back_populates="case_info_commits")
+    
+
+class CaseAnalysisReport(Base):
+    """案件分析报告模型"""
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
+    
+    # 报告内容
+    content: Mapped[Dict] = mapped_column(JSONB, nullable=False)  # 分析报告内容
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+    case = relationship("Case", back_populates="case_analysis_reports")

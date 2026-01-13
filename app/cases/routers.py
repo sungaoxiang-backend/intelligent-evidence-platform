@@ -340,7 +340,50 @@ async def get_users(
         sort_order=sort_order
     )
     
-    return ListResponse(
-        data=users,
-        pagination=Pagination(total=total, page=skip // limit + 1, size=limit, pages=(total + limit - 1) // limit)
-    )
+
+# ==================== 案件分析、提交记录相关端点 ====================
+
+from app.cases.schemas_analysis import CaseInfoCommit, CaseInfoCommitCreate, CaseInfoCommitDelete, CaseAnalysisReport
+
+@router.get("/{case_id}/commits", response_model=SingleResponse[List[CaseInfoCommit]])
+async def get_case_commits(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """获取案件提交记录"""
+    # Simply mapping to service call - needing implementation in service too
+    commits = await case_service.get_commits_by_case_id(db, case_id)
+    return SingleResponse(code=200, message="获取提交记录成功", data=commits)
+
+@router.post("/{case_id}/commits", response_model=SingleResponse[CaseInfoCommit])
+async def create_case_commit(
+    case_id: int,
+    commit_in: CaseInfoCommitCreate,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """创建案件提交记录"""
+    commit = await case_service.create_commit(db, case_id, commit_in)
+    return SingleResponse(code=201, message="提交成功", data=commit)
+
+@router.post("/{case_id}/commits/batch-delete", response_model=SingleResponse[bool])
+async def delete_case_commits(
+    case_id: int,
+    delete_req: CaseInfoCommitDelete,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """批量删除提交记录"""
+    success = await case_service.delete_commits(db, case_id, delete_req.ids)
+    return SingleResponse(code=200, message="删除成功", data=success)
+
+@router.get("/{case_id}/reports", response_model=SingleResponse[List[CaseAnalysisReport]])
+async def get_case_reports(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """获取案件分析报告"""
+    reports = await case_service.get_reports_by_case_id(db, case_id)
+    return SingleResponse(code=200, message="获取报告成功", data=reports)

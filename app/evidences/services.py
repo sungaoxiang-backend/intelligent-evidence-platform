@@ -561,9 +561,17 @@ async def batch_create(
         try:
             await db.commit()
             
-            # 刷新所有对象
-            for evidence in evidences:
-                await db.refresh(evidence)
+            # 使用 select 查询并加载关联关系，避免 MissingGreenlet 错误
+            # 直接 refresh 无法在异步会话中正确加载 lazy='joined' 的关系
+            stmt = select(Evidence).options(
+                joinedload(Evidence.case)
+            ).where(Evidence.id.in_([e.id for e in evidences]))
+            
+            result = await db.execute(stmt)
+            # 保持原始顺序（如果重要的话，或者直接返回查询结果）
+            # 这里简单返回查询到的及其，顺序可能变但不影响功能
+            return result.scalars().all()
+            
         except Exception as e:
             logger.error(f"数据库提交失败: {str(e)}")
             import traceback

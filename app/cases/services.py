@@ -798,6 +798,7 @@ async def auto_process(
             existing_feature.association_evidence_ids = sorted_evidence_ids
             existing_feature.evidence_features = processed_evidence_features
             existing_feature.features_extracted_at = datetime.now()
+
             existing_feature.evidence_feature_status = "features_extracted"  # 重置为特征已提取状态
             association_evidence_features.append(existing_feature)
         else:
@@ -833,3 +834,44 @@ async def auto_process(
         })
     
     return association_evidence_features
+
+
+# ==================== 案件分析服务 ====================
+
+from app.cases.schemas_analysis import CaseInfoCommitCreate
+from app.cases.models import CaseInfoCommit, CaseAnalysisReport
+
+async def get_commits_by_case_id(db: AsyncSession, case_id: int) -> List[CaseInfoCommit]:
+    """获取所有提交记录"""
+    query = select(CaseInfoCommit).where(CaseInfoCommit.case_id == case_id).order_by(CaseInfoCommit.created_at.desc())
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+async def create_commit(db: AsyncSession, case_id: int, commit_in: CaseInfoCommitCreate) -> CaseInfoCommit:
+    """创建提交记录"""
+    commit_data = commit_in.model_dump()
+    commit = CaseInfoCommit(case_id=case_id, **commit_data)
+    db.add(commit)
+    await db.commit()
+    await db.refresh(commit)
+    return commit
+
+async def delete_commits(db: AsyncSession, case_id: int, commit_ids: List[int]) -> bool:
+    """批量删除提交记录"""
+    query = select(CaseInfoCommit).where(CaseInfoCommit.case_id == case_id, CaseInfoCommit.id.in_(commit_ids))
+    result = await db.execute(query)
+    commits = result.scalars().all()
+    
+    if not commits:
+        return True
+        
+    for commit in commits:
+        await db.delete(commit)
+    await db.commit()
+    return True
+
+async def get_reports_by_case_id(db: AsyncSession, case_id: int) -> List[CaseAnalysisReport]:
+    """获取分析报告"""
+    query = select(CaseAnalysisReport).where(CaseAnalysisReport.case_id == case_id).order_by(CaseAnalysisReport.created_at.desc())
+    result = await db.execute(query)
+    return list(result.scalars().all())

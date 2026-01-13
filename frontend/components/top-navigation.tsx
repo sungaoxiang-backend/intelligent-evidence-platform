@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen } from "lucide-react"
+import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import type { Staff } from "@/lib/config"
@@ -42,6 +42,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
   const isCardFactoryPage = pathname?.includes('/card-factory')
 
   const getActiveModule = () => {
+    if (pathname.startsWith("/case-analysis")) return "case-analysis"
     if (pathname.startsWith("/cases")) return "cases"
     if (pathname.startsWith("/evidences")) return "evidences"
     if (pathname.startsWith("/document-creation")) return "document-creation"
@@ -54,6 +55,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "workbench", label: "工作台", icon: Home, href: "/" },
     { id: "users", label: "用户管理", icon: Users, href: "/users" },
     { id: "cases", label: "案件管理", icon: Scale, href: "/cases" },
+    { id: "case-analysis", label: "案情分析", icon: FileSearch, href: "/case-analysis" },
     { id: "documents", label: "文书模板", icon: FileText, href: "/documents" },
     { id: "document-creation", label: "文书制作", icon: FilePen, href: "/document-creation" },
   ]

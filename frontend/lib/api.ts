@@ -3,7 +3,7 @@ import { API_CONFIG } from "./config"
 
 console.log("API_CONFIG.BASE_URL =", API_CONFIG.BASE_URL)
 
-function getAuthHeader(): Record<string, string> {
+export function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem(API_CONFIG.TOKEN_KEY) || ''
     return token ? { Authorization: `Bearer ${token}` } : {}
@@ -11,66 +11,66 @@ function getAuthHeader(): Record<string, string> {
   return {}
 }
 
-function buildApiUrl(path: string): string {
+export function buildApiUrl(path: string): string {
   return API_CONFIG.BASE_URL + path
 }
 
 export const caseApi = {
-  async getCases(params: PaginationParams & { 
-    user_id?: number; 
+  async getCases(params: PaginationParams & {
+    user_id?: number;
     party_name?: string;
     party_type?: string;
     party_role?: string;
     min_loan_amount?: number;
     max_loan_amount?: number;
-    sort_by?: string; 
-    sort_order?: string 
+    sort_by?: string;
+    sort_order?: string
   }): Promise<{ data: Case[]; pagination?: any }> {
-    const { 
-      page = 1, 
-      pageSize = 20, 
-      search = "", 
-      user_id, 
+    const {
+      page = 1,
+      pageSize = 20,
+      search = "",
+      user_id,
       party_name,
       party_type,
       party_role,
       min_loan_amount,
       max_loan_amount,
-      sort_by, 
-      sort_order 
+      sort_by,
+      sort_order
     } = params
     const skip = (page - 1) * pageSize
     let url = buildApiUrl(`/cases?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
-    
+
     // Add user_id parameter if provided
     if (user_id) {
       url += `&user_id=${user_id}`
     }
-    
+
     // Add party name filter if provided
     if (party_name) {
       url += `&party_name=${encodeURIComponent(party_name)}`
     }
-    
+
     // Add party type filter if provided
     if (party_type) {
       url += `&party_type=${encodeURIComponent(party_type)}`
     }
-    
+
     // Add party role filter if provided
     if (party_role) {
       url += `&party_role=${encodeURIComponent(party_role)}`
     }
-    
+
     // Add loan amount range filters if provided
     if (min_loan_amount !== undefined) {
       url += `&min_loan_amount=${min_loan_amount}`
     }
-    
+
     if (max_loan_amount !== undefined) {
       url += `&max_loan_amount=${max_loan_amount}`
     }
-    
+
     // Add sorting parameters if provided
     if (sort_by) {
       url += `&sort_by=${encodeURIComponent(sort_by)}`
@@ -78,7 +78,7 @@ export const caseApi = {
     if (sort_order) {
       url += `&sort_order=${encodeURIComponent(sort_order)}`
     }
-    
+
     // 添加调试日志
     console.log("🔍 Case API Request:", {
       url,
@@ -86,7 +86,7 @@ export const caseApi = {
       sort_order,
       params
     });
-    
+
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })
@@ -247,7 +247,7 @@ export const caseApi = {
     const { page = 1, pageSize = 100, sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
     let url = buildApiUrl(`/cases/users?skip=${skip}&limit=${pageSize}`)
-    
+
     // Add sorting parameters if provided
     if (sort_by) {
       url += `&sort_by=${encodeURIComponent(sort_by)}`
@@ -255,7 +255,7 @@ export const caseApi = {
     if (sort_order) {
       url += `&sort_order=${encodeURIComponent(sort_order)}`
     }
-    
+
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })
@@ -273,7 +273,7 @@ export const userApi = {
     const { page = 1, pageSize = 20, search = "", sort_by, sort_order } = params
     const skip = (page - 1) * pageSize
     let url = buildApiUrl(`/users?skip=${skip}&limit=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`)
-    
+
     // Add sorting parameters if provided
     if (sort_by) {
       url += `&sort_by=${encodeURIComponent(sort_by)}`
@@ -281,7 +281,7 @@ export const userApi = {
     if (sort_order) {
       url += `&sort_order=${encodeURIComponent(sort_order)}`
     }
-    
+
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })
@@ -396,7 +396,7 @@ export const evidenceApi = {
     if (case_id !== undefined && case_id !== null) url += `&case_id=${case_id}`
     if (sort_by) url += `&sort_by=${encodeURIComponent(sort_by)}`
     if (sort_order) url += `&sort_order=${encodeURIComponent(sort_order)}`
-    
+
     // 添加调试日志
     console.log("🔍 Evidence API Request:", {
       url,
@@ -404,7 +404,7 @@ export const evidenceApi = {
       sort_order,
       params
     });
-    
+
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     })
@@ -418,10 +418,10 @@ export const evidenceApi = {
 
   async getEvidencesByIds(evidenceIds: number[]) {
     if (evidenceIds.length === 0) return { data: [] }
-    
+
     const params = new URLSearchParams()
     evidenceIds.forEach(id => params.append('evidence_ids', id.toString()))
-    
+
     const url = buildApiUrl(`/evidences?${params.toString()}`)
     const resp = await fetch(url, {
       headers: getAuthHeader(),
@@ -543,10 +543,10 @@ export const evidenceApi = {
         'Content-Type': 'application/json',
         ...getAuthHeader()
       },
-      body: JSON.stringify({ 
-        urls, 
-        evidence_type, 
-        consider_correlations 
+      body: JSON.stringify({
+        urls,
+        evidence_type,
+        consider_correlations
       }),
     });
     const result = await resp.json();
@@ -690,12 +690,12 @@ export const evidenceCardApi = {
   }): Promise<{ data: EvidenceCard[]; pagination?: any }> {
     const { case_id, skip = 0, limit = 100, card_type, card_is_associated, sort_by, sort_order } = params;
     let url = buildApiUrl(`/evidences/evidence-cards?case_id=${case_id}&skip=${skip}&limit=${limit}`);
-    
+
     if (card_type) url += `&card_type=${encodeURIComponent(card_type)}`;
     if (card_is_associated !== undefined) url += `&card_is_associated=${card_is_associated}`;
     if (sort_by) url += `&sort_by=${encodeURIComponent(sort_by)}`;
     if (sort_order) url += `&sort_order=${encodeURIComponent(sort_order)}`;
-    
+
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     });
@@ -774,9 +774,9 @@ export const evidenceCardApi = {
   },
 
   // 槽位关联快照相关API
-  async getSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<{ 
-    case_id: number; 
-    template_id: string; 
+  async getSlotAssignmentSnapshot(caseId: number, templateId: string): Promise<{
+    case_id: number;
+    template_id: string;
     assignments: Record<string, number | null>;
     proofread_results: Record<string, Array<{
       slot_name: string;
@@ -883,7 +883,7 @@ export const evidenceCardApi = {
     const resp = await fetch(url, {
       headers: getAuthHeader(),
     });
-    
+
     // 检查响应状态
     if (!resp.ok) {
       const errorText = await resp.text();
@@ -896,7 +896,7 @@ export const evidenceCardApi = {
       }
       throw new Error(errorMsg);
     }
-    
+
     const result = await resp.json();
     if (result.code === 200) {
       return { data: result.data || [] };
@@ -1048,7 +1048,7 @@ export const taskApi = {
         "Content-Type": "application/json",
         ...getAuthHeader(),
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         evidence_id: evidenceId.toString(),
         evidence_type: evidenceType
       }),
@@ -1069,7 +1069,7 @@ export const taskApi = {
         "Content-Type": "application/json",
         ...getAuthHeader(),
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         case_id: caseId.toString(),
         evidence_ids: evidenceIds.map(id => id.toString())
       }),
@@ -1092,7 +1092,7 @@ export const taskApi = {
         "Content-Type": "application/json",
         ...getAuthHeader(),
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         case_id: caseId.toString(),
         evidence_ids: evidenceIds.map(id => id.toString())
       }),
@@ -1115,7 +1115,7 @@ export const taskApi = {
         "Content-Type": "application/json",
         ...getAuthHeader(),
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         case_id: caseId.toString(),
         evidence_ids: evidenceIds.map(id => id.toString())
       }),
