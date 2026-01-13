@@ -367,6 +367,21 @@ async def create_case_commit(
     commit = await case_service.create_commit(db, case_id, commit_in)
     return SingleResponse(code=201, message="提交成功", data=commit)
 
+
+@router.put("/{case_id}/commits/{commit_id}", response_model=SingleResponse[CaseInfoCommit])
+async def update_case_commit(
+    case_id: int,
+    commit_id: int,
+    commit_in: CaseInfoCommitCreate,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """更新案件提交记录"""
+    commit = await case_service.update_commit(db, case_id, commit_id, commit_in)
+    if not commit:
+        raise HTTPException(status_code=404, detail="提交记录不存在")
+    return SingleResponse(code=200, message="更新成功", data=commit)
+
 @router.post("/{case_id}/commits/batch-delete", response_model=SingleResponse[bool])
 async def delete_case_commits(
     case_id: int,
@@ -384,6 +399,88 @@ async def get_case_reports(
     db: DBSession,
     current_staff: Annotated[Staff, Depends(get_current_staff)]
 ):
-    """获取案件分析报告"""
+    """获取案件分析报告列表"""
     reports = await case_service.get_reports_by_case_id(db, case_id)
     return SingleResponse(code=200, message="获取报告成功", data=reports)
+
+
+from app.cases.schemas_analysis import TriggerAnalysisRequest, TriggerAnalysisResponse
+
+
+@router.post("/{case_id}/analyze", response_model=SingleResponse[dict])
+async def trigger_case_analysis(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)],
+    request: TriggerAnalysisRequest = None
+):
+    """
+    触发案件分析
+    
+    提交后会异步执行 AI 分析，返回报告ID和任务ID用于状态跟踪。
+    
+    Args:
+        case_id: 案件ID
+        request: 触发请求，包含触发类型和引用的 commit IDs（可选）
+        
+    Returns:
+        包含 report_id, task_id, status, message 的响应
+    """
+    try:
+        # 解析请求参数
+        trigger_type = "manual"
+        commit_ids = None
+        
+        if request:
+            trigger_type = request.trigger_type
+            commit_ids = request.commit_ids if request.commit_ids else None
+        
+        # 触发分析
+        result = await case_service.trigger_case_analysis(
+            db=db,
+            case_id=case_id,
+            trigger_type=trigger_type,
+            ref_commit_ids=commit_ids
+        )
+        
+        return SingleResponse(code=200, message="分析任务已提交", data=result)
+        
+    except Exception as e:
+        logger.error(f"触发案件分析失败: {e}")
+        raise HTTPException(status_code=500, detail=f"触发分析失败: {str(e)}")
+
+
+@router.get("/{case_id}/reports/latest", response_model=SingleResponse[CaseAnalysisReport])
+async def get_latest_case_report(
+    case_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """
+    获取案件的最新完成报告
+    
+    返回最近一次成功完成的分析报告。
+    """
+    report = await case_service.get_latest_report_by_case_id(db, case_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="暂无完成的分析报告")
+    return SingleResponse(code=200, message="获取最新报告成功", data=report)
+
+
+@router.get("/{case_id}/reports/{report_id}", response_model=SingleResponse[CaseAnalysisReport])
+async def get_case_report_by_id(
+    case_id: int,
+    report_id: int,
+    db: DBSession,
+    current_staff: Annotated[Staff, Depends(get_current_staff)]
+):
+    """
+    根据ID获取特定报告
+    """
+    from app.cases.models import CaseAnalysisReport as CaseAnalysisReportModel
+    
+    report = await db.get(CaseAnalysisReportModel, report_id)
+    if not report or report.case_id != case_id:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    return SingleResponse(code=200, message="获取报告成功", data=report)
+

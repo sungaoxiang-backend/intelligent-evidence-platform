@@ -27,6 +27,7 @@ from .example_tasks import example_task, add_numbers, process_document
 from .document_tasks import process_document_task, analyze_document_task
 from .evidence_tasks import analyze_evidence_task, generate_evidence_chain_task
 from .real_evidence_tasks import analyze_evidences_task, batch_analyze_evidences_task, analyze_association_evidences_task
+from .case_analysis_tasks import run_case_analysis_task
 
 # 注册任务路由端点
 @router.post("/example")

@@ -848,12 +848,63 @@ async def get_commits_by_case_id(db: AsyncSession, case_id: int) -> List[CaseInf
     return list(result.scalars().all())
 
 async def create_commit(db: AsyncSession, case_id: int, commit_in: CaseInfoCommitCreate) -> CaseInfoCommit:
-    """创建提交记录"""
+    """创建提交记录并自动触发分析"""
     commit_data = commit_in.model_dump()
     commit = CaseInfoCommit(case_id=case_id, **commit_data)
     db.add(commit)
     await db.commit()
     await db.refresh(commit)
+    
+    # 自动触发案件分析
+    logger.info(f"新提交记录已创建 (ID: {commit.id})，自动触发案件分析...")
+    try:
+        await trigger_case_analysis(
+            db=db,
+            case_id=case_id,
+            trigger_type="commit_added",
+            ref_commit_ids=None  # 使用全量 commits
+        )
+    except Exception as e:
+        # 分析触发失败不影响提交创建
+        logger.error(f"自动触发案件分析失败: {e}")
+    
+    return commit
+
+
+async def update_commit(db: AsyncSession, case_id: int, commit_id: int, commit_in: CaseInfoCommitCreate) -> Optional[CaseInfoCommit]:
+    """更新提交记录并自动触发分析"""
+    # 查找提交记录
+    query = select(CaseInfoCommit).where(
+        CaseInfoCommit.id == commit_id,
+        CaseInfoCommit.case_id == case_id
+    )
+    result = await db.execute(query)
+    commit = result.scalars().first()
+    
+    if not commit:
+        return None
+    
+    # 更新字段
+    update_data = commit_in.model_dump()
+    for field, value in update_data.items():
+        setattr(commit, field, value)
+    
+    await db.commit()
+    await db.refresh(commit)
+    
+    # 自动触发案件分析
+    logger.info(f"提交记录已更新 (ID: {commit.id})，自动触发案件分析...")
+    try:
+        await trigger_case_analysis(
+            db=db,
+            case_id=case_id,
+            trigger_type="commit_updated",
+            ref_commit_ids=None  # 使用全量 commits
+        )
+    except Exception as e:
+        # 分析触发失败不影响更新
+        logger.error(f"自动触发案件分析失败: {e}")
+    
     return commit
 
 async def delete_commits(db: AsyncSession, case_id: int, commit_ids: List[int]) -> bool:
@@ -875,3 +926,161 @@ async def get_reports_by_case_id(db: AsyncSession, case_id: int) -> List[CaseAna
     query = select(CaseAnalysisReport).where(CaseAnalysisReport.case_id == case_id).order_by(CaseAnalysisReport.created_at.desc())
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+async def create_analysis_report(
+    db: AsyncSession,
+    case_id: int,
+    trigger_type: str = "manual",
+    ref_commit_ids: List[int] = None
+) -> CaseAnalysisReport:
+    """
+    创建分析报告记录（初始状态为 pending）
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        trigger_type: 触发类型
+        ref_commit_ids: 引用的 commits ID 列表
+        
+    Returns:
+        新创建的报告记录
+    """
+    from app.cases.models import AnalysisReportStatus
+    
+    report = CaseAnalysisReport(
+        case_id=case_id,
+        trigger_type=trigger_type,
+        ref_commit_ids=ref_commit_ids or [],
+        status=AnalysisReportStatus.PENDING,
+        content=None
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    
+    logger.info(f"创建分析报告记录: ID={report.id}, 案件ID={case_id}, 触发类型={trigger_type}")
+    return report
+
+
+async def trigger_case_analysis(
+    db: AsyncSession,
+    case_id: int,
+    trigger_type: str = "manual",
+    ref_commit_ids: List[int] = None
+) -> dict:
+    """
+    触发案件分析（异步执行）
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        trigger_type: 触发类型 (commit_added, commit_updated, commit_removed, manual)
+        ref_commit_ids: 引用的 commits ID 列表
+        
+    Returns:
+        包含 report_id 和 task_id 的字典
+    """
+    from app.core.celery_app import celery_app
+    
+    # 1. 检查案件是否存在
+    case = await get_by_id(db, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"案件不存在: {case_id}")
+    
+    # 2. 获取全量 commits（如果未指定）
+    if not ref_commit_ids:
+        commits = await get_commits_by_case_id(db, case_id)
+        ref_commit_ids = [c.id for c in commits]
+    
+    # 3. 创建报告记录
+    report = await create_analysis_report(
+        db=db,
+        case_id=case_id,
+        trigger_type=trigger_type,
+        ref_commit_ids=ref_commit_ids
+    )
+    
+    # 4. 发送 Celery 任务
+    task = celery_app.send_task(
+        'app.tasks.case_analysis_tasks.run_case_analysis_task',
+        kwargs={
+            'case_id': case_id,
+            'report_id': report.id,
+            'trigger_type': trigger_type,
+            'ref_commit_ids': ref_commit_ids
+        }
+    )
+    
+    logger.info(f"触发案件分析任务: 案件ID={case_id}, 报告ID={report.id}, 任务ID={task.id}")
+    
+    return {
+        "report_id": report.id,
+        "task_id": task.id,
+        "status": "submitted",
+        "message": f"案件分析任务已提交，共引用 {len(ref_commit_ids)} 条提交记录"
+    }
+
+
+async def update_analysis_report(
+    db: AsyncSession,
+    report_id: int,
+    content: Optional[dict] = None,
+    status: Optional[str] = None,
+    error_message: Optional[str] = None
+) -> Optional[CaseAnalysisReport]:
+    """
+    更新分析报告
+    
+    Args:
+        db: 数据库会话
+        report_id: 报告ID
+        content: 报告内容
+        status: 状态
+        error_message: 错误信息
+        
+    Returns:
+        更新后的报告记录
+    """
+    report = await db.get(CaseAnalysisReport, report_id)
+    if not report:
+        return None
+    
+    if content is not None:
+        report.content = content
+    if status is not None:
+        report.status = status
+        if status == "completed":
+            report.completed_at = datetime.now()
+    if error_message is not None:
+        report.error_message = error_message
+    
+    await db.commit()
+    await db.refresh(report)
+    return report
+
+
+async def get_latest_report_by_case_id(db: AsyncSession, case_id: int) -> Optional[CaseAnalysisReport]:
+    """
+    获取案件的最新完成报告
+    
+    Args:
+        db: 数据库会话
+        case_id: 案件ID
+        
+    Returns:
+        最新的已完成报告，如果没有则返回 None
+    """
+    from app.cases.models import AnalysisReportStatus
+    
+    query = (
+        select(CaseAnalysisReport)
+        .where(
+            CaseAnalysisReport.case_id == case_id,
+            CaseAnalysisReport.status == AnalysisReportStatus.COMPLETED
+        )
+        .order_by(CaseAnalysisReport.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(query)
+    return result.scalars().first()

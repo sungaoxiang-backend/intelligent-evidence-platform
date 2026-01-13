@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     DEEPSEEK_REASONER_MODEL: str
     DEEPSEEK_BASE_URL: str
 
+    # Anthropic/Claude configuration (使用私有认证)
+    ANTHROPIC_AUTH_TOKEN: str = ""
+    ANTHROPIC_BASE_URL: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+
     # Wecom
     WECOM_CORP_ID: str
     WECOM_CORP_SECRET: str

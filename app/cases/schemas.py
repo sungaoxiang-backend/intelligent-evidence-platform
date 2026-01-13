@@ -295,3 +295,149 @@ class AutoProcessResponse(BaseModel):
     
 class CaseWithAssociationEvidenceFeaturesResponse(CaseWithUser):
     association_evidence_features: Optional[List[AssociationEvidenceFeatureGroup]]
+
+
+class StatementResource(BaseModel):
+    """案件陈述资源, 处理观点维度时使用"""
+    statement: str = Field(description="案件陈述资源")
+
+
+class MaterialResource(BaseModel):
+    """案件材料资源, 处理证据维度时使用"""
+    materials: List[str] = Field(description="案件材料资源")
+
+
+class LegalBasisResource(BaseModel):
+    """法律依据资源, 处理法律维度时使用"""
+    source_channel: str = Field(description="法律依据来源渠道：web_search, built_in, system_resources")
+    basis: str = Field(description="法律法条依据")
+    source_from: Optional[str] = Field(default=None, description="法律法条依据来源: url, built_in, path")
+    priority: int = Field(default=1, description="优先级：1最高(内置), 2中(系统资源), 3最低(网络搜索)")
+
+
+class SystemResource(BaseModel):
+    """论点维度处理引用系统资源"""
+    skills: List[str] = Field(default=[], description="系统资源技能")
+    assets: List[str] = Field(default=[], description="系统资源资产")
+
+
+class CaseResources(BaseModel):
+    """案件引用资源（陈述或材料）"""
+    statement: Optional[str] = Field(default=None, description="引用的陈述内容")
+    materials: Optional[List[str]] = Field(default=None, description="引用的材料列表")
+
+
+class DimensionResult(BaseModel):
+    """论点维度处理结果（观点/证据维度）"""
+    question: str = Field(description="维度预设问题")
+    answer: str = Field(description="维度预设问题回答")
+    reason: str = Field(description="维度预设问题回答原因")
+    refs_case_resources: Optional[CaseResources] = Field(default=None, description="引用的案件资源")
+
+
+class LegalDimensionResult(BaseModel):
+    """法律维度处理结果"""
+    question: str = Field(description="法律维度预设问题")
+    answer: str = Field(description="法律维度问题回答")
+    reason: str = Field(description="法律维度回答原因")
+    refs_legal_resources: List[LegalBasisResource] = Field(description="引用的法律依据列表")
+
+
+class ProbabilityInfo(BaseModel):
+    """高度盖然性评估信息"""
+    positive: str = Field(description="积极信息（已证明的有利事实）")
+    negative: str = Field(description="消极信息（证据不足的方面）")
+    conflict: str = Field(default="", description="冲突信息（证据矛盾的方面）")
+    confidence_score: Optional[float] = Field(default=None, description="置信度分数 0-1")
+    confidence_level: Optional[str] = Field(default=None, description="置信度级别: low/medium/high")
+
+
+class ConclusionDimensionResult(BaseModel):
+    """论点结论维度处理结果"""
+    answer: str = Field(description="结论维度回答")
+    probability_info: ProbabilityInfo = Field(description="高度盖然性评估")
+
+
+# ============ 维度结构 ============
+
+class ReasoningSection(BaseModel):
+    """推理维度（观点/证据）"""
+    refs_system_resources: SystemResource = Field(description="引用的系统资源")
+    results: List[DimensionResult] = Field(description="推理结果列表（支持多结论）")
+
+
+class LegalSection(BaseModel):
+    """法律维度"""
+    refs_system_resources: SystemResource = Field(description="引用的系统资源")
+    results: LegalDimensionResult = Field(description="法律分析结果")
+
+
+class ConclusionSection(BaseModel):
+    """结论维度"""
+    refs_system_resources: SystemResource = Field(description="引用的系统资源")
+    results: List[ConclusionDimensionResult] = Field(description="结论结果列表（支持多结论）")
+
+
+# ============ 论点块结构 ============
+
+class ArgumentBlock(BaseModel):
+    """标准论点块（4个维度）"""
+    view_points: ReasoningSection = Field(description="观点维度")
+    evidences: ReasoningSection = Field(description="证据维度")
+    laws: LegalSection = Field(description="法律维度")
+    conclusion: ConclusionSection = Field(description="结论维度")
+
+
+# ============ 特殊论点结构 ============
+
+class PartiesArgument(BaseModel):
+    """当事人信息论点（嵌套：原告/被告）"""
+    plaintiff: ArgumentBlock = Field(description="原告信息论点块")
+    defendant: ArgumentBlock = Field(description="被告信息论点块")
+
+
+class RightsObligationsArgument(BaseModel):
+    """权利与义务变化过程论点（嵌套：建立/履行/打破）"""
+    formation: ArgumentBlock = Field(description="权利义务建立阶段")
+    performance: ArgumentBlock = Field(description="权利义务履行阶段")
+    breach: ArgumentBlock = Field(description="权利义务打破阶段（违约）")
+
+
+# ============ 报告结论和追问 ============
+
+class LegalReportPursuitQuestion(BaseModel):
+    """案件论证报告追问问题"""
+    question: str = Field(description="追问问题内容")
+    type: str = Field(description="追问问题类型: guidance(引导型), risk_warning(风险提示), clarification(澄清型)")
+
+
+class LegalReportConclusion(BaseModel):
+    """案件论证报告总结论"""
+    refs_system_resources: SystemResource = Field(description="引用的系统资源")
+    summary: str = Field(description="报告一句话总结")
+    probability_info: ProbabilityInfo = Field(description="总体高度盖然性评估")
+    pursuit_questions: List[LegalReportPursuitQuestion] = Field(
+        description="追问问题列表（恰好3个）",
+        min_length=3,
+        max_length=3
+    )
+
+
+# ============ 完整报告结构 ============
+
+class LegalReport(BaseModel):
+    """案件论证报告（5大论点 + 总结论）"""
+    case_id: str = Field(description="案件ID")
+    case_title: str = Field(description="案件标题")
+    
+    # 5大论点
+    cause_of_action: ArgumentBlock = Field(description="论点1: 案由")
+    parties: PartiesArgument = Field(description="论点2: 当事人信息（原告/被告）")
+    jurisdiction: ArgumentBlock = Field(description="论点3: 管辖法院")
+    claims: ArgumentBlock = Field(description="论点4: 诉讼请求")
+    rights_and_obligations_process: RightsObligationsArgument = Field(
+        description="论点5: 权利与义务变化过程（建立/履行/打破）"
+    )
+    
+    # 总结论
+    conclusion: LegalReportConclusion = Field(description="报告总结论")

@@ -157,6 +157,22 @@ class CaseInfoCommit(Base):
     case = relationship("Case", back_populates="case_info_commits")
     
 
+class AnalysisTriggerType(str, Enum):
+    """分析触发类型枚举"""
+    COMMIT_ADDED = "commit_added"  # 新增提交
+    COMMIT_UPDATED = "commit_updated"  # 更新提交
+    COMMIT_REMOVED = "commit_removed"  # 移除提交
+    MANUAL = "manual"  # 手动触发
+
+
+class AnalysisReportStatus(str, Enum):
+    """分析报告状态枚举"""
+    PENDING = "pending"  # 等待处理
+    PROCESSING = "processing"  # 处理中
+    COMPLETED = "completed"  # 已完成
+    FAILED = "failed"  # 失败
+
+
 class CaseAnalysisReport(Base):
     """案件分析报告模型"""
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -164,8 +180,29 @@ class CaseAnalysisReport(Base):
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
     
     # 报告内容
-    content: Mapped[Dict] = mapped_column(JSONB, nullable=False)  # 分析报告内容
+    content: Mapped[Optional[Dict]] = mapped_column(JSONB, nullable=True)  # 分析报告内容（可为空，处理中时）
+    
+    # 触发元信息
+    trigger_type: Mapped[str] = mapped_column(
+        String(30), 
+        default=AnalysisTriggerType.MANUAL,
+        nullable=False
+    )  # 触发类型
+    ref_commit_ids: Mapped[List[int]] = mapped_column(
+        JSONB, 
+        default=[], 
+        nullable=False
+    )  # 引用的 commits ID 列表
+    
+    # 状态追踪
+    status: Mapped[str] = mapped_column(
+        String(20), 
+        default=AnalysisReportStatus.PENDING,
+        nullable=False
+    )  # 报告状态
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 错误信息
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # 完成时间
 
     case = relationship("Case", back_populates="case_analysis_reports")
