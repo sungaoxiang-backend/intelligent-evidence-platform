@@ -296,16 +296,18 @@ class CaseAnalysisAgent:
                 logger.info("已将 ANTHROPIC_AUTH_TOKEN 映射到 ANTHROPIC_API_KEY 环境变量")
             
             try:
-                # 配置 Agent 选项（参照用户示例 tmp_app.py）
-                # 关键：开启 include_partial_messages 以获取实时流
                 agent_options_kwargs = {
                     "env": env_vars,
+                    "cwd": os.getcwd(),  # Use current working directory
+                    "add_dirs": [os.getcwd()],  # Add project root
+                    "setting_sources": ["project"],  # Enable CLAUDE.md loading
                     "system_prompt": self.system_prompt,
-                    "max_turns": 1,
-                    # ⚠️ 关键修正：开启部分消息，否则思考过程不会实时流式传输，看起来像卡住
+                    # Enable tools matching raw_app.py
+                    "allowed_tools": ["Skill", "computer", "bash", "text_editor"],
                     "include_partial_messages": True,
-                    # 设置合理的思考预算
                     "max_thinking_tokens": 8000,
+                    # Remove max_turns=1 restriction to allow tool use
+                    "max_turns": 20, 
                 }
                 
                 options = ClaudeAgentOptions(**agent_options_kwargs)
@@ -452,46 +454,98 @@ class CaseAnalysisAgent:
             LegalReport 格式的字典
         """
         try:
-            # 尝试直接解析 JSON
-            if "```json" in response:
-                json_str = response.split("```json")[1].split("```")[0].strip()
-            elif "```" in response:
-                json_str = response.split("```")[1].split("```")[0].strip()
-            else:
-                # 尝试找到 JSON 对象
-                start_idx = response.find("{")
-                end_idx = response.rfind("}")
-                if start_idx != -1 and end_idx != -1:
-                    json_str = response[start_idx:end_idx + 1]
-                else:
-                    json_str = response
+            logger.info("============== DEBUG: RAW RESPONSE START ==============")
+            logger.info(response)
+            logger.info("============== DEBUG: RAW RESPONSE END ==============")
             
-            report_data = json.loads(json_str)
+            # Helper to extract all JSON candidates
+            import re
+            candidates = []
             
-            # 确保必要字段存在
-            report_data["case_id"] = str(case_id)
-            if "case_title" not in report_data:
-                # 根据案件类型生成标题
-                case_type_map = {
-                    "debt": "借款纠纷案",
-                    "contract": "合同纠纷案"
-                }
-                case_type = case_info.get("case_type", "")
-                title = case_type_map.get(case_type, "民事纠纷案")
-                report_data["case_title"] = f"案件#{case_id} - {title}"
+            # 1. Extract from ```json blocks
+            json_blocks = re.findall(r'```json\s*([\s\S]*?)\s*```', response)
+            candidates.extend([b.strip() for b in json_blocks])
             
-            # 验证报告格式
-            LegalReport.model_validate(report_data)
-            
-            return report_data
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON 解析失败: {e}")
-            logger.debug(f"原始响应: {response[:500]}...")
-            raise ValueError(f"无法解析 Claude 响应为 JSON: {e}")
+            # 2. Extract from ``` blocks (without language specifier)
+            plain_blocks = re.findall(r'```\s*([\s\S]*?)\s*```', response)
+            # Filter out blocks that were likely already caught as json blocks or aren't json
+            for block in plain_blocks:
+                block = block.strip()
+                if block not in candidates and block.startswith('{') and block.endswith('}'):
+                    candidates.append(block)
+
+            # 3. Always try to find the last valid JSON object using brace balancing
+            # This handles cases where the final JSON is not in a code block, even if other blocks exist.
+            try:
+                # Find the last '}'
+                last_brace_idx = response.rfind("}")
+                if last_brace_idx != -1:
+                    balance = 0
+                    start_idx = -1
+                    # Iterate backwards from string end to find matching '{'
+                    for i in range(last_brace_idx, -1, -1):
+                        char = response[i]
+                        if char == '}':
+                            balance += 1
+                        elif char == '{':
+                            balance -= 1
+                            if balance == 0:
+                                start_idx = i
+                                break
+                    
+                    if start_idx != -1:
+                        potential_json = response[start_idx:last_brace_idx + 1]
+                        if potential_json not in candidates:
+                            candidates.append(potential_json)
+            except Exception as e:
+                logger.warning(f"Brace balancing extraction failed: {e}")
+
+            # If still absolutely no candidates, try the naive full-string approach (unlikely to work if mixed content)
+            if not candidates:
+                 json_start = response.find("{")
+                 json_end = response.rfind("}")
+                 if json_start != -1 and json_end != -1:
+                     candidates.append(response[json_start:json_end+1])
+
+            if not candidates:
+                logger.error("No JSON candidates found in response.")
+                raise ValueError("No JSON candidates found.")
+
+            # Iterate candidates in reverse (assuming final output is the report)
+            last_error = None
+            for i, json_str in enumerate(reversed(candidates)):
+                try:
+                    logger.info(f"Trying to parse candidate #{len(candidates)-i}...")
+                    report_data = json.loads(json_str)
+                    
+                    # 确保必要字段存在
+                    report_data["case_id"] = str(case_id)
+                    if "case_title" not in report_data:
+                         case_type_map = {
+                            "debt": "借款纠纷案",
+                            "contract": "合同纠纷案"
+                         }
+                         case_type = case_info.get("case_type", "")
+                         title = case_type_map.get(case_type, "民事纠纷案")
+                         report_data["case_title"] = f"案件#{case_id} - {title}"
+                    
+                    # 验证报告格式
+                    LegalReport.model_validate(report_data)
+                    
+                    logger.info(f"✅ Successfully validated candidate #{len(candidates)-i}")
+                    return report_data
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Candidate #{len(candidates)-i} validation failed: {e}")
+                    last_error = e
+                    continue
+
+            # If we reach here, no candidate worked
+            logger.error("All JSON candidates failed validation.")
+            raise ValueError(f"无法从响应中解析出有效的 LegalReport: {last_error}")
+
         except Exception as e:
-            logger.error(f"报告格式验证失败: {e}")
-            raise ValueError(f"报告格式不符合 LegalReport schema: {e}")
+            logger.error(f"解析过程发生未知错误: {e}")
+            raise ValueError(f"解析响应失败: {e}")
 
 
 # 单例实例

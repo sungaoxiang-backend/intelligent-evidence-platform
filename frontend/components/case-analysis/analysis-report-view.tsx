@@ -129,9 +129,9 @@ const DimensionView = ({
                             )}
 
                             {/* Legal Sources */}
-                            {type === 'legal' && item.refs_legal_resources && (
+                            {type === 'legal' && item.refs_legal_resources?.legal_basis && (
                                 <div className="mt-2 bg-gray-50 p-2 text-xs text-gray-600 space-y-1 rounded-sm">
-                                    {item.refs_legal_resources.map((res: any, i: number) => (
+                                    {item.refs_legal_resources.legal_basis.map((res: any, i: number) => (
                                         <div key={i} className="flex gap-2">
                                             <span className="font-semibold text-gray-500">[{res.source_channel}]</span>
                                             <span>{res.basis}</span>
@@ -141,20 +141,20 @@ const DimensionView = ({
                             )}
 
                             {/* Probability Info */}
-                            {type === 'conclusion' && item.probability_info && (
+                            {type === 'conclusion' && item.probability_assessment && (
                                 <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs border-t border-dashed pt-2">
                                     <div>
                                         <span className="font-semibold text-gray-600 block mb-0.5">积极因素 (+)</span>
-                                        <span className="text-gray-800">{item.probability_info.positive}</span>
+                                        <span className="text-gray-800">{item.probability_assessment.positive}</span>
                                     </div>
                                     <div>
                                         <span className="font-semibold text-gray-600 block mb-0.5">消极因素 (-)</span>
-                                        <span className="text-gray-800">{item.probability_info.negative}</span>
+                                        <span className="text-gray-800">{item.probability_assessment.negative}</span>
                                     </div>
-                                    {item.probability_info.conflict && (
+                                    {item.probability_assessment.conflict && (
                                         <div className="col-span-full">
                                             <span className="font-semibold text-orange-700 block mb-0.5">矛盾点 (!)</span>
-                                            <span className="text-gray-700">{item.probability_info.conflict}</span>
+                                            <span className="text-gray-700">{item.probability_assessment.conflict}</span>
                                         </div>
                                     )}
                                 </div>
@@ -206,28 +206,28 @@ export function AnalysisReportView({ content }: AnalysisReportViewProps) {
 
                     <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 border-t border-gray-200 pt-3">
                         <ConfidenceIndicator
-                            level={content.conclusion.probability_info.confidence_level}
-                            score={content.conclusion.probability_info.confidence_score}
+                            level={content.conclusion.probability_assessment.confidence_level}
+                            score={content.conclusion.probability_assessment.confidence_score}
                         />
                         <div className="flex gap-2 text-xs">
                             <span className="font-semibold text-gray-700">有利:</span>
-                            <span className="text-gray-600 truncate max-w-[200px]" title={content.conclusion.probability_info.positive}>{content.conclusion.probability_info.positive}</span>
+                            <span className="text-gray-600 truncate max-w-[200px]" title={content.conclusion.probability_assessment.positive}>{content.conclusion.probability_assessment.positive}</span>
                         </div>
                         <div className="flex gap-2 text-xs">
                             <span className="font-semibold text-gray-700">不利:</span>
-                            <span className="text-gray-600 truncate max-w-[200px]" title={content.conclusion.probability_info.negative}>{content.conclusion.probability_info.negative}</span>
+                            <span className="text-gray-600 truncate max-w-[200px]" title={content.conclusion.probability_assessment.negative}>{content.conclusion.probability_assessment.negative}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Pursuit Questions */}
-                {content.conclusion.pursuit_questions && content.conclusion.pursuit_questions.length > 0 && (
+                {content.conclusion.follow_up_questions && content.conclusion.follow_up_questions.length > 0 && (
                     <div className="space-y-3 pt-2">
                         <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
                             <AlertCircle className="w-4 h-4" /> 建议追问 / 风险提示
                         </h3>
                         <ul className="space-y-2 text-sm text-gray-700 list-disc pl-5">
-                            {content.conclusion.pursuit_questions.slice(0, 10).map((q, i) => (
+                            {content.conclusion.follow_up_questions.slice(0, 10).map((q, i) => (
                                 <li key={i} className="pl-1">
                                     <span className="font-medium text-gray-900">{q.question}</span>
                                     <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-1 py-0.5 rounded">

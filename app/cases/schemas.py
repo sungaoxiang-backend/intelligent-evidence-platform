@@ -315,6 +315,10 @@ class LegalBasisResource(BaseModel):
     priority: int = Field(default=1, description="优先级：1最高(内置), 2中(系统资源), 3最低(网络搜索)")
 
 
+class LegalResources(BaseModel):
+    """法律依据资源包装器"""
+    legal_basis: List[LegalBasisResource] = Field(description="法律依据列表")
+
 class SystemResource(BaseModel):
     """论点维度处理引用系统资源"""
     skills: List[str] = Field(default=[], description="系统资源技能")
@@ -340,10 +344,10 @@ class LegalDimensionResult(BaseModel):
     question: str = Field(description="法律维度预设问题")
     answer: str = Field(description="法律维度问题回答")
     reason: str = Field(description="法律维度回答原因")
-    refs_legal_resources: List[LegalBasisResource] = Field(description="引用的法律依据列表")
+    refs_legal_resources: LegalResources = Field(description="引用的法律依据列表")
 
 
-class ProbabilityInfo(BaseModel):
+class ProbabilityAssessment(BaseModel):
     """高度盖然性评估信息"""
     positive: str = Field(description="积极信息（已证明的有利事实）")
     negative: str = Field(description="消极信息（证据不足的方面）")
@@ -355,7 +359,7 @@ class ProbabilityInfo(BaseModel):
 class ConclusionDimensionResult(BaseModel):
     """论点结论维度处理结果"""
     answer: str = Field(description="结论维度回答")
-    probability_info: ProbabilityInfo = Field(description="高度盖然性评估")
+    probability_assessment: ProbabilityAssessment = Field(description="高度盖然性评估")
 
 
 # ============ 维度结构 ============
@@ -405,7 +409,7 @@ class RightsObligationsArgument(BaseModel):
 
 # ============ 报告结论和追问 ============
 
-class LegalReportPursuitQuestion(BaseModel):
+class FollowUpQuestion(BaseModel):
     """案件论证报告追问问题"""
     question: str = Field(description="追问问题内容")
     type: str = Field(description="追问问题类型: guidance(引导型), risk_warning(风险提示), clarification(澄清型)")
@@ -415,8 +419,8 @@ class LegalReportConclusion(BaseModel):
     """案件论证报告总结论"""
     refs_system_resources: SystemResource = Field(description="引用的系统资源")
     summary: str = Field(description="报告一句话总结")
-    probability_info: ProbabilityInfo = Field(description="总体高度盖然性评估")
-    pursuit_questions: List[LegalReportPursuitQuestion] = Field(
+    probability_assessment: ProbabilityAssessment = Field(description="总体高度盖然性评估")
+    follow_up_questions: List[FollowUpQuestion] = Field(
         description="追问问题列表（恰好3个）",
         min_length=3,
         max_length=3

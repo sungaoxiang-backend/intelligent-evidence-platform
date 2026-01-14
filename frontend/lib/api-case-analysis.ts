@@ -31,6 +31,10 @@ export interface LegalBasisResource {
     priority: number
 }
 
+export interface LegalResources {
+    legal_basis: LegalBasisResource[]
+}
+
 export interface DimensionResult {
     question: string
     answer: string
@@ -42,12 +46,12 @@ export interface LegalDimensionResult {
     question: string
     answer: string
     reason: string
-    refs_legal_resources: LegalBasisResource[]
+    refs_legal_resources: LegalResources
 }
 
 export interface ConclusionDimensionResult {
     answer: string
-    probability_info: {
+    probability_assessment: {
         positive: string
         negative: string
         conflict: string
@@ -100,14 +104,14 @@ export interface LegalReportContent {
     conclusion: {
         refs_system_resources: SystemResource
         summary: string
-        probability_info: {
+        probability_assessment: {
             positive: string
             negative: string
             conflict: string
             confidence_score?: number
             confidence_level?: string
         }
-        pursuit_questions: {
+        follow_up_questions: {
             question: string
             type: string
         }[]

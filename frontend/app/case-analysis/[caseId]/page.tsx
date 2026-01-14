@@ -297,7 +297,25 @@ export default function CaseAnalysisDetailPage() {
     }
 
     const handleViewReportVersion = async (commit: CaseInfoCommit) => {
-        // Find reports that include this commit
+        // Find reports where this commit is the latest one (highest ID) in the reference list
+        // This ensures we view the report that was generated specifically for this commit state
+        const specificReports = reports.filter(r =>
+            r.status === 'completed' &&
+            r.ref_commit_ids.includes(commit.id) &&
+            Math.max(...r.ref_commit_ids) === commit.id
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+        if (specificReports.length > 0) {
+            setActiveReport(specificReports[0])
+            toast({
+                title: "报告已切换",
+                description: `查看基于提交 #${commit.id} 的分析报告`
+            })
+            return
+        }
+
+        // Fallback: if no specific report found (maybe logic changed or special case), 
+        // try to find any report containing this commit
         const relevantReports = reports.filter(r =>
             r.ref_commit_ids.includes(commit.id) && r.status === 'completed'
         ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -306,7 +324,7 @@ export default function CaseAnalysisDetailPage() {
             setActiveReport(relevantReports[0])
             toast({
                 title: "报告已切换",
-                description: `查看基于提交 #${commit.id} 的分析报告`
+                description: `查看包含提交 #${commit.id} 的最新报告`
             })
         } else {
             toast({
