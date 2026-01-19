@@ -48,7 +48,7 @@ class DocxProcessor:
             请以JSON格式返回识别结果。
             """,
             response_model=PlaceholderIdentificationResults,
-            show_tool_calls=True,
+
             debug_mode=True
         )
 

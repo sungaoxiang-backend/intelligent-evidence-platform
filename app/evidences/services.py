@@ -15,7 +15,7 @@ from app.evidences.models import EvidenceCard, Evidence, EvidenceCardSlotAssignm
 
 from loguru import logger
 from agno.media import Image
-from agno.run.response import RunResponse
+from agno.agent import RunOutput as RunResponse
 from app.evidences.models import Evidence, EvidenceStatus
 from app.cases.models import Case
 from app.evidences.schemas import (

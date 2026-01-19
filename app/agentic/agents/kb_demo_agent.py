@@ -11,7 +11,7 @@ class KBDemoAgent:
             role="你是客服专家",
             knowledge=knowledge,
             search_knowledge=True,
-            show_tool_calls=True,
+
             debug_mode=True
         )
 

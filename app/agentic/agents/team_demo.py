@@ -67,7 +67,7 @@ team = Team(
     """,
     response_model=EvidenceClassifiResults,
 
-    show_tool_calls=True,
+
     show_members_responses=True,
     debug_mode=True
 

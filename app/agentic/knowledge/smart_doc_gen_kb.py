@@ -1,5 +1,5 @@
 from pathlib import Path
-from agno.knowledge.markdown import MarkdownKnowledgeBase
+from agno.knowledge import Knowledge as KnowledgeBase
 from agno.vectordb.pgvector import PgVector, SearchType
 from app.core.config import settings
 from app.agentic.rag.embedder import get_qwen_embedder
@@ -18,8 +18,7 @@ def get_smart_doc_gen_kb():
     # Use synchronous driver for PgVector
     db_url = str(settings.SQLALCHEMY_DATABASE_URI).replace('postgresql+asyncpg', 'postgresql')
     
-    return MarkdownKnowledgeBase(
-        path=str(kb_docs_dir),
+    return KnowledgeBase(
         vector_db=PgVector(
             table_name="smart_doc_gen_kb",
             db_url=db_url,

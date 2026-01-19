@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch } from "lucide-react"
+import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch, Clapperboard } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import type { Staff } from "@/lib/config"
@@ -58,6 +58,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "case-analysis", label: "案情分析", icon: FileSearch, href: "/case-analysis" },
     { id: "documents", label: "文书模板", icon: FileText, href: "/documents" },
     { id: "document-creation", label: "文书制作", icon: FilePen, href: "/document-creation" },
+    { id: "video-creation", label: "视频创作", icon: Clapperboard, href: "/video-creation" },
   ]
 
   if (userRole === "admin") {
@@ -139,7 +140,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
                 <Scale className="h-3.5 w-3.5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-foreground leading-none">汇法律 智能证物平台</h1>
+                <h1 className="text-base font-bold text-foreground leading-none whitespace-nowrap">汇法律 智能证物平台</h1>
               </div>
             </Link>
 

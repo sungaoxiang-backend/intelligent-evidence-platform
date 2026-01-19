@@ -14,6 +14,7 @@ from app.documents_management.routers import (
 from app.evidence_chains.routers import router as chain_router
 from app.evidences.routers import router as evidences_router
 from app.agentic.routers import router as agentic_router
+from app.video_creation.routers import router as video_creation_router
 from app.ocr import router as ocr_router
 from app.staffs.routers import login_router, router as staffs_router
 from app.tasks import router as tasks_router
@@ -29,6 +30,7 @@ api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(cases_router, prefix="/cases", tags=["cases"])
 api_router.include_router(evidences_router, prefix="/evidences", tags=["evidences"])
 api_router.include_router(agentic_router, prefix="/agentic", tags=["agentic"])
+api_router.include_router(video_creation_router, prefix="/video-creation", tags=["video-creation"])
 api_router.include_router(chain_router, prefix="/chain", tags=["chain"])
 api_router.include_router(documents_management_router, prefix="/documents", tags=["documents-management"])
 

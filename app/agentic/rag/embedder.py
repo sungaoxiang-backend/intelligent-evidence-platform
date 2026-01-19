@@ -1,4 +1,4 @@
-from agno.embedder.openai import OpenAIEmbedder
+from agno.knowledge.embedder.openai import OpenAIEmbedder
 from app.core.config import settings
 
 def get_qwen_embedder():

@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from urllib.parse import unquote
 from app.cases.models import Case as CaseModel, CaseParty as CasePartyModel, AssociationEvidenceFeature, PartyType
 from app.cases.schemas import CaseCreate, CaseUpdate, Case as CaseSchema, CasePartyCreate, CasePartyUpdate
-from agno.run.response import RunResponse
+from agno.agent import RunOutput as RunResponse
 from agno.media import Image
 import asyncio
 from app.users.services import get_by_id_card, get_by_phone, create as create_user

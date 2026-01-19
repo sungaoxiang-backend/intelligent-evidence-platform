@@ -70,7 +70,7 @@ At the very end, you MUST output a VALID JSON block inside markdown code fences,
 - `fillings` map keys are Template IDs.
 - `reasoning` is a string explaining your logic.
             """,
-            show_tool_calls=True,
+
             debug_mode=True,
         )
 

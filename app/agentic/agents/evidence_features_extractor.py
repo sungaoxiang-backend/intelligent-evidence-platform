@@ -221,7 +221,7 @@ class EvidenceFeaturesExtractor:
             add_state_in_messages=True,
             instructions=self.build_instructions(),
             response_model=EvidenceExtractionResults,
-            show_tool_calls=True,
+
             debug_mode=True
         )
     

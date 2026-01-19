@@ -265,7 +265,7 @@ class EvidenceClassifier:
 """,
             response_model=EvidenceClassifiResults,
 
-            show_tool_calls=True,
+
             debug_mode=True
         )
         

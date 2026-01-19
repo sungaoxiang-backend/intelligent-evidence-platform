@@ -8,3 +8,4 @@ from app.cases.models import Case  # noqa
 from app.evidences.models import Evidence, EvidenceCard  # noqa - 导入 EvidenceCard 以确保关联表被检测到
 from app.wecom.models import WeComStaff, ExternalContact, CustomerSession, ContactWay, CustomerEventLog  # noqa
 from app.documents_management.models import Document  # noqa
+from app.video_creation.models import VideoCreationSession, VideoCreationMessage, VideoScript  # noqa

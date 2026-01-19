@@ -63,7 +63,7 @@ class AssociationFeaturesExtractor:
             # add_state_in_messages=True,
             instructions=self.build_instructions(),
             response_model=AssociationFeaturesExtractionResults,
-            show_tool_calls=True,
+
             debug_mode=True
         )
     

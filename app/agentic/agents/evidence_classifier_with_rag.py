@@ -43,7 +43,7 @@ class EvidenceClassifierWithRAG:
             enable_agentic_knowledge_filters=True,
             response_model=Results,
             markdown=True,
-            show_tool_calls=True,
+
             debug_mode=True
         )
 
