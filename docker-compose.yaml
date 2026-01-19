@@ -14,9 +14,12 @@ services:
       - .env.docker
     environment:
       - POSTGRES_SERVER=db # 覆盖.env.docker中的配置，确保在容器环境中使用正确的数据库主机
+      - RSS_SERVICE_URL=http://host.docker.internal:4000 # 允许Agent访问宿主机上的RSS服务（通过SSH隧道或本地运行）
       # Playwright 配置：使用国内镜像源加速下载
       - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
       - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # 允许容器访问宿主机端口
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
@@ -68,9 +71,12 @@ services:
       - .env.docker
     environment:
       - SERVICE_TYPE=celery-worker
+      - RSS_SERVICE_URL=http://host.docker.internal:4000
       # Playwright 配置：使用国内镜像源加速下载
       - PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
       - PLAYWRIGHT_DOWNLOAD_TIMEOUT=1800000 # 30分钟超时
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - redis
       - db

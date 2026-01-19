@@ -14,13 +14,14 @@ Examples:
 
 import argparse
 import sys
+import os
 import xml.etree.ElementTree as ET
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode
 from urllib.error import URLError
 
 
-DEFAULT_BASE_URL = "http://localhost:4000"
+DEFAULT_BASE_URL = os.getenv("RSS_SERVICE_URL", "http://localhost:4000")
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 
 
