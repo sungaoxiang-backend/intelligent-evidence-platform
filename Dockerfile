@@ -32,21 +32,36 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # 配置 Debian apt 镜像源（使用清华镜像加速，适用于 Debian 12/13）
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
-        sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources; \
+    sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+    sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources; \
     elif [ -f /etc/apt/sources.list ]; then \
-        sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list && \
-        sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list; \
+    sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list && \
+    sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list; \
     fi && \
     echo "已配置 Debian apt 镜像源为清华镜像"
 
-# 安装PostgreSQL客户端（使用缓存挂载加速）
+# 安装PostgreSQL客户端和Node.js（使用缓存挂载加速）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
+    curl \
+    gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "Node.js $(node --version) installed successfully"
+
+# 安装 Playwright npm 包（全局安装，供 fetch.js 脚本使用）
+# 使用 npmmirror 加速下载
+RUN npm config set registry https://registry.npmmirror.com \
+    && npm install -g playwright \
+    && PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright npx playwright install chromium \
+    && echo "Playwright npm package and Chromium browser installed successfully"
 
 # 从构建阶段复制虚拟环境
 COPY --from=builder /app/.venv /app/.venv

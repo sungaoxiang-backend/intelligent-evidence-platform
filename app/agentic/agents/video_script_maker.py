@@ -2,6 +2,7 @@ from pathlib import Path
 from agno.agent import Agent
 from agno.models.anthropic import Claude
 from agno.skills import Skills, LocalSkills
+from agno.tools.shell import ShellTools
 
 agent = Agent(
     model=Claude(
@@ -12,6 +13,7 @@ agent = Agent(
         }
     ),
     skills=Skills(loaders=[LocalSkills(Path(__file__).parent.parent / "skills")]),
+    tools=[ShellTools()],
     markdown=True,
 )
 

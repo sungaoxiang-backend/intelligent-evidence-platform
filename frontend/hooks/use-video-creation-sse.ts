@@ -19,7 +19,7 @@ export interface Message {
 }
 
 export interface StreamChunk {
-    type: 'text' | 'tool_call' | 'skill_hit' | 'thinking' | 'error' | 'done'
+    type: 'text' | 'tool_call' | 'skill_hit' | 'thinking' | 'error' | 'done' | 'status' | 'heartbeat'
     content: string
     metadata: any
 }
@@ -165,13 +165,27 @@ export function useVideoCreationSSE(sessionId: number) {
                 streamingMessageRef.current.content += event.content
                 setMessages(prev => {
                     const newMessages = [...prev]
-                    const lastMessage = newMessages[newMessages.length - 1]
-                    if (lastMessage?.role === 'assistant' && lastMessage.message_metadata?.streaming_status === 'streaming') {
-                        // 更新流式消息
-                        newMessages[newMessages.length - 1] = { ...streamingMessageRef.current }
+                    // 查找是否已存在流式 assistant 消息
+                    const lastAssistantIndex = newMessages.findIndex(
+                        m => m.role === 'assistant' && m.message_metadata?.streaming_status === 'streaming'
+                    )
+
+                    if (lastAssistantIndex >= 0) {
+                        // 更新已存在的流式消息
+                        newMessages[lastAssistantIndex] = { ...streamingMessageRef.current }
                     } else {
-                        // 添加新的流式消息
-                        newMessages.push({ ...streamingMessageRef.current })
+                        // 检查最后一条消息是否是用户消息（刚发送的）
+                        const lastMessage = newMessages[newMessages.length - 1]
+                        if (lastMessage?.role === 'user') {
+                            // 用户消息之后，添加新的 assistant 消息
+                            newMessages.push({ ...streamingMessageRef.current })
+                        } else if (lastMessage?.role === 'assistant') {
+                            // 如果最后是 assistant 消息但不是 streaming 状态，更新它
+                            newMessages[newMessages.length - 1] = { ...streamingMessageRef.current }
+                        } else {
+                            // 其他情况，添加新消息
+                            newMessages.push({ ...streamingMessageRef.current })
+                        }
                     }
                     return newMessages
                 })
@@ -202,7 +216,13 @@ export function useVideoCreationSSE(sessionId: number) {
                 streamingMessageRef.current.id = event.metadata.message_id
                 setMessages(prev => {
                     const newMessages = [...prev]
-                    newMessages[newMessages.length - 1] = { ...streamingMessageRef.current }
+                    // 找到最后一个 assistant 消息并更新
+                    for (let i = newMessages.length - 1; i >= 0; i--) {
+                        if (newMessages[i].role === 'assistant') {
+                            newMessages[i] = { ...streamingMessageRef.current }
+                            break
+                        }
+                    }
                     return newMessages
                 })
                 setIsStreaming(false)
@@ -211,6 +231,12 @@ export function useVideoCreationSSE(sessionId: number) {
             case 'error':
                 setError(event.content)
                 setIsStreaming(false)
+                break
+
+            case 'status':
+            case 'heartbeat':
+                // 忽略状态和心跳消息，只用于保持连接
+                // 不需要做任何处理
                 break
         }
     }, [])

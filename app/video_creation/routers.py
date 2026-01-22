@@ -28,21 +28,20 @@ async def create_session(
     current_staff: Annotated[Staff, Depends(get_current_staff)]
 ):
     """创建新会话"""
+    # 使用初始消息作为会话标题（最多50字符）
+    title = "新会话"
+    if request.initial_message:
+        title = request.initial_message[:50] + ("..." if len(request.initial_message) > 50 else "")
+
     # 创建会话
     session = VideoCreationSession(
         staff_id=current_staff.id,
-        title="新会话"  # 默认标题，后续可根据第一条消息更新
+        title=title
     )
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    
-    # 如果有初始消息，则发送消息（非流式，直接返回）
-    if request.initial_message:
-        # 这里简化处理，不流式输出初始消息
-        # 实际应用中可以选择流式处理
-        pass
-    
+
     return SingleResponse(data=SessionResponse.model_validate(session))
 
 

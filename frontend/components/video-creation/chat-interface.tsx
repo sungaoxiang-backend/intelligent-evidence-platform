@@ -38,6 +38,35 @@ function parseMessageContent(content: string) {
     return { clean, reasoning }
 }
 
+function parseSkillOutputJson(content: string): {
+    rssArticle?: any
+    videoScript?: any
+} {
+    const result: any = {}
+
+    // 提取 <skill-output type="rss-article">
+    const rssMatch = content.match(/<skill-output type="rss-article"[^>]*>([\s\S]*?)<\/skill-output>/)
+    if (rssMatch) {
+        try {
+            result.rssArticle = JSON.parse(rssMatch[1].trim())
+        } catch (e) {
+            console.error('Failed to parse RSS article JSON:', e)
+        }
+    }
+
+    // 提取 <skill-output type="video-script">
+    const scriptMatch = content.match(/<skill-output type="video-script"[^>]*>([\s\S]*?)<\/skill-output>/)
+    if (scriptMatch) {
+        try {
+            result.videoScript = JSON.parse(scriptMatch[1].trim())
+        } catch (e) {
+            console.error('Failed to parse video script JSON:', e)
+        }
+    }
+
+    return result
+}
+
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false)
 
@@ -130,6 +159,95 @@ function ThinkingBlock({ reasoning, toolCalls, skillHits }: { reasoning: string,
     )
 }
 
+function StructuredScriptCard({ scriptData }: { scriptData: any }) {
+    const { final_script, metadata, templates } = scriptData
+    const [showMetadata, setShowMetadata] = useState(false)
+
+    return (
+        <div className="my-6 rounded-xl border bg-card shadow-sm overflow-hidden not-prose ring-1 ring-border/50">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b backdrop-blur-sm">
+                <span className="font-semibold text-sm flex items-center gap-2 text-foreground/80">
+                    <FileText className="h-4 w-4 text-primary" />
+                    视频脚本 (类型 {metadata.script_type})
+                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                        {final_script.word_count} 字 · {Math.round(final_script.estimated_duration)} 秒
+                    </span>
+                    <CopyButton text={final_script.full_text} />
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="bg-white dark:bg-zinc-950 overflow-x-auto">
+                <div className="p-4 min-w-full">
+                    <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
+                        {final_script.full_text}
+                    </pre>
+                </div>
+            </div>
+
+            {/* Expandable Metadata */}
+            <details className="group">
+                <summary
+                    onClick={(e) => {
+                        e.preventDefault()
+                        setShowMetadata(!showMetadata)
+                    }}
+                    className="px-4 py-2 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer flex items-center justify-between select-none"
+                >
+                    <span>查看风格分析与元数据</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showMetadata ? 'rotate-180' : ''}`} />
+                </summary>
+                {showMetadata && (
+                    <div className="px-4 py-3 border-t bg-muted/20 text-sm space-y-4">
+                        {/* Style Analysis */}
+                        <div>
+                            <h4 className="font-medium mb-2">7维风格分析</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {Object.entries(metadata.style_analysis || {}).map(([key, value]: [string, any]) => (
+                                    <div key={key} className="bg-background rounded p-2">
+                                        <div className="font-medium text-xs text-muted-foreground mb-1">
+                                            {key.replace(/_/g, ' ')}
+                                        </div>
+                                        <div className="text-xs">{value.summary || ''}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Templates */}
+                        {templates && (
+                            <div>
+                                <h4 className="font-medium mb-2">模板库</h4>
+                                <div className="space-y-2">
+                                    {templates.hooks?.length > 0 && (
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">开头模板</div>
+                                            {templates.hooks.map((hook: string, i: number) => (
+                                                <div key={i} className="text-xs bg-background rounded p-2 mb-1">{hook}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {templates.ctas?.length > 0 && (
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">CTA模板</div>
+                                            {templates.ctas.map((cta: string, i: number) => (
+                                                <div key={i} className="text-xs bg-background rounded p-2 mb-1">{cta}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </details>
+        </div>
+    )
+}
+
 export function ChatInterface({ messages, isStreaming, error }: ChatInterfaceProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -172,61 +290,108 @@ export function ChatInterface({ messages, isStreaming, error }: ChatInterfacePro
                             )}
 
                             {message.role === 'assistant' ? (
-                                <div className="prose prose-slate max-w-none dark:prose-invert leading-7">
-                                    <ReactMarkdown
-                                        components={{
-                                            code({ node, inline, className, children, ...props }) {
-                                                const match = /language-(\w+)/.exec(className || '')
-                                                const isVideoScript = match && match[1] === 'video-script'
+                                (() => {
+                                    // 解析 skill-output 标签
+                                    const skillOutputs = parseSkillOutputJson(cleanContent)
 
-                                                if (!inline && isVideoScript) {
-                                                    return (
-                                                        <div className="my-6 rounded-xl border bg-card shadow-sm overflow-hidden not-prose ring-1 ring-border/50">
-                                                            <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b backdrop-blur-sm">
-                                                                <span className="font-semibold text-sm flex items-center gap-2 text-foreground/80">
-                                                                    <FileText className="h-4 w-4 text-primary" />
-                                                                    视频脚本
-                                                                </span>
-                                                                <CopyButton text={String(children)} />
-                                                            </div>
-                                                            <div className="bg-white dark:bg-zinc-950 overflow-x-auto">
-                                                                <div className="p-4 min-w-full">
-                                                                    <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
+                                    // 清除 skill-output 标签后的纯文本内容
+                                    let textWithoutSkillOutput = cleanContent
+                                        .replace(/<skill-output[^>]*>[\s\S]*?<\/skill-output>/g, '')
+                                        .trim()
+
+                                    return (
+                                        <>
+                                            {/* 显示普通文本内容 */}
+                                            {textWithoutSkillOutput && (
+                                                <div className="prose prose-slate max-w-none dark:prose-invert leading-7">
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            code({ node, inline, className, children, ...props }) {
+                                                                const match = /language-(\w+)/.exec(className || '')
+                                                                const isVideoScript = match && match[1] === 'video-script'
+
+                                                                // 检测 skill-output JSON 格式
+                                                                if (!inline && className === 'language-json') {
+                                                                    const jsonString = String(children)
+                                                                    try {
+                                                                        const jsonData = JSON.parse(jsonString)
+                                                                        if (jsonData.version && jsonData.final_script) {
+                                                                            return <StructuredScriptCard scriptData={jsonData} />
+                                                                        }
+                                                                    } catch (e) { }
+                                                                }
+
+                                                                if (!inline && isVideoScript) {
+                                                                    return (
+                                                                        <div className="my-6 rounded-xl border bg-card shadow-sm overflow-hidden not-prose ring-1 ring-border/50">
+                                                                            <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b backdrop-blur-sm">
+                                                                                <span className="font-semibold text-sm flex items-center gap-2 text-foreground/80">
+                                                                                    <FileText className="h-4 w-4 text-primary" />
+                                                                                    视频脚本
+                                                                                </span>
+                                                                                <CopyButton text={String(children)} />
+                                                                            </div>
+                                                                            <div className="bg-white dark:bg-zinc-950 overflow-x-auto">
+                                                                                <div className="p-4 min-w-full">
+                                                                                    <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
+                                                                                        {children}
+                                                                                    </pre>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                }
+
+                                                                return !inline && match ? (
+                                                                    <div className="rounded-lg overflow-hidden border my-4">
+                                                                        <div className="bg-muted/50 px-3 py-1.5 flex justify-between items-center border-b">
+                                                                            <span className="text-xs text-muted-foreground font-mono">{match[1]}</span>
+                                                                            <CopyButton text={String(children)} />
+                                                                        </div>
+                                                                        <SyntaxHighlighter
+                                                                            style={vs}
+                                                                            language={match[1]}
+                                                                            PreTag="div"
+                                                                            customStyle={{ margin: 0, borderRadius: 0 }}
+                                                                            {...props}
+                                                                        >
+                                                                            {String(children).replace(/\n$/, '')}
+                                                                        </SyntaxHighlighter>
+                                                                    </div>
+                                                                ) : (
+                                                                    <code className={`${className} bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-primary/80`} {...props}>
                                                                         {children}
-                                                                    </pre>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                }
+                                                                    </code>
+                                                                )
+                                                            }
+                                                        }}
+                                                    >
+                                                        {textWithoutSkillOutput}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            )}
 
-                                                return !inline && match ? (
-                                                    <div className="rounded-lg overflow-hidden border my-4">
-                                                        <div className="bg-muted/50 px-3 py-1.5 flex justify-between items-center border-b">
-                                                            <span className="text-xs text-muted-foreground font-mono">{match[1]}</span>
-                                                            <CopyButton text={String(children)} />
-                                                        </div>
-                                                        <SyntaxHighlighter
-                                                            style={vs}
-                                                            language={match[1]}
-                                                            PreTag="div"
-                                                            customStyle={{ margin: 0, borderRadius: 0 }}
-                                                            {...props}
-                                                        >
-                                                            {String(children).replace(/\n$/, '')}
-                                                        </SyntaxHighlighter>
+                                            {/* 渲染结构化视频脚本卡片 */}
+                                            {skillOutputs.videoScript && (
+                                                <StructuredScriptCard scriptData={skillOutputs.videoScript} />
+                                            )}
+
+                                            {/* 渲染 RSS 文章摘要（如果有） */}
+                                            {skillOutputs.rssArticle && (
+                                                <div className="my-4 p-4 rounded-lg border bg-blue-50 dark:bg-blue-950/30">
+                                                    <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                                                        RSS 文章
                                                     </div>
-                                                ) : (
-                                                    <code className={`${className} bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-primary/80`} {...props}>
-                                                        {children}
-                                                    </code>
-                                                )
-                                            }
-                                        }}
-                                    >
-                                        {cleanContent}
-                                    </ReactMarkdown>
-                                </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {skillOutputs.rssArticle.result?.article?.title ||
+                                                            skillOutputs.rssArticle.result?.articles?.[0]?.title ||
+                                                            '已获取文章'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )
+                                })()
                             ) : (
                                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                             )}
