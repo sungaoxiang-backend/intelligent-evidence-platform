@@ -55,9 +55,17 @@ function AppContent({ children }: { children: React.ReactNode }) {
         } else {
           authService.logout()
           setIsAuthenticated(false)
+          // 如果不在登录页，跳转到登录页
+          if (pathname !== "/login") {
+            router.push("/login")
+          }
         }
       } else {
         setIsAuthenticated(false)
+        // 如果不在登录页，跳转到登录页
+        if (pathname !== "/login") {
+          router.push("/login")
+        }
       }
       setLoading(false)
     }
@@ -77,7 +85,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     authService.logout()
     setIsAuthenticated(false)
     setCurrentUser(null)
-    router.push("/")
+    router.push("/login") // 退出登录后跳转到登录页
   }
 
   if (loading) {
@@ -91,8 +99,21 @@ function AppContent({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!isAuthenticated) {
+  // 如果未登录且当前在登录页，渲染登录页（通过children传递）
+  if (!isAuthenticated && pathname === "/login") {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />
+  }
+
+  // 如果未登录且不在登录页，等待重定向
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">跳转中...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

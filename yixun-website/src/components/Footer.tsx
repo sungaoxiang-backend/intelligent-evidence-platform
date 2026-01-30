@@ -35,7 +35,7 @@ export function Footer() {
                     </div>
 
                     <div className="border-t border-border/40 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-                        <p>© 2024 汇法律 All rights reserved.</p>
+                        <p>© 2024 广州义寻科技有限公司 All rights reserved.</p>
                         <div className="flex gap-4 items-center">
                             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
                                 粤ICP备2023052474号-1

@@ -60,16 +60,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # 使用 npmmirror 加速下载
 RUN npm config set registry https://registry.npmmirror.com \
     && npm install -g playwright \
-    && PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright npx playwright install chromium \
-    && echo "Playwright npm package and Chromium browser installed successfully"
+    && echo "Playwright npm package installed successfully"
 
 # 从构建阶段复制虚拟环境
 COPY --from=builder /app/.venv /app/.venv
 
 # 安装 Playwright 系统依赖（浏览器将在运行时安装，避免构建时网络问题）
-# 注意：系统依赖体积小，可以正常安装；浏览器（~300MB）将在容器启动时通过 docker-entrypoint.sh 安装
 RUN . /app/.venv/bin/activate && \
-    playwright install-deps chromium || echo "警告: Playwright 系统依赖安装失败，但不会阻止构建"
+    playwright install-deps chromium 2>/dev/null || true
 
 # 复制本地预下载的 NLTK 数据 (生产级优化：完全避免构建时网络依赖)
 # 请确保在构建前运行 scripts/download_nltk_local.py
