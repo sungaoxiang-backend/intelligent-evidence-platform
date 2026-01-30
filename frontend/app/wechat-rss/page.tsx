@@ -133,7 +133,7 @@ export default function WeChatRssPage() {
                 src={RSS_SERVICE_URL}
                 className="w-full h-[calc(100vh-18rem)] border-0"
                 title="WeWe RSS Dashboard"
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
               />
             )}
           </CardContent>
