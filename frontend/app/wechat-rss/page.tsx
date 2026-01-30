@@ -83,16 +83,21 @@ export default function WeChatRssPage() {
         {serviceStatus === "online" && (
           <Alert className="mb-4 border-green-200 bg-green-50 dark:bg-green-900/20">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>本地RSS服务运行正常</span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleOpenInNewTab}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                在新标签页打开
-              </Button>
+            <AlertDescription className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span>本地RSS服务运行正常</span>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleOpenInNewTab}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  在新标签页打开
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                提示：由于浏览器安全限制，嵌入页面的RSS服务可能无法保存登录状态。如遇认证问题，建议使用"在新标签页打开"。
+              </p>
             </AlertDescription>
           </Alert>
         )}
@@ -133,7 +138,8 @@ export default function WeChatRssPage() {
                 src={RSS_SERVICE_URL}
                 className="w-full h-[calc(100vh-18rem)] border-0"
                 title="WeWe RSS Dashboard"
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-storage-access-by-user-activation"
+                allow="storage-access-by-user-activation"
               />
             )}
           </CardContent>
