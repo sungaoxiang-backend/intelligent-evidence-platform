@@ -3,13 +3,18 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ExternalLink, Rss, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { ExternalLink, Rss, RefreshCw, AlertCircle, CheckCircle2, Database, Shield, Globe, Clock, FileText, ArrowRight } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function WeChatRssPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [serviceStatus, setServiceStatus] = useState<"checking" | "online" | "offline">("checking")
-  const RSS_SERVICE_URL = "http://localhost:4000/dash"
+  const [feedsCount, setFeedsCount] = useState<number | null>(null)
+  
+  // RSS 服务配置
+  const RSS_SERVICE_URL = "https://rss.yixuninc.cn"
+  const AUTH_CODE = "huifalv"
 
   useEffect(() => {
     checkServiceStatus()
@@ -20,7 +25,8 @@ export default function WeChatRssPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000)
       
-      await fetch("http://localhost:4000", { 
+      // 尝试获取 feeds 列表来验证服务状态
+      const response = await fetch(`${RSS_SERVICE_URL}/feeds/all.atom`, { 
         method: "HEAD",
         signal: controller.signal,
         mode: "no-cors"
@@ -35,8 +41,9 @@ export default function WeChatRssPage() {
     }
   }
 
-  const handleOpenInNewTab = () => {
-    window.open(RSS_SERVICE_URL, "_blank")
+  const handleOpenService = () => {
+    // 打开服务页面，带上 auth code
+    window.open(`${RSS_SERVICE_URL}?auth=${AUTH_CODE}`, "_blank")
   }
 
   const handleRefresh = () => {
@@ -46,12 +53,13 @@ export default function WeChatRssPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-3rem)] flex flex-col pt-12">
+    <div className="h-[calc(100vh-3rem)] flex flex-col pt-12 overflow-auto">
       <div className="container mx-auto px-4 py-6 max-w-7xl">
+        {/* 头部 */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-              <Rss className="h-5 w-5 text-white" />
+            <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Rss className="h-6 w-6 text-white" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">微信RSS</h1>
@@ -62,11 +70,12 @@ export default function WeChatRssPage() {
           </div>
         </div>
 
+        {/* 状态提示 */}
         {serviceStatus === "offline" && (
           <Alert variant="destructive" className="mb-4">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              本地RSS服务未启动（端口4000）。请先启动 WeWe RSS 服务。
+            <AlertDescription className="flex items-center justify-between">
+              <span>RSS服务暂时无法连接</span>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -81,113 +90,142 @@ export default function WeChatRssPage() {
         )}
 
         {serviceStatus === "online" && (
-          <Alert className="mb-4 border-green-200 bg-green-50 dark:bg-green-900/20">
+          <Alert className="mb-6 border-green-200 bg-green-50 dark:bg-green-900/20">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span>本地RSS服务运行正常</span>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleOpenInNewTab}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  在新标签页打开
-                </Button>
+            <AlertDescription className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>RSS服务运行正常</span>
+                <Badge variant="secondary" className="text-xs">已配置</Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                提示：由于浏览器安全限制，嵌入页面的RSS服务可能无法保存登录状态。如遇认证问题，建议使用"在新标签页打开"。
-              </p>
             </AlertDescription>
           </Alert>
         )}
 
-        <Card className="flex-1 min-h-[calc(100vh-16rem)]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">RSS管理面板</CardTitle>
-            <CardDescription>
-              管理微信公众号订阅源，生成RSS/ATOM格式的订阅链接
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0 flex-1 h-full">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </div>
-            ) : serviceStatus === "offline" ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center px-4">
-                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">服务未连接</h3>
-                <p className="text-sm text-muted-foreground mb-4 max-w-md">
-                  无法连接到本地 WeWe RSS 服务。请确保服务已启动：
-                </p>
-                <code className="bg-muted px-3 py-2 rounded text-sm font-mono mb-4">
-                  docker run -d -p 4000:4000 cooderl/wewe-rss:latest
-                </code>
-                <Button onClick={handleRefresh}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  重新检测
-                </Button>
-              </div>
-            ) : (
-              <iframe
-                src={RSS_SERVICE_URL}
-                className="w-full h-[calc(100vh-18rem)] border-0"
-                title="WeWe RSS Dashboard"
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-storage-access-by-user-activation"
-                allow="storage-access-by-user-activation"
-              />
-            )}
+        {/* 主操作卡片 */}
+        <Card className="mb-6 border-2 border-dashed border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Globe className="w-8 h-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">访问RSS管理后台</h2>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              由于浏览器安全限制，微信RSS需要在独立页面中打开以确保认证状态正常保存。
+            </p>
+            <Button 
+              size="lg" 
+              onClick={handleOpenService}
+              className="px-8"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              打开RSS管理后台
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+            <p className="text-xs text-muted-foreground mt-4">
+              认证码: <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{AUTH_CODE}</code>
+            </p>
           </CardContent>
         </Card>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* 功能介绍网格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">功能说明</CardTitle>
+              <Database className="w-5 h-5 text-blue-500 mb-2" />
+              <CardTitle className="text-sm">公众号订阅</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>• 添加微信读书账号（扫码登录）</li>
-                <li>• 订阅微信公众号（通过分享链接）</li>
-                <li>• 自动获取公众号历史文章</li>
-                <li>• 定时后台更新订阅内容</li>
-              </ul>
+              <p className="text-xs text-muted-foreground">
+                添加微信读书账号，扫码登录后订阅任意微信公众号
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">订阅格式</CardTitle>
+              <Clock className="w-5 h-5 text-green-500 mb-2" />
+              <CardTitle className="text-sm">自动更新</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>• 支持 RSS 2.0 格式</li>
-                <li>• 支持 ATOM 1.0 格式</li>
-                <li>• 支持 JSON Feed 格式</li>
-                <li>• 支持全文内容输出</li>
-              </ul>
+              <p className="text-xs text-muted-foreground">
+                后台自动定时更新订阅内容，获取最新文章推送
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">高级功能</CardTitle>
+              <FileText className="w-5 h-5 text-purple-500 mb-2" />
+              <CardTitle className="text-sm">多格式导出</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>• 标题关键词过滤</li>
-                <li>• OPML 批量导出</li>
-                <li>• 手动触发更新</li>
-                <li>• 多账号管理</li>
-              </ul>
+              <p className="text-xs text-muted-foreground">
+                支持 RSS 2.0、ATOM 1.0、JSON Feed 格式订阅链接
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <Shield className="w-5 h-5 text-amber-500 mb-2" />
+              <CardTitle className="text-sm">全文输出</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                支持全文内容输出，让阅读无障碍，一键导出OPML
+              </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* 使用说明 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">快速开始</CardTitle>
+            <CardDescription>三步开始使用微信RSS订阅</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-medium text-primary">1</span>
+                </div>
+                <div>
+                  <h4 className="font-medium text-sm">添加账号</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    点击"打开RSS管理后台"，使用认证码 <code className="bg-muted px-1 rounded">{AUTH_CODE}</code> 登录。
+                    进入账号管理，扫码登录微信读书账号（不要勾选24小时后自动退出）。
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-medium text-primary">2</span>
+                </div>
+                <div>
+                  <h4 className="font-medium text-sm">订阅公众号</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    进入公众号源页面，点击添加，通过提交微信公众号分享链接来订阅。
+                    注意：添加频率过高容易被封控，等24小时解封。
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-medium text-primary">3</span>
+                </div>
+                <div>
+                  <h4 className="font-medium text-sm">获取RSS链接</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    订阅成功后，每个公众号都会生成对应的RSS/ATOM链接，
+                    可以在任何RSS阅读器中订阅使用。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
