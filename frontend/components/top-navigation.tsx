@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch, Clapperboard } from "lucide-react"
+import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch, Clapperboard, Rss } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import type { Staff } from "@/lib/config"
@@ -47,6 +47,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     if (pathname.startsWith("/evidences")) return "evidences"
     if (pathname.startsWith("/document-creation")) return "document-creation"
     if (pathname.startsWith("/documents")) return "documents"
+    if (pathname.startsWith("/wechat-rss")) return "wechat-rss"
     return "workbench"
   }
   const activeModule = getActiveModule()
@@ -59,6 +60,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     { id: "documents", label: "文书模板", icon: FileText, href: "/documents" },
     { id: "document-creation", label: "文书制作", icon: FilePen, href: "/document-creation" },
     { id: "video-creation", label: "视频创作", icon: Clapperboard, href: "/video-creation" },
+    { id: "wechat-rss", label: "微信RSS", icon: Rss, href: "/wechat-rss" },
   ]
 
   if (userRole === "admin") {
