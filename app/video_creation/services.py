@@ -22,8 +22,8 @@ class VideoCreationService:
             model=Claude(
                 "claude-sonnet-4-5-20250929",
                 client_params={
-                    "base_url": "https://open.bigmodel.cn/api/anthropic",
-                    "auth_token": "0fa78a5665bf4201953e85fb91a79a57.zY0dvOkueFu4nG1m"
+                    "base_url": "https://api.minimaxi.com/anthropic",
+                    "auth_token": "sk-cp-mKpCCoXQTZSt1H_0RmfAltGjQ03m7ceBacAGJJDqID2bEXTvgAtAtVtjTS5FkA562ZV8Dq4iaN8j6QLrfa1f9DRx0G8tCoVJwE-WGmmOviYsInX3VPvxXrk"
                 }
             ),
             skills=Skills(loaders=[
