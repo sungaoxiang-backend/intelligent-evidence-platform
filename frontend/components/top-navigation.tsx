@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch, Clapperboard, Rss } from "lucide-react"
+import { Home, Scale, Users, UserCheck, Bell, Plus, Search, Moon, Sun, User, LogOut, BarChart3, X, Activity, Clock, ExternalLink, FileText, FileEdit, FilePen, FileSearch, Clapperboard, Rss, Wrench } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import type { Staff } from "@/lib/config"
@@ -47,6 +47,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     if (pathname.startsWith("/evidences")) return "evidences"
     if (pathname.startsWith("/document-creation")) return "document-creation"
     if (pathname.startsWith("/documents")) return "documents"
+    if (pathname.startsWith("/skill-management")) return "skill-management"
     if (pathname.startsWith("/wechat-rss")) return "wechat-rss"
     return "workbench"
   }
@@ -65,6 +66,7 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
 
   if (userRole === "admin") {
     navigationItems.push({ id: "staff", label: "员工管理", icon: UserCheck, href: "/staff" })
+    navigationItems.push({ id: "skill-management", label: "技能管理", icon: Wrench, href: "/skill-management" })
   }
 
   // 任务相关逻辑
@@ -500,4 +502,3 @@ export function TopNavigation({ userRole, currentUser, onLogout, tasks = [], onR
     </header>
   )
 }
-

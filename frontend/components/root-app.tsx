@@ -127,7 +127,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
         <main className="pt-12">
           <div
             className={
-              pathname?.includes("/card-factory") || pathname?.includes("/document-creation")
+              pathname?.includes("/card-factory") ||
+              pathname?.includes("/document-creation") ||
+              pathname?.includes("/skill-management")
                 ? "w-full px-4 lg:px-6 py-3"
                 : "container mx-auto px-4 lg:px-6 py-3 max-w-7xl"
             }
@@ -183,4 +185,3 @@ export function RootApp({ children }: { children: React.ReactNode }) {
     </ThemeProvider>
   )
 }
-
