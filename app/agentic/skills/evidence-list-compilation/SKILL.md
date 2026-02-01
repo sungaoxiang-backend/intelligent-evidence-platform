@@ -1,6 +1,5 @@
 ---
 name: evidence-list-compilation
-skill_type: A
 description: 用于编制证据清单一览表的执行技能。本技能提供标准化的证据清单模板和组织方法，帮助律师规范地呈现证据，讲好"法律事实故事"。适用于诉前证据整理、证据交换阶段。
 ---
 

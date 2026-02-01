@@ -1,6 +1,5 @@
 ---
 name: evidence-admissibility-check
-skill_type: O
 description: 用于综合判断证据可采性的编排技能。根据《最高人民法院关于民事诉讼证据的若干规定》第八十七条，从5个方面综合审核认定证据的可采性。适用于证据审查、质证准备阶段。
 ---
 

@@ -1,6 +1,5 @@
 ---
 name: evidence-review-methodology
-skill_type: R
 description: 用于检索证据审查方法论的检索技能。本技能提供"四法则"（印证法则、逻辑法则、自然法则、经验法则）的理论基础和适用场景，帮助律师正确运用证据审查方法。适用于证据审查、事实认定阶段。
 ---
 

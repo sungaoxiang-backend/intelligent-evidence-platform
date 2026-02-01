@@ -1,6 +1,5 @@
 ---
 name: evidence-cross-examination
-skill_type: A
 description: 用于庭审中对证据"三性"（真实性、合法性、关联性）进行质证的执行技能。本技能提供标准化的质证意见模板和策略，帮助律师准确、有效地对对方证据发表质证意见。适用于庭审质证阶段。
 ---
 

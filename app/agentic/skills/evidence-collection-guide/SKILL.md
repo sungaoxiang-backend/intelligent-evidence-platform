@@ -1,6 +1,5 @@
 ---
 name: evidence-collection-guide
-skill_type: O
 description: 用于指导证据收集策略的编排技能。本技能提供清单式引导、发散性挖掘等方法，帮助律师"按图索骥"收集证据，而非被动接受当事人提供的材料。适用于诉前证据收集阶段。
 ---
 
