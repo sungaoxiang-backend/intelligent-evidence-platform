@@ -20,10 +20,14 @@ function extractDetailMessage(detail: any): string {
   }
 }
 
+export type SkillStatus = "draft" | "pending_review" | "approved" | "rejected"
+
 export type SkillSummary = {
   id: string
   name: string
   description: string
+  status: SkillStatus
+  updated_at?: string | null
 }
 
 export type SkillFileNode = {
@@ -41,26 +45,15 @@ export type SkillFileContent = {
   content_base64?: string | null
 }
 
-export type AgentSummary = { id: string }
-
-export type AgentPromptVersionSummary = {
-  agent_id: string
+export type SkillVersionSummary = {
   version: string
-  lang: string
-  active_skill_ids: string[]
+  message: string
   created_at: string
-  updated_at: string
 }
 
-export type AgentPromptVersionDetail = AgentPromptVersionSummary & {
-  content: string
-}
-
-export type PlaygroundRunResponse = {
-  output: string
-  session_id?: string | null
-  total_cost_usd?: number | null
-  raw?: any
+export type SkillMeta = {
+  status: SkillStatus
+  versions: SkillVersionSummary[]
 }
 
 async function parseJsonOrThrow(resp: Response) {
@@ -119,7 +112,7 @@ export const skillManagementApi = {
     return result.data as SkillFileContent
   },
 
-  async saveSkillFile(skillId: string, path: string, body: { is_binary: boolean; content?: string }) {
+  async saveSkillFile(skillId: string, path: string, body: { is_binary: boolean; content?: string; content_base64?: string }) {
     const url = buildApiUrl(
       `/skill-management/skills/${encodeURIComponent(skillId)}/file?path=${encodeURIComponent(path)}`
     )
@@ -131,75 +124,61 @@ export const skillManagementApi = {
     await parseJsonOrThrow(resp)
   },
 
-  async listAgents() {
-    const url = buildApiUrl(`/skill-management/agents`)
-    const resp = await fetch(url, { headers: getAuthHeader() })
-    const result = await parseJsonOrThrow(resp)
-    return result.data as AgentSummary[]
-  },
-
-  async listPromptVersions(agentId: string) {
-    const url = buildApiUrl(`/skill-management/agents/${encodeURIComponent(agentId)}/prompts`)
-    const resp = await fetch(url, { headers: getAuthHeader() })
-    const result = await parseJsonOrThrow(resp)
-    return result.data as AgentPromptVersionSummary[]
-  },
-
-  async getPromptVersion(agentId: string, version: string) {
-    const url = buildApiUrl(
-      `/skill-management/agents/${encodeURIComponent(agentId)}/prompts/${encodeURIComponent(version)}`
-    )
-    const resp = await fetch(url, { headers: getAuthHeader() })
-    const result = await parseJsonOrThrow(resp)
-    return result.data as AgentPromptVersionDetail
-  },
-
-  async createPromptVersion(
-    agentId: string,
-    body: { version: string; lang: string; content: string; active_skill_ids?: string[] }
-  ) {
-    const url = buildApiUrl(`/skill-management/agents/${encodeURIComponent(agentId)}/prompts`)
+  async batchOps(skillId: string, ops: any[]) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/ops`)
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeader() },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ops }),
     })
-    const result = await parseJsonOrThrow(resp)
-    return result.data as AgentPromptVersionDetail
+    await parseJsonOrThrow(resp)
   },
 
-  async updatePromptVersion(
-    agentId: string,
-    version: string,
-    body: { lang?: string; content?: string; active_skill_ids?: string[] }
-  ) {
-    const url = buildApiUrl(
-      `/skill-management/agents/${encodeURIComponent(agentId)}/prompts/${encodeURIComponent(version)}`
-    )
+  // Meta & Versioning
+  async getSkillMeta(skillId: string) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/meta`)
+    const resp = await fetch(url, { headers: getAuthHeader() })
+    const result = await parseJsonOrThrow(resp)
+    return result.data as SkillMeta
+  },
+
+  async updateSkillStatus(skillId: string, status: SkillStatus) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/status`)
     const resp = await fetch(url, {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...getAuthHeader() },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ status }),
     })
     const result = await parseJsonOrThrow(resp)
-    return result.data as AgentPromptVersionDetail
+    return result.data as SkillMeta
   },
 
-  async runPlayground(body: {
-    agent_id: string
-    prompt_version: string
-    skill_ids: string[]
-    message: string
-    model?: string
-    max_turns?: number
-  }) {
-    const url = buildApiUrl(`/skill-management/playground/run`)
+  async listVersions(skillId: string) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/versions`)
+    const resp = await fetch(url, { headers: getAuthHeader() })
+    const result = await parseJsonOrThrow(resp)
+    return result.data as SkillVersionSummary[]
+  },
+
+  async createVersion(skillId: string, message: string) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/versions`)
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeader() },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ message }),
     })
     const result = await parseJsonOrThrow(resp)
-    return result.data as PlaygroundRunResponse
+    return result.data as SkillVersionSummary
+  },
+
+  async restoreVersion(skillId: string, versionId: string) {
+    const url = buildApiUrl(`/skill-management/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(versionId)}/restore`)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeader() },
+      body: JSON.stringify({}),
+    })
+    await parseJsonOrThrow(resp)
   },
 }
+

@@ -1,179 +1,82 @@
 "use client"
 
 import React, { useEffect, useMemo, useState } from "react"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import {
-  AgentPromptVersionDetail,
-  AgentPromptVersionSummary,
-  AgentSummary,
   SkillFileNode,
   SkillSummary,
+  SkillMeta,
+  SkillVersionSummary,
+  SkillStatus,
   skillManagementApi,
 } from "@/lib/api-skill-management"
 import {
-  Settings2,
-  Trash2,
-  Copy,
-  Check,
-  SlidersHorizontal,
-  BookmarkPlus,
   ChevronRight,
   ChevronDown,
   Folder,
   FolderOpen,
   FileText,
-  X,
+  Save,
+  Clock,
+  GitBranch,
+  FileCode,
+  RotateCcw,
 } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { vs } from "react-syntax-highlighter/dist/esm/styles/prism"
 
-type ChatMessage = { role: "user" | "assistant"; content: string; createdAt: number }
 type SkillIdSet = Set<string>
 type SkillTreeMap = Record<string, SkillFileNode | undefined>
 type SkillExpandedSet = Set<string>
 type ActiveFile = { skillId: string; path: string } | null
-type SessionPreset = { name: string; agentId: string; promptVersion: string; skillIds: string[]; updatedAt: number }
 type ExpandedTreeNodes = Set<string>
-
-const PRESET_STORAGE_KEY = "skill_management_session_presets_v1"
-
-function safeLoadPresets(): SessionPreset[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = localStorage.getItem(PRESET_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(Boolean) as SessionPreset[]
-  } catch {
-    return []
-  }
-}
-
-function safeSavePresets(presets: SessionPreset[]) {
-  if (typeof window === "undefined") return
-  try {
-    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets))
-  } catch {
-    // ignore
-  }
-}
-
-function extractSkillOutputTypes(text: string): string[] {
-  const types = new Set<string>()
-  const re = /<skill-output[^>]*type="([^"]+)"[^>]*>/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text))) {
-    if (m[1]) types.add(m[1])
-  }
-  return Array.from(types)
-}
-
-function normalizeAssistantMarkdown(text: string): string {
-  let out = text
-  out = out.replace(/<\|[a-zA-Z]+\|>/g, "")
-  out = out.replace(
-    /<skill-output[^>]*type="([^"]+)"[^>]*>\s*([\s\S]*?)\s*<\/skill-output>/g,
-    (_full, type, body) => `\n\n**<skill-output type="${type}">**\n\n\`\`\`json\n${body.trim()}\n\`\`\`\n\n`
-  )
-  return out.trim()
-}
-
-function CopyIconButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted transition-colors"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(value)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1400)
-              } catch {
-                // ignore
-              }
-            }}
-            aria-label={label}
-            title={label}
-          >
-            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>{copied ? "已复制" : label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )
-}
-
-function MarkdownMessage({ content }: { content: string }) {
-  const normalized = useMemo(() => normalizeAssistantMarkdown(content), [content])
-  return (
-    <ReactMarkdown
-      className="prose prose-sm max-w-none prose-pre:p-0 prose-pre:bg-transparent dark:prose-invert"
-      components={{
-        code({ inline, className, children, ...props }) {
-          const match = /language-(\w+)/.exec(className || "")
-          const language = match?.[1]
-          const raw = String(children ?? "")
-          if (inline) {
-            return (
-              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[12px]" {...props}>
-                {children}
-              </code>
-            )
-          }
-          return (
-            <div className="rounded-xl border overflow-hidden bg-background">
-              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-                <div className="text-xs text-muted-foreground font-mono">{language || "text"}</div>
-                <CopyIconButton value={raw.replace(/\n$/, "")} label="复制代码" />
-              </div>
-              <SyntaxHighlighter
-                language={language}
-                style={vs as any}
-                customStyle={{ margin: 0, padding: "12px", background: "transparent" }}
-                showLineNumbers={false}
-              >
-                {raw.replace(/\n$/, "")}
-              </SyntaxHighlighter>
-            </div>
-          )
-        },
-      }}
-    >
-      {normalized}
-    </ReactMarkdown>
-  )
-}
 
 function basename(p: string) {
   if (!p) return ""
   const parts = p.split("/")
   return parts[parts.length - 1] || p
+}
+
+const statusColors: Record<SkillStatus, string> = {
+  draft: "bg-gray-100 text-gray-800 border-gray-200",
+  pending_review: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  approved: "bg-green-100 text-green-800 border-green-200",
+  rejected: "bg-red-100 text-red-800 border-red-200",
+}
+
+const statusLabels: Record<SkillStatus, string> = {
+  draft: "草稿",
+  pending_review: "待审核",
+  approved: "已批准",
+  rejected: "已拒绝",
+}
+
+function StatusBadge({ status }: { status: SkillStatus }) {
+  return (
+    <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", statusColors[status])}>
+      {statusLabels[status]}
+    </span>
+  )
 }
 
 function TreeRow({
@@ -212,23 +115,21 @@ function SkillExplorerTree({
   root,
   isSkillExpanded,
   setSkillExpanded,
-  isActiveSkill,
-  onToggleActive,
   expandedNodes,
   setExpandedNodes,
   activeFile,
   onOpenFile,
+  skillStatus,
 }: {
   skillId: string
   root: SkillFileNode | undefined
   isSkillExpanded: boolean
   setSkillExpanded: (open: boolean) => void
-  isActiveSkill: boolean
-  onToggleActive: (next: boolean) => void
   expandedNodes: ExpandedTreeNodes
   setExpandedNodes: (next: ExpandedTreeNodes) => void
   activeFile: ActiveFile
   onOpenFile: (path: string) => void
+  skillStatus?: SkillStatus
 }) {
   const isLoaded = Boolean(root)
   const rootNode: SkillFileNode = root ?? { path: "", type: "dir", children: [] }
@@ -254,38 +155,15 @@ function SkillExplorerTree({
           <span className={cn("truncate font-medium", isRoot && "text-[13px]")}>
             {isRoot ? skillId : basename(node.path)}
           </span>
-          {isRoot && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border",
-                isActiveSkill
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  : "bg-muted/30 border-border text-muted-foreground"
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  isActiveSkill ? "bg-emerald-500" : "bg-muted-foreground/50"
-                )}
-              />
-              {isActiveSkill ? "Active" : "Inactive"}
-            </span>
+          {isRoot && skillStatus && (
+            <div className={cn("w-2 h-2 rounded-full",
+              skillStatus === 'approved' ? 'bg-green-500' :
+                skillStatus === 'pending_review' ? 'bg-yellow-500' :
+                  skillStatus === 'rejected' ? 'bg-red-500' : 'bg-gray-300'
+            )} />
           )}
         </div>
       )
-
-      const right = isRoot ? (
-        <div
-          className="flex items-center gap-2"
-          onClick={(e) => {
-            e.stopPropagation()
-          }}
-        >
-          <div className="text-[11px] text-muted-foreground hidden group-hover:block">激活</div>
-          <Switch checked={isActiveSkill} onCheckedChange={onToggleActive} />
-        </div>
-      ) : null
 
       return (
         <div key={key}>
@@ -299,7 +177,6 @@ function SkillExplorerTree({
               </div>
             }
             label={label}
-            right={right}
           />
           {open ? (
             !isRoot && node.children?.length ? (
@@ -333,36 +210,30 @@ function SkillExplorerTree({
 }
 
 export function SkillManagementClient() {
-  const [agents, setAgents] = useState([] as AgentSummary[])
-  const [agentId, setAgentId] = useState("")
-
-  const [promptVersions, setPromptVersions] = useState([] as AgentPromptVersionSummary[])
-  const [promptVersion, setPromptVersion] = useState("")
-  const [promptDetail, setPromptDetail] = useState(null as AgentPromptVersionDetail | null)
-  const [promptDraft, setPromptDraft] = useState("")
-  const [promptSaving, setPromptSaving] = useState(false)
-  const [promptSheetOpen, setPromptSheetOpen] = useState(false)
-
   const [skills, setSkills] = useState([] as SkillSummary[])
   const [skillQuery, setSkillQuery] = useState("")
-  const [activeSkillIds, setActiveSkillIds] = useState(new Set() as SkillIdSet)
 
   const [skillTrees, setSkillTrees] = useState({} as SkillTreeMap)
   const [expandedSkills, setExpandedSkills] = useState(new Set() as SkillExpandedSet)
   const [expandedTreeNodes, setExpandedTreeNodes] = useState(new Set() as ExpandedTreeNodes)
+
   const [activeFile, setActiveFile] = useState(null as ActiveFile)
   const [fileDraft, setFileDraft] = useState("")
   const [fileIsBinary, setFileIsBinary] = useState(false)
   const [fileSaving, setFileSaving] = useState(false)
 
-  const [messages, setMessages] = useState([] as ChatMessage[])
-  const [input, setInput] = useState("")
-  const [running, setRunning] = useState(false)
+  // Meta & Versioning State
+  const [currentSkillMeta, setCurrentSkillMeta] = useState<SkillMeta | null>(null)
+  const [skillVersions, setSkillVersions] = useState<SkillVersionSummary[]>([])
+  const [versionMessage, setVersionMessage] = useState("")
+  const [isVersionDialogOpen, setIsVersionDialogOpen] = useState(false)
+  const [versionCreating, setVersionCreating] = useState(false)
+
   const [error, setError] = useState("")
-  const [autoScroll, setAutoScroll] = useState(true)
-  const [presets, setPresets] = useState([] as SessionPreset[])
-  const [model, setModel] = useState<string>("")
-  const [maxTurns, setMaxTurns] = useState<number>(1)
+
+  // Computed
+  const activeSkillId = activeFile?.skillId
+  const currentSkill = useMemo(() => skills.find(s => s.id === activeSkillId), [skills, activeSkillId])
 
   const filteredSkills = useMemo(() => {
     const q = skillQuery.trim().toLowerCase()
@@ -375,90 +246,49 @@ export function SkillManagementClient() {
     )
   }, [skillQuery, skills])
 
-  const activeSkillList = useMemo(() => Array.from(activeSkillIds), [activeSkillIds])
-  const activeSkillsPreview = useMemo(() => {
-    const names = activeSkillList
-      .map((id) => skills.find((s) => s.id === id)?.name || id)
-      .slice(0, 3)
-    const suffix = activeSkillList.length > 3 ? ` +${activeSkillList.length - 3}` : ""
-    return names.join(", ") + suffix
-  }, [activeSkillList, skills])
-
-  async function refreshAgents() {
-    const list = await skillManagementApi.listAgents()
-    setAgents(list)
-    if (!agentId && list.length) setAgentId(list[0].id)
-  }
-
   async function refreshSkills(q?: string) {
-    const list = await skillManagementApi.listSkills(q)
-    setSkills(list)
-    if (list.length && expandedSkills.size === 0) {
-      const first = list[0].id
-      setExpandedSkills(new Set([first]))
-      try {
-        await ensureSkillTreeLoaded(first)
-      } catch {
-        // ignore
-      }
+    try {
+      const list = await skillManagementApi.listSkills(q)
+      setSkills(list)
+    } catch (e: any) {
+      setError(e.message)
     }
   }
 
-  async function refreshPromptVersions(nextAgentId: string) {
-    const list = await skillManagementApi.listPromptVersions(nextAgentId)
-    setPromptVersions(list)
-    if (list.length && !list.find((v) => v.version === promptVersion)) {
-      setPromptVersion(list[0].version)
-    }
-    if (!list.length) {
-      setPromptVersion("")
-      setPromptDetail(null)
-      setPromptDraft("")
-    }
-  }
-
+  // Initial Load
   useEffect(() => {
-    ;(async () => {
-      try {
-        setPresets(safeLoadPresets())
-        await Promise.all([refreshAgents(), refreshSkills()])
-      } catch (e: any) {
-        setError(e?.message || "初始化失败")
-      }
-    })()
+    refreshSkills()
   }, [])
 
+  // Load Meta/Versions when active skill changes
   useEffect(() => {
-    if (!agentId) return
-    ;(async () => {
-      try {
-        await refreshPromptVersions(agentId)
-      } catch (e: any) {
-        setError(e?.message || "加载 Prompt 版本失败")
-      }
-    })()
-  }, [agentId])
+    // If we selected a file, we know which skill is active.
+    // But if we just expanded a skill tree (and not selected file), we might want to see details too?
+    // For now, let's link "Active details" to "Selected File's Skill" or maybe we need a dedicated "Select Skill" action?
+    // The requirement says: "active/inactive status ... remove ... new status system".
+    // Let's assume selecting a file sets the "Active Skill Context".
+    if (!activeSkillId) {
+      setCurrentSkillMeta(null)
+      setSkillVersions([])
+      return
+    }
+    refreshMeta(activeSkillId)
+  }, [activeSkillId])
 
-  useEffect(() => {
-    if (!agentId || !promptVersion) return
-    ;(async () => {
-      try {
-        const detail = await skillManagementApi.getPromptVersion(agentId, promptVersion)
-        setPromptDetail(detail)
-        setPromptDraft(detail.content)
-        setActiveSkillIds(new Set(detail.active_skill_ids || []))
-      } catch (e: any) {
-        setPromptDetail(null)
-        setPromptDraft("")
-        setError(e?.message || "加载 Prompt 失败")
-      }
-    })()
-  }, [agentId, promptVersion])
-
-  useEffect(() => {
-    if (presets.length === 0) return
-    safeSavePresets(presets)
-  }, [presets])
+  async function refreshMeta(skillId: string) {
+    try {
+      const [meta, versions] = await Promise.all([
+        skillManagementApi.getSkillMeta(skillId),
+        skillManagementApi.listVersions(skillId)
+      ])
+      setCurrentSkillMeta(meta)
+      setSkillVersions(versions)
+      // Update skill list status locally if needed
+      setSkills(prev => prev.map(s => s.id === skillId ? { ...s, status: meta.status } : s))
+    } catch (e: any) {
+      console.error("Failed to load meta", e)
+    }
+  }
 
   async function ensureSkillTreeLoaded(skillId: string) {
     if (skillTrees[skillId]) return
@@ -474,46 +304,7 @@ export function SkillManagementClient() {
       setFileIsBinary(content.is_binary)
       setFileDraft(content.content || "")
     } catch (e: any) {
-      setError(e?.message || "读取文件失败")
-    }
-  }
-
-  async function savePrompt() {
-    if (!agentId || !promptVersion) return
-    setPromptSaving(true)
-    setError("")
-    try {
-      const updated = await skillManagementApi.updatePromptVersion(agentId, promptVersion, {
-        content: promptDraft,
-        active_skill_ids: activeSkillList,
-      })
-      setPromptDetail(updated)
-    } catch (e: any) {
-      setError(e?.message || "保存 Prompt 失败")
-    } finally {
-      setPromptSaving(false)
-    }
-  }
-
-  async function createNewPromptVersion() {
-    if (!agentId) return
-    const version = window.prompt("新 Prompt 版本号（仅字母/数字/._-）", `v${promptVersions.length + 1}`)
-    if (!version) return
-    setPromptSaving(true)
-    setError("")
-    try {
-      const created = await skillManagementApi.createPromptVersion(agentId, {
-        version,
-        lang: "zh-CN",
-        content: promptDraft || "",
-        active_skill_ids: activeSkillList,
-      })
-      await refreshPromptVersions(agentId)
-      setPromptVersion(created.version)
-    } catch (e: any) {
-      setError(e?.message || "创建版本失败")
-    } finally {
-      setPromptSaving(false)
+      setError(e?.message || "Read file failed")
     }
   }
 
@@ -526,53 +317,60 @@ export function SkillManagementClient() {
         is_binary: false,
         content: fileDraft,
       })
+      // Maybe toast success?
     } catch (e: any) {
-      setError(e?.message || "保存文件失败")
+      setError(e?.message || "Save file failed")
     } finally {
       setFileSaving(false)
     }
   }
 
-  async function run() {
-    if (!agentId || !promptVersion || !input.trim()) return
-    setRunning(true)
-    setError("")
-    const userMessage = input.trim()
-    setMessages((prev) => [...prev, { role: "user", content: userMessage, createdAt: Date.now() }])
-    setInput("")
+  async function updateStatus(status: SkillStatus) {
+    if (!activeSkillId) return
     try {
-      const resp = await skillManagementApi.runPlayground({
-        agent_id: agentId,
-        prompt_version: promptVersion,
-        // Server uses the prompt-version bound active skills; keep request minimal.
-        skill_ids: [],
-        message: userMessage,
-        model: model || undefined,
-        max_turns: maxTurns,
-      })
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: resp.output || "(empty)", createdAt: Date.now() },
-      ])
+      const meta = await skillManagementApi.updateSkillStatus(activeSkillId, status)
+      setCurrentSkillMeta(meta)
+      setSkills(prev => prev.map(s => s.id === activeSkillId ? { ...s, status: meta.status } : s))
     } catch (e: any) {
-      setError(e?.message || "运行失败")
-    } finally {
-      setRunning(false)
+      setError(e.message)
     }
   }
 
-  const promptDirty = (promptDetail?.content ?? "") !== promptDraft
-  const chatBottomId = "skill-management-chat-bottom"
-
-  useEffect(() => {
-    if (!autoScroll) return
-    const el = document.getElementById(chatBottomId)
-    el?.scrollIntoView({ block: "end" })
-  }, [autoScroll, chatBottomId, messages.length, running])
-
-  const formatTime = (ts: number) => {
+  async function createVersion() {
+    if (!activeSkillId || !versionMessage.trim()) return
+    setVersionCreating(true)
     try {
-      return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(ts)
+      await skillManagementApi.createVersion(activeSkillId, versionMessage)
+      setVersionMessage("")
+      setIsVersionDialogOpen(false)
+      await refreshMeta(activeSkillId)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setVersionCreating(false)
+    }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (!activeSkillId || !confirm(`确定要恢复到版本 ${versionId} 吗？当前未保存的更改将会丢失。`)) return
+    try {
+      await skillManagementApi.restoreVersion(activeSkillId, versionId)
+      await refreshMeta(activeSkillId)
+      // Reload file if open
+      if (activeFile && activeFile.skillId === activeSkillId) {
+        await openFile(activeFile.skillId, activeFile.path)
+      }
+      // Reload tree
+      const tree = await skillManagementApi.getSkillTree(activeSkillId)
+      setSkillTrees(prev => ({ ...prev, [activeSkillId]: tree }))
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const formatTime = (ts: string) => {
+    try {
+      return new Date(ts).toLocaleString("zh-CN")
     } catch {
       return ""
     }
@@ -582,59 +380,18 @@ export function SkillManagementClient() {
     <div className="h-[calc(100vh-4.5rem)]">
       <ResizablePanelGroup direction="horizontal" className="h-full rounded-lg border bg-background">
         {/* Left: Explorer */}
-        <ResizablePanel defaultSize={22} minSize={16}>
+        <ResizablePanel defaultSize={20} minSize={15}>
           <div className="h-full flex flex-col">
             <div className="px-3 py-2 border-b">
-              <div className="font-medium text-sm">Explorer</div>
-              <div className="mt-2 flex gap-2">
+              <div className="font-medium text-sm text-foreground">技能列表</div>
+              <div className="mt-2">
                 <Input
                   value={skillQuery}
                   onChange={(e) => setSkillQuery(e.target.value)}
-                  placeholder="搜索 skills..."
-                  className="h-8"
+                  placeholder="搜索技能..."
+                  className="h-8 text-xs"
                 />
-                <Badge variant="secondary" className="h-8 px-2 text-xs flex items-center">
-                  {activeSkillList.length}
-                </Badge>
               </div>
-              {activeSkillList.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {activeSkillList.slice(0, 6).map((id) => (
-                    <Badge key={id} variant="secondary" className="text-[11px] pr-1">
-                      <span className="mr-1">{id}</span>
-                      <button
-                        className="rounded-sm hover:bg-muted px-1"
-                        title="停用"
-                        onClick={async () => {
-                          if (!agentId || !promptVersion) {
-                            setError("请先在 Prompt 中选择/创建版本，再绑定技能。")
-                            setPromptSheetOpen(true)
-                            return
-                          }
-                          const next = new Set(activeSkillIds)
-                          next.delete(id)
-                          setActiveSkillIds(next)
-                          try {
-                            const updated = await skillManagementApi.updatePromptVersion(agentId, promptVersion, {
-                              active_skill_ids: Array.from(next),
-                            })
-                            setPromptDetail(updated)
-                          } catch (e: any) {
-                            setError(e?.message || "解绑技能失败")
-                          }
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                  {activeSkillList.length > 6 && (
-                    <Badge variant="secondary" className="text-[11px]">
-                      +{activeSkillList.length - 6}
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
 
             <ScrollArea className="flex-1">
@@ -642,7 +399,6 @@ export function SkillManagementClient() {
                 {filteredSkills.map((s) => {
                   const tree = skillTrees[s.id]
                   const expanded = expandedSkills.has(s.id)
-                  const isActive = activeSkillIds.has(s.id)
                   return (
                     <SkillExplorerTree
                       key={s.id}
@@ -656,38 +412,18 @@ export function SkillManagementClient() {
                           try {
                             await ensureSkillTreeLoaded(s.id)
                           } catch (e: any) {
-                            setError(e?.message || "加载技能文件树失败")
+                            setError(e?.message || "Load tree failed")
                           }
                         } else {
                           next.delete(s.id)
                         }
                         setExpandedSkills(next)
                       }}
-                      isActiveSkill={isActive}
-                      onToggleActive={async (nextChecked) => {
-                        if (!agentId || !promptVersion) {
-                          setError("请先在 Prompt 中选择/创建版本，再绑定技能。")
-                          setPromptSheetOpen(true)
-                          return
-                        }
-                        const next = new Set(activeSkillIds)
-                        if (nextChecked) next.add(s.id)
-                        else next.delete(s.id)
-                        setActiveSkillIds(next)
-                        setError("")
-                        try {
-                          const updated = await skillManagementApi.updatePromptVersion(agentId, promptVersion, {
-                            active_skill_ids: Array.from(next),
-                          })
-                          setPromptDetail(updated)
-                        } catch (e: any) {
-                          setError(e?.message || "绑定技能失败")
-                        }
-                      }}
                       expandedNodes={expandedTreeNodes}
                       setExpandedNodes={setExpandedTreeNodes}
                       activeFile={activeFile}
                       onOpenFile={(path) => openFile(s.id, path)}
+                      skillStatus={s.status}
                     />
                   )
                 })}
@@ -696,384 +432,165 @@ export function SkillManagementClient() {
           </div>
         </ResizablePanel>
 
-        <ResizableHandle withHandle />
+        <ResizableHandle />
 
         {/* Center: Editor */}
-        <ResizablePanel defaultSize={50} minSize={30}>
+        <ResizablePanel defaultSize={55} minSize={30}>
           <div className="h-full flex flex-col">
-            <div className="px-3 py-2 border-b flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-medium text-sm">Editor</div>
-                <div className="text-xs text-muted-foreground font-mono truncate">
-                  {activeFile ? `${activeFile.skillId}/${activeFile.path}` : "选择左侧文件开始编辑"}
+            <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/10 h-10">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileCode className="h-4 w-4 text-muted-foreground" />
+                <div className="text-sm font-medium truncate">
+                  {activeFile ? `${activeFile.skillId}/${activeFile.path}` : "未选择文件"}
                 </div>
               </div>
-              <Button size="sm" onClick={saveFile} disabled={!activeFile || fileIsBinary || fileSaving}>
-                {fileSaving ? "保存中..." : "保存"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {activeFile && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-xs z-10"
+                    onClick={saveFile}
+                    disabled={fileIsBinary || fileSaving}
+                  >
+                    <Save className="h-3 w-3 mr-1" />
+                    {fileSaving ? "保存中..." : "保存"}
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <div className="flex-1 p-3">
+            <div className="flex-1 overflow-hidden relative">
               {!activeFile ? (
-                <div className="text-sm text-muted-foreground">从左侧选择一个文件开始。</div>
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  请选择一个文件进行编辑
+                </div>
               ) : fileIsBinary ? (
-                <div className="text-sm text-muted-foreground">二进制文件暂不支持在线编辑。</div>
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  不支持显示二进制文件内容
+                </div>
               ) : (
                 <Textarea
                   value={fileDraft}
                   onChange={(e) => setFileDraft(e.target.value)}
-                  className="h-full font-mono text-xs leading-5 resize-none"
+                  className="h-full w-full font-mono text-xs leading-5 resize-none border-0 focus-visible:ring-0 p-4 rounded-none"
+                  spellCheck={false}
                 />
               )}
             </div>
+            {error && (
+              <div className="px-4 py-2 bg-red-50 text-red-600 text-xs border-t border-red-100 flex items-center justify-between">
+                <span>{error}</span>
+                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setError("")}><span className="sr-only">Dismiss</span>×</Button>
+              </div>
+            )}
           </div>
         </ResizablePanel>
 
-        <ResizableHandle withHandle />
+        <ResizableHandle />
 
-        {/* Right: Session / Debug */}
-        <ResizablePanel defaultSize={28} minSize={22}>
-          <div className="h-full flex flex-col">
-            <div className="px-3 py-2 border-b flex items-center justify-between gap-2 bg-gradient-to-b from-muted/40 to-background">
-              <div className="min-w-0">
-                <div className="font-medium text-sm">Session</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {agentId ? `${agentId} · ${promptVersion || "-"}` : "未选择 Agent"}
+        {/* Right: Details & Versions */}
+        <ResizablePanel defaultSize={25} minSize={20}>
+          {activeSkillId ? (
+            <div className="h-full flex flex-col bg-muted/5">
+              {/* Header */}
+              <div className="px-4 py-3 border-b bg-background">
+                <div className="font-semibold text-lg">{activeSkillId}</div>
+                <div className="text-xs text-muted-foreground mt-1 truncate">{currentSkill?.description || "暂无描述"}</div>
+              </div>
+
+              {/* Status */}
+              <div className="px-4 py-4 border-b space-y-3 bg-background/50">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">状态</div>
+                <div className="flex items-center justify-between">
+                  {currentSkillMeta && <StatusBadge status={currentSkillMeta.status} />}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 text-xs">更改状态</Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => updateStatus("draft")}>设为草稿</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => updateStatus("pending_review")}>提交审核</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => updateStatus("approved")}>批准</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => updateStatus("rejected")}>拒绝</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                {activeSkillList.length > 0 && (
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    Skills: {activeSkillsPreview}
+              </div>
+
+              {/* Versions */}
+              <div className="flex-1 flex flex-col min-h-0 bg-background">
+                <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/10">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    版本历史
                   </div>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground">
-                      <SlidersHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuLabel>会话配置</DropdownMenuLabel>
-                    <div className="px-2 py-2 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground">Auto-scroll</div>
-                        <input
-                          type="checkbox"
-                          checked={autoScroll}
-                          onChange={(e) => setAutoScroll(e.target.checked)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-xs text-muted-foreground">Model（可选）</div>
+                  <Dialog open={isVersionDialogOpen} onOpenChange={setIsVersionDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+                        <GitBranch className="h-3.5 w-3.5" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>创建新版本</DialogTitle>
+                        <DialogDescription>
+                          为当前文件创建版本快照。
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4">
                         <Input
-                          value={model}
-                          onChange={(e) => setModel(e.target.value)}
-                          placeholder="例如：claude-sonnet-4-20250514"
-                          className="h-8"
+                          placeholder="版本描述（例如：添加了输入验证）"
+                          value={versionMessage}
+                          onChange={e => setVersionMessage(e.target.value)}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <div className="text-xs text-muted-foreground">Max turns</div>
-                        <Input
-                          value={String(maxTurns)}
-                          onChange={(e) => setMaxTurns(Math.max(1, Number(e.target.value || 1)))}
-                          className="h-8"
-                          inputMode="numeric"
-                        />
-                      </div>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const name = window.prompt(
-                          "保存为预设名称（会保存 Agent + Prompt 版本 + 激活技能集合）",
-                          `${agentId || "agent"}:${promptVersion || "v"}:${activeSkillList.length}skills`
-                        )
-                        if (!name) return
-                        const next: SessionPreset[] = [
-                          { name, agentId, promptVersion, skillIds: activeSkillList, updatedAt: Date.now() },
-                          ...presets.filter((p) => p.name !== name),
-                        ].slice(0, 20)
-                        setPresets(next)
-                      }}
-                    >
-                      <BookmarkPlus className="h-4 w-4 mr-2" />
-                      保存当前为预设
-                    </DropdownMenuItem>
-                    {presets.length > 0 && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>预设</DropdownMenuLabel>
-                        {presets.slice(0, 8).map((p) => (
-                          <DropdownMenuItem
-                            key={p.name}
-                            onClick={async () => {
-                              setAgentId(p.agentId)
-                              setPromptVersion(p.promptVersion)
-                              setActiveSkillIds(new Set(p.skillIds))
-                              const nextExpanded = new Set(expandedSkills)
-                              for (const id of p.skillIds) {
-                                nextExpanded.add(id)
-                                try {
-                                  await ensureSkillTreeLoaded(id)
-                                } catch {
-                                  // ignore
-                                }
-                              }
-                              setExpandedSkills(nextExpanded)
-                              if (p.agentId && p.promptVersion) {
-                                try {
-                                  const updated = await skillManagementApi.updatePromptVersion(
-                                    p.agentId,
-                                    p.promptVersion,
-                                    { active_skill_ids: p.skillIds }
-                                  )
-                                  setPromptDetail(updated)
-                                } catch {
-                                  // ignore
-                                }
-                              }
-                            }}
-                          >
-                            <span className="truncate">{p.name}</span>
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => {
-                            if (!window.confirm("清空所有预设？")) return
-                            setPresets([])
-                            safeSavePresets([])
-                          }}
-                        >
-                          清空预设
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => setMessages([])}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-
-                <Sheet open={promptSheetOpen} onOpenChange={setPromptSheetOpen}>
-                  <SheetTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <Settings2 className="h-4 w-4 mr-2" />
-                      Prompt
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-[720px] sm:max-w-none">
-                    <SheetHeader>
-                      <SheetTitle>Agent Prompt 配置</SheetTitle>
-                    </SheetHeader>
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-muted-foreground">Agent</div>
-                        <select
-                          value={agentId}
-                          onChange={(e) => setAgentId(e.target.value)}
-                          className="h-8 rounded-md border bg-background px-2 text-sm"
-                        >
-                          {agents.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.id}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex-1" />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={createNewPromptVersion}
-                          disabled={!agentId || promptSaving}
-                        >
-                          新建版本
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsVersionDialogOpen(false)}>取消</Button>
+                        <Button onClick={createVersion} disabled={versionCreating || !versionMessage.trim()}>
+                          {versionCreating ? "创建中..." : "创建快照"}
                         </Button>
-                        <Button size="sm" onClick={savePrompt} disabled={!promptDirty || promptSaving}>
-                          {promptSaving ? "保存中..." : "保存"}
-                        </Button>
-                      </div>
-
-                      {promptVersions.length > 0 && (
-                        <Tabs value={promptVersion} onValueChange={setPromptVersion}>
-                          <TabsList className="h-8">
-                            {promptVersions.slice(0, 10).map((v) => (
-                              <TabsTrigger key={v.version} value={v.version} className="text-xs">
-                                {v.version}
-                              </TabsTrigger>
-                            ))}
-                          </TabsList>
-                        </Tabs>
-                      )}
-
-                      <div className="text-xs text-muted-foreground">提示词（版本：{promptVersion || "-"}）</div>
-                      <Textarea
-                        value={promptDraft}
-                        onChange={(e) => setPromptDraft(e.target.value)}
-                        className="h-[60vh] font-mono text-xs leading-5 resize-none"
-                        placeholder='<agent id="huiFa" version="2.0" lang="zh-CN">...'
-                      />
-                    </div>
-                  </SheetContent>
-                </Sheet>
-              </div>
-            </div>
-
-            <ScrollArea
-              className="flex-1 bg-muted/20"
-              onWheel={() => setAutoScroll(false)}
-              onTouchMove={() => setAutoScroll(false)}
-            >
-              <div className="p-4 space-y-4">
-                {messages.length === 0 ? (
-                  <Card className="p-4 bg-background/60">
-                    <div className="text-sm font-medium mb-1">开始调试</div>
-                    <div className="text-sm text-muted-foreground space-y-2">
-                      <div>1) 在左侧勾选需要注册的 Skills（可多选）</div>
-                      <div>2) 点击右上角 Prompt 配置，选择/新建 Prompt 版本并保存</div>
-                      <div>3) 在底部输入消息，开始对话调试</div>
-                    </div>
-                  </Card>
-                ) : (
-                  messages.map((m, idx) => {
-                    const isUser = m.role === "user"
-                    const skillTypes = !isUser ? extractSkillOutputTypes(m.content) : []
-                    return (
-                      <div
-                        key={idx}
-                        className={cn("flex gap-2", isUser ? "justify-end" : "justify-start")}
-                      >
-                        {!isUser && (
-                          <Avatar className="h-7 w-7 mt-1">
-                            <AvatarFallback className="text-xs">A</AvatarFallback>
-                          </Avatar>
-                        )}
-                        <div className={cn("max-w-[86%] space-y-1", isUser ? "items-end" : "items-start")}>
-                          {!isUser && skillTypes.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {skillTypes.map((t) => (
-                                <Badge key={t} variant="secondary" className="text-[11px]">
-                                  {t}
-                                </Badge>
-                              ))}
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <ScrollArea className="flex-1">
+                  <div className="divide-y">
+                    {skillVersions.length === 0 ? (
+                      <div className="p-4 text-xs text-muted-foreground text-center">暂无版本历史</div>
+                    ) : (
+                      skillVersions.map(v => (
+                        <div key={v.version} className="p-3 hover:bg-muted/30 group">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-xs font-mono font-medium">{v.version}</div>
+                              <div className="text-[10px] text-muted-foreground mt-0.5">{formatTime(v.created_at)}</div>
+                              <div className="text-xs mt-1.5 break-words text-foreground/90">{v.message}</div>
                             </div>
-                          )}
-                          <div
-                            className={cn(
-                              "rounded-2xl px-3 py-2 shadow-sm border text-sm",
-                              isUser
-                                ? "bg-primary text-primary-foreground border-primary/20"
-                                : "bg-background border-border/70"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className={cn("min-w-0", isUser ? "text-primary-foreground" : "text-foreground")}>
-                                {isUser ? (
-                                  <pre className="whitespace-pre-wrap font-sans">{m.content}</pre>
-                                ) : (
-                                  <MarkdownMessage content={m.content} />
-                                )}
-                              </div>
-                              <div className="shrink-0 mt-0.5">
-                                <CopyIconButton value={m.content} label="复制消息" />
-                              </div>
-                            </div>
-                          </div>
-                          <div className={cn("text-[11px] text-muted-foreground", isUser ? "text-right" : "text-left")}>
-                            {formatTime(m.createdAt)}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="恢复此版本"
+                              onClick={() => restoreVersion(v.version)}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                        {isUser && (
-                          <Avatar className="h-7 w-7 mt-1">
-                            <AvatarFallback className="text-xs">我</AvatarFallback>
-                          </Avatar>
-                        )}
-                      </div>
-                    )
-                  })
-                )}
-
-                {running && (
-                  <div className="flex gap-2 justify-start">
-                    <Avatar className="h-7 w-7 mt-1">
-                      <AvatarFallback className="text-xs">A</AvatarFallback>
-                    </Avatar>
-                    <div className="max-w-[86%]">
-                      <div className="rounded-2xl px-3 py-2 shadow-sm border bg-background text-sm text-muted-foreground">
-                        正在思考...
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
-                )}
-
-                <div id={chatBottomId} />
+                </ScrollArea>
               </div>
-            </ScrollArea>
-
-              <div className="border-t p-3 space-y-2">
-              {activeSkillList.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {activeSkillList.slice(0, 6).map((id) => (
-                    <Badge key={id} variant="secondary" className="text-xs">
-                      {id}
-                    </Badge>
-                  ))}
-                  {activeSkillList.length > 6 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{activeSkillList.length - 6}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              {!promptVersion && (
-                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
-                  还没有 Prompt 版本：点击右上角 Prompt 新建并保存。
-                </div>
-              )}
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="对方叫张三，欠了我5万..."
-                    className="min-h-[64px] resize-none bg-background"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault()
-                        run()
-                        setAutoScroll(true)
-                      }
-                    }}
-                    onFocus={() => setAutoScroll(true)}
-                  />
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    Enter 发送 · Shift+Enter 换行
-                  </div>
-                </div>
-                <Button
-                  onClick={run}
-                  disabled={running || !agentId || !promptVersion || !input.trim()}
-                  className="h-auto"
-                >
-                  {running ? "运行中..." : "发送"}
-                </Button>
-              </div>
-              {error && (
-                <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1">
-                  {error}
-                </div>
-              )}
             </div>
-          </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/5">
+              <FolderOpen className="h-10 w-10 opacity-20 mb-2" />
+              <div className="text-sm">请选择一个技能查看详情</div>
+            </div>
+          )}
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

@@ -1,5 +1,5 @@
 ---
-name: evidence-identifier
+name: evidence-types-handler
 description: |
   当用户说"这是什么证据"或"聊天记录能当证据吗"时，使用此技能执行：
   1. 识别材料属于八大证据类型中的哪一种

@@ -1,5 +1,5 @@
 ---
-name: evidence-authenticator
+name: evidence-authentication-guide
 description: |
   当用户说"帮我审核这份证据"或"看看这个能当证据吗"时，使用此技能执行：
   1. 要求用户提供证据类型、来源和形式信息

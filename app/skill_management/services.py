@@ -2,25 +2,21 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import re
-from dataclasses import dataclass
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 from fastapi import HTTPException
 
 from app.skill_management.schemas import (
-    AgentPromptVersionDetail,
-    AgentPromptVersionSummary,
     SkillFileContent,
     SkillFileNode,
+    SkillMeta,
+    SkillStatus,
     SkillSummary,
+    SkillVersionSummary,
 )
-
-
-_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
 
 
 def _now() -> datetime:
@@ -35,16 +31,9 @@ def skills_root_dir() -> Path:
     return _project_root() / "app" / "agentic" / "skills"
 
 
-def prompts_root_dir() -> Path:
-    return _project_root() / "app" / "agentic" / "agent_prompts"
-
-
-def agents_root_dir() -> Path:
-    return _project_root() / "app" / "agentic" / "agents"
-
-
 def _ensure_safe_id(value: str, label: str) -> str:
-    if not _SAFE_NAME_RE.match(value):
+    # Basic validation for directory names
+    if not value or ".." in value or "/" in value or "\\" in value:
         raise HTTPException(status_code=400, detail=f"invalid_{label}")
     return value
 
@@ -58,6 +47,14 @@ def _resolve_under(base: Path, relative_path: str) -> Path:
     if not resolved.is_relative_to(base_resolved):
         raise HTTPException(status_code=400, detail="path_outside_root")
     return resolved
+
+
+def _get_skill_dir(skill_id: str) -> Path:
+    _ensure_safe_id(skill_id, "skill_id")
+    root = skills_root_dir() / skill_id
+    if not root.exists() or not root.is_dir():
+        raise HTTPException(status_code=404, detail="skill_not_found")
+    return root
 
 
 def _parse_skill_frontmatter(skill_md: str) -> tuple[str, str]:
@@ -83,6 +80,26 @@ def _parse_skill_frontmatter(skill_md: str) -> tuple[str, str]:
     return name, description
 
 
+def _read_skill_meta(skill_id: str) -> SkillMeta:
+    skill_dir = _get_skill_dir(skill_id)
+    meta_path = skill_dir / "skill.meta.json"
+    if not meta_path.exists():
+        return SkillMeta()
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        return SkillMeta(**data)
+    except Exception:
+        return SkillMeta()
+
+
+def _save_skill_meta(skill_id: str, meta: SkillMeta) -> None:
+    skill_dir = _get_skill_dir(skill_id)
+    meta_path = skill_dir / "skill.meta.json"
+    meta_path.write_text(
+        meta.model_dump_json(indent=2, exclude_none=True), encoding="utf-8"
+    )
+
+
 def list_skills(query: str | None = None) -> list[SkillSummary]:
     root = skills_root_dir()
     if not root.exists():
@@ -96,6 +113,8 @@ def list_skills(query: str | None = None) -> list[SkillSummary]:
         skill_md_path = child / "SKILL.md"
         name = ""
         description = ""
+        
+        # Read basic info from SKILL.md
         if skill_md_path.exists():
             try:
                 raw = skill_md_path.read_text(encoding="utf-8", errors="replace")
@@ -103,11 +122,25 @@ def list_skills(query: str | None = None) -> list[SkillSummary]:
             except Exception:
                 name = ""
                 description = ""
+        
+        # Read status from meta
+        meta = _read_skill_meta(skill_id)
+        
+        # Determine updated_at
+        updated_at = None
+        try:
+            st = child.stat()
+            updated_at = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+        except Exception:
+            pass
+
         results.append(
             SkillSummary(
                 id=skill_id,
                 name=name or skill_id,
                 description=description or "",
+                status=meta.status,
+                updated_at=updated_at,
             )
         )
 
@@ -122,11 +155,7 @@ def list_skills(query: str | None = None) -> list[SkillSummary]:
 
 
 def skill_tree(skill_id: str, max_nodes: int = 4000) -> SkillFileNode:
-    _ensure_safe_id(skill_id, "skill_id")
-    root = skills_root_dir() / skill_id
-    if not root.exists() or not root.is_dir():
-        raise HTTPException(status_code=404, detail="skill_not_found")
-
+    root = _get_skill_dir(skill_id)
     root_resolved = root.resolve()
     nodes_emitted = 0
 
@@ -136,14 +165,19 @@ def skill_tree(skill_id: str, max_nodes: int = 4000) -> SkillFileNode:
             return []
         items: list[SkillFileNode] = []
         for entry in sorted(dir_path.iterdir(), key=lambda p: (p.is_file(), p.name)):
-            if entry.name.startswith("."):
+            # Skip hidden files and directories (like .versions, .git, .DS_Store), but keep skill.meta.json if needed (or hide it?)
+            # Let's hide .versions and .git, but maybe show skill.meta.json for debugging? 
+            # Ideally users shouldn't edit skill.meta.json manually. Hiding it is better.
+            if entry.name.startswith(".") or entry.name == "skill.meta.json":
                 continue
+            
             try:
                 resolved = entry.resolve()
             except FileNotFoundError:
                 continue
             if not resolved.is_relative_to(root_resolved):
                 continue
+            
             rel_path = (rel_prefix / entry.name).as_posix()
             try:
                 st = entry.stat()
@@ -151,6 +185,7 @@ def skill_tree(skill_id: str, max_nodes: int = 4000) -> SkillFileNode:
             except Exception:
                 updated_at = None
                 st = None
+            
             if entry.is_dir() and not entry.is_symlink():
                 children = walk_dir(entry, rel_prefix / entry.name)
                 items.append(
@@ -183,11 +218,7 @@ def skill_tree(skill_id: str, max_nodes: int = 4000) -> SkillFileNode:
 
 
 def read_skill_file(skill_id: str, relative_path: str, max_bytes: int = 2 * 1024 * 1024) -> SkillFileContent:
-    _ensure_safe_id(skill_id, "skill_id")
-    base = skills_root_dir() / skill_id
-    if not base.exists() or not base.is_dir():
-        raise HTTPException(status_code=404, detail="skill_not_found")
-
+    base = _get_skill_dir(skill_id)
     abs_path = _resolve_under(base, relative_path)
     if not abs_path.exists() or not abs_path.is_file():
         raise HTTPException(status_code=404, detail="file_not_found")
@@ -209,11 +240,7 @@ def read_skill_file(skill_id: str, relative_path: str, max_bytes: int = 2 * 1024
 
 
 def write_skill_file(skill_id: str, relative_path: str, *, is_binary: bool, content: str | None, content_base64: str | None) -> None:
-    _ensure_safe_id(skill_id, "skill_id")
-    base = skills_root_dir() / skill_id
-    if not base.exists() or not base.is_dir():
-        raise HTTPException(status_code=404, detail="skill_not_found")
-
+    base = _get_skill_dir(skill_id)
     abs_path = _resolve_under(base, relative_path)
     abs_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -231,8 +258,7 @@ def write_skill_file(skill_id: str, relative_path: str, *, is_binary: bool, cont
 
 
 def delete_skill_path(skill_id: str, relative_path: str) -> None:
-    _ensure_safe_id(skill_id, "skill_id")
-    base = skills_root_dir() / skill_id
+    base = _get_skill_dir(skill_id)
     abs_path = _resolve_under(base, relative_path)
     if not abs_path.exists():
         return
@@ -240,22 +266,13 @@ def delete_skill_path(skill_id: str, relative_path: str) -> None:
         # avoid deleting skill root itself
         if abs_path.resolve() == base.resolve():
             raise HTTPException(status_code=400, detail="cannot_delete_skill_root")
-        for child in sorted(abs_path.rglob("*"), reverse=True):
-            if child.is_file() or child.is_symlink():
-                child.unlink(missing_ok=True)
-            elif child.is_dir():
-                try:
-                    child.rmdir()
-                except OSError:
-                    pass
-        abs_path.rmdir()
+        shutil.rmtree(abs_path)
     else:
         abs_path.unlink(missing_ok=True)
 
 
 def rename_skill_path(skill_id: str, old_relative_path: str, new_relative_path: str) -> None:
-    _ensure_safe_id(skill_id, "skill_id")
-    base = skills_root_dir() / skill_id
+    base = _get_skill_dir(skill_id)
     src = _resolve_under(base, old_relative_path)
     dst = _resolve_under(base, new_relative_path)
     if not src.exists():
@@ -265,196 +282,95 @@ def rename_skill_path(skill_id: str, old_relative_path: str, new_relative_path: 
 
 
 def mkdir_skill_path(skill_id: str, relative_path: str) -> None:
-    _ensure_safe_id(skill_id, "skill_id")
-    base = skills_root_dir() / skill_id
+    base = _get_skill_dir(skill_id)
     abs_path = _resolve_under(base, relative_path)
     abs_path.mkdir(parents=True, exist_ok=True)
 
 
-def list_agents() -> list[str]:
-    # Skill management page is intended to debug a dedicated Claude Agent SDK agent,
-    # not the legacy Agno-based agents under app/agentic/agents.
-    return ["skill-management"]
+# --- Meta & Versioning ---
+
+def get_skill_meta(skill_id: str) -> SkillMeta:
+    return _read_skill_meta(skill_id)
 
 
-def _prompt_version_dir(agent_id: str, version: str) -> Path:
-    _ensure_safe_id(agent_id, "agent_id")
-    _ensure_safe_id(version, "prompt_version")
-    return prompts_root_dir() / agent_id / version
+def update_skill_status(skill_id: str, status: SkillStatus) -> SkillMeta:
+    meta = _read_skill_meta(skill_id)
+    meta.status = status
+    _save_skill_meta(skill_id, meta)
+    return meta
 
 
-def list_prompt_versions(agent_id: str) -> list[AgentPromptVersionSummary]:
-    _ensure_safe_id(agent_id, "agent_id")
-    root = prompts_root_dir() / agent_id
-    if not root.exists():
-        return []
-    versions: list[AgentPromptVersionSummary] = []
-    for version_dir in sorted(root.iterdir(), key=lambda p: p.name):
-        if not version_dir.is_dir():
-            continue
-        meta_path = version_dir / "meta.json"
-        prompt_path = version_dir / "prompt.md"
-        if not meta_path.exists() or not prompt_path.exists():
-            continue
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            created_at = datetime.fromisoformat(meta["created_at"])
-            updated_at = datetime.fromisoformat(meta["updated_at"])
-            lang = meta.get("lang", "zh-CN")
-            active_skill_ids = meta.get("active_skill_ids", []) or []
-            versions.append(
-                AgentPromptVersionSummary(
-                    agent_id=agent_id,
-                    version=version_dir.name,
-                    lang=lang,
-                    active_skill_ids=list(active_skill_ids),
-                    created_at=created_at,
-                    updated_at=updated_at,
-                )
-            )
-        except Exception:
-            continue
-    return versions
-
-
-def get_prompt_version(agent_id: str, version: str) -> AgentPromptVersionDetail:
-    version_dir = _prompt_version_dir(agent_id, version)
-    meta_path = version_dir / "meta.json"
-    prompt_path = version_dir / "prompt.md"
-    if not meta_path.exists() or not prompt_path.exists():
-        raise HTTPException(status_code=404, detail="prompt_version_not_found")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    content = prompt_path.read_text(encoding="utf-8", errors="replace")
-    return AgentPromptVersionDetail(
-        agent_id=agent_id,
-        version=version,
-        lang=meta.get("lang", "zh-CN"),
-        active_skill_ids=list(meta.get("active_skill_ids", []) or []),
-        created_at=datetime.fromisoformat(meta["created_at"]),
-        updated_at=datetime.fromisoformat(meta["updated_at"]),
-        content=content,
-    )
-
-
-def create_prompt_version(agent_id: str, version: str, *, lang: str, content: str) -> AgentPromptVersionDetail:
-    version_dir = _prompt_version_dir(agent_id, version)
-    if version_dir.exists():
-        raise HTTPException(status_code=409, detail="prompt_version_exists")
-    version_dir.mkdir(parents=True, exist_ok=True)
+def create_skill_version(skill_id: str, message: str) -> SkillVersionSummary:
+    skill_dir = _get_skill_dir(skill_id)
+    versions_dir = skill_dir / ".versions"
+    versions_dir.mkdir(exist_ok=True)
+    
+    # Generate version ID (timestamp)
     now = _now()
-    (version_dir / "prompt.md").write_text(content or "", encoding="utf-8")
-    (version_dir / "meta.json").write_text(
-        json.dumps(
-            {
-                "agent_id": agent_id,
-                "version": version,
-                "lang": lang,
-                "active_skill_ids": [],
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    version_id = now.strftime("v_%Y%m%d%H%M%S")
+    version_path = versions_dir / version_id
+    
+    # Create snapshot
+    # Copy everything except .versions and .git
+    def ignore_patterns(path, names):
+        if path == str(skill_dir):
+            return {".versions", ".git", ".DS_Store", "__pycache__"}
+        return {".DS_Store", "__pycache__"}
+
+    shutil.copytree(skill_dir, version_path, ignore=ignore_patterns)
+
+    # Update meta
+    meta = _read_skill_meta(skill_id)
+    version_summary = SkillVersionSummary(
+        version=version_id,
+        message=message,
+        created_at=now
     )
-    return get_prompt_version(agent_id, version)
+    # Insert at beginning
+    meta.versions.insert(0, version_summary)
+    _save_skill_meta(skill_id, meta)
+    
+    return version_summary
 
 
-def create_prompt_version_with_skills(
-    agent_id: str, version: str, *, lang: str, content: str, active_skill_ids: list[str]
-) -> AgentPromptVersionDetail:
-    version_dir = _prompt_version_dir(agent_id, version)
-    if version_dir.exists():
-        raise HTTPException(status_code=409, detail="prompt_version_exists")
-    version_dir.mkdir(parents=True, exist_ok=True)
-    now = _now()
-    (version_dir / "prompt.md").write_text(content or "", encoding="utf-8")
-    (version_dir / "meta.json").write_text(
-        json.dumps(
-            {
-                "agent_id": agent_id,
-                "version": version,
-                "lang": lang,
-                "active_skill_ids": list(active_skill_ids or []),
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    return get_prompt_version(agent_id, version)
+def list_skill_versions(skill_id: str) -> list[SkillVersionSummary]:
+    meta = _read_skill_meta(skill_id)
+    return meta.versions
 
 
-def update_prompt_version(agent_id: str, version: str, *, lang: Optional[str], content: Optional[str]) -> AgentPromptVersionDetail:
-    version_dir = _prompt_version_dir(agent_id, version)
-    meta_path = version_dir / "meta.json"
-    prompt_path = version_dir / "prompt.md"
-    if not meta_path.exists() or not prompt_path.exists():
-        raise HTTPException(status_code=404, detail="prompt_version_not_found")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    if lang is not None:
-        meta["lang"] = lang
-    if content is not None:
-        prompt_path.write_text(content, encoding="utf-8")
-    meta["updated_at"] = _now().isoformat()
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return get_prompt_version(agent_id, version)
+def restore_skill_version(skill_id: str, version_id: str) -> None:
+    skill_dir = _get_skill_dir(skill_id)
+    version_path = skill_dir / ".versions" / version_id
+    
+    if not version_path.exists():
+        raise HTTPException(status_code=404, detail="version_not_found")
+        
+    # Safety check: Snapshot existence
+    if not version_path.is_dir():
+        raise HTTPException(status_code=400, detail="invalid_version_snapshot")
 
-
-def update_prompt_version_with_skills(
-    agent_id: str,
-    version: str,
-    *,
-    lang: Optional[str],
-    content: Optional[str],
-    active_skill_ids: Optional[list[str]],
-) -> AgentPromptVersionDetail:
-    version_dir = _prompt_version_dir(agent_id, version)
-    meta_path = version_dir / "meta.json"
-    prompt_path = version_dir / "prompt.md"
-    if not meta_path.exists() or not prompt_path.exists():
-        raise HTTPException(status_code=404, detail="prompt_version_not_found")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    if lang is not None:
-        meta["lang"] = lang
-    if content is not None:
-        prompt_path.write_text(content, encoding="utf-8")
-    if active_skill_ids is not None:
-        meta["active_skill_ids"] = list(active_skill_ids)
-    meta["updated_at"] = _now().isoformat()
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return get_prompt_version(agent_id, version)
-
-
-def delete_prompt_version(agent_id: str, version: str) -> None:
-    version_dir = _prompt_version_dir(agent_id, version)
-    if not version_dir.exists():
-        return
-    for child in sorted(version_dir.rglob("*"), reverse=True):
-        if child.is_file() or child.is_symlink():
-            child.unlink(missing_ok=True)
-        elif child.is_dir():
-            try:
-                child.rmdir()
-            except OSError:
-                pass
-    try:
-        version_dir.rmdir()
-    except OSError:
-        pass
-
-
-def build_system_prompt_with_skills(prompt: str, skill_ids: Iterable[str]) -> str:
-    chunks = [prompt.rstrip()]
-    root = skills_root_dir()
-    for skill_id in skill_ids:
-        _ensure_safe_id(skill_id, "skill_id")
-        skill_md = root / skill_id / "SKILL.md"
-        if not skill_md.exists():
+    # Clean current directory (except .versions, .git, skill.meta.json)
+    # We want to keep metadata history even if we restore files
+    for child in skill_dir.iterdir():
+        if child.name in [".versions", ".git", "skill.meta.json"]:
             continue
-        raw = skill_md.read_text(encoding="utf-8", errors="replace")
-        chunks.append(f"\n\n# Skill: {skill_id}\n\n{raw}\n")
-    return "\n".join(chunks).strip() + "\n"
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+            
+    # Copy from snapshot
+    for child in version_path.iterdir():
+        if child.name == "skill.meta.json":
+            # Don't overwrite meta from snapshot, we keep current meta history
+            continue
+            
+        dest = skill_dir / child.name
+        if child.is_dir():
+            shutil.copytree(child, dest)
+        else:
+            shutil.copy2(child, dest)
+            
+    # Note: We do not change the 'versions' list in meta. Restoring is just an action.
+    # Optionally we could record a new version "Restored from X". But for now, just overwriting files is enough.
+

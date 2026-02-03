@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+class SkillStatus(str, Enum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class SkillSummary(BaseModel):
     id: str
     name: str = ""
     description: str = ""
+    status: SkillStatus = SkillStatus.DRAFT
+    updated_at: Optional[datetime] = None
 
 
 class SkillFileNode(BaseModel):
@@ -46,47 +56,21 @@ class SkillBatchOpsRequest(BaseModel):
     ops: list[SkillBatchOp] = Field(default_factory=list)
 
 
-class AgentSummary(BaseModel):
-    id: str
-
-
-class AgentPromptVersionSummary(BaseModel):
-    agent_id: str
+class SkillVersionSummary(BaseModel):
     version: str
-    lang: str = "zh-CN"
-    active_skill_ids: list[str] = Field(default_factory=list)
+    message: str = ""
     created_at: datetime
-    updated_at: datetime
 
 
-class AgentPromptVersionDetail(AgentPromptVersionSummary):
-    content: str
+class CreateSkillVersionRequest(BaseModel):
+    message: str = ""
 
 
-class CreatePromptVersionRequest(BaseModel):
-    version: str
-    lang: str = "zh-CN"
-    content: str = ""
-    active_skill_ids: list[str] = Field(default_factory=list)
+class UpdateSkillStatusRequest(BaseModel):
+    status: SkillStatus
 
 
-class UpdatePromptVersionRequest(BaseModel):
-    lang: Optional[str] = None
-    content: Optional[str] = None
-    active_skill_ids: Optional[list[str]] = None
+class SkillMeta(BaseModel):
+    status: SkillStatus = SkillStatus.DRAFT
+    versions: list[SkillVersionSummary] = Field(default_factory=list)
 
-
-class PlaygroundRunRequest(BaseModel):
-    agent_id: str
-    prompt_version: str
-    skill_ids: list[str] = Field(default_factory=list)
-    message: str
-    model: Optional[str] = None
-    max_turns: int = 1
-
-
-class PlaygroundRunResponse(BaseModel):
-    output: str = ""
-    session_id: Optional[str] = None
-    total_cost_usd: Optional[float] = None
-    raw: Optional[dict[str, Any]] = None
