@@ -1,5 +1,5 @@
 ---
-name: evidence-organization-strategist
+name: evidence-organizer
 description: |
   当用户准备一审诉讼证据或说"怎么组织证据"时，使用此技能执行：
   1. 帮助选择证据组织体系（时间顺序/争议焦点/法律要件）

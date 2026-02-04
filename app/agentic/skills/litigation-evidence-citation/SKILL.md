@@ -1,5 +1,5 @@
 ---
-name: litigation-evidence-citation
+name: evidence-citation
 description: |
   当用户需要查询证据相关法条或说"举证期限多久"时，使用此技能执行：
   1. 快速定位相关法条（民事诉讼法/证据规定/司法解释）
