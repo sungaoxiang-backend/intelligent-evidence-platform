@@ -74,3 +74,6 @@ static/
 # NLTK Data (Local pre-download)
 nltk_data/
 nltk_data.zip
+
+# Agentic Skills (generated content - managed by the skill management system)
+app/agentic/skills/
