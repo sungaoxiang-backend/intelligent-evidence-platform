@@ -218,9 +218,8 @@ class EvidenceFeaturesExtractor:
             session_state={
                 "evidence_type_features": EVIDENCE_TYPE_FEATURES
             },
-            add_state_in_messages=True,
             instructions=self.build_instructions(),
-            response_model=EvidenceExtractionResults,
+            output_schema=EvidenceExtractionResults,
 
             debug_mode=True
         )
@@ -300,7 +299,7 @@ class EvidenceFeaturesExtractor:
         images = [Image(url=url) for url in image_urls]
         
         # 执行提取
-        return self.agent.print_response(message=message, images=images)
+        return self.agent.print_response(input=message, images=images)
 
 if __name__ == '__main__':
     # 测试用例

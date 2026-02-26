@@ -35,7 +35,6 @@ class DocxProcessor:
             session_state={
                 "placeholder_metadata": {}  # 初始为空，运行时动态加载
             },
-            add_state_in_messages=True,
             instructions=f"""
             你是一个专业的DOCX内容解析专家，你会收到一些具有结构的文本内容，其来自于从DOCX文档中解析出来的HTML内容。
             你的任务是根据你收到的HTML内容，识别出其中的占位符，并以JSON格式返回占位符的元数据。
@@ -47,7 +46,7 @@ class DocxProcessor:
             
             请以JSON格式返回识别结果。
             """,
-            response_model=PlaceholderIdentificationResults,
+            output_schema=PlaceholderIdentificationResults,
 
             debug_mode=True
         )
@@ -70,7 +69,7 @@ class DocxProcessor:
         message = "\n".join(message_parts)
         
         try:
-            run_response = await self.agent.arun(message=message)
+            run_response = await self.agent.arun(input=message)
             
             # 尝试解析响应
             if hasattr(run_response, 'parsed') and run_response.parsed:

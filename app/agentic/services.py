@@ -49,7 +49,7 @@ async def classify_evidence(
     messages = "\n".join(message_parts)
 
     response = await evidence_classifier.agent.arun(
-        messages,
+        input=messages,
         images=uploaded_images
     )
     
@@ -76,7 +76,7 @@ async def classify_evidence_by_urls(
         message_parts.append(f"{i+1}. file_url: {img.url}")
     messages = "\n".join(message_parts)
     response = await evidence_classifier.agent.arun(
-        messages,
+        input=messages,
         images=images
     )
     result = response.content
@@ -154,7 +154,7 @@ async def extract_evidence_features(
     messages = "\n".join(message_parts)
     
     response = await extractor.agent.arun(
-        messages,
+        input=messages,
         images=images
     )
     result = response.content
@@ -269,7 +269,7 @@ async def extract_evidence_features_by_upload(
     messages = "\n".join(message_parts)
     
     response = await extractor.agent.arun(
-        messages,
+        input=messages,
         images=uploaded_images
     )
     result = response.content

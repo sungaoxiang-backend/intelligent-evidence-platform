@@ -53,9 +53,8 @@ class EvidenceFeaturesExtractor:
             session_state={
                 "extraction_guide": {}  # 初始为空，运行时动态加载
             },
-            add_state_in_messages=True,
             instructions=self.build_instructions(),
-            response_model=EvidenceExtractionResults,
+            output_schema=EvidenceExtractionResults,
 
             debug_mode=True
         )
@@ -144,7 +143,7 @@ class EvidenceFeaturesExtractor:
         
         # 创建图片对象，直接使用URL（文件名已在上传时清理）
         images = [Image(url=image.url) for image in evidence_images]
-        return await self.agent.arun(message=message, images=images)
+        return await self.agent.arun(input=message, images=images)
 
     def reload_config(self):
         """重新加载配置"""

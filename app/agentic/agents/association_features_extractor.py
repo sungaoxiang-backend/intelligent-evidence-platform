@@ -62,9 +62,8 @@ class AssociationFeaturesExtractor:
             session_state={
                 "target_slots_to_extract": target_slots_to_extract
             },
-            add_state_in_messages=True,
             instructions=self.build_instructions(),
-            response_model=AssociationFeaturesExtractionResults,
+            output_schema=AssociationFeaturesExtractionResults,
 
             debug_mode=True
         )
@@ -162,7 +161,7 @@ class AssociationFeaturesExtractor:
             message_parts.append(f"\n{i+1}. 图片: {image_url}")
         message = "\n".join(message_parts)
         images = [Image(url=url) for url in image_urls]
-        return await self.agent.arun(message=message, images=images)
+        return await self.agent.arun(input=message, images=images)
     
     def reload_config(self):
         """重新加载配置"""
@@ -205,5 +204,5 @@ if __name__ == '__main__':
     for i, image_url in enumerate(test_images):
         message_parts.append(f"\n{i+1}. 图片: {image_url}")
     message = "\n".join(message_parts)
-    extractor.agent.print_response(message=message, images=[Image(url=image_url) for image_url in test_images])
+    extractor.agent.print_response(input=message, images=[Image(url=image_url) for image_url in test_images])
     # print(extractor.agent.run(message=message, images=[Image(url=image_url) for image_url in test_images]).content.model_dump())

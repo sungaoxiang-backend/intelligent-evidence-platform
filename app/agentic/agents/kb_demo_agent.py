@@ -18,4 +18,4 @@ class KBDemoAgent:
 if __name__ == "__main__":
     knowledge.load(upsert=True)
     agent = KBDemoAgent()
-    agent.agent.print_response(user_id="1", session_id="1", message="你们是惠安公司吗？", stream=True)
+    agent.agent.print_response(user_id="1", session_id="1", input="你们是惠安公司吗？", stream=True)

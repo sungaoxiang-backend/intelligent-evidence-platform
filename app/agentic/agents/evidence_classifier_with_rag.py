@@ -41,7 +41,7 @@ class EvidenceClassifierWithRAG:
             knowledge=knowledge,
             search_knowledge=True,
             enable_agentic_knowledge_filters=True,
-            response_model=Results,
+            output_schema=Results,
             markdown=True,
 
             debug_mode=True

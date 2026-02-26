@@ -48,7 +48,6 @@ team = Team(
     session_state={
         "evidence_type_descriptions": get_evidence_type_descriptions(),
     },
-    add_state_in_messages=True,
     members=[],
     instructions="""
     <Backstory>
@@ -65,7 +64,7 @@ team = Team(
     2. 无需转发任何成员，请直接输出分类结果
     </Note>
     """,
-    response_model=EvidenceClassifiResults,
+    output_schema=EvidenceClassifiResults,
 
 
     show_members_responses=True,
@@ -94,4 +93,4 @@ if __name__ == '__main__':
     images = [Image(url=url) for url in image_urls]
 
     # 运行 Team
-    team.print_response(message=message, images=images)
+    team.print_response(input=message, images=images)

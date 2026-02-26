@@ -73,9 +73,8 @@ class EvidenceClassifier:
             session_state={
                 "evidence_type_descriptions": get_evidence_type_features_guide_v2(),
             },
-            add_state_in_messages=True,
             instructions=self.build_instructions(),
-            response_model=EvidenceClassifiResults,
+            output_schema=EvidenceClassifiResults,
 
             debug_mode=True
         )
@@ -146,7 +145,7 @@ class EvidenceClassifier:
             message_parts.append(f"{i + 1}. {url}")
         message = "\n".join(message_parts)
         images = [Image(url=url) for url in image_urls]
-        return await self.agent.arun(message=message, images=images)
+        return await self.agent.arun(input=message, images=images)
 
     def reload_config(self):
         """重新加载配置"""

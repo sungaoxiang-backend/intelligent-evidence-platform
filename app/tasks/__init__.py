@@ -150,33 +150,47 @@ async def get_task_status(task_id: str):
     """获取任务状态"""
     try:
         task = celery_app.AsyncResult(task_id)
-        
+
         # 安全地获取任务结果
         result = None
         info = None
-        
-        if task.ready():
-            try:
+        status = "PENDING"
+
+        try:
+            # 先获取状态，避免直接调用 ready() 触发异常
+            status = task.state
+        except Exception as e:
+            logger.warning(f"获取任务状态失败: {str(e)}")
+
+        try:
+            if status in ('SUCCESS', 'FAILURE', 'REVOKED'):
+                # 只有在任务完成时才尝试获取结果
                 result = task.result
-            except Exception as e:
-                # 如果结果无法序列化，返回错误信息
-                result = {
-                    "error": "任务结果无法序列化",
-                    "error_message": str(e)
-                }
-        else:
+        except KeyError as e:
+            # 处理缺少 exc_type 的异常
+            logger.warning(f"任务结果格式异常: {str(e)}")
+            result = {
+                "error": "任务结果格式异常，可能存在数据损坏",
+                "original_status": status
+            }
+        except Exception as e:
+            result = {
+                "error": "任务结果无法序列化",
+                "error_message": str(e)
+            }
+
+        if status == 'PENDING':
             try:
                 info = task.info
             except Exception as e:
-                # 如果信息无法序列化，返回错误信息
                 info = {
                     "error": "任务信息无法序列化",
                     "error_message": str(e)
                 }
-        
+
         return {
             "task_id": task_id,
-            "status": task.status,
+            "status": status,
             "result": result,
             "info": info
         }
@@ -186,8 +200,8 @@ async def get_task_status(task_id: str):
         error_traceback = traceback.format_exc()
         logger.error(f"获取任务状态失败: {str(e)}")
         logger.error(f"错误详情: {error_traceback}")
-        
+
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"获取任务状态失败: {str(e)}"
         )

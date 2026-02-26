@@ -100,7 +100,7 @@ At the very end, you MUST output a VALID JSON block inside markdown code fences,
         """
         
         # Step 3: Get mapping from agent (Text Response)
-        response = await self.agent.arun(message)
+        response = await self.agent.arun(input=message)
         # Handle potential string or RunResponse output
         response_text = response.content if hasattr(response, 'content') else str(response)
         

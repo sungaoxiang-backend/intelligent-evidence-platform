@@ -228,7 +228,6 @@ class EvidenceClassifier:
             session_state={
                 "evidence_type_descriptions": get_evidence_type_features_guide(),
             },
-            add_state_in_messages=True,
             instructions="""
 你是一个专业的法律证据分类AI助手。你的任务是根据用户上传的图片，准确地判断其属于哪一种证据类型。
 
@@ -263,7 +262,7 @@ class EvidenceClassifier:
 **[证据分类指南]**
 {evidence_type_descriptions}
 """,
-            response_model=EvidenceClassifiResults,
+            output_schema=EvidenceClassifiResults,
 
 
             debug_mode=True
@@ -275,7 +274,7 @@ class EvidenceClassifier:
             message_parts.append(f"{i+1}. file_url: {url}")
         messages = "\n".join(message_parts)
         images = [Image(url=url) for url in image_urls]
-        return await self.agent.arun(message=messages, images=images)
+        return await self.agent.arun(input=messages, images=images)
 
 
 if __name__ == '__main__':
@@ -302,4 +301,4 @@ if __name__ == '__main__':
 
     # 运行 Team
     evidence_clissifier = EvidenceClassifier()
-    evidence_clissifier.agent.print_response(message=message, images=images)
+    evidence_clissifier.agent.print_response(input=message, images=images)

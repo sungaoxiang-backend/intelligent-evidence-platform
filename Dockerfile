@@ -1,5 +1,5 @@
 # 构建阶段
-FROM python:3.12 AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -19,8 +19,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     . /app/.venv/bin/activate && \
     UV_HTTP_TIMEOUT=120 UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
 
-# 最终阶段 - 使用完整版Python镜像
-FROM python:3.12
+# 最终阶段 - 使用轻量级Python镜像
+FROM python:3.12-slim
 
 WORKDIR /app
 
